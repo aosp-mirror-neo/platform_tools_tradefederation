@@ -30,6 +30,7 @@ public enum AutoLogCollector {
     JAVA_COVERAGE(JavaCodeCoverageCollector.class),
     LOGCAT_ON_FAILURE(LogcatOnFailureCollector.class),
     SCREENSHOT_ON_FAILURE(ScreenshotOnFailureCollector.class),
+    SCREEN_RECORD_ON_FAILURE(ScreenRecordOnFailureCollector.class),
     MODULE_LOGCAT(ModuleLogcatCollector.class),
     DEVICE_TRACE(DeviceTraceCollector.class),
     MODULE_PERFETTO_COLLECTOR(ModulePerfettoCollector.class);

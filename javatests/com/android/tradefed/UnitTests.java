@@ -150,6 +150,7 @@ import com.android.tradefed.device.metric.PerfettoFilePullerCollectorTest;
 import com.android.tradefed.device.metric.PerfettoPullerMetricCollectorTest;
 import com.android.tradefed.device.metric.RebootReasonCollectorTest;
 import com.android.tradefed.device.metric.RuntimeRestartCollectorTest;
+import com.android.tradefed.device.metric.ScreenRecordOnFailureCollectorTest;
 import com.android.tradefed.device.metric.ScreenshotOnFailureCollectorTest;
 import com.android.tradefed.device.metric.ShowmapPullerMetricCollectorTest;
 import com.android.tradefed.device.metric.TraceCmdCollectorTest;
@@ -728,6 +729,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PerfettoPullerMetricCollectorTest.class,
     RebootReasonCollectorTest.class,
     RuntimeRestartCollectorTest.class,
+    ScreenRecordOnFailureCollectorTest.class,
     ScreenshotOnFailureCollectorTest.class,
     ShowmapPullerMetricCollectorTest.class,
     TraceCmdCollectorTest.class,
