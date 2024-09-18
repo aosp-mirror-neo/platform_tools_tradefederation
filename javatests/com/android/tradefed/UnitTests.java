@@ -293,6 +293,7 @@ import com.android.tradefed.targetprep.DeviceOwnerTargetPreparerTest;
 import com.android.tradefed.targetprep.DeviceSetupTest;
 import com.android.tradefed.targetprep.DeviceStorageFillerTest;
 import com.android.tradefed.targetprep.DeviceStringPusherTest;
+import com.android.tradefed.targetprep.DexMetadataExtractorTest;
 import com.android.tradefed.targetprep.DisableSELinuxTargetPreparerTest;
 import com.android.tradefed.targetprep.DynamicSystemPreparerTest;
 import com.android.tradefed.targetprep.FastbootCommandPreparerTest;
@@ -881,6 +882,7 @@ import org.junit.runners.Suite.SuiteClasses;
     DeviceSetupTest.class,
     DeviceStorageFillerTest.class,
     DeviceStringPusherTest.class,
+    DexMetadataExtractorTest.class,
     DisableSELinuxTargetPreparerTest.class,
     DynamicSystemPreparerTest.class,
     FastbootCommandPreparerTest.class,
