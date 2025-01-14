@@ -47,6 +47,7 @@ import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
+import com.android.tradefed.testtype.suite.SuiteTestFilter;
 import com.android.tradefed.util.MultiMap;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -65,6 +66,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -108,6 +110,7 @@ public class ResultDBReporter
             description = "Create a local invocation if invocation is not provided in the context")
     private boolean mCreateLocalInvocation = false;
 
+    private IConfiguration mConfiguration;
     private String mInvocationId;
     // Set to true if the reporter is responsible for updating and finalizing the invocation.
     private boolean mManageInvocation = false;
@@ -118,6 +121,7 @@ public class ResultDBReporter
     // Module level variant for test in the same test module.
     private Variant mModuleVariant;
     private String mCurrentModule;
+    private IInvocationContext mModuleContext;
     private TestResult mCurrentTestResult;
     // Counter for generate test result ID.
     private AtomicInteger mResultCounter = new AtomicInteger(0);
@@ -128,7 +132,7 @@ public class ResultDBReporter
 
     @Override
     public void setConfiguration(IConfiguration configuration) {
-        // TODO: implement this method.
+        mConfiguration = configuration;
     }
 
     @Override
@@ -341,6 +345,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
+        mModuleContext = moduleContext;
         // Extract module informations.
         mCurrentModule = moduleContext.getConfigurationDescriptor().getModuleName();
         mModuleVariant = getModuleVariant(moduleContext.getAttributes());
@@ -362,14 +367,79 @@ public class ResultDBReporter
 
     @Override
     public void testModuleEnded() {
-        // Clear module variant.
+        // Clear module context.
+        mModuleContext = null;
         mModuleVariant = null;
     }
 
     @Override
     public void testRunEnded(
             long elapsedTimeMillis, HashMap<String, MetricMeasurement.Metric> runMetrics) {
-        // TODO: implement this method.
+        if (mDisable) {
+            return;
+        }
+        try {
+            reportDemotedTests();
+        } catch (RuntimeException e) {
+            CLog.e("error during skip reporting:");
+            CLog.e(e);
+        }
+    }
+
+    private void reportDemotedTests() {
+        String moduleAbi = null;
+        String moduleName = null;
+        if (mModuleContext != null) {
+            moduleAbi = mModuleContext.getAttribute(ModuleDefinition.MODULE_ABI);
+            moduleName = mModuleContext.getAttribute(ModuleDefinition.MODULE_NAME);
+        }
+        Variant.Builder variantBuilder = Variant.newBuilder();
+        if (mModuleVariant != null) {
+            variantBuilder = variantBuilder.mergeFrom(mModuleVariant);
+        }
+        if (mBaseVariant != null) {
+            variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
+        }
+        for (Entry<String, SkipReason> entry :
+                mConfiguration.getSkipManager().getDemotedTests().entrySet()) {
+            String key = entry.getKey();
+            SuiteTestFilter filter = SuiteTestFilter.createFrom(key);
+            // If module filter has an ABI, we expect the filter to match it to be applicable
+            // not having it is a bit ambiguous so we default to report for all abi similar
+            // to how filters are applied.
+            if (filter.getAbi() != null && !filter.getAbi().equals(moduleAbi)) {
+                continue;
+            }
+            if (!filter.getName().equals(moduleName)) {
+                continue;
+            }
+            if (filter.getTest() == null) {
+                continue;
+            }
+            TestDescription test = TestDescription.fromString(filter.getTest());
+            SkipReason skippedReason = entry.getValue();
+            String summaryHtml =
+                    ResultDBUtil.testSkipReasonToSummaryHtml(skippedReason, "Demotion");
+
+            TestResult currentTest =
+                    TestResult.newBuilder()
+                            .setTestIdStructured(
+                                    ResultDBUtil.toTestIdentifier(
+                                            mCurrentModule, variantBuilder.build(), test))
+                            .setResultId(
+                                    String.format(
+                                            "%s-%05d",
+                                            mResultIdBase, mResultCounter.incrementAndGet()))
+                            .setStartTime(Timestamps.fromMillis(currentTimestamp()))
+                            .setStatus(TestStatus.SKIP)
+                            .setExpected(true)
+                            .setSummaryHtml(
+                                    ResultDBUtil.truncateString(
+                                            summaryHtml, MAX_SUMMARY_HTML_BYTES))
+                            .build();
+            mRecorder.uploadTestResult(currentTest);
+            CLog.d("Backfilled %s SKIPPED", currentTest);
+        }
     }
 
     @Override
@@ -485,15 +555,8 @@ public class ResultDBReporter
             return;
         }
 
-        // ResultDB does not yet have a skip reason field, we put them in the
-        // summary HTML field and test artifact for now.
-        String summaryHtml = "";
-        if (!Strings.isNullOrEmpty(reason.getBugId())) {
-            summaryHtml += "bug_id: " + reason.getBugId() + "<br>";
-        }
-        if (!Strings.isNullOrEmpty(reason.getTrigger())) {
-            summaryHtml += "trigger: " + reason.getTrigger() + "<br>";
-        }
+        String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, null);
+
         // TODO: Skip reason can be too long to fit in any test result field.
         // Upload it as test artifact.
 
@@ -501,7 +564,8 @@ public class ResultDBReporter
                 mCurrentTestResult.toBuilder()
                         .setStatus(TestStatus.SKIP)
                         .setExpected(true)
-                        .setSummaryHtml(summaryHtml)
+                        .setSummaryHtml(
+                                ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES))
                         .build();
     }
 

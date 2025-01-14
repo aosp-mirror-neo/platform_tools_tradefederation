@@ -18,6 +18,7 @@ package com.android.tradefed.result.resultdb;
 import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.result.TestDescription;
+import com.android.tradefed.result.skipped.SkipReason;
 
 import com.google.common.base.Strings;
 
@@ -94,6 +95,28 @@ public final class ResultDBUtil {
             validKey = "num_" + validKey;
         }
         return validKey;
+    }
+
+    /**
+     * Converts a test skip reason to a summary HTML string. ResultDB does not yet have a skip
+     * reason field, we put them in the summary HTML field and test artifact for now. The return
+     * string can be longer than the summary HTML field limit, caller should truncate it if needed.
+     */
+    public static String testSkipReasonToSummaryHtml(SkipReason reason, String skipReasonType) {
+        StringBuilder summaryHtml = new StringBuilder();
+        if (!Strings.isNullOrEmpty(reason.getBugId())) {
+            summaryHtml.append("bug_id: ").append(reason.getBugId()).append("<br>");
+        }
+        if (!Strings.isNullOrEmpty(reason.getTrigger())) {
+            summaryHtml.append("trigger: ").append(reason.getTrigger()).append("<br>");
+        }
+        if (!Strings.isNullOrEmpty(skipReasonType)) {
+            summaryHtml.append("skip_reason_type: ").append(skipReasonType).append("<br>");
+        }
+        if (!Strings.isNullOrEmpty(reason.getReason())) {
+            summaryHtml.append("reason: ").append(reason.getReason()).append("<br>");
+        }
+        return summaryHtml.toString();
     }
 
     /**
