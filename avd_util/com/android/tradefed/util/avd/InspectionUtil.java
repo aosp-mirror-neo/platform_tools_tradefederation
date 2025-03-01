@@ -39,8 +39,11 @@ public class InspectionUtil {
 
     // A map of expected process names and the corresponding error identifier if they are missing.
     // The name string should be a substring of a process list.
-    public static final Map<String, ErrorIdentifier> EXPECTED_PROCESSES =
+    public static final LinkedHashMap<String, ErrorIdentifier> EXPECTED_PROCESSES =
             Stream.of(
+                            new AbstractMap.SimpleEntry<>(
+                                    " run_cvd",
+                                    InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_RUN_CVD_MISSING),
                             new AbstractMap.SimpleEntry<>(
                                     " netsimd",
                                     InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_BLUETOOTH),
@@ -55,6 +58,20 @@ public class InspectionUtil {
                                     InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_CROSVM),
                             new AbstractMap.SimpleEntry<>(
                                     " nginx", InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_NGINX))
+                    .collect(
+                            Collectors.toMap(
+                                    Map.Entry::getKey,
+                                    Map.Entry::getValue,
+                                    (x, y) -> y,
+                                    LinkedHashMap::new));
+
+    // A map of unexpected process names and the corresponding error identifier if they are found.
+    // The name string should be a substring of a process list.
+    public static final Map<String, ErrorIdentifier> UNEXPECTED_PROCESSES =
+            Stream.of(
+                            new AbstractMap.SimpleEntry<>(
+                                    "cvd fetch",
+                                    InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_CVD_FETCH_HANG))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     // Map between error signature to ErrorIdentifier. Note that the signatures are sorted. More
