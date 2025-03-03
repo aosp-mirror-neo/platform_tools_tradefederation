@@ -73,6 +73,15 @@ public class HostOrchestratorClient {
                 .build();
     }
 
+    // https://github.com/google/android-cuttlefish/blob/fff7e3487c924435e6f6120345edf1dddb49d50b/frontend/src/host_orchestrator/orchestrator/controller.go#L71
+    public static HttpRequest buildRemoveInstanceRequest(
+            String baseURL, String group, String name) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds/%s/%s", baseURL, group, name)))
+                .DELETE()
+                .build();
+    }
+
     public static interface IHoHttpClient {
         HttpResponse<String> send(HttpRequest request)
                 throws IOException, InterruptedException, ErrorResponseException;
@@ -85,7 +94,7 @@ public class HostOrchestratorClient {
         private final HttpClient mClient;
 
         public HoHttpClient() {
-            mClient = HttpClient.newBuilder().build();
+            mClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
         }
 
         @Override

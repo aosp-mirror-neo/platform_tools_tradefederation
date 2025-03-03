@@ -166,7 +166,7 @@ public class SkipManager implements IDisableable {
     }
 
     /** Reports whether we should skip the current invocation. */
-    public boolean shouldSkipInvocation(TestInformation information) {
+    public boolean shouldSkipInvocation(TestInformation information, IConfiguration configuration) {
         if (InvocationContext.isOnDemand(information.getContext())) {
             // Avoid skipping invocation for on-demand testing
             return false;
@@ -178,7 +178,14 @@ public class SkipManager implements IDisableable {
                 Set<String> possibleModules = new HashSet<>();
                 for (ContentAnalysisContext context : mTestArtifactsAnalysisContent) {
                     if (context.analysisMethod().equals(AnalysisMethod.SANDBOX_WORKDIR)) {
-                        possibleModules.addAll(ContentModuleLister.buildModuleList(context));
+                        Set<String> modules = ContentModuleLister.buildModuleList(context);
+                        if (modules == null) {
+                            // If some sort of error occurs, never skip invocation
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.ERROR_INVOCATION_SKIP, 1);
+                            return false;
+                        }
+                        possibleModules.addAll(modules);
                     }
                 }
                 if (!possibleModules.isEmpty()) {
@@ -211,6 +218,7 @@ public class SkipManager implements IDisableable {
             ArtifactsAnalyzer analyzer =
                     new ArtifactsAnalyzer(
                             information,
+                            configuration,
                             mImageAnalysis,
                             mTestArtifactsAnalysisContent,
                             mModulesDiscovered,

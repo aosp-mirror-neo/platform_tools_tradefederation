@@ -289,7 +289,8 @@ public class AdbSshConnection extends AdbTcpConnection {
                     CLog.d("Device log collection is skipped per SkipDeviceLogCollection setting.");
                 } else if (getDevice().getOptions().useCvdCF()) {
                     mHOUtil = createHostOrchestratorUtil(mGceAvd);
-                    CommonLogRemoteFileUtil.pullCommonCvdLogs(mGceAvd, mHOUtil, getLogger());
+                    CommonLogRemoteFileUtil.pullCommonCvdLogs(
+                            mGceAvd, mHOUtil, getLogger(), getDevice().getOptions());
                 } else if (mGceAvd.hostAndPort() != null) {
                     // Host and port can be null in case of acloud timeout
                     // attempt to get a bugreport if Gce Avd is a failure
@@ -438,7 +439,11 @@ public class AdbSshConnection extends AdbTcpConnection {
             if (GceAvdInfo.GceStatus.BOOT_FAIL.equals(mGceAvd.getStatus())
                     || GceAvdInfo.GceStatus.FAIL.equals(mGceAvd.getStatus())) {
                 inspectionResult = debugDeviceNotAvailable();
-                if (inspectionResult != null && inspectionResult.getErrorIdentifier() != null) {
+                // Only override error identifier if it's not a generic one.
+                if ((errorIdentifier == InfraErrorIdentifier.OXYGEN_DEVICE_LAUNCHER_TIMEOUT
+                                || errorIdentifier == DeviceErrorIdentifier.FAILED_TO_LAUNCH_GCE)
+                        && inspectionResult != null
+                        && inspectionResult.getErrorIdentifier() != null) {
                     errorMsg = inspectionResult.getDetails();
                     errorIdentifier = inspectionResult.getErrorIdentifier();
                 }
@@ -897,7 +902,7 @@ public class AdbSshConnection extends AdbTcpConnection {
         long startTime = System.currentTimeMillis();
         CommandResult stopRes = null;
         if (getDevice().getOptions().useCvdCF()) {
-            stopRes = mHOUtil.stopGce();
+            stopRes = mHOUtil.removeInstance();
         } else {
             // Get the user from options instance-user if user is null.
             if (user == null) {
@@ -1126,6 +1131,23 @@ public class AdbSshConnection extends AdbTcpConnection {
                 getLogger().testLog("host_vm_processes", LogDataType.TEXT, source);
             }
 
+            // Check unexpected processes first. If any unexpected process presents, the process
+            // is likely hang or takes too long to finish, which indicate some infra issue.
+            for (String p : InspectionUtil.UNEXPECTED_PROCESSES.keySet()) {
+                if (InspectionUtil.searchProcess(processes, p)) {
+                    CLog.e(
+                            "Found unexpected process %s. Review `host_vm_processes` log for the"
+                                    + " complete list of running processes.",
+                            p);
+                    if (inspectionResult == null) {
+                        inspectionResult =
+                                new DeviceInspectionResult(
+                                        InspectionUtil.UNEXPECTED_PROCESSES.get(p),
+                                        String.format("Unexpected process %s found", p));
+                    }
+                }
+            }
+
             for (String p : InspectionUtil.EXPECTED_PROCESSES.keySet()) {
                 if (!InspectionUtil.searchProcess(processes, p)) {
                     CLog.e(
@@ -1163,6 +1185,16 @@ public class AdbSshConnection extends AdbTcpConnection {
                     return new DeviceInspectionResult(
                             DeviceErrorIdentifier.DEVICE_UNAVAILABLE,
                             "No adb devices found on the host.");
+                }
+            } else {
+                // Collect bugreport as the device is available with adb
+                try {
+                    File bugreport =
+                            GceManager.getNestedDeviceSshBugreportz(
+                                    mGceAvd, getDevice().getOptions(), getRunUtil());
+                    GceManager.logAndDeleteFile(bugreport, "bugreport-ssh.zip", getLogger());
+                } catch (IOException e) {
+                    CLog.e(e);
                 }
             }
         }
