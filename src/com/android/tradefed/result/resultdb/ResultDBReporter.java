@@ -24,6 +24,8 @@ import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
+import com.android.tradefed.config.Option;
+import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement;
@@ -43,6 +45,7 @@ import com.android.tradefed.testtype.suite.ModuleDefinition;
 import com.android.tradefed.util.MultiMap;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
@@ -52,12 +55,13 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@OptionClass(alias = "resultdb-reporter")
 /** Result reporter that uploads test results to ResultDB. */
 public class ResultDBReporter
         implements ITestSummaryListener,
@@ -65,17 +69,23 @@ public class ResultDBReporter
                 ISupportGranularResults,
                 IConfigurationReceiver {
 
+    public static final int MAX_SUMMARY_HTML_BYTES = 4096;
+
+    public static final int MAX_PRIMARY_ERROR_MESSAGE_BYTES = 1024;
+
     // Set containing the allowed variant module parameter keys
     private static final Set<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
     // Tag name for the test mapping source
     private static final String TEST_MAPPING_TAG = "test_mapping_source";
 
+    @Option(name = "disable", description = "Set to true if reporter is disabled")
+    private boolean mDisable = false;
+
     private Invocation mInvocation;
     private String mInvocationId;
     private IRecorderClient mRecorder;
-    // If true result reporter will be enabled.
-    private boolean mEnable = false;
+
     // Common variant values for all test in this TF invocation.
     private Variant mBaseVariant;
     // Module level variant for test in the same test module.
@@ -129,21 +139,27 @@ public class ResultDBReporter
 
     @Override
     public void invocationStarted(IInvocationContext context) {
-        // Obtain invocation ID from context.
-        String invocationId = context.getAttribute("resultdb_invocation_id");
-        String updateToken = context.getAttribute("resultdb_invocation_update_token");
-        if (!invocationId.isEmpty() && !updateToken.isEmpty()) {
-            mEnable = true;
-        }
-        if (!mEnable) {
+        if (mDisable) {
             CLog.i("ResultDBReporter is disabled");
             return;
         }
+        // Obtain invocation ID from context.
+        String invocationId = context.getAttribute("resultdb_invocation_id");
+        String updateToken = context.getAttribute("resultdb_invocation_update_token");
+        if (invocationId.isEmpty() || updateToken.isEmpty()) {
+            mDisable = true;
+            CLog.i(
+                    "ResultDBReporter is disabled as invocation ID or update token is not"
+                            + " provided.");
+            return;
+        }
+
         mInvocationId = invocationId;
         mRecorder = createRecorderClient(invocationId, updateToken);
         try {
             mResultIdBase = this.randomHexString();
         } catch (NoSuchAlgorithmException e) {
+            mDisable = true;
             CLog.e("Failed to generate random result ID base.");
             return;
         }
@@ -183,7 +199,7 @@ public class ResultDBReporter
 
     @Override
     public void invocationEnded(long elapsedTime) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         mRecorder.finalizeTestResults();
@@ -192,7 +208,7 @@ public class ResultDBReporter
 
     @Override
     public void testModuleStarted(IInvocationContext moduleContext) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         // Extract module informations.
@@ -272,15 +288,15 @@ public class ResultDBReporter
 
     @Override
     public void testStarted(TestDescription test, long startTime) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         Variant.Builder variantBuilder = Variant.newBuilder();
         if (mModuleVariant != null) {
             variantBuilder = variantBuilder.mergeFrom(mModuleVariant);
-    }
+        }
         if (mBaseVariant != null) {
-                variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
+            variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
         }
         mCurrentTestResult =
                 TestResult.newBuilder()
@@ -306,57 +322,84 @@ public class ResultDBReporter
 
     @Override
     public void testAssumptionFailure(TestDescription test, FailureDescription failure) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         if (mCurrentTestResult == null) {
             CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
             return;
         }
-        // TODO: set failure reason somewhere.
+
         mCurrentTestResult =
-                mCurrentTestResult.toBuilder().setStatus(TestStatus.SKIP).setExpected(true).build();
+                mCurrentTestResult.toBuilder()
+                        .setStatus(TestStatus.SKIP)
+                        .setExpected(true)
+                        // This is not set in the test result failure reason field, because
+                        // test assumption failure is treated as a ResultDB skip status
+                        // (instead of fail). We will likely re-visit this once we have more
+                        // information on how this is used by downstream.
+                        .setSummaryHtml(
+                                extractFailureReason(
+                                        failure.getErrorMessage(), MAX_SUMMARY_HTML_BYTES))
+                        .build();
+        // TODO: Full error message is too long to fit in any test result field.
+        // Upload it as test artifact.
     }
 
     @Override
     public void testSkipped(TestDescription test, SkipReason reason) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         if (mCurrentTestResult == null) {
             CLog.e("Received #testIgnored(%s) without a valid testStart before.", test);
             return;
         }
+
+        // ResultDB does not yet have a skip reason field, we put them in the
+        // summary HTML field and test artifact for now.
+        String summaryHtml = "";
+        if (!Strings.isNullOrEmpty(reason.getBugId())) {
+            summaryHtml += "bug_id: " + reason.getBugId() + "<br>";
+        }
+        if (!Strings.isNullOrEmpty(reason.getTrigger())) {
+            summaryHtml += "trigger: " + reason.getTrigger() + "<br>";
+        }
+        // TODO: Skip reason can be too long to fit in any test result field.
+        // Upload it as test artifact.
+
         mCurrentTestResult =
-                mCurrentTestResult.toBuilder().setStatus(TestStatus.SKIP).setExpected(true).build();
-        // TODO: set skip reason somewhere.
+                mCurrentTestResult.toBuilder()
+                        .setStatus(TestStatus.SKIP)
+                        .setExpected(true)
+                        .setSummaryHtml(summaryHtml)
+                        .build();
     }
 
     @Override
     public void testFailed(TestDescription test, String trace) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         if (mCurrentTestResult == null) {
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
         }
+        String failureReason = extractFailureReason(trace, MAX_PRIMARY_ERROR_MESSAGE_BYTES);
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
                         .setFailureReason(
-                                FailureReason.newBuilder()
-                                        .setPrimaryErrorMessage(extractFailureReason(trace)))
+                                FailureReason.newBuilder().setPrimaryErrorMessage(failureReason))
                         .setStatus(TestStatus.FAIL)
                         .setExpected(false)
                         .build();
-        // TODO: set summary HTML.
-        // TODO: set local instruction.
-        // TODO: trace is too long to fit in any test result field. Put it in artifact.
+        // TODO: extract local instruction from test description and set in ResultDB test result.
+        // TODO: trace is too long to fit in any test result field. Upload it as test artifact.
     }
 
     @Override
     public void testFailed(TestDescription test, FailureDescription failure) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         if (mCurrentTestResult == null) {
@@ -374,24 +417,31 @@ public class ResultDBReporter
         if (crashStatus.contains(failure.getFailureStatus())) {
             status = TestStatus.CRASH;
         }
+        String failureReason =
+                extractFailureReason(failure.getErrorMessage(), MAX_PRIMARY_ERROR_MESSAGE_BYTES);
+
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
                         .setFailureReason(
-                                FailureReason.newBuilder()
-                                        .setPrimaryErrorMessage(
-                                                extractFailureReason(failure.getErrorMessage())))
+                                FailureReason.newBuilder().setPrimaryErrorMessage(failureReason))
                         .setStatus(status)
                         .setExpected(false)
                         .build();
-        // TODO: set summary HTML.
-        // TODO: save the tf error type somewhere.
-        // TODO: set local instruction.
-        // TODO: trace is too long to fit in any test result field. Put it in artifact.
+
+        // Set the TF error type in the summary HTML.
+        if (failure.getFailureStatus() != null) {
+            mCurrentTestResult =
+                    mCurrentTestResult.toBuilder()
+                            .setSummaryHtml("TF error type: " + failure.getFailureStatus())
+                            .build();
+        }
+        // TODO: extract local instruction from test description and set in ResultDB test result.
+        // TODO: trace is too long to fit in any test result field. Upload it as test artifact.
     }
 
     @Override
     public void testIgnored(TestDescription test) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         if (mCurrentTestResult == null) {
@@ -413,7 +463,7 @@ public class ResultDBReporter
             TestDescription test,
             long endTime,
             HashMap<String, MetricMeasurement.Metric> testMetrics) {
-        if (!mEnable) {
+        if (mDisable) {
             return;
         }
         long startTimeMillis = Timestamps.toMillis(mCurrentTestResult.getStartTime());
@@ -453,15 +503,15 @@ public class ResultDBReporter
     }
 
     /**
-     * Extract the first line of the stack trace as the error message.
+     * Extract the first line of the stack trace as the error message, and truncate the string to
+     * the given max bytes.
      *
      * <p>In most cases, this ends up being the exception + error message.
      */
-    @VisibleForTesting
-    String extractFailureReason(String trace) {
+    String extractFailureReason(String trace, int maxBytes) {
         String firstLine = trace.split("[\\r\\n]+", 2)[0];
         if (!firstLine.trim().isEmpty()) {
-            return firstLine;
+            return ResultDBUtil.truncateString(firstLine, maxBytes);
         }
         return "";
     }
