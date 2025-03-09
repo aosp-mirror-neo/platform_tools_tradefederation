@@ -94,6 +94,16 @@ public class ResultDBReporterTest {
     }
 
     @Test
+    public void noInvocationIdInInvocationContext_reporterDisabled() {
+        mSimulator
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withTest("com.google.ExampleClass", "testExampleMethod")
+                .simulateInvocation(mReporter);
+
+        assertThat(mReporter.mRecorder.getTestResults()).isEmpty();
+    }
+
+    @Test
     public void uploadFunctionalResults() {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
@@ -156,6 +166,10 @@ public class ResultDBReporterTest {
                         "com.google.ExampleClass",
                         "testMethodIgnored",
                         InvocationSimulator.TestStatus.IGNORED)
+                .withTest(
+                        "com.google.ExampleClass",
+                        "testMethodSkip",
+                        InvocationSimulator.TestStatus.TEST_SKIPPED)
                 .simulateInvocation(mReporter);
 
         assertThat(mReporter.mRecorder.getTestResults())
@@ -178,12 +192,20 @@ public class ResultDBReporterTest {
                                 .setResultId("1234abcd-00003")
                                 .setStatus(TestStatus.SKIP)
                                 .setStartTime(Timestamps.fromMillis(1536333825400L))
+                                .setSummaryHtml("Assumption Fail Trace")
                                 .setExpected(true)
                                 .build(),
                         newTestResult("testMethodIgnored")
                                 .setResultId("1234abcd-00004")
                                 .setStatus(TestStatus.SKIP)
                                 .setStartTime(Timestamps.fromMillis(1536333825600L))
+                                .setExpected(true)
+                                .build(),
+                        newTestResult("testMethodSkip")
+                                .setResultId("1234abcd-00005")
+                                .setStatus(TestStatus.SKIP)
+                                .setStartTime(Timestamps.fromMillis(1536333825800L))
+                                .setSummaryHtml("bug_id: bugId<br>trigger: skip trigger<br>")
                                 .setExpected(true)
                                 .build());
     }
@@ -208,6 +230,7 @@ public class ResultDBReporterTest {
                                 .setFailureReason(
                                         FailureReason.newBuilder()
                                                 .setPrimaryErrorMessage("Failure Message"))
+                                .setSummaryHtml("TF error type: TEST_FAILURE")
                                 .build());
     }
 
@@ -232,6 +255,7 @@ public class ResultDBReporterTest {
                                 .setFailureReason(
                                         FailureReason.newBuilder()
                                                 .setPrimaryErrorMessage("Failure Message"))
+                                .setSummaryHtml("TF error type: TIMED_OUT")
                                 .build());
     }
 }
