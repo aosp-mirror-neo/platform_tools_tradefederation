@@ -22,8 +22,8 @@ public enum DiscoveryExitCode {
     NO_DISCOVERY_POSSIBLE(6), // When the command doesn't have any properties useful for discovery.
     CONFIGURATION_EXCEPTION(7), // When the command itself doesn't parse
     DISCOVERY_RESULTS_CORREPUTED(8), // When the discovery results are corrupted.
-    ERROR(1);
-
+    ERROR(1),
+    HAS_NON_SUITE_BASED_TEST_RUNNER_ERROR(11);
     private final int code;
 
     private DiscoveryExitCode(int code) {

@@ -25,14 +25,14 @@ import re
 import subprocess
 import time
 
-import cas_metrics_pb2  # type: ignore
 from artifact_manager import ArtifactManager
-from uploader import ArtifactConfig
+from artifacts import ARTIFACTS
+import cas_metrics_pb2  # type: ignore
 from uploader import CasInfo
 from uploader import Uploader
 
 
-VERSION = '1.6'
+VERSION = '1.8'
 
 CAS_UPLOADER_PREBUILT_PATH = 'tools/tradefederation/prebuilts/'
 CAS_UPLOADER_PATH = 'tools/content_addressed_storage/prebuilts/'
@@ -41,81 +41,9 @@ CAS_UPLOADER_BIN = 'casuploader'
 LOG_PATH = 'logs/cas_uploader.log'
 CAS_METRICS_PATH = 'logs/cas_metrics.pb'
 METRICS_PATH = 'logs/artifact_metrics.json'
-MAX_WORKERS_LOWER_BOUND = 2
-MAX_WORKERS_UPPER_BOUND = 6
+MAX_WORKERS_LOWER_BOUND = 5
+MAX_WORKERS_UPPER_BOUND = 7
 MAX_WORKERS = random.randint(MAX_WORKERS_LOWER_BOUND, MAX_WORKERS_UPPER_BOUND)
-
-# Configurations of artifacts to upload to CAS.
-#
-# Override the preset artifacts with the "--artifacts" flag. Examples:
-# 1. To upload img files with path relative to DIST_DIR (no '/**/'), override source_path with:
-#   --artifacts 'img=./*-img-*zip'
-# 2. To upload img files as chunked version only:
-#   --artifacts 'img=*-img-*zip' standard=False chunk=True
-# 3. To also upload json files in logs folder:
-#   --artifacts 'new=./log/*.json'
-# 4. To not update img files:
-#   --artifacts 'img='
-#
-ARTIFACTS = {
-    # test_suite targets
-    'android-catbox': ArtifactConfig('android-catbox.zip', True, exclude_filters=['android-catbox/jdk/.*']),
-    'android-csuite': ArtifactConfig('android-csuite.zip', True, exclude_filters=['android-csuite/jdk/.*']),
-    'android-cts': ArtifactConfig('android-cts.zip', True, exclude_filters=['android-cts/jdk/.*']),
-    'android-gcatbox': ArtifactConfig('android-gcatbox.zip', True, exclude_filters=['android-gcatbox/jdk/.*']),
-    'android-gts': ArtifactConfig('android-gts.zip', True, exclude_filters=['android-gts/jdk/.*']),
-    'android-mcts': ArtifactConfig('android-mcts.zip', True),
-    'android-mts': ArtifactConfig('android-mts.zip', True, exclude_filters=['android-mts/jdk/.*']),
-    'android-pts': ArtifactConfig('android-pts.zip', True, exclude_filters=['android-pts/jdk/.*']),
-    'android-sts': ArtifactConfig('android-sts.zip', True),
-    'android-tvts': ArtifactConfig('android-tvts.zip', True, exclude_filters=['android-tvts/jdk/.*']),
-    'android-vts': ArtifactConfig('android-vts.zip', True),
-    'android-wts': ArtifactConfig('android-wts.zip', True, exclude_filters=['android-wts/jdk/.*']),
-    'art-host-tests': ArtifactConfig('art-host-tests.zip', True),
-    'bazel-test-suite': ArtifactConfig('bazel-test-suite.zip', True),
-    'host-unit-tests': ArtifactConfig('host-unit-tests.zip', True),
-    'general-tests': ArtifactConfig('general-tests.zip', True),
-    'general-tests_configs': ArtifactConfig('general-tests_configs.zip', True),
-    'general-tests_host-shared-libs': ArtifactConfig('general-tests_host-shared-libs.zip', True),
-    'tradefed': ArtifactConfig('tradefed.zip', True),
-    'google-tradefed': ArtifactConfig('google-tradefed.zip', True),
-    'robolectric-tests': ArtifactConfig('robolectric-tests.zip', True),
-    'ravenwood-tests': ArtifactConfig('ravenwood-tests.zip', True),
-    'test_mappings': ArtifactConfig('test_mappings.zip', True),
-
-    # Mainline artifacts
-    'apex': ArtifactConfig('*.apex', False),
-    'apk': ArtifactConfig('*.apk', False),
-
-    # Device target artifacts
-    'androidTest': ArtifactConfig('androidTest.zip', True),
-    'device-tests': ArtifactConfig('device-tests.zip', True),
-    'device-tests_configs': ArtifactConfig('device-tests_configs.zip', True),
-    'device-tests_host-shared-libs': ArtifactConfig('device-tests_host-shared-libs.zip', True),
-    'performance-tests': ArtifactConfig('performance-tests.zip', True),
-    'device-platinum-tests': ArtifactConfig('device-platinum-tests.zip', True),
-    'device-platinum-tests_configs': ArtifactConfig('device-platinum-tests_configs.zip', True),
-    'device-platinum-tests_host-shared-libs': ArtifactConfig('device-platinum-tests_host-shared-libs.zip', True),
-    'camera-hal-tests': ArtifactConfig('camera-hal-tests.zip', True),
-    'camera-hal-tests_configs': ArtifactConfig('camera-hal-tests_configs.zip', True),
-    'camera-hal-tests_host-shared-libs': ArtifactConfig('camera-hal-tests_host-shared-libs.zip', True),
-    'device-pixel-tests': ArtifactConfig('device-pixel-tests.zip', True),
-    'device-pixel-tests_configs': ArtifactConfig('device-pixel-tests_configs.zip', True),
-    'device-pixel-tests_host-shared-libs': ArtifactConfig('device-pixel-tests_host-shared-libs.zip', True),
-    'automotive-tests': ArtifactConfig('automotive-tests.zip', True),
-    'automotive-general-tests': ArtifactConfig('automotive-general-tests', True),
-    'automotive-sdv-tests': ArtifactConfig('automotive-sdv-tests', True),
-    'automotive-sdv-tests_configs': ArtifactConfig('automotive-sdv-tests_configs', True),
-    'tests': ArtifactConfig('*-tests-*zip', True),
-    'continuous_instrumentation_tests': ArtifactConfig('*-continuous_instrumentation_tests-*zip', True),
-    'continuous_instrumentation_metric_tests': ArtifactConfig('*-continuous_instrumentation_metric_tests-*zip', True),
-    'continuous_native_tests': ArtifactConfig('*-continuous_native_tests-', True),
-    'cvd-host_package': ArtifactConfig('cvd-host_package.tar.gz', False),
-    'bootloader': ArtifactConfig('bootloader.img', False),
-    'radio': ArtifactConfig('radio.img', False),
-    'target_files': ArtifactConfig('*-target_files-*zip', True),
-    'img': ArtifactConfig('*-img-*zip', False, chunk=True, chunk_dir=True)
-}
 
 
 def _init_cas_info() -> CasInfo:
@@ -176,13 +104,6 @@ def main():
     """Uploads the specified artifacts to CAS."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--experiment_artifacts',
-        required=False,
-        action='append',
-        default=[],
-        help='Name of configuration which artifact to upload',
-    )
-    parser.add_argument(
         '--artifacts',
         required=False,
         action='append',
@@ -221,9 +142,8 @@ def main():
                 print(f"{name:<30}={artifact}")
 
         cas_info = _init_cas_info()
-        cas_metrics = cas_metrics_pb2.CasMetrics()
-        Uploader(cas_info, log_file).upload(list(artifacts.values()),
-                dist_dir, cas_metrics, MAX_WORKERS, args.dryrun)
+        cas_metrics = Uploader(cas_info).upload(list(artifacts.values()),
+                dist_dir, MAX_WORKERS, args.dryrun)
 
         elapsed = time.time() - start
         logging.info('Total time of uploading build artifacts to CAS: %d seconds',

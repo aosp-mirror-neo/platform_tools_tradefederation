@@ -22,9 +22,10 @@ import glob
 import json
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
+import uuid
+import time
 from typing import Tuple
 
 import cas_metrics_pb2  # type: ignore
@@ -75,6 +76,7 @@ class UploadResult:
     """
     digest: str
     content_details: list[dict[str, any]]
+    log_file: str
 
 
 @dataclasses.dataclass
@@ -96,10 +98,52 @@ CHUNKED_DIR_ARTIFACT_NAME_PREFIX = "_chunked_dir_"
 
 class Uploader:
     """Uploader for uploading artifacts to CAS remote."""
-    def __init__(self, cas_info: CasInfo, log_file: str):
+    def __init__(self, cas_info: CasInfo):
         """Initialize the Uploader with CAS info."""
-        self.cas_info = cas_info
-        self.log_file = log_file
+        self._cas_info = cas_info
+
+    @staticmethod
+    def setup_task_logger(working_dir: str) -> Tuple[logging.Logger, str]:
+        """Creates a logger for an individual uploader task."""
+        task_id = uuid.uuid4()
+        logger = logging.getLogger(f"Uploader-{task_id}")
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+
+        log_file = os.path.join(working_dir, f"_uploader_{task_id}.log")
+        file_handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+        return logger, log_file
+
+    @staticmethod
+    def read_file(file_path: str) -> str:
+        """Returns contents of file."""
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                return file.read()
+        except FileNotFoundError:
+            return f"Error: File '{file_path}' not found."
+        except Exception as e:
+            return f"Error: {e}"
+
+    @staticmethod
+    def _run_uploader_command(cmd: str, working_dir: str) -> str:
+        """"Run the uploader command using working_dir and returns the output."""
+        log_file = os.path.join(working_dir, f'_casuploader_{uuid.uuid4()}.log')
+        with open(log_file, 'w', encoding='utf8') as outfile:
+            subprocess.run(
+                cmd,
+                check=True,
+                text=True,
+                stdout=outfile,
+                stderr=subprocess.STDOUT,
+                encoding='utf-8',
+                timeout=UPLOADER_TIMEOUT_SECS
+            )
+        return Uploader.read_file(log_file)
 
     def _upload_artifact(self,
             artifact: ArtifactConfig,
@@ -116,34 +160,36 @@ class Uploader:
         Returns: the digest of the uploaded artifact, formatted as "<hash>/<size>".
         returns None if artifact upload fails.
         """
+        logger, log_file = Uploader.setup_task_logger(working_dir)
+
         # `-dump-file-details` only supports on cas uploader V1.0 or later.
-        dump_file_details = self.cas_info.client_version >= (1, 0)
+        dump_file_details = self._cas_info.client_version >= (1, 0)
         if not dump_file_details:
-            logging.warning('-dump-file-details is not enabled')
+            logger.warning('-dump-file-details is not enabled')
 
         # `-dump-metrics` only supports on cas uploader V1.3 or later.
-        dump_metrics = self.cas_info.client_version >= (1, 3)
+        dump_metrics = self._cas_info.client_version >= (1, 3)
         if not dump_metrics:
-            logging.warning('-dump-metrics is not enabled')
+            logger.warning('-dump-metrics is not enabled')
 
         with tempfile.NamedTemporaryFile(mode='w+') as digest_file, tempfile.NamedTemporaryFile(
         mode='w+') as content_details_file:
-            logging.info(
-                'Uploading %s to CAS instance %s', artifact.source_path, self.cas_info.cas_instance
+            logger.info(
+                'Uploading %s to CAS instance %s', artifact.source_path, self._cas_info.cas_instance
             )
 
             cmd = [
-                self.cas_info.client_path,
+                self._cas_info.client_path,
                 '-cas-instance',
-                self.cas_info.cas_instance,
+                self._cas_info.cas_instance,
                 '-cas-addr',
-                self.cas_info.cas_service,
+                self._cas_info.cas_service,
                 '-dump-digest',
                 digest_file.name,
                 '-use-adc',
             ]
 
-            cmd = cmd + Uploader._path_flag_for_artifact(artifact, working_dir)
+            cmd = cmd + Uploader._path_flag_for_artifact(artifact)
 
             if artifact.chunk or artifact.chunk_dir:
                 cmd = cmd + ['-chunk', '-avg-chunk-size', str(AVG_CHUNK_SIZE_IN_KB)]
@@ -158,35 +204,29 @@ class Uploader:
                 cmd = cmd + ['-dump-metrics', metrics_file]
 
             try:
-                logging.info('Running command: %s', cmd)
-                with open(self.log_file, 'a', encoding='utf8') as outfile:
-                    subprocess.run(
-                        cmd,
-                        check=True,
-                        text=True,
-                        stdout=outfile,
-                        stderr=subprocess.STDOUT,
-                        encoding='utf-8',
-                        timeout=UPLOADER_TIMEOUT_SECS
-                    )
+                logger.info('Running command: %s', cmd)
+                output = Uploader._run_uploader_command(cmd, working_dir)
+                logger.info('Command output:\n %s', output)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logging.warning(
+                logger.warning(
                     'Failed to upload %s to CAS instance %s. Skip.\nError message: %s\nLog: %s',
-                    artifact.source_path, self.cas_info.cas_instance, e, e.stdout,
+                    artifact.source_path, self._cas_info.cas_instance, e, e.stdout,
                 )
                 return None
             except subprocess.SubprocessError as e:
-                logging.warning('Failed to upload %s to CAS instance %s. Skip.\n. Error %s',
-                    artifact.source_path, self.cas_info.cas_instance, e)
+                logger.warning('Failed to upload %s to CAS instance %s. Skip.\n. Error %s',
+                    artifact.source_path, self._cas_info.cas_instance, e)
                 return None
 
             # Read digest of the root directory or file from dumped digest file.
             digest = digest_file.read()
             if digest:
-                logging.info('Uploaded %s to CAS. Digest: %s', artifact.source_path, digest)
+                logger.info('Uploaded %s to CAS. Digest: %s', artifact.source_path, digest)
             else:
-                logging.warning(
-                    'No digest is dumped for file %s, the uploading may fail.', artifact.source_path)
+                logger.warning(
+                    'No digest is dumped for file %s, the uploading may fail.',
+                    artifact.source_path,
+                )
                 return None
 
             content_details = None
@@ -194,13 +234,12 @@ class Uploader:
                 try:
                     content_details = json.loads(content_details_file.read())
                 except json.JSONDecodeError as e:
-                    logging.warning('Failed to parse uploaded content details: %s', e)
+                    logger.warning('Failed to parse uploaded content details: %s', e)
 
-            return UploadResult(digest, content_details)
-
+            return UploadResult(digest, content_details, log_file)
 
     @staticmethod
-    def _path_flag_for_artifact(artifact: ArtifactConfig, working_dir: str) -> str:
+    def _path_flag_for_artifact(artifact: ArtifactConfig) -> list[str]:
         """Returns the path flag for the artifact."""
         if artifact.standard:
             return ['-zip-path' if artifact.unzip else '-file-path', artifact.source_path]
@@ -208,12 +247,8 @@ class Uploader:
             return ['-file-path', artifact.source_path]
         if artifact.chunk_dir:
             return ['-zip-path', artifact.source_path]
-        # TODO(b/250643926) This is a workaround to handle non-directory files.
-        tmp_dir = tempfile.mkdtemp(dir=working_dir)
-        target_path = os.path.join(tmp_dir, os.path.basename(artifact.source_path))
-        shutil.copy(artifact.source_path, target_path)
-        return ['-dir-path', tmp_dir]
-
+        # Should neve reach here.
+        return ['-file-path', artifact.source_path]
 
     def _output_results(
             self,
@@ -223,9 +258,9 @@ class Uploader:
     ):
         """Outputs digests and content details."""
         digests_output = {
-            'cas_instance': self.cas_info.cas_instance,
-            'cas_service': self.cas_info.cas_service,
-            'client_version': '.'.join(map(str, self.cas_info.client_version)),
+            'cas_instance': self._cas_info.cas_instance,
+            'cas_service': self._cas_info.cas_service,
+            'client_version': '.'.join(map(str, self._cas_info.client_version)),
             'files': digests,
         }
         output_path = os.path.join(output_dir, DIGESTS_PATH)
@@ -238,7 +273,6 @@ class Uploader:
             writer.write(json.dumps(content_details, sort_keys=True, indent=2))
         logging.info('Output uploaded content details to %s', output_path)
 
-
     def _upload_wrapper(self, task: UploadTask) -> Tuple[UploadResult, UploadTask]:
         """Returns a wrapper for _upload_artifact that associates the result with the task."""
         return self._upload_artifact(
@@ -247,38 +281,53 @@ class Uploader:
             task.metrics_file,
         ), task
 
-
     @staticmethod
-    def _glob(dist_dir: str, path: str) -> list[str]:
-        """Returns glob pattern for files matching path in dist_dir."""
-        if path.startswith("./"):
-            return glob.glob(dist_dir + path[1:])
-        return glob.glob(dist_dir + '/**/' + path, recursive=True)
+    def _glob_wrapper(args):
+        """Wrapper function for multiprocessing"""
+        dist_dir, artifact = args
 
+        files = []
+        if artifact.source_path.startswith("./"):
+            files = glob.glob(dist_dir + artifact.source_path[1:])
+        else:
+            files = glob.glob(dist_dir + '/**/' + artifact.source_path, recursive=True)
+        return (files, artifact)
 
-    def create_upload_tasks(self, artifacts: list[ArtifactConfig], working_dir: str, dist_dir: str) -> list[UploadTask]:
+    def create_upload_tasks(
+            self, artifacts: list[ArtifactConfig], working_dir: str, dist_dir: str
+    ) -> list[UploadTask]:
         """Creates upload tasks for the artifacts."""
+        start = time.time()
+
         tasks = []
         skip_files = []
-        for artifact in artifacts:
-            for f in Uploader._glob(dist_dir, artifact.source_path):
-                if os.path.isdir(f):
-                    logging.warning('Ignore artifact match (dir): %s', f)
-                    continue
-                rel_path = Uploader._get_relative_path(dist_dir, f)
-                for task_artifact in Uploader._artifact_variations(rel_path, artifact):
-                    path = Uploader._artifact_path(rel_path, task_artifact)
-
-                    # Avoid redundant upload if multiple ArtifactConfigs share files.
-                    if path in skip_files:
+        # Glob in parallel. Note that ThreadPoolExecutor doesn't help, likely due to GIL.
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            results = executor.map(
+                    Uploader._glob_wrapper,
+                    [(dist_dir, artifact) for artifact in artifacts],
+            )
+            for files, artifact in results:
+                for file in files:
+                    if os.path.isdir(file):
+                        logging.warning('Ignore artifact match (dir): %s', file)
                         continue
-                    skip_files.append(path)
-                    task_artifact.source_path = f
-                    _, task_metrics_file = tempfile.mkstemp(dir=working_dir)
-                    task = UploadTask(task_artifact, path, working_dir, task_metrics_file)
-                    tasks.append(task)
-        return tasks
+                    rel_path = Uploader._get_relative_path(dist_dir, file)
+                    for task_artifact in Uploader._artifact_variations(rel_path, artifact):
+                        path = Uploader._artifact_path(rel_path, task_artifact)
+                        if path in skip_files:
+                            continue
+                        skip_files.append(path)
+                        task_artifact.source_path = file
+                        _, task_metrics_file = tempfile.mkstemp(dir=working_dir)
+                        task = UploadTask(task_artifact, path, working_dir, task_metrics_file)
+                        tasks.append(task)
 
+        logging.info(
+                'Time of file globbing for all artifact configs: %d seconds',
+                time.time() - start,
+        )
+        return tasks
 
     @staticmethod
     def _print_tasks(tasks: list[UploadTask]):
@@ -288,13 +337,13 @@ class Uploader:
             print(f"{task.path:<40} {unzip} {task.artifact.source_path}")
         print(f"Total: {len(tasks)} files.")
 
-
     def upload(self, artifacts: list[ArtifactConfig], dist_dir: str,
-               cas_metrics: str, max_works: int, dryrun: bool = False):
+               max_works: int, dryrun: bool = False) -> cas_metrics_pb2.CasMetrics:
         """Uploads artifacts to CAS remote"""
         file_digests = {}
         content_details = []
 
+        cas_metrics = cas_metrics_pb2.CasMetrics()
         with tempfile.TemporaryDirectory() as working_dir:
             logging.info('The working dir is %s', working_dir)
 
@@ -302,14 +351,22 @@ class Uploader:
             logging.info('Uploading %d files, max workers = %d', len(tasks), max_works)
             if dryrun:
                 Uploader._print_tasks(tasks)
-                return
+                return cas_metrics
 
             # Upload artifacts in parallel
+            logging.info('==== Start uploading %d artifact(s) in parallel ====\n', len(tasks))
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_works) as executor:
                 futures = [executor.submit(self._upload_wrapper, task) for task in tasks]
 
+                index = 1
                 for future in concurrent.futures.as_completed(futures):
                     result, task = future.result()
+                    if result:
+                        output = Uploader.read_file(result.log_file) if result else ''
+                        logging.info('---- %s: %s ----\n\n%s', index, task.path, output)
+                    else:
+                        logging.info('---- %s: %s ----\n\n', index, task.path)
+                    index += 1
                     if result and result.digest:
                         file_digests[task.path] = result.digest
                     else:
@@ -326,13 +383,14 @@ class Uploader:
                     if os.path.exists(task.metrics_file):
                         Uploader._add_artifact_metrics(task.metrics_file, cas_metrics)
                         os.remove(task.metrics_file)
+            logging.info('==== Uploading of artifacts completed ====')
 
         self._output_results(
             dist_dir,
             file_digests,
             content_details,
         )
-
+        return cas_metrics
 
     @staticmethod
     def _add_artifact_metrics(metrics_file: str, cas_metrics: cas_metrics_pb2.CasMetrics):
@@ -354,7 +412,6 @@ class Uploader:
         except json_format.ParseError as e:  # Catch any other unexpected errors
             logging.exception("Error converting Json to protobuf: %s", e)
 
-
     @staticmethod
     def _get_relative_path(dir: str, path: str) -> str:
         """Returns the relative path from dir, falls back to basename on error."""
@@ -364,7 +421,6 @@ class Uploader:
             logging.exception("Error calculating relative path: %s", e)
             return os.path.basename(path)
 
-
     @staticmethod
     def _artifact_path(path: str, artifact: ArtifactConfig) -> str:
         """Returns unique artifact path for saving in cas_digest.json."""
@@ -373,7 +429,6 @@ class Uploader:
         if artifact.chunk_dir:
             return CHUNKED_DIR_ARTIFACT_NAME_PREFIX + path
         return path
-
 
     @staticmethod
     def _artifact_variations(path: str, artifact: ArtifactConfig) -> list[ArtifactConfig]:
