@@ -4568,12 +4568,14 @@ public class NativeDevice
             return mFastbootSerialNumber;
         }
 
-        mFastbootSerialNumber = getLinkLocalIpv6FastbootSerial();
-        if (mFastbootSerialNumber != null) {
-            CLog.i(
-                    "Device %s's fastboot serial number is %s",
-                    getSerialNumber(), mFastbootSerialNumber);
-            return mFastbootSerialNumber;
+        if (getOptions().useIpV6ForTcpFastboot()) {
+            mFastbootSerialNumber = getLinkLocalIpv6FastbootSerial();
+            if (mFastbootSerialNumber != null) {
+                CLog.i(
+                        "Device %s's fastboot serial number is %s",
+                        getSerialNumber(), mFastbootSerialNumber);
+                return mFastbootSerialNumber;
+            }
         }
 
         // Fallback to the same serial over TCP. Used for emulator cases (i.e Cuttlefish).
