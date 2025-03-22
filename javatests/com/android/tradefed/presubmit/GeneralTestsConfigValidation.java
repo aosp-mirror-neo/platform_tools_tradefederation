@@ -328,7 +328,10 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             "PtsCoreGetclientTestCases.config",
                             "PtsKmsGetfbTestCases.config",
                             "PtsKmsFlipTestCases.config",
-                            "s2-geometry-library-java-tests.config"));
+                            "s2-geometry-library-java-tests.config",
+                            // TODO(b/404996613): Confirm that this test should be in
+                            //  general-tests and exempted for validation.
+                            "DesktopChromeStableTestCases.config"));
 
     @Override
     public void setBuild(IBuildInfo buildInfo) {
@@ -430,7 +433,8 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             URI uri = new URI(apk.getPath());
                             if (uri.getScheme() != null
                                     && (uri.getScheme().contains("gs")
-                                            || uri.getScheme().contains("http"))) {
+                                            || uri.getScheme().contains("http")
+                                            || uri.getScheme().contains("pstash"))) {
                                 continue;
                             }
                         }
