@@ -399,6 +399,14 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             } else {
                 flasher = createFlasher(device);
                 mFlasher = flasher;
+                if (mIncrementalImageUtil != null
+                        && checkAntiRollback(flasher, device, deviceBuild)) {
+                    CLog.d("Avoid incremental flashing due to Anti-rollback situation");
+                    useIncrementalFlashing = false;
+                    mIncrementalImageUtil = null;
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.INCREMENTAL_FLASHING_ANTI_ROLLBACK_DETECTED, 1);
+                }
             }
             flasher.setWipeTimeout(mWipeTimeout);
             boolean tookPermit = false;
@@ -569,6 +577,12 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                             deviceBuild.getBuildBranch(),
                             deviceBuild.getBuildFlavor());
         }
+    }
+
+    protected boolean checkAntiRollback(
+            IDeviceFlasher flasher, ITestDevice device, IDeviceBuildInfo deviceBuild)
+            throws DeviceNotAvailableException {
+        return false;
     }
 
     /**
