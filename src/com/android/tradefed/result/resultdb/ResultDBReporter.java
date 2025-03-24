@@ -28,6 +28,7 @@ import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.invoker.IInvocationContext;
+import com.android.tradefed.log.Log.LogLevel;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement;
 import com.android.tradefed.result.FailureDescription;
@@ -74,6 +75,9 @@ public class ResultDBReporter
 
     public static final int MAX_PRIMARY_ERROR_MESSAGE_BYTES = 1024;
 
+    // Link to redirect to the result page.
+    private static final String RESULT_LINK = "https://ci.chromium.org/ui/inv/invocations/%s";
+
     // Set containing the allowed variant module parameter keys
     private static final Set<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
@@ -89,7 +93,7 @@ public class ResultDBReporter
             description = "Create a local invocation if invocation is not provided in the context")
     private boolean mCreateLocalInvocation = false;
 
-    private Invocation mInvocation;
+    private String mInvocationId;
     // Set to true if the reporter is responsible for updating and finalizing the invocation.
     private boolean mManageInvocation = false;
     private IRecorderClient mRecorder;
@@ -133,12 +137,12 @@ public class ResultDBReporter
 
     @VisibleForTesting
     IRecorderClient createRecorderClient(String invocationId, String updateToken) {
-        return Client.create(invocationId, updateToken);
+        return RecorderClient.create(invocationId, updateToken);
     }
 
     @VisibleForTesting
     IRecorderClient createRecorderClient(CreateInvocationRequest request) {
-        return Client.createWithNewInvocation(request);
+        return RecorderClient.createWithNewInvocation(request);
     }
 
     // Generate a random hexadecimal string of length 8.
@@ -161,15 +165,17 @@ public class ResultDBReporter
             String invocationId = context.getAttribute("resultdb_invocation_id");
             String updateToken = context.getAttribute("resultdb_invocation_update_token");
             if (!invocationId.isEmpty() && !updateToken.isEmpty()) {
+                mInvocationId = invocationId;
                 mRecorder = createRecorderClient(invocationId, updateToken);
             } else if (mCreateLocalInvocation) {
-                mInvocation = Invocation.newBuilder().setRealm("android:ants-experiment").build();
-                invocationId = randomUUIDString().toString();
+                Invocation invocation =
+                        Invocation.newBuilder().setRealm("android:ants-experiment").build();
+                mInvocationId = "u-" + randomUUIDString().toString();
                 mRecorder =
                         createRecorderClient(
                                 CreateInvocationRequest.newBuilder()
-                                        .setInvocation(mInvocation)
-                                        .setInvocationId("u-" + invocationId)
+                                        .setInvocation(invocation)
+                                        .setInvocationId(mInvocationId)
                                         .build());
                 mManageInvocation = true;
 
@@ -214,6 +220,8 @@ public class ResultDBReporter
                             .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
         }
         mBaseVariant = mBaseVariantBuilder.build();
+        CLog.logAndDisplay(
+                LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
     }
 
     @Override
@@ -240,6 +248,8 @@ public class ResultDBReporter
         if (mManageInvocation) {
             mRecorder.finalizeInvocation();
         }
+        CLog.logAndDisplay(
+                LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
         // TODO: Update ResultDB invocation with information from TF invocation.
     }
 
