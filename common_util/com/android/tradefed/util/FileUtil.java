@@ -40,7 +40,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileStore;
 import java.nio.file.FileSystemException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
@@ -490,17 +489,19 @@ public class FileUtil {
 
                 try {
                     // Get file attributes - link count
-                    long linkCount = (long) Files.getAttribute(path, "unix:nlink");
-                    // Get filesystem stats - total and free inodes
-                    FileStore fileStore = Files.getFileStore(path);
-                    long totalInodes = (long) fileStore.getAttribute("totalInodes");
-                    long freeInodes = (long) fileStore.getAttribute("freeInodes");
+                    long linkCount = ((Integer) Files.getAttribute(path, "unix:nlink")).intValue();
                     CLog.d(
-                            "Too many links for file: %s, Hard link count: %d, Total inodes: %d, "
-                                    + "Free inodes: %d",
-                            origFile.getAbsolutePath(), linkCount, totalInodes, freeInodes);
-                } catch (UnsupportedOperationException uoe) {
-                    CLog.e("Filesystem does not support inode queries.", uoe.getMessage());
+                            "Too many links for file: %s, Hard link count: %d",
+                            origFile.getAbsolutePath(), linkCount);
+                    String destDir = destFile.getParent();
+                    // All hosts are on Linux, so we can use df to get the filesystem stats.
+                    CommandResult result =
+                            RunUtil.getDefault()
+                                    .runTimedCmd(
+                                            10 * 1000, "df", destDir);
+                    if (result.getExitCode() == 0) {
+                        CLog.d("df output for %s: %s", destFile, result.getStdout());
+                    }
                 } catch (IOException ioe) {
                     CLog.e("Error retrieving file or filesystem stats: " + ioe.getMessage());
                 }
@@ -1450,4 +1451,3 @@ public class FileUtil {
         return e;
     }
 }
-
