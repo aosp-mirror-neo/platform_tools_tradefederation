@@ -2725,7 +2725,17 @@ public class NativeDevice
                             actionDescription, getSerialNumber());
                 }
                 if (shouldRecover) {
-                    recoverDevice();
+                    boolean recovered = recoverDevice();
+                    if (!recovered) {
+                        throw new DeviceNotAvailableException(
+                                String.format(
+                                        "Attempted %s without communication success and recovery"
+                                                + " was not running. Aborting.",
+                                        actionDescription),
+                                lastException,
+                                getSerialNumber(),
+                                DeviceErrorIdentifier.DEVICE_UNRESPONSIVE);
+                    }
                 }
             }
             if (retryAttempts > 0) {
