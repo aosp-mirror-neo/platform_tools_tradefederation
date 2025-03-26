@@ -97,6 +97,31 @@ public class HostOrchestratorClient {
                 .build();
     }
 
+    // https://github.com/google/android-cuttlefish/blob/fff7e3487c924435e6f6120345edf1dddb49d50b/frontend/src/host_orchestrator/orchestrator/controller.go#L73
+    public static HttpRequest buildStopInstanceRequest(String baseURL, String group, String name) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds/%s/%s/:stop", baseURL, group, name)))
+                .POST(java.net.http.HttpRequest.BodyPublishers.noBody())
+                .build();
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/main/frontend/src/host_orchestrator/orchestrator/controller.go#L89
+    public static HttpRequest buildSnapshotRequest(String baseURL, String group, String name) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds/%s/%s/snapshots", baseURL, group, name)))
+                .POST(java.net.http.HttpRequest.BodyPublishers.noBody())
+                .build();
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/fff7e3487c924435e6f6120345edf1dddb49d50b/frontend/src/host_orchestrator/orchestrator/controller.go#L65
+    public static HttpRequest buildRestoreSnapshotRequest(
+            String baseURL, String group, String name, String req) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds/%s/%s/:start", baseURL, group, name)))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(req))
+                .build();
+    }
+
     public static interface IHoHttpClient {
         HttpResponse<String> send(HttpRequest request)
                 throws IOException, InterruptedException, ErrorResponseException;
