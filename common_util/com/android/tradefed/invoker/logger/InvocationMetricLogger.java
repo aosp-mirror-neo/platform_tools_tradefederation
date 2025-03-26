@@ -356,6 +356,8 @@ public class InvocationMetricLogger {
 
         TRACE_INTERNAL_ERROR("trace_internal_error", true),
 
+        INCREMENTAL_FLASHING_ANTI_ROLLBACK_DETECTED(
+                "incremental_flashing_anti_rollback_detected", true),
         INCREMENTAL_FLASHING_TIME("incremental_flashing_time", true),
         INCREMENTAL_FLASHING_WAIT_PARALLEL_SETUP("incremental_flashing_wait_parallel_setup", true),
         INCREMENTAL_FLASHING_ATTEMPT_COUNT("incremental_flashing_attempt_count", true),

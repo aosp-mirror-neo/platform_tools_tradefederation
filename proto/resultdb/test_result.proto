@@ -1,18 +1,18 @@
 /*
- * Copyright (C) 2024 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+* Copyright (C) 2019 The Android Open Source Project
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*      http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
 
 syntax = "proto3";
 
@@ -56,25 +56,28 @@ message TestResult {
     (google.api.field_behavior) = IMMUTABLE
   ];
 
-  // Test id, a unique identifier of the test in a LUCI project.
+  // The structured test identifier.
+  //
+  // Uniquely identifies the test that was run, including the specific way of running that
+  // test, e.g. build configuration, CPU architecture, OS.
+  //
+  // When uploading results, this should be specified in preference
+  // to test_id and variant. (Uploading test_id and variant is supported only for
+  // legacy uploaders).
+  TestIdentifier test_id_structured = 19 [(google.api.field_behavior) = IMMUTABLE];
+
+  // A unique identifier of the test in a LUCI project, excluding variant.
   // Regex: ^[[::print::]]{1,512}$
   //
-  // If two tests have a common test id prefix that ends with a
-  // non-alphanumeric character, they considered a part of a group. Examples:
-  // - "a/b/c"
-  // - "a/b/d"
-  // - "a/b/e:x"
-  // - "a/b/e:y"
-  // - "a/f"
-  // This defines the following groups:
-  // - All items belong to one group because of the common prefix "a/"
-  // - Within that group, the first 4 form a sub-group because of the common
-  //   prefix "a/b/"
-  // - Within that group, "a/b/e:x" and "a/b/e:y" form a sub-group because of
-  //   the common prefix "a/b/e:".
-  // This can be used in UI.
-  // LUCI does not interpret test ids in any other way.
-  string test_id = 2 [(google.api.field_behavior) = IMMUTABLE];
+  // This is the flat-form encoding of the structured test variant ID above,
+  // excluding information about the specific way of running test (e.g. build configuration,
+  // CPU architecture). Such information is captured separately in the `variant` field below.
+  //
+  // See TestIdentifier for details how a structured test identifier is converted
+  // to flat test ID.
+  //
+  // Output only. (Except for legacy uploaders.)
+  string test_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY, (google.api.field_behavior) = IMMUTABLE];
 
   // Identifies a test result in a given invocation and test id.
   // Regex: ^[a-z0-9\-_.]{1,32}$
@@ -84,8 +87,10 @@ message TestResult {
   ];
 
   // Description of one specific way of running the test,
-  // e.g. a specific bucket, builder and a test suite.
-  Variant variant = 4 [(google.api.field_behavior) = IMMUTABLE];
+  // e.g. build configuration, CPU architecture, OS.
+  //
+  // Output only. (Except for legacy uploaders.)
+  Variant variant = 4 [(google.api.field_behavior) = OUTPUT_ONLY, (google.api.field_behavior) = IMMUTABLE];
 
   // Whether the result of test case execution is expected.
   // In a typical Chromium CL, 99%+ of test results are expected.
@@ -226,6 +231,7 @@ enum SkipReason {
 // for an unexpected result of a test variant.
 // For example, the test variant fails both with and without CL, so it is not
 // CL's fault.
+// Next ID: 10.
 message TestExoneration {
   // Can be used to refer to this test exoneration, e.g. in
   // ResultDB.GetTestExoneration RPC.
@@ -240,13 +246,34 @@ message TestExoneration {
     (google.api.field_behavior) = IMMUTABLE
   ];
 
-  // Test identifier, see TestResult.test_id.
-  string test_id = 2;
+  // The structured test identifier.
+  //
+  // Uniquely identifies the test that was run, including the specific way of running that
+  // test, e.g. build configuration, CPU architecture, OS.
+  //
+  // When uploading results, this should be specified in preference
+  // to test_id and variant. (Uploading test_id and variant is supported only for
+  // legacy uploaders).
+  TestIdentifier test_id_structured = 9 [(google.api.field_behavior) = IMMUTABLE];
 
-  // Description of the variant of the test, see Variant type.
-  // Unlike TestResult.extra_variant_pairs, this one must be a full definition
-  // of the variant, i.e. it is not combined with Invocation.base_test_variant.
-  Variant variant = 3;
+  // A unique identifier of the test in a LUCI project, excluding variant.
+  // Regex: ^[[::print::]]{1,512}$
+  //
+  // This is the flat-form encoding of the structured test variant ID above,
+  // excluding information about the specific way of running test (e.g. build configuration,
+  // CPU architecture). Such information is captured separately in the `variant` field below.
+  //
+  // See TestIdentifier for details how a structured test identifier is converted
+  // to flat test ID.
+  //
+  // Output only. (Except for legacy uploaders.)
+  string test_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY, (google.api.field_behavior) = IMMUTABLE];
+
+  // Description of one specific way of running the test,
+  // e.g. build configuration, CPU architecture, OS.
+  //
+  // Output only. (Except for legacy uploaders.)
+  Variant variant = 3 [(google.api.field_behavior) = OUTPUT_ONLY, (google.api.field_behavior) = IMMUTABLE];
 
   // Identifies an exoneration in a given invocation and test id.
   // It is server-generated.

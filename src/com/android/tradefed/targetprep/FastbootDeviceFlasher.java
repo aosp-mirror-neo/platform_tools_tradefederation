@@ -1143,17 +1143,22 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         CLog.v("fastboot stderr: " + result.getStderr());
         CommandStatus status = result.getStatus();
         ErrorIdentifier errorIdentifier = null;
-        boolean diskErrorIdentified = false;
+        boolean specialErrorIdentified = false;
         for (String diskError : DISK_SPACE_ERRORS) {
             if (result.getStderr().contains(diskError)) {
                 errorIdentifier = InfraErrorIdentifier.NO_DISK_SPACE;
                 status = CommandStatus.FAILED;
-                diskErrorIdentified = true;
+                specialErrorIdentified = true;
                 break;
             }
         }
+        if (result.getStderr().contains("rejected, anti-rollback")) {
+            specialErrorIdentified = true;
+            errorIdentifier = InfraErrorIdentifier.ANTI_ROLLBACK_ERROR;
+            status = CommandStatus.FAILED;
+        }
 
-        if (!diskErrorIdentified && result.getStderr().contains("FAILED")) {
+        if (!specialErrorIdentified && result.getStderr().contains("FAILED")) {
             // if output contains "FAILED", just override to failure
             status = CommandStatus.FAILED;
         }
