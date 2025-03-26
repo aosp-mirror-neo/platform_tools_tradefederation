@@ -363,6 +363,12 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 // Re-entry can occur during reset isolation.
                 reEntry = true;
             } else {
+                if (TestDeviceState.ONLINE.equals(device.getDeviceState())) {
+                    CommandResult verityOutput = device.executeShellV2Command("enable-verity");
+                    CLog.d(
+                            "Verity output: stdout:%s\nstderr:%s",
+                            verityOutput.getStdout(), verityOutput.getStderr());
+                }
                 mIncrementalImageUtil =
                         IncrementalImageUtil.initialize(
                                 device,
@@ -373,18 +379,12 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                                 mAllowedTransition,
                                 mNewIncrementalFlow,
                                 mUpdateBootloaderFromUserspace,
-                                mWaitPhase,
-                                mUseMerkleTreeComparison);
+                                mWaitPhase);
                 if (mIncrementalImageUtil == null) {
                     useIncrementalFlashing = false;
                 } else {
                     if (mAllowIncrementalOnSameBuild) {
                         mIncrementalImageUtil.allowSameBuildFlashing();
-                    }
-                    if (TestDeviceState.ONLINE.equals(device.getDeviceState())) {
-                        // No need to reboot yet, it will happen later in the sequence
-                        String verityOutput = device.executeAdbCommand("enable-verity");
-                        CLog.d("%s", verityOutput);
                     }
                 }
             }

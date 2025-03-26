@@ -115,9 +115,9 @@ public class IncrementalImageUtil {
             Set<String> allowedTransition,
             boolean newFlow,
             boolean updateBootloaderFromUserspace,
-            SnapuserdWaitPhase waitPhase,
-            boolean useMerkleTree)
+            SnapuserdWaitPhase waitPhase)
             throws DeviceNotAvailableException {
+        boolean useMerkleTree = true;
         String serialNumber = device.getSerialNumber();
         FileCacheTracker tracker =
                 DeviceImageTracker.getDefaultCache().getBaselineDeviceImage(serialNumber);
@@ -179,6 +179,11 @@ public class IncrementalImageUtil {
                         CLog.w("Failed to pull merkle tree");
                         FileUtil.recursiveDelete(merkleTreeDir);
                         merkleTreeDir = null;
+                    } else if (merkleTreeDir.list().length == 0) {
+                        CLog.w("Merkle tree dir is empty. Is verity disabled?");
+                        FileUtil.recursiveDelete(merkleTreeDir);
+                        merkleTreeDir = null;
+                        return null;
                     }
                 } catch (IOException e) {
                     CLog.e(e);
@@ -186,6 +191,10 @@ public class IncrementalImageUtil {
                     merkleTreeDir = null;
                 }
             }
+        }
+        // We need the merkle tree now to compare
+        if (merkleTreeDir == null) {
+            return null;
         }
         return new IncrementalImageUtil(
                 device,
