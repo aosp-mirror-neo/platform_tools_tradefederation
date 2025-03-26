@@ -20,6 +20,7 @@ import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
+import com.android.tradefed.device.NativeDevice;
 import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.internal.DeviceResetHandler;
 import com.android.tradefed.device.internal.DeviceSnapshotHandler;
@@ -516,6 +517,11 @@ public class BaseRetryDecision
             try (CloseableTraceScope ignored = new CloseableTraceScope("reboot_isolation")) {
                 for (ITestDevice device : devices) {
                     device.reboot();
+                    // Force content provider to re-issue an install to ensure readiness for tests
+                    // retrying
+                    if (device instanceof NativeDevice) {
+                        ((NativeDevice) device).resetContentProviderSetup();
+                    }
                 }
                 CurrentInvocation.setModuleIsolation(IsolationGrade.REBOOT_ISOLATED);
                 CurrentInvocation.setRunIsolation(IsolationGrade.REBOOT_ISOLATED);
