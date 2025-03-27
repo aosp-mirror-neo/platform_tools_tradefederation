@@ -478,9 +478,9 @@ public class IncrementalImageUtil {
             // Once block comparison is successful, log the information
             logTargetInformation(targetDirectory);
             long totalPatchSizes = logPatchesInformation(workDir);
-            // if we have more than 2.5GB we will overflow super partition size to /data and we
+            // if we have more than 2.0GB we will overflow super partition size to /data and we
             // can't use the feature
-            if (totalPatchSizes > 2300000000L) {
+            if (totalPatchSizes > 2000000000L) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.INCREMENTAL_FALLBACK_REASON, "Patches too large.");
                 throw new TargetSetupError(
