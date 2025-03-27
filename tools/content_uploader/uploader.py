@@ -206,17 +206,17 @@ class Uploader:
             try:
                 logger.info('Running command: %s', cmd)
                 output = Uploader._run_uploader_command(cmd, working_dir)
-                logger.info('Command output:\n %s', output)
+                logger.info('Command output:\n%s', output)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(
                     'Failed to upload %s to CAS instance %s. Skip.\nError message: %s\nLog: %s',
                     artifact.source_path, self._cas_info.cas_instance, e, e.stdout,
                 )
-                return None
+                return UploadResult(None, None, log_file)
             except subprocess.SubprocessError as e:
                 logger.warning('Failed to upload %s to CAS instance %s. Skip.\n. Error %s',
                     artifact.source_path, self._cas_info.cas_instance, e)
-                return None
+                return UploadResult(None, None, log_file)
 
             # Read digest of the root directory or file from dumped digest file.
             digest = digest_file.read()
@@ -227,7 +227,7 @@ class Uploader:
                     'No digest is dumped for file %s, the uploading may fail.',
                     artifact.source_path,
                 )
-                return None
+                return UploadResult(None, None, log_file)
 
             content_details = None
             if dump_file_details:
@@ -361,20 +361,17 @@ class Uploader:
                 index = 1
                 for future in concurrent.futures.as_completed(futures):
                     result, task = future.result()
-                    if result:
-                        output = Uploader.read_file(result.log_file) if result else ''
-                        logging.info('---- %s: %s ----\n\n%s', index, task.path, output)
-                    else:
-                        logging.info('---- %s: %s ----\n\n', index, task.path)
+                    output = Uploader.read_file(result.log_file)
+                    logging.info('---- %s: %s ----\n\n%s', index, task.path, output)
                     index += 1
-                    if result and result.digest:
+                    if result.digest:
                         file_digests[task.path] = result.digest
                     else:
                         logging.warning(
                             'Skip to save the digest of file %s, the uploading may fail',
                             task.path,
                         )
-                    if result and result.content_details:
+                    if result.content_details:
                         content_details.append({"artifact": task.path,
                                                 "details": result.content_details})
                     else:
@@ -396,7 +393,7 @@ class Uploader:
     def _add_artifact_metrics(metrics_file: str, cas_metrics: cas_metrics_pb2.CasMetrics):
         """Adds artifact metrics from metrics_file to cas_metrics."""
         try:
-            with open(metrics_file, "r", encoding='utf8') as file:
+            with open(metrics_file, 'r', encoding='utf8') as file:
                 json_str = file.read()  # Read the file contents here
                 if json_str:
                     json_metrics = json.loads(json_str)
@@ -404,13 +401,13 @@ class Uploader:
                         json_format.ParseDict(json_metrics, cas_metrics_pb2.ArtifactMetrics())
                     )
                 else:
-                    logging.exception("Empty file: %s", metrics_file)
+                    logging.warning('Empty metrics file: %s', metrics_file)
         except FileNotFoundError:
-            logging.exception("File not found: %s", metrics_file)
+            logging.exception('File not found: %s', metrics_file)
         except json.JSONDecodeError as e:
-            logging.exception("Jason decode error: %s for json contents:\n%s", e, json_str)
+            logging.exception('Jason decode error: %s for json contents:\n', e)
         except json_format.ParseError as e:  # Catch any other unexpected errors
-            logging.exception("Error converting Json to protobuf: %s", e)
+            logging.exception('Error converting Json to protobuf: %s', e)
 
     @staticmethod
     def _get_relative_path(dir: str, path: str) -> str:

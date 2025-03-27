@@ -87,6 +87,20 @@ done
         uploader.upload(artifacts, dist_dir, max_workers, dryrun)
         return Uploader.read_file(self.command_file)
 
+    def _upload_failed(self, artifacts, test_dir: str, dist_dir: str) -> str:
+        log_dir = os.path.join(dist_dir, 'logs')
+        os.makedirs(log_dir, 0o777)
+        max_workers = 1
+        dryrun = False
+        client_path = self._create_fake_uploader(test_dir, f"""#!/bin/bash
+echo $@ >> {self.command_file}
+exit 1
+""")
+        cas_info = CasInfo('INSTANCE', 'SERVICE', client_path, (1, 4))
+        uploader = Uploader(cas_info)
+        uploader.upload(artifacts, dist_dir, max_workers, dryrun)
+        return Uploader.read_file(self.command_file)
+
     def _verify(self, command: str, has_flags: list[str], no_flags: list[str]):
         for flag in has_flags:
             if not flag in command:
@@ -188,6 +202,21 @@ done
             commands = self._upload(artifacts, self.test_dir, dist_dir)
             self.assertEqual(len(commands.split('\n')) - 1, 1)
             self.assertNotIn('/sub/', commands)
+
+    def test_upload_failed(self):
+        """Log from failed upload task is captured."""
+        standard_image = ArtifactConfig(
+            '*-img-*zip',
+            unzip = False,
+        )
+        with tempfile.TemporaryDirectory() as dist_dir:
+            artifacts = [standard_image]
+            self._create_fake_imagefile(dist_dir, 'oriole-img-123.zip')
+            with self.assertLogs(level=logging.INFO) as cm:
+                _ = self._upload_failed(artifacts, self.test_dir, dist_dir)
+                log_lines = '\n'.join(cm.output)
+                self.assertIn('Failed to upload', log_lines)
+
 
 if __name__ == '__main__':
     unittest.main()
