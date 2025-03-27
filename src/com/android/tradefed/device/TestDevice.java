@@ -1181,12 +1181,12 @@ public class TestDevice extends NativeDevice {
             CLog.i(
                     "Attempting to disable keyguard on %s using %s",
                     getSerialNumber(), DISMISS_KEYGUARD_WM_CMD);
-            String output = executeShellCommand(DISMISS_KEYGUARD_WM_CMD);
-            CLog.i("output of %s: %s", DISMISS_KEYGUARD_WM_CMD, output);
+            CommandResult output = executeShellV2Command(DISMISS_KEYGUARD_WM_CMD);
+            CLog.i("output of %s: %s", DISMISS_KEYGUARD_WM_CMD, output.getStdout());
         } else {
             CLog.i("Command: %s, is not supported, falling back to %s", DISMISS_KEYGUARD_WM_CMD,
                     DISMISS_KEYGUARD_CMD);
-            executeShellCommand(DISMISS_KEYGUARD_CMD);
+            executeShellV2Command(DISMISS_KEYGUARD_CMD);
         }
         verifyKeyguardDismissed();
     }

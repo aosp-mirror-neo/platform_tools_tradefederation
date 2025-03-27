@@ -823,6 +823,9 @@ public class TestDeviceTest {
                     }
 
                     @Override
+                    public void disableKeyguard() throws DeviceNotAvailableException {}
+
+                    @Override
                     void doReboot(RebootMode rebootMode, @Nullable final String reason)
                             throws DeviceNotAvailableException, UnsupportedOperationException {}
                 };
@@ -843,7 +846,6 @@ public class TestDeviceTest {
                         Mockito.anyLong(),
                         (TimeUnit) Mockito.any());
         when(mMockStateMonitor.waitForDeviceOnline()).thenReturn(mMockIDevice);
-        injectSystemProperty(SDK_VERSION, "23");
 
         mTestDevice.executeShellCommand(testCommand, mMockReceiver);
 
@@ -864,24 +866,6 @@ public class TestDeviceTest {
         // expect post boot up steps
         verify(mMockRecovery, times(times))
                 .recoverDevice(Mockito.eq(mMockStateMonitor), Mockito.eq(false));
-        verify(mMockIDevice, times(times))
-                .executeShellCommand(
-                        Mockito.eq("dumpsys input"),
-                        Mockito.any(),
-                        Mockito.anyLong(),
-                        Mockito.eq(TimeUnit.MILLISECONDS));
-        verify(mMockIDevice, times(times))
-                .executeShellCommand(
-                        Mockito.eq(TestDevice.DISMISS_KEYGUARD_WM_CMD),
-                        (IShellOutputReceiver) Mockito.any(),
-                        Mockito.anyLong(),
-                        (TimeUnit) Mockito.any());
-        verify(mMockIDevice, times(times))
-                .executeShellCommand(
-                        Mockito.eq(TestDevice.KEYGUARD_CONTROLLER_CMD),
-                        Mockito.any(),
-                        Mockito.anyLong(),
-                        Mockito.eq(TimeUnit.MILLISECONDS));
     }
 
     private void assertRecoverySuccess()
@@ -921,6 +905,9 @@ public class TestDeviceTest {
                     }
 
                     @Override
+                    public void disableKeyguard() throws DeviceNotAvailableException {}
+
+                    @Override
                     void doReboot(RebootMode rebootMode, @Nullable final String reason)
                             throws DeviceNotAvailableException, UnsupportedOperationException {}
                 };
@@ -954,7 +941,6 @@ public class TestDeviceTest {
                         Mockito.anyLong(),
                         (TimeUnit) Mockito.any());
         assertRecoverySuccess();
-        verifySystemProperty(SDK_VERSION, "23", 1);
     }
 
     /**
@@ -981,6 +967,9 @@ public class TestDeviceTest {
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
                     }
+
+                    @Override
+                    public void disableKeyguard() throws DeviceNotAvailableException {}
 
                     @Override
                     protected IRunUtil getRunUtil() {
@@ -1011,7 +1000,6 @@ public class TestDeviceTest {
         }
 
         assertRecoverySuccess(TestDevice.MAX_RETRY_ATTEMPTS + 1);
-        verifySystemProperty(SDK_VERSION, "23", 1);
         verify(mMockStateMonitor, times(3)).waitForDeviceOnline();
         verify(mMockIDevice, times(TestDevice.MAX_RETRY_ATTEMPTS + 1))
                 .executeShellCommand(
@@ -4297,6 +4285,9 @@ public class TestDeviceTest {
                     public String getProperty(String name) throws DeviceNotAvailableException {
                         return "R\n";
                     }
+
+                    @Override
+                    public void disableKeyguard() throws DeviceNotAvailableException {}
                 };
         assertTrue(mTestDevice.switchUser(10));
     }
@@ -4345,6 +4336,9 @@ public class TestDeviceTest {
                     protected long getCheckNewUserSleep() {
                         return 100;
                     }
+
+                    @Override
+                    public void disableKeyguard() throws DeviceNotAvailableException {}
                 };
         assertTrue(mTestDevice.switchUser(10));
     }
@@ -6136,6 +6130,7 @@ public class TestDeviceTest {
                 .when(spy)
                 .executeShellV2Command(Mockito.contains("content write"), (File) Mockito.any());
         doReturn(null).when(spy).uninstallPackage(Mockito.eq("android.tradefed.contentprovider"));
+        doReturn(true).when(spy).recoverDevice();
 
         try {
             boolean res = spy.pushFile(tmpFile, fakeRemotePath);

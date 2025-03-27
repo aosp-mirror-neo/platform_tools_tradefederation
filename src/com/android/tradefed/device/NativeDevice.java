@@ -2725,7 +2725,17 @@ public class NativeDevice
                             actionDescription, getSerialNumber());
                 }
                 if (shouldRecover) {
-                    recoverDevice();
+                    boolean recovered = recoverDevice();
+                    if (!recovered) {
+                        throw new DeviceNotAvailableException(
+                                String.format(
+                                        "Attempted %s without communication success and recovery"
+                                                + " was not running. Aborting.",
+                                        actionDescription),
+                                lastException,
+                                getSerialNumber(),
+                                DeviceErrorIdentifier.DEVICE_UNRESPONSIVE);
+                    }
                 }
             }
             if (retryAttempts > 0) {
@@ -4558,12 +4568,14 @@ public class NativeDevice
             return mFastbootSerialNumber;
         }
 
-        mFastbootSerialNumber = getLinkLocalIpv6FastbootSerial();
-        if (mFastbootSerialNumber != null) {
-            CLog.i(
-                    "Device %s's fastboot serial number is %s",
-                    getSerialNumber(), mFastbootSerialNumber);
-            return mFastbootSerialNumber;
+        if (getOptions().useIpV6ForTcpFastboot()) {
+            mFastbootSerialNumber = getLinkLocalIpv6FastbootSerial();
+            if (mFastbootSerialNumber != null) {
+                CLog.i(
+                        "Device %s's fastboot serial number is %s",
+                        getSerialNumber(), mFastbootSerialNumber);
+                return mFastbootSerialNumber;
+            }
         }
 
         // Fallback to the same serial over TCP. Used for emulator cases (i.e Cuttlefish).

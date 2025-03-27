@@ -423,6 +423,10 @@ public class TestDeviceOptions {
     @Option(name = "force-evaluate-connection")
     private boolean mForceEvaluateDeviceConnection = false;
 
+    @Option(name = "use-ipv6-for-tcp-fastboot",
+            description = "Whether to use IPv6 for TCP fastboot detection.")
+    private boolean mUseIpV6ForTcpFastboot = true;
+
     // END ====================== Options Related to Virtual Devices ======================
 
     // Option related to Remote Device only
@@ -1054,6 +1058,10 @@ public class TestDeviceOptions {
 
     public boolean evaluateDeviceConnection() {
         return mForceEvaluateDeviceConnection;
+    }
+
+    public boolean useIpV6ForTcpFastboot() {
+        return mUseIpV6ForTcpFastboot;
     }
 }
 
