@@ -340,4 +340,8 @@ public interface ICommandScheduler {
 
     /** Returns true if the device is used by an active invocation thread. */
     public boolean isDeviceInInvocationThread(ITestDevice device);
+
+    public default void setMaxPollTime(long polling) {
+        // Empty on purpose
+    }
 }
