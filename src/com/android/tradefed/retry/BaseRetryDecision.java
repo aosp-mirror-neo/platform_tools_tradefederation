@@ -213,7 +213,9 @@ public class BaseRetryDecision
         if (mRebootAtLastRetry) {
             args.add("--reboot-at-last-retry");
         }
-        args.addAll(List.of("--retry-isolation-grade", mRetryIsolationGrade.toString()));
+        if (!IsolationGrade.NOT_ISOLATED.equals(mRetryIsolationGrade)) {
+            args.addAll(List.of("--retry-isolation-grade", mRetryIsolationGrade.toString()));
+        }
         for (String filterEntry : mSkipRetryingSet) {
             args.add("--skip-retrying-list");
             args.add(filterEntry);
