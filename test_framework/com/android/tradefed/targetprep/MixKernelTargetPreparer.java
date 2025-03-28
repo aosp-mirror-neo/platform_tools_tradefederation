@@ -358,10 +358,10 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
                     "Failed to run mix kernel tool. Exit code: %s, stdout: %s, stderr: %s",
                     result.getStatus(), result.getStdout(), result.getStderr());
             throw new TargetSetupError(
-                    "Failed to run mix kernel tool. Stderr: " + result.getStderr());
+                    "Failed to run mix kernel tool.");
         }
         CLog.i(
-                "Successfully mixed kernel to new device image in %s with files %s",
-                newDeviceDir.toString(), Arrays.toString(newDeviceDir.list()));
+                "%s\nSuccessfully mixed kernel to new device image in %s with files %s.",
+                result.getStdout(), newDeviceDir.toString(), Arrays.toString(newDeviceDir.list()));
     }
 }
