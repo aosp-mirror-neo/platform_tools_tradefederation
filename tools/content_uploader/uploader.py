@@ -26,7 +26,7 @@ import subprocess
 import tempfile
 import uuid
 import time
-from typing import Tuple
+from typing import TextIO, Tuple
 
 import cas_metrics_pb2  # type: ignore
 from google.protobuf import json_format
@@ -130,20 +130,17 @@ class Uploader:
             return f"Error: {e}"
 
     @staticmethod
-    def _run_uploader_command(cmd: str, working_dir: str) -> str:
-        """"Run the uploader command using working_dir and returns the output."""
-        log_file = os.path.join(working_dir, f'_casuploader_{uuid.uuid4()}.log')
-        with open(log_file, 'w', encoding='utf8') as outfile:
-            subprocess.run(
-                cmd,
-                check=True,
-                text=True,
-                stdout=outfile,
-                stderr=subprocess.STDOUT,
-                encoding='utf-8',
-                timeout=UPLOADER_TIMEOUT_SECS
-            )
-        return Uploader.read_file(log_file)
+    def _run_uploader_command(cmd: str, outfile: TextIO):
+        """"Run the uploader command and output to outfile."""
+        subprocess.run(
+            cmd,
+            check=True,
+            text=True,
+            stdout=outfile,
+            stderr=subprocess.STDOUT,
+            encoding='utf-8',
+            timeout=UPLOADER_TIMEOUT_SECS
+        )
 
     def _upload_artifact(self,
             artifact: ArtifactConfig,
@@ -203,20 +200,24 @@ class Uploader:
             if dump_metrics:
                 cmd = cmd + ['-dump-metrics', metrics_file]
 
-            try:
-                logger.info('Running command: %s', cmd)
-                output = Uploader._run_uploader_command(cmd, working_dir)
-                logger.info('Command output:\n%s', output)
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(
-                    'Failed to upload %s to CAS instance %s. Skip.\nError message: %s\nLog: %s',
-                    artifact.source_path, self._cas_info.cas_instance, e, e.stdout,
-                )
-                return UploadResult(None, None, log_file)
-            except subprocess.SubprocessError as e:
-                logger.warning('Failed to upload %s to CAS instance %s. Skip.\n. Error %s',
-                    artifact.source_path, self._cas_info.cas_instance, e)
-                return UploadResult(None, None, log_file)
+            cmd_output_file = os.path.join(working_dir, f'_casuploader_{uuid.uuid4()}.log')
+            with open(cmd_output_file, 'w', encoding='utf8') as outfile:
+                try:
+                    logger.info('Running command: %s', cmd)
+                    Uploader._run_uploader_command(cmd, outfile)
+                    logger.info('Command output:\n%s', Uploader.read_file(cmd_output_file))
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    logger.info('Command output:\n%s', Uploader.read_file(cmd_output_file))
+                    logger.warning(
+                        'Failed to upload %s to CAS instance %s. Skip.\nError message: %s',
+                        artifact.source_path, self._cas_info.cas_instance, e
+                    )
+                    return UploadResult(None, None, log_file)
+                except subprocess.SubprocessError as e:
+                    logger.info('Command output:\n%s', Uploader.read_file(cmd_output_file))
+                    logger.warning('Failed to upload %s to CAS instance %s. Skip.\n. Error: %s',
+                        artifact.source_path, self._cas_info.cas_instance, e)
+                    return UploadResult(None, None, log_file)
 
             # Read digest of the root directory or file from dumped digest file.
             digest = digest_file.read()
@@ -405,7 +406,7 @@ class Uploader:
         except FileNotFoundError:
             logging.exception('File not found: %s', metrics_file)
         except json.JSONDecodeError as e:
-            logging.exception('Jason decode error: %s for json contents:\n', e)
+            logging.exception('Json decode error: %s', e)
         except json_format.ParseError as e:  # Catch any other unexpected errors
             logging.exception('Error converting Json to protobuf: %s', e)
 
