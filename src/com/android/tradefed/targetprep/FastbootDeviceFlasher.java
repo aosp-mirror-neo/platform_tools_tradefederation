@@ -54,6 +54,8 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -65,6 +67,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** A class that relies on fastboot to flash an image on physical Android hardware. */
 public class FastbootDeviceFlasher implements IDeviceFlasher {
@@ -99,6 +102,7 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     private CommandStatus mSystemFlashStatus;
 
     private boolean mShouldFlashRamdisk = false;
+    private boolean mSkipBootloaderVersionCheck = false;
 
     private String mRamdiskPartition = "root";
 
@@ -485,8 +489,9 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     protected boolean checkAndFlashBootloader(ITestDevice device, IDeviceBuildInfo deviceBuild)
             throws DeviceNotAvailableException, TargetSetupError {
         String currentBootloaderVersion = getImageVersion(device, "bootloader");
-        if (deviceBuild.getBootloaderVersion() != null &&
-                !deviceBuild.getBootloaderVersion().equals(currentBootloaderVersion)) {
+        if (mSkipBootloaderVersionCheck
+                || (deviceBuild.getBootloaderVersion() != null
+                        && !deviceBuild.getBootloaderVersion().equals(currentBootloaderVersion))) {
             CLog.i("Flashing bootloader %s", deviceBuild.getBootloaderVersion());
             flashBootloader(device, deviceBuild.getBootloaderImageFile());
             if (mIncrementalFlashing != null) {
@@ -878,6 +883,18 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
      */
     private void flashWithAll(ITestDevice device, IDeviceBuildInfo deviceBuild)
             throws DeviceNotAvailableException, TargetSetupError {
+        if (mSkipBootloaderVersionCheck) {
+            CLog.d("mSkipBootloaderVersionCheck=true, removing bootloader requirements.");
+            File androidInfo = new File(deviceBuild.getDeviceImageFile(), "android-info.txt");
+            removeLine(androidInfo);
+            try {
+                CLog.d(
+                        "android-info.txt after rewrite:\n%s",
+                        FileUtil.readStringFromFile(androidInfo));
+            } catch (IOException e) {
+                CLog.e(e);
+            }
+        }
         try {
             Map<String, String> systemVarMap = new HashMap<>();
             systemVarMap.put(
@@ -891,6 +908,21 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                             + "the image you are flashing can boot properly.",
                     e,
                     device.getSerialNumber());
+        }
+    }
+
+    public static void removeLine(File androidInfo) throws TargetSetupError {
+        try (Stream<String> streamLine = Files.lines(androidInfo.toPath())) {
+            List<String> out = streamLine
+                .filter(line -> !line.contains("require version-bootloader="))
+                            .collect(Collectors.toList());
+            Files.write(
+                    androidInfo.toPath(),
+                    out,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+            throw new TargetSetupError(e.getMessage(), e);
         }
     }
 
@@ -1272,5 +1304,13 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     @VisibleForTesting
     IHostOptions getHostOptions() {
         return GlobalConfiguration.getInstance().getHostOptions();
+    }
+
+    protected void setSkipBootloaderVersionCheck(boolean skipBootloaderVersionCheck) {
+        mSkipBootloaderVersionCheck = skipBootloaderVersionCheck;
+    }
+
+    public boolean shouldSkipBootloaderVersionCheck() {
+        return mSkipBootloaderVersionCheck;
     }
 }

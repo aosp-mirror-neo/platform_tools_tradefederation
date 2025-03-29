@@ -114,6 +114,11 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             description = "whether or not to skip post-flashing setup steps")
     private boolean mSkipPostFlashingSetup = false;
 
+    @Option(
+            name = "skip-bootloader-version-check",
+            description = "Allows to ignore bootloader version and force it installed.")
+    private boolean mSkipBootloaderVersionCheck = false;
+
     @Option(name = "wipe-timeout",
             description = "the timeout for the command of wiping user data.", isTimeVal = true)
     private long mWipeTimeout = 4 * 60 * 1000;
@@ -383,6 +388,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 if (mIncrementalImageUtil == null) {
                     useIncrementalFlashing = false;
                 } else {
+                    mIncrementalImageUtil.setSkipBootloaderVersionCheck(
+                            mSkipBootloaderVersionCheck);
                     if (mAllowIncrementalOnSameBuild) {
                         mIncrementalImageUtil.allowSameBuildFlashing();
                     }
@@ -421,6 +428,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                     flasher.setRamdiskPartition(mRamdiskPartition);
                 }
                 if (flasher instanceof FastbootDeviceFlasher) {
+                    ((FastbootDeviceFlasher) flasher)
+                            .setSkipBootloaderVersionCheck(mSkipBootloaderVersionCheck);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
                     if (!reEntry) {
                         // Avoid using incremental during re-entry since it will just wipe
