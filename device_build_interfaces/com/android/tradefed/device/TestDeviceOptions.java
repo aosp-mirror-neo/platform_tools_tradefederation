@@ -116,6 +116,20 @@ public class TestDeviceOptions {
                             + "the same fastboot binary as DeviceManager.")
     private File mFastbootBinary = null;
 
+    @Option(
+            name = "device-adb-binary",
+            description =
+                    "The adb binary to use for the test session. If null, will use "
+                            + "the same adb binary as DeviceManager.")
+    private File mAdbBinary = null;
+
+    @Option(
+            name = "device-adb-server-port",
+            description =
+                    "The port of the adb server associated with the device. By default will be the"
+                            + " 5037.")
+    private String mAdbServerPort = null;
+
     @Option(name = "use-fastboot-erase", description =
             "use fastboot erase instead of fastboot format to wipe partitions")
     private boolean mUseFastbootErase = false;
@@ -423,6 +437,10 @@ public class TestDeviceOptions {
     @Option(name = "force-evaluate-connection")
     private boolean mForceEvaluateDeviceConnection = false;
 
+    @Option(name = "use-ipv6-for-tcp-fastboot",
+            description = "Whether to use IPv6 for TCP fastboot detection.")
+    private boolean mUseIpV6ForTcpFastboot = true;
+
     // END ====================== Options Related to Virtual Devices ======================
 
     // Option related to Remote Device only
@@ -546,6 +564,16 @@ public class TestDeviceOptions {
     /** Returns a specified fastboot binary to be used. if null, use the DeviceManager one. */
     public File getFastbootBinary() {
         return mFastbootBinary;
+    }
+
+    /** Returns a specified adb binary to be used. if null, use the DeviceManager one. */
+    public File getAdbBinary() {
+        return mAdbBinary;
+    }
+
+    /** Returns the adb server port associated with the device. if null, use the default one. */
+    public String getAdbServerPort() {
+        return mAdbServerPort;
     }
 
     /**
@@ -1054,6 +1082,10 @@ public class TestDeviceOptions {
 
     public boolean evaluateDeviceConnection() {
         return mForceEvaluateDeviceConnection;
+    }
+
+    public boolean useIpV6ForTcpFastboot() {
+        return mUseIpV6ForTcpFastboot;
     }
 }
 

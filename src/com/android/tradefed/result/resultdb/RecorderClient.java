@@ -39,6 +39,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 
 import java.io.IOException;
@@ -48,7 +49,7 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 
 /** ResultDB recorder client that uploads test results to ResultDB. */
-public class Client implements IRecorderClient {
+public class RecorderClient implements IRecorderClient {
 
     // The key for the update token used to create/update resources undera ResultDB invocation.
     private static final Metadata.Key<String> UPDATE_TOKEN_METADATA_KEY =
@@ -67,7 +68,7 @@ public class Client implements IRecorderClient {
     public static final String SERVER_ADDRESS = "results.api.cr.dev";
     public static final int SERVER_PORT = 443;
 
-    private Client() {
+    private RecorderClient() {
         try {
             mCredentials = GoogleCredentials.getApplicationDefault();
         } catch (IOException e) {
@@ -90,14 +91,14 @@ public class Client implements IRecorderClient {
     }
 
     public static IRecorderClient create(String invocationId, String updateToken) {
-        Client client = new Client();
+        RecorderClient client = new RecorderClient();
         client.mInvocationId = invocationId;
         client.mUpdateToken = updateToken;
         return client;
     }
 
     public static IRecorderClient createWithNewInvocation(CreateInvocationRequest request) {
-        Client client = new Client();
+        RecorderClient client = new RecorderClient();
         Invocation invocation = client.createInvocation(request);
         client.mInvocationId = invocation.getName().replace("invocations/", "");
         return client;
@@ -275,7 +276,11 @@ public class Client implements IRecorderClient {
                 request.addRequests(
                         CreateTestResultRequest.newBuilder().setTestResult(result).build());
             }
-            mStub.batchCreateTestResults(request.build());
+            try {
+                mStub.batchCreateTestResults(request.build());
+            } catch (StatusRuntimeException e) {
+                CLog.e("Error uploading results: %s", e);
+            }
             CLog.i("Uploaded %d results to invocation %s", allResults.size(), mInvocationId);
         }
     }

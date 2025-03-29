@@ -36,6 +36,7 @@ import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ITestInvocationListener;
+import com.android.tradefed.result.ModuleResultsAndMetricsForwarder;
 import com.android.tradefed.result.ResultAndLogForwarder;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestRunResult;
@@ -93,8 +94,8 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private IConfiguration mModuleConfiguration;
     private ModuleListener mMainGranularRunListener;
     private RetryLogSaverResultForwarder mRetryAttemptForwarder;
-    private List<ITestInvocationListener> mModuleLevelListeners;
     private ITestInvocationListener mRemoteTestTimeOutEnforcer;
+    private ModuleResultsAndMetricsForwarder listenerWithModuleMetricsForwarder;
     private ILogSaver mLogSaver;
     private String mModuleId;
     private int mMaxRunLimit;
@@ -105,28 +106,37 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private RetryStatistics mRetryStats = null;
     private int mCountRetryUsed = 0;
 
+    private boolean mUseModuleResultsForwarder = false;
+
     public GranularRetriableTestWrapper(
             IRemoteTest test,
             ITestInvocationListener mainListener,
-            List<ITestInvocationListener> moduleLevelListeners,
             int maxRunLimit) {
-        this(test, null, mainListener, moduleLevelListeners, maxRunLimit);
+        this(test, null, mainListener, maxRunLimit);
     }
 
     public GranularRetriableTestWrapper(
             IRemoteTest test,
             ModuleDefinition module,
             ITestInvocationListener mainListener,
-            List<ITestInvocationListener> moduleLevelListeners,
             int maxRunLimit) {
+        this(test, module, mainListener, maxRunLimit, false);
+    }
+
+    public GranularRetriableTestWrapper(
+            IRemoteTest test,
+            ModuleDefinition module,
+            ITestInvocationListener mainListener,
+            int maxRunLimit,
+            boolean useModuleResultsForwarder) {
         mTest = test;
         mModule = module;
+        mUseModuleResultsForwarder = useModuleResultsForwarder;
         IInvocationContext context = null;
         if (module != null) {
             context = module.getModuleInvocationContext();
         }
         initializeGranularRunListener(mainListener, context);
-        mModuleLevelListeners = moduleLevelListeners;
         mMaxRunLimit = maxRunLimit;
     }
 
@@ -202,7 +212,14 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
      */
     private void initializeGranularRunListener(
             ITestInvocationListener listener, IInvocationContext moduleContext) {
+        ModuleResultsAndMetricsForwarder mListenerWithModuleMetricsForwarder = null;
+        if (mUseModuleResultsForwarder) {
+            mListenerWithModuleMetricsForwarder = new ModuleResultsAndMetricsForwarder(listener);
+            mListenerWithModuleMetricsForwarder.setModuleId(mModuleId);
+            listener = mListenerWithModuleMetricsForwarder;
+        }
         mMainGranularRunListener = new ModuleListener(listener, moduleContext);
+        mMainGranularRunListener.setUseModuleResultsForwarder(mUseModuleResultsForwarder);
         if (mModule != null) {
             ConfigurationDescriptor configDesc =
                     mModule.getModuleInvocationContext().getConfigurationDescriptor();
@@ -218,6 +235,9 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                     configDesc.getMetaData(Integer.toString(mTest.hashCode()));
             if (testMappingSources != null) {
                 mMainGranularRunListener.setTestMappingSources(testMappingSources);
+                if (mListenerWithModuleMetricsForwarder != null) {
+                    mListenerWithModuleMetricsForwarder.setTestMappingSources(testMappingSources);
+                }
             }
         }
     }
@@ -232,10 +252,6 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
      */
     private ITestInvocationListener initializeListeners() throws DeviceNotAvailableException {
         List<ITestInvocationListener> currentTestListener = new ArrayList<>();
-        // Add all the module level listeners, including TestFailureListener
-        if (mModuleLevelListeners != null) {
-            currentTestListener.addAll(mModuleLevelListeners);
-        }
         currentTestListener.add(mMainGranularRunListener);
 
         if (mRemoteTestTimeOutEnforcer != null) {
@@ -350,6 +366,10 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             TestInformation testInfo, ITestInvocationListener runListener, int attempt) {
         DeviceNotAvailableException exception = null;
         mMainGranularRunListener.setAttemptIsolation(CurrentInvocation.runCurrentIsolation());
+        if (listenerWithModuleMetricsForwarder != null) {
+            listenerWithModuleMetricsForwarder.setAttemptIsolation(
+                    CurrentInvocation.runCurrentIsolation());
+        }
         StartEndCollector startEndCollector = new StartEndCollector(runListener);
         runListener = startEndCollector;
         try (CloseableTraceScope ignored =

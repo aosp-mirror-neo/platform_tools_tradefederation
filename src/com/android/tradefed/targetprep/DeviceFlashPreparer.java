@@ -114,6 +114,11 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             description = "whether or not to skip post-flashing setup steps")
     private boolean mSkipPostFlashingSetup = false;
 
+    @Option(
+            name = "skip-bootloader-version-check",
+            description = "Allows to ignore bootloader version and force it installed.")
+    private boolean mSkipBootloaderVersionCheck = false;
+
     @Option(name = "wipe-timeout",
             description = "the timeout for the command of wiping user data.", isTimeVal = true)
     private long mWipeTimeout = 4 * 60 * 1000;
@@ -363,6 +368,12 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 // Re-entry can occur during reset isolation.
                 reEntry = true;
             } else {
+                if (TestDeviceState.ONLINE.equals(device.getDeviceState())) {
+                    CommandResult verityOutput = device.executeShellV2Command("enable-verity");
+                    CLog.d(
+                            "Verity output: stdout:%s\nstderr:%s",
+                            verityOutput.getStdout(), verityOutput.getStderr());
+                }
                 mIncrementalImageUtil =
                         IncrementalImageUtil.initialize(
                                 device,
@@ -373,18 +384,14 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                                 mAllowedTransition,
                                 mNewIncrementalFlow,
                                 mUpdateBootloaderFromUserspace,
-                                mWaitPhase,
-                                mUseMerkleTreeComparison);
+                                mWaitPhase);
                 if (mIncrementalImageUtil == null) {
                     useIncrementalFlashing = false;
                 } else {
+                    mIncrementalImageUtil.setSkipBootloaderVersionCheck(
+                            mSkipBootloaderVersionCheck);
                     if (mAllowIncrementalOnSameBuild) {
                         mIncrementalImageUtil.allowSameBuildFlashing();
-                    }
-                    if (TestDeviceState.ONLINE.equals(device.getDeviceState())) {
-                        // No need to reboot yet, it will happen later in the sequence
-                        String verityOutput = device.executeAdbCommand("enable-verity");
-                        CLog.d("%s", verityOutput);
                     }
                 }
             }
@@ -399,6 +406,14 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             } else {
                 flasher = createFlasher(device);
                 mFlasher = flasher;
+                if (mIncrementalImageUtil != null
+                        && checkAntiRollback(flasher, device, deviceBuild)) {
+                    CLog.d("Avoid incremental flashing due to Anti-rollback situation");
+                    useIncrementalFlashing = false;
+                    mIncrementalImageUtil = null;
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.INCREMENTAL_FLASHING_ANTI_ROLLBACK_DETECTED, 1);
+                }
             }
             flasher.setWipeTimeout(mWipeTimeout);
             boolean tookPermit = false;
@@ -413,6 +428,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                     flasher.setRamdiskPartition(mRamdiskPartition);
                 }
                 if (flasher instanceof FastbootDeviceFlasher) {
+                    ((FastbootDeviceFlasher) flasher)
+                            .setSkipBootloaderVersionCheck(mSkipBootloaderVersionCheck);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
                     if (!reEntry) {
                         // Avoid using incremental during re-entry since it will just wipe
@@ -569,6 +586,12 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                             deviceBuild.getBuildBranch(),
                             deviceBuild.getBuildFlavor());
         }
+    }
+
+    protected boolean checkAntiRollback(
+            IDeviceFlasher flasher, ITestDevice device, IDeviceBuildInfo deviceBuild)
+            throws DeviceNotAvailableException {
+        return false;
     }
 
     /**

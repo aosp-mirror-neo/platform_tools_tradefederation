@@ -2645,4 +2645,9 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
         }
         return false;
     }
+
+    @Override
+    public void setMaxPollTime(long polling) {
+        mPollTime = polling;
+    }
 }

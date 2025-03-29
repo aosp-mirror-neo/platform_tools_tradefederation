@@ -161,6 +161,7 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
         }
         testDevice.setFastbootEnabled(mFastbootEnabled);
         testDevice.setFastbootPath(mDeviceManager.getFastbootPath());
+        testDevice.setAdbPath(mDeviceManager.getAdbPath());
         return testDevice;
     }
 

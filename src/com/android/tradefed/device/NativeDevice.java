@@ -231,6 +231,8 @@ public class NativeDevice
     private LogcatReceiver mLogcatReceiver;
     private boolean mFastbootEnabled = true;
     private String mFastbootPath = "fastboot";
+    private String mAdbPath = "adb";
+    private String mAdbServerPort = null;
 
     protected TestDeviceOptions mOptions = new TestDeviceOptions();
     private Process mEmulatorProcess;
@@ -263,6 +265,7 @@ public class NativeDevice
     private String mTrackingSerialNumber = null;
     private String mFastbootSerialNumber = null;
     private File mUnpackedFastbootDir = null;
+    private File mUnpackedAdbDir = null;
     // Connection for the device.
     private AbstractConnection mConnection;
     private GceAvdInfo mConnectionAvd;
@@ -517,6 +520,37 @@ public class NativeDevice
                 }
             } else {
                 setFastbootPath(mOptions.getFastbootBinary().getAbsolutePath());
+            }
+        }
+        if (mOptions.getAdbServerPort() != null) {
+            mAdbServerPort = mOptions.getAdbServerPort();
+        } else {
+            mAdbServerPort = null;
+        }
+        if (mOptions.getAdbBinary() != null) {
+            // Setup adb, if it's zipped, unzip it
+            if (".zip".equals(FileUtil.getExtension(mOptions.getAdbBinary().getName()))) {
+                // Unzip the fastboot files
+                try {
+                    mUnpackedAdbDir =
+                            ZipUtil2.extractZipToTemp(mOptions.getAdbBinary(), "unpacked-adb");
+                    File unpackedAdb = FileUtil.findFile(mUnpackedAdbDir, "adb");
+                    if (unpackedAdb == null) {
+                        throw new HarnessRuntimeException(
+                                String.format(
+                                        "device-adb-binary was set, but didn't contain a"
+                                                + " adb binary."),
+                                InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+                    }
+                    setAdbPath(unpackedAdb.getAbsolutePath());
+                } catch (IOException e) {
+                    CLog.e("Failed to unpacked zipped adb.");
+                    CLog.e(e);
+                    FileUtil.recursiveDelete(mUnpackedAdbDir);
+                    mUnpackedAdbDir = null;
+                }
+            } else {
+                setAdbPath(mOptions.getAdbBinary().getAbsolutePath());
             }
         }
         mStateMonitor.setDefaultOnlineTimeout(options.getOnlineTimeout());
@@ -2630,8 +2664,13 @@ public class NativeDevice
      * Builds the OS command for the given adb command and args
      */
     private String[] buildAdbCommand(String... commandArgs) {
-        return ArrayUtil.buildArray(new String[] {"adb", "-s", getSerialNumber()},
-                commandArgs);
+        if (mAdbServerPort != null) {
+            return ArrayUtil.buildArray(
+                    new String[] {getAdbPath(), "-s", getSerialNumber(), "-P", mAdbServerPort},
+                    commandArgs);
+        }
+        return ArrayUtil.buildArray(
+                new String[] {getAdbPath(), "-s", getSerialNumber()}, commandArgs);
     }
 
     /** Builds the OS command for the given adb shell command session and args */
@@ -2650,7 +2689,9 @@ public class NativeDevice
             exitStatusProbe = new String[] {};
         }
         return ArrayUtil.buildArray(
-                new String[] {"adb", "-s", getSerialNumber(), "shell"},
+                new String[] {getAdbPath(), "-s", getSerialNumber()},
+                mAdbServerPort != null ? new String[] {"-P", mAdbServerPort} : new String[] {},
+                new String[] {"shell"},
                 commandArgs,
                 exitStatusProbe);
     }
@@ -2725,7 +2766,17 @@ public class NativeDevice
                             actionDescription, getSerialNumber());
                 }
                 if (shouldRecover) {
-                    recoverDevice();
+                    boolean recovered = recoverDevice();
+                    if (!recovered) {
+                        throw new DeviceNotAvailableException(
+                                String.format(
+                                        "Attempted %s without communication success and recovery"
+                                                + " was not running. Aborting.",
+                                        actionDescription),
+                                lastException,
+                                getSerialNumber(),
+                                DeviceErrorIdentifier.DEVICE_UNRESPONSIVE);
+                    }
                 }
             }
             if (retryAttempts > 0) {
@@ -4481,6 +4532,18 @@ public class NativeDevice
 
     /** {@inheritDoc} */
     @Override
+    public void setAdbPath(String adbPath) {
+        mAdbPath = adbPath;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String getAdbPath() {
+        return mAdbPath;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public String getFastbootVersion() {
         try {
             CommandResult res = executeFastbootCommand("--version");
@@ -4558,12 +4621,14 @@ public class NativeDevice
             return mFastbootSerialNumber;
         }
 
-        mFastbootSerialNumber = getLinkLocalIpv6FastbootSerial();
-        if (mFastbootSerialNumber != null) {
-            CLog.i(
-                    "Device %s's fastboot serial number is %s",
-                    getSerialNumber(), mFastbootSerialNumber);
-            return mFastbootSerialNumber;
+        if (getOptions().useIpV6ForTcpFastboot()) {
+            mFastbootSerialNumber = getLinkLocalIpv6FastbootSerial();
+            if (mFastbootSerialNumber != null) {
+                CLog.i(
+                        "Device %s's fastboot serial number is %s",
+                        getSerialNumber(), mFastbootSerialNumber);
+                return mFastbootSerialNumber;
+            }
         }
 
         // Fallback to the same serial over TCP. Used for emulator cases (i.e Cuttlefish).
@@ -5436,6 +5501,9 @@ public class NativeDevice
         FileUtil.deleteFile(mExecuteShellCommandLogs);
         mExecuteShellCommandLogs = null;
         FileUtil.recursiveDelete(mUnpackedFastbootDir);
+        mUnpackedFastbootDir = null;
+        FileUtil.recursiveDelete(mUnpackedAdbDir);
+        mUnpackedAdbDir = null;
         getConnection().tearDownConnection();
         mConnectionAvd = null;
         mDeviceActionReceivers.clear();

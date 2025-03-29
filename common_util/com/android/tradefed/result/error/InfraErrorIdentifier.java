@@ -69,6 +69,7 @@ public enum InfraErrorIdentifier implements ErrorIdentifier {
     NO_WIFI(501_003, FailureStatus.DEPENDENCY_ISSUE),
     NO_DISK_SPACE(501_004, FailureStatus.DEPENDENCY_ISSUE),
     VIRTUAL_WIFI_FAILED_CONNECT(501_005, FailureStatus.DEPENDENCY_ISSUE),
+    ANTI_ROLLBACK_ERROR(501_006, FailureStatus.DEPENDENCY_ISSUE),
 
     // 502_000 - 502_100: Test issues detected by infra
     EXPECTED_TESTS_MISMATCH(502_000, FailureStatus.TEST_FAILURE),

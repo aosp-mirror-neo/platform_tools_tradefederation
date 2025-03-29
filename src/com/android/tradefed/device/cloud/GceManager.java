@@ -1016,7 +1016,7 @@ public class GceManager {
         }
 
         // TODO(b/280177749): Remove the special logic after Oxygen side is cleaned up.
-        if (options.useOxygen() && options.useOxygenationDevice()) {
+        if (options.useOxygen() && !options.useOxygenationDevice()) {
             output =
                     remoteSshCommandExec(
                             gceAvd,
@@ -1046,7 +1046,7 @@ public class GceManager {
         }
         String deviceFilePath = match.group(2);
         String pullOutput;
-        if (options.useOxygen() && options.useOxygenationDevice()) {
+        if (options.useOxygen() && !options.useOxygenationDevice()) {
             pullOutput =
                     remoteSshCommandExec(
                             gceAvd,

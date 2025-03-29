@@ -64,7 +64,6 @@ import com.android.tradefed.result.ITestLoggerReceiver;
 import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.ResultAndLogForwarder;
-import com.android.tradefed.result.ResultForwarder;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.result.error.TestErrorIdentifier;
@@ -407,6 +406,13 @@ public abstract class ITestSuite
                     "Entry point to execute the given test suite as defined by the Soong"
                             + " test_suites rule")
     private String mRunTestSuite = null;
+
+    @Option(
+            name = "use-module-results-forwarder",
+            description =
+                    "Feature flag to enable whether metrics should be forwarded by ModuleListener"
+                            + " or the new forwarder.")
+    private boolean mUseModuleResultsForwarder = true;
 
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
@@ -884,10 +890,13 @@ public abstract class ITestSuite
             mSkipContext = SkipFeature.getSkipContext();
         }
         /** Run all the module, make sure to reduce the list to release resources as we go. */
-        try {
-            while (!mRunModules.isEmpty()) {
-                ModuleDefinition module = mRunModules.remove(0);
-
+        while (!mRunModules.isEmpty()) {
+            ModuleDefinition module = mRunModules.remove(0);
+            mModuleInProgress = module;
+            boolean moduleStartReported = false;
+            boolean moduleEndReported = false;
+            ITestInvocationListener listenerWithCollectors = null;
+            try {
                 if (!shouldModuleRun(module)) {
                     continue;
                 }
@@ -930,8 +939,11 @@ public abstract class ITestSuite
                                         ModuleDefinition.MODULE_ISOLATED,
                                         CurrentInvocation.moduleCurrentIsolation().toString());
                     }
+                    // Unify invocation level listeners, module listeners and module post-processors
+                    ITestInvocationListener allListeners =
+                            listenerWithPostProcessors(module, listener, moduleListeners);
                     // Only the module callback will be called here.
-                    ITestInvocationListener listenerWithCollectors = listener;
+                    listenerWithCollectors = allListeners;
                     if (mMetricCollectors != null) {
                         for (IMetricCollector collector :
                                 CollectorHelper.cloneCollectors(mMetricCollectors)) {
@@ -1003,16 +1015,7 @@ public abstract class ITestSuite
                             .addInvocationAttribute(
                                     MODULE_START_TIME, Long.toString(System.currentTimeMillis()));
                     listenerWithCollectors.testModuleStarted(module.getModuleInvocationContext());
-                    mModuleInProgress = module;
-                    // Add module specific post processors.
-                    moduleListeners =
-                            new ArrayList<>(
-                                    Arrays.asList(
-                                            listenerWithPostProcessorsForPerfModule(
-                                                    module, moduleListeners)));
-                    // Trigger module start on module level listener too
-                    new ResultForwarder(moduleListeners)
-                            .testModuleStarted(module.getModuleInvocationContext());
+                    moduleStartReported = true;
                     boolean applyCachedResults =
                             cacheDescriptor != null
                                     && cacheDescriptor.isCacheHit()
@@ -1028,7 +1031,7 @@ public abstract class ITestSuite
                         // TODO(b/372243975): report logs even while applying caching
                         try (InputStreamSource source =
                                 new FileInputStreamSource(moduleConfig, deleteRightAway)) {
-                            listener.testLog(
+                            allListeners.testLog(
                                     "module-configuration", LogDataType.HARNESS_CONFIG, source);
                         }
                     }
@@ -1060,14 +1063,12 @@ public abstract class ITestSuite
                             module.getModuleInvocationContext()
                                     .addInvocationAttribute(ModuleDefinition.SPARSE_MODULE, "true");
                         } else {
-                            runSingleModule(module, moduleInfo, listener, moduleListeners);
+                            runSingleModule(module, moduleInfo, allListeners);
                         }
                     } finally {
                         module.getModuleInvocationContext()
                                 .addInvocationAttribute(
                                         MODULE_END_TIME, Long.toString(System.currentTimeMillis()));
-                        // Trigger module end on module level listener too
-                        new ResultForwarder(moduleListeners).testModuleEnded();
                         if (mMainConfiguration.getCommandOptions().shouldUploadCacheResults()
                                 && moduleReporter != null) {
                             File protoResults = moduleReporter.getOutputFile();
@@ -1085,10 +1086,6 @@ public abstract class ITestSuite
                             moduleListeners.remove(moduleReporter);
                         }
                         FileUtil.deleteFile(moduleConfig);
-                        // clear out module invocation context since we are now done with module
-                        // execution
-                        listenerWithCollectors.testModuleEnded();
-                        mModuleInProgress = null;
                         if (!applyCachedResults) {
                             // Following modules will not be isolated if no action is taken
                             CurrentInvocation.setModuleIsolation(IsolationGrade.NOT_ISOLATED);
@@ -1096,16 +1093,42 @@ public abstract class ITestSuite
                     }
                     if (moduleRan) {
                         // Module isolation routine
-                        moduleIsolation(mContext, listener);
+                        moduleIsolation(mContext, allListeners);
                     }
                 }
+            } catch (DeviceNotAvailableException e) {
+                CLog.e(
+                        "A DeviceNotAvailableException occurred, following modules did not run: %s",
+                        mRunModules);
+                // allow current module to properly report module start/end
+                mModuleInProgress.setReportModuleStart(!moduleStartReported);
+                mModuleInProgress.setReportModuleEnd(true);
+                String inProgressMessage =
+                        String.format(
+                                "Module %s was interrupted after starting due to device not"
+                                        + " available. Results might not be accurate or complete.",
+                                mModuleInProgress.getId());
+                if (listenerWithCollectors != null) {
+                    mModuleInProgress.reportNotExecuted(listenerWithCollectors, inProgressMessage);
+                } else {
+                    mModuleInProgress.reportNotExecuted(listener, inProgressMessage);
+                }
+                moduleEndReported = true;
+                reportNotExecuted(listener, "Module did not run due to device not available.");
+                throw e;
+            } finally {
+                // if module end not reported(no DNAE happened), report it now
+                if (!moduleEndReported) {
+                    if (listenerWithCollectors != null) {
+                        listenerWithCollectors.testModuleEnded();
+                    } else {
+                        listener.testModuleEnded();
+                    }
+                }
+                // clear out module invocation context since we are now done with module
+                // execution
+                mModuleInProgress = null;
             }
-        } catch (DeviceNotAvailableException e) {
-            CLog.e(
-                    "A DeviceNotAvailableException occurred, following modules did not run: %s",
-                    mRunModules);
-            reportNotExecuted(listener, "Module did not run due to device not available.");
-            throw e;
         }
     }
 
@@ -1113,14 +1136,20 @@ public abstract class ITestSuite
      * Returns a listener with module-level post processors (for perf modules) instered to the
      * listener chain.
      */
-    private ITestInvocationListener listenerWithPostProcessorsForPerfModule(
-            ModuleDefinition module, List<ITestInvocationListener> moduleListeners) {
+    private ITestInvocationListener listenerWithPostProcessors(
+            ModuleDefinition module,
+            ITestInvocationListener invocationListener,
+            List<ITestInvocationListener> moduleListeners) {
         IConfiguration config = module.getModuleConfiguration();
         List<String> testTypes = config.getConfigurationDescription().getMetaData(TEST_TYPE_KEY);
-        ITestInvocationListener listenerWithLogForwarder =
-                new ResultAndLogForwarder(moduleListeners);
+        List<ITestInvocationListener> allListeners = new ArrayList<>();
+        allListeners.add(invocationListener);
+        // wrap module listeners with a forwarder in order to keep the array object intact.
+        allListeners.add(new ResultAndLogForwarder(moduleListeners));
+        ITestInvocationListener allListenerWithForwarder = new ResultAndLogForwarder(allListeners);
+
         if (testTypes == null || !testTypes.contains(TEST_TYPE_VALUE_PERFORMANCE)) {
-            return listenerWithLogForwarder; // not a perf module
+            return allListenerWithForwarder; // not a perf module
         }
         List<IPostProcessor> topLevelPostProcessors = mMainConfiguration.getPostProcessors();
         List<IPostProcessor> modulePostProcessors = config.getPostProcessors();
@@ -1129,14 +1158,14 @@ public abstract class ITestSuite
         }
         for (IPostProcessor postProcessor : modulePostProcessors) {
             try {
-                listenerWithLogForwarder = postProcessor.init(listenerWithLogForwarder);
+                allListenerWithForwarder = postProcessor.init(allListenerWithForwarder);
             } catch (Exception e) {
                 CLog.e(
                         "Post processor %s is ignored as it fails to init() with exception: %s",
                         postProcessor.getClass().getSimpleName(), e);
             }
         }
-        return listenerWithLogForwarder;
+        return allListenerWithForwarder;
     }
 
     /** Log the module configuration. */
@@ -1235,16 +1264,14 @@ public abstract class ITestSuite
      *
      * @param module The {@link ModuleDefinition} to be ran.
      * @param moduleInfo The {@link TestInformation} for the module.
-     * @param listener The {@link ITestInvocationListener} where to report results
-     * @param moduleListeners The {@link ITestInvocationListener}s that runs at the module level.
+     * @param allListeners The {@link ITestInvocationListener} where to report results
      * @param failureListener special listener that we add to collect information on failures.
      * @throws DeviceNotAvailableException
      */
     private void runSingleModule(
             ModuleDefinition module,
             TestInformation moduleInfo,
-            ITestInvocationListener listener,
-            List<ITestInvocationListener> moduleListeners)
+            ITestInvocationListener allListeners)
             throws DeviceNotAvailableException {
         Map<String, String> properties = new LinkedHashMap<>();
         try (CloseableTraceScope ignored = new CloseableTraceScope("module_pre_check")) {
@@ -1262,13 +1289,16 @@ public abstract class ITestSuite
             if (!mSkipAllSystemStatusCheck && !mSystemStatusCheckers.isEmpty()) {
                 properties.putAll(
                         runPreModuleCheck(
-                                module.getId(), mSystemStatusCheckers, mDevice, listener));
+                                module.getId(), mSystemStatusCheckers, mDevice, allListeners));
             }
             if (mCollectTestsOnly) {
                 module.setCollectTestsOnly(mCollectTestsOnly);
             }
             if (mRecoverDeviceByCvd) {
                 module.setRecoverVirtualDevice(mRecoverDeviceByCvd);
+            }
+            if (mUseModuleResultsForwarder) {
+                module.setUseModuleResultsForwarder(mUseModuleResultsForwarder);
             }
             // Pass the run defined collectors to be used.
             module.setMetricCollectors(CollectorHelper.cloneCollectors(mMetricCollectors));
@@ -1297,15 +1327,14 @@ public abstract class ITestSuite
         // Actually run the module
         module.run(
                 moduleInfo,
-                listener,
-                moduleListeners,
+                allListeners,
                 getConfiguration().getRetryDecision().getMaxTestRunAttempts(module));
 
         if (!mSkipAllSystemStatusCheck && !mSystemStatusCheckers.isEmpty()) {
             try (CloseableTraceScope ignored = new CloseableTraceScope("module_post_check")) {
                 properties.putAll(
                         runPostModuleCheck(
-                                module.getId(), mSystemStatusCheckers, mDevice, listener));
+                                module.getId(), mSystemStatusCheckers, mDevice, allListeners));
             }
         }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -1685,16 +1714,6 @@ public abstract class ITestSuite
         }
         if (runModules == null) {
             runModules = createExecutionList();
-        }
-
-        if (mModuleInProgress != null) {
-            // TODO: Ensure in-progress data make sense
-            String inProgressMessage =
-                    String.format(
-                            "Module %s was interrupted after starting. Results might not be "
-                                    + "accurate or complete.",
-                            mModuleInProgress.getId());
-            mModuleInProgress.reportNotExecuted(listener, inProgressMessage);
         }
 
         while (!runModules.isEmpty()) {

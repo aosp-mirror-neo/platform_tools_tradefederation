@@ -100,6 +100,7 @@ public class IncrementalImageUtil {
     private boolean mBootloaderNeedsFlashing = false;
     private boolean mBasebandNeedsFlashing = false;
     private boolean mUpdateWasCompleted = false;
+    private boolean mSkipBootloaderVersionCheck = false;
     private File mSourceDirectory;
     private File mTargetDirectory;
 
@@ -115,9 +116,9 @@ public class IncrementalImageUtil {
             Set<String> allowedTransition,
             boolean newFlow,
             boolean updateBootloaderFromUserspace,
-            SnapuserdWaitPhase waitPhase,
-            boolean useMerkleTree)
+            SnapuserdWaitPhase waitPhase)
             throws DeviceNotAvailableException {
+        boolean useMerkleTree = true;
         String serialNumber = device.getSerialNumber();
         FileCacheTracker tracker =
                 DeviceImageTracker.getDefaultCache().getBaselineDeviceImage(serialNumber);
@@ -179,6 +180,11 @@ public class IncrementalImageUtil {
                         CLog.w("Failed to pull merkle tree");
                         FileUtil.recursiveDelete(merkleTreeDir);
                         merkleTreeDir = null;
+                    } else if (merkleTreeDir.list().length == 0) {
+                        CLog.w("Merkle tree dir is empty. Is verity disabled?");
+                        FileUtil.recursiveDelete(merkleTreeDir);
+                        merkleTreeDir = null;
+                        return null;
                     }
                 } catch (IOException e) {
                     CLog.e(e);
@@ -186,6 +192,10 @@ public class IncrementalImageUtil {
                     merkleTreeDir = null;
                 }
             }
+        }
+        // We need the merkle tree now to compare
+        if (merkleTreeDir == null) {
+            return null;
         }
         return new IncrementalImageUtil(
                 device,
@@ -307,6 +317,10 @@ public class IncrementalImageUtil {
 
     public boolean useUpdatedFlow() {
         return mNewFlow;
+    }
+
+    public void setSkipBootloaderVersionCheck(boolean skipBootloaderVersionCheck) {
+        mSkipBootloaderVersionCheck = skipBootloaderVersionCheck;
     }
 
     /** Returns whether device is currently using snapshots or not. */
@@ -478,9 +492,9 @@ public class IncrementalImageUtil {
             // Once block comparison is successful, log the information
             logTargetInformation(targetDirectory);
             long totalPatchSizes = logPatchesInformation(workDir);
-            // if we have more than 2.5GB we will overflow super partition size to /data and we
+            // if we have more than 2.0GB we will overflow super partition size to /data and we
             // can't use the feature
-            if (totalPatchSizes > 2300000000L) {
+            if (totalPatchSizes > 2000000000L) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.INCREMENTAL_FALLBACK_REASON, "Patches too large.");
                 throw new TargetSetupError(
@@ -767,6 +781,18 @@ public class IncrementalImageUtil {
         // image.
         if (mDevice instanceof NativeDevice) {
             ((NativeDevice) mDevice).invalidatePropertyCache();
+        }
+        if (mSkipBootloaderVersionCheck) {
+            CLog.d("mSkipBootloaderVersionCheck=true, removing bootloader requirements.");
+            File androidInfo = new File(imageDirectory, "android-info.txt");
+            FastbootDeviceFlasher.removeLine(androidInfo);
+            try {
+                CLog.d(
+                        "android-info.txt after rewrite:\n%s",
+                        FileUtil.readStringFromFile(androidInfo));
+            } catch (IOException e) {
+                CLog.e(e);
+            }
         }
         Map<String, String> envMap = new HashMap<>();
         envMap.put("ANDROID_PRODUCT_OUT", imageDirectory.getAbsolutePath());
