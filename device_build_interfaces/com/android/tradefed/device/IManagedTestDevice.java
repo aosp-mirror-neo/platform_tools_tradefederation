@@ -81,6 +81,12 @@ public interface IManagedTestDevice extends ITestDevice {
      */
     public String getFastbootPath();
 
+    /** Sets the path to the adb binary that should be used. */
+    public void setAdbPath(String fastbootPath);
+
+    /** Returns the path of the adb binary being used. */
+    public String getAdbPath();
+
     /**
      * Returns the version string of the fastboot binary being used. Or null if something goes
      * wrong.

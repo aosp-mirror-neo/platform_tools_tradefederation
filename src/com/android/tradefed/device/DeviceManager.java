@@ -722,7 +722,8 @@ public class DeviceManager implements IDeviceManager {
     public void freeDevice(ITestDevice device, FreeDeviceState deviceState) {
         checkInit();
         IManagedTestDevice managedDevice = (IManagedTestDevice) device;
-        // Reset fastboot path to original one no matter what
+        // Reset adb/fastboot path to original one no matter what
+        managedDevice.setAdbPath(getAdbPath());
         managedDevice.setFastbootPath(getFastbootPath());
         // force stop capturing logcat just to be sure
         managedDevice.stopLogcat();

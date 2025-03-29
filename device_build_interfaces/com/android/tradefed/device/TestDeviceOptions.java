@@ -116,6 +116,20 @@ public class TestDeviceOptions {
                             + "the same fastboot binary as DeviceManager.")
     private File mFastbootBinary = null;
 
+    @Option(
+            name = "device-adb-binary",
+            description =
+                    "The adb binary to use for the test session. If null, will use "
+                            + "the same adb binary as DeviceManager.")
+    private File mAdbBinary = null;
+
+    @Option(
+            name = "device-adb-server-port",
+            description =
+                    "The port of the adb server associated with the device. By default will be the"
+                            + " 5037.")
+    private String mAdbServerPort = null;
+
     @Option(name = "use-fastboot-erase", description =
             "use fastboot erase instead of fastboot format to wipe partitions")
     private boolean mUseFastbootErase = false;
@@ -550,6 +564,16 @@ public class TestDeviceOptions {
     /** Returns a specified fastboot binary to be used. if null, use the DeviceManager one. */
     public File getFastbootBinary() {
         return mFastbootBinary;
+    }
+
+    /** Returns a specified adb binary to be used. if null, use the DeviceManager one. */
+    public File getAdbBinary() {
+        return mAdbBinary;
+    }
+
+    /** Returns the adb server port associated with the device. if null, use the default one. */
+    public String getAdbServerPort() {
+        return mAdbServerPort;
     }
 
     /**
