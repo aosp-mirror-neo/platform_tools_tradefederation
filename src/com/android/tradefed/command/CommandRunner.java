@@ -38,13 +38,13 @@ import com.google.common.annotations.VisibleForTesting;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import sun.misc.Signal;
+import sun.misc.SignalHandler;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-
-import sun.misc.Signal;
-import sun.misc.SignalHandler;
 
 /**
  * An alternate TradeFederation entry point that will run command specified in command
@@ -128,6 +128,7 @@ public class CommandRunner {
             }
 
             mScheduler = getCommandScheduler();
+            mScheduler.setMaxPollTime(getCheckDeviceTimeout() / 10);
             mScheduler.setClearcutClient(client);
             mScheduler.start();
             SignalHandler handler =
