@@ -72,7 +72,7 @@ public class AllTestAppsInstallSetupTest {
 
     @Test
     public void testNoTestDir() throws Exception {
-        when(mMockBuildInfo.getTestsDir()).thenReturn(new File(""));
+        when(mMockBuildInfo.getTestsDir()).thenReturn(new File("non-existing-path"));
 
         try {
             mPrep.setUp(mTestInfo);

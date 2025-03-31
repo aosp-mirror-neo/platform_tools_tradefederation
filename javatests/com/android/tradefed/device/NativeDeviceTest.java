@@ -332,7 +332,7 @@ public class NativeDeviceTest {
     /** Unit test for {@link NativeDevice#pushDir(File, String)}. */
     @Test
     public void testPushDir_notADir() throws Exception {
-        assertFalse(mTestDevice.pushDir(new File(""), ""));
+        assertFalse(mTestDevice.pushDir(new File("non-existing-path"), ""));
     }
 
     /** Unit test for {@link NativeDevice#pushDir(File, String)}. */
