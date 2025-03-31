@@ -117,9 +117,11 @@ public class ContentProviderHandler {
      * @return True if ready to be used, False otherwise.
      */
     public boolean setUp() throws DeviceNotAvailableException {
-        if (mDevice.isPackageInstalled(PACKAGE_NAME, Integer.toString(getEffectiveUserId()))) {
-            mReportNotFound = false;
-            return true;
+        if (mUserId != null && mUserId == 0) {
+            if (mDevice.isPackageInstalled(PACKAGE_NAME, Integer.toString(getEffectiveUserId()))) {
+                mReportNotFound = false;
+                return true;
+            }
         }
         if (mContentProviderApk == null || !mContentProviderApk.exists()) {
             try {
