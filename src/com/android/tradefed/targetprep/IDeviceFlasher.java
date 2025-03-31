@@ -23,6 +23,7 @@ import com.android.tradefed.util.CommandStatus;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -203,6 +204,11 @@ public interface IDeviceFlasher {
 
     /** Last opportunity for the flasher implementation to clean up after itself */
     public default void tearDownFlasher() {
+        // Empty on purpose
+    }
+
+    /** Allows flasher to receive extra metadata options. */
+    public default void setExtraMetadata(Map<String, String> metadata) {
         // Empty on purpose
     }
 }

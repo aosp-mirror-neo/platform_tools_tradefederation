@@ -55,7 +55,9 @@ import com.android.tradefed.util.image.IncrementalImageUtil;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -227,6 +229,11 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             name = "use-merkle-tree-comparison",
             description = "Generate snapshot using the merkle tree on device instead of baseline.")
     private boolean mUseMerkleTreeComparison = true;
+
+    @Option(
+            name = "flasher-extra-metadata",
+            description = "Key values that will be passed to the flasher implementation.")
+    private Map<String, String> mFlasherMetadata = new HashMap<>();
 
     private IncrementalImageUtil mIncrementalImageUtil;
     private IConfiguration mConfig;
@@ -405,6 +412,7 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 CLog.d("Reusing flasher object.");
             } else {
                 flasher = createFlasher(device);
+                flasher.setExtraMetadata(mFlasherMetadata);
                 mFlasher = flasher;
                 if (mIncrementalImageUtil != null
                         && checkAntiRollback(flasher, device, deviceBuild)) {
