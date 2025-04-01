@@ -281,6 +281,9 @@ public class IsolatedHostTest
             if (mRavenwoodResources) {
                 runner.setEnvVariable("LANG", mRavenwoodLocale);
                 runner.setEnvVariable("LC_ALL", mRavenwoodLocale);
+                runner.setEnvVariable(
+                        "RAVENWOOD_RUNTIME_DIR",
+                        getRavenwoodRuntimeDir(findTestDirectory()).getAbsolutePath() + "/");
             }
 
             runner.setWorkingDir(mWorkDir);

@@ -61,6 +61,7 @@ public class FilePullerLogCollector extends FilePullerDeviceMetricCollector {
 
         // Try to infer the type. This will be improved eventually, see todo on the class.
         String ext = FileUtil.getExtension(metricFile.getName()).toLowerCase();
+        String baseName = FileUtil.getBaseName(metricFile.getName());
         if (".hprof".equals(ext)) {
             return LogDataType.HPROF;
         } else if (".mp4".equals(ext)) {
@@ -69,14 +70,15 @@ public class FilePullerLogCollector extends FilePullerDeviceMetricCollector {
             return LogDataType.PB;
         } else if (".png".equals(ext)) {
             return LogDataType.PNG;
+        } else if (baseName.contains("winscope") || baseName.contains("uiTrace_")) {
+            return LogDataType.WINSCOPE;
         } else if (".perfetto-trace".equals(ext)) {
             return LogDataType.PERFETTO;
         } else if (".zip".equals(ext)) {
             return LogDataType.ZIP;
         } else if (".uix".equals(ext)) {
             return LogDataType.UIX;
-        } else if (".textproto".equals(ext)
-                && FileUtil.getBaseName(metricFile.getName()).contains("_goldResult")) {
+        } else if (".textproto".equals(ext) && baseName.contains("_goldResult")) {
             return LogDataType.GOLDEN_RESULT_PROTO;
         } else if (".trace".equals(ext)) {
             return LogDataType.TRACE;
@@ -84,9 +86,6 @@ public class FilePullerLogCollector extends FilePullerDeviceMetricCollector {
             return LogDataType.BT_SNOOP_LOG;
         } else if (".json".equals(ext)) {
             return LogDataType.JSON;
-        } else if (FileUtil.getBaseName(metricFile.getName()).contains("winscope")
-                || FileUtil.getBaseName(metricFile.getName()).contains("uiTrace_")) {
-            return LogDataType.WINSCOPE;
         }
         return LogDataType.TEXT;
     }
