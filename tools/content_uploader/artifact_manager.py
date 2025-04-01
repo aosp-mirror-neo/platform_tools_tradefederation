@@ -98,9 +98,11 @@ class ArtifactManager:
         """
         tokens = source_path_str.split()
         source_path = tokens[0]
-        action = "update" if name in self._artifacts else "add"
+        action = 'update' if name in self._artifacts else 'add'
         artifact = self._artifacts.get(name, ArtifactConfig(source_path, unzip=False))
-        artifact.source_path = source_path
+        # Update the source path only if specified
+        if action == 'update' and source_path:
+            artifact.source_path = source_path
 
         if len(tokens) > 1:
             artifact.unzip = self._get_artifact_attribute(

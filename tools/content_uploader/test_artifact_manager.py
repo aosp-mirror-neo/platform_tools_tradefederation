@@ -70,6 +70,18 @@ class ArtifactManagerTest(unittest.TestCase):
             self.artifacts['apex'].source_path = 'new_path'
             self.assertDictEqual(artifacts, expected)
 
+    def test_override_artifacts_update_artifact_source_path_unspecified(self):
+        """Flag --artifact 'ARTIFACT_NAME= chunk' retains the default source path."""
+        test_args = ['content_uploader', '--artifacts', 'apex= chunk']
+        with patch.object(sys, 'argv', test_args):
+            args = self.parser.parse_args()
+            self.artifact_manager.override_artifacts(args)
+            artifacts = self.artifact_manager.artifacts()
+            expected = self.artifacts.copy()
+            expected['apex'].source_path = '*.apex'
+            expected['apex'].chunk = True
+            self.assertDictEqual(artifacts, expected)
+
     def test_override_artifacts_add_artifact(self):
         """Flag --artifact 'NEW_ARTIFACT=PATH' adds a new artifact."""
         test_args = ['content_uploader', '--artifacts', 'new_artifact=path/to/new']
