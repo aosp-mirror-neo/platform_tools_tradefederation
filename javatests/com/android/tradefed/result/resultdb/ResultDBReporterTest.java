@@ -19,6 +19,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.FailureReason;
+import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.TestStatus;
 import com.android.resultdb.proto.Variant;
@@ -80,20 +81,24 @@ public class ResultDBReporterTest {
 
     private TestResult.Builder newTestResult(String method) {
         return TestResult.newBuilder()
-                .setTestId(
-                        String.format(
-                                "ants://%s/%s/%s",
-                                "example-module", "com.google.ExampleClass", method))
+                .setTestIdStructured(
+                        TestIdentifier.newBuilder()
+                                .setModuleName("example-module")
+                                .setModuleScheme("junit")
+                                .setModuleVariant(
+                                        Variant.newBuilder()
+                                                .putDef("name", "test tag")
+                                                .putDef("scheduler", "ATP")
+                                                .build())
+                                .setCoarseName("com.google")
+                                .setFineName("ExampleClass")
+                                .setCaseName(method)
+                                .build())
                 .setResultId("1234abcd-00001")
                 .setStartTime(Timestamps.fromSeconds(1536333825L))
                 .setDuration(Durations.fromMillis(100))
                 .setStatus(TestStatus.PASS)
-                .setExpected(true)
-                .setVariant(
-                        Variant.newBuilder()
-                                .putDef("name", "test tag")
-                                .putDef("scheduler", "ATP")
-                                .build());
+                .setExpected(true);
     }
 
     @Before
@@ -162,8 +167,10 @@ public class ResultDBReporterTest {
                         .putDef("scheduler", "ATP")
                         .putDef("target", "test-flavor")
                         .build();
-        assertThat(mReporter.mRecorder.getTestResults())
-                .containsExactly(newTestResult("testExampleMethod").setVariant(variant).build());
+        TestResult.Builder expected = newTestResult("testExampleMethod");
+        expected.setTestIdStructured(
+                expected.getTestIdStructured().toBuilder().setModuleVariant(variant).build());
+        assertThat(mReporter.mRecorder.getTestResults()).containsExactly(expected.build());
     }
 
     @Test

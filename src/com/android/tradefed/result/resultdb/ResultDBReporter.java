@@ -346,20 +346,18 @@ public class ResultDBReporter
         if (mBaseVariant != null) {
             variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
         }
+
         mCurrentTestResult =
                 TestResult.newBuilder()
-                        // TODO: Use test id format designed in go/resultdb-test-hierarchy-proposal
-                        .setTestId(
-                                String.format(
-                                        "ants://%s/%s/%s",
-                                        mCurrentModule, test.getClassName(), test.getTestName()))
+                        .setTestIdStructured(
+                                ResultDBUtil.toTestIdentifier(
+                                        mCurrentModule, variantBuilder.build(), test))
                         .setResultId(
                                 String.format(
                                         "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
                         .setStartTime(Timestamps.fromMillis(startTime))
                         .setStatus(TestStatus.PASS)
                         .setExpected(true)
-                        .setVariant(variantBuilder.build())
                         .build();
     }
 
