@@ -16,10 +16,10 @@
 package com.android.tradefed.device;
 
 import com.android.annotations.VisibleForTesting;
+import com.android.ddmlib.AndroidDebugBridge;
+import com.android.ddmlib.AndroidDebugBridge.IDeviceChangeListener;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
-import com.android.tradefed.device.server.AndroidDebugBridge;
-import com.android.tradefed.device.server.AndroidDebugBridge.IDeviceChangeListener;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
