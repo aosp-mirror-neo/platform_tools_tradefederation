@@ -82,6 +82,8 @@ public class FileUtil {
     };
 
     private static String sChmod = "chmod";
+    private static final List<String> HIGH_LINK_COUNT_FILES =
+            Arrays.asList("libc++.so");
 
     /** A map of {@link PosixFilePermission} to its corresponding Unix file mode */
     private static final Map<PosixFilePermission, Integer> PERM_MODE_MAP = new HashMap<>();
@@ -504,6 +506,13 @@ public class FileUtil {
                     }
                 } catch (IOException ioe) {
                     CLog.e("Error retrieving file or filesystem stats: " + ioe.getMessage());
+                }
+                // For high link count files, fallback to copy.
+                String fileName = path.getFileName().toString();
+                if (HIGH_LINK_COUNT_FILES.contains(fileName)) {
+                    CLog.d("Link count maximum reached for %s, falling back to copy.", fileName);
+                    copyFile(origFile, destFile);
+                    return;
                 }
                 throw e;
             }
