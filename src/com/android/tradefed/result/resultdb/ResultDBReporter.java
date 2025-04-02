@@ -169,7 +169,10 @@ public class ResultDBReporter
                 mRecorder = createRecorderClient(invocationId, updateToken);
             } else if (mCreateLocalInvocation) {
                 Invocation invocation =
-                        Invocation.newBuilder().setRealm("android:ants-experiment").build();
+                        Invocation.newBuilder()
+                                .setRealm("android:ants-experiment")
+                                .setIsExportRoot(true)
+                                .build();
                 mInvocationId = "u-" + randomUUIDString().toString();
                 mRecorder =
                         createRecorderClient(
