@@ -25,18 +25,14 @@ import com.android.ddmlib.IDevice;
 import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.internal.jdwp.chunkhandler.HandleHello;
 import com.android.sdklib.AndroidVersion;
-import com.android.server.adb.protos.AppProcessesProto;
 import com.android.tradefed.log.Log;
 import com.android.tradefed.log.LogUtil.CLog;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -93,10 +89,7 @@ class DeviceClientMonitorTask implements Runnable {
         }
         if (socketChannel != null) {
             try {
-                TrackServiceProcessor processor =
-                        isDeviceVersionAtLeastS(device)
-                                ? new TrackAppProcessor(device)
-                                : new TrackJdwpProcessor(device);
+                TrackServiceProcessor processor = new TrackJdwpProcessor(device);
                 boolean result = sendDeviceMonitoringRequest(socketChannel, processor);
                 if (result) {
                     device.setClientMonitoringSocket(socketChannel);
@@ -435,9 +428,8 @@ class DeviceClientMonitorTask implements Runnable {
      * A Processor instance is the entity to process data coming from a socket. It's always
      * registered with the Selector in {@link DeviceClientMonitorTask}.
      *
-     * <p>For each device, there's a {@link TrackServiceProcessor}. If the device version is at
-     * least S, it's for adb's track-app service through derived class {@link TrackAppProcessor};
-     * otherwise, it's for the track-jdwp service through derived class {@link TrackJdwpProcessor}.
+     * <p>For each device, there's a {@link TrackServiceProcessor}. it's for the track-jdwp service
+     * through derived class {@link TrackJdwpProcessor}.
      *
      * <p>Another type of Processor is {@link CmdlineFileProcessor} which is created to run an adb
      * shell command to read the /proc/<PID>/cmdline file for the name of a given process.
@@ -475,130 +467,6 @@ class DeviceClientMonitorTask implements Runnable {
 
         @NonNull
         abstract String getCommand();
-    }
-
-    private class TrackAppProcessor extends TrackServiceProcessor {
-
-        TrackAppProcessor(@NonNull DeviceImpl device) {
-            super(device);
-        }
-
-        @Override
-        @NonNull
-        String getCommand() {
-            return "track-app";
-        }
-
-        @Override
-        void processIncomingData() throws IOException {
-            if (getSocket() == null) {
-                return;
-            }
-            final byte[] lengthBuffer = new byte[4];
-            int length = AdbSocketUtils.readLength(getSocket(), lengthBuffer);
-            if (length < 0) {
-                return;
-            }
-
-            ByteBuffer buffer = AdbSocketUtils.read(getSocket(), length);
-            AppProcessesProto.AppProcesses processes =
-                    AppProcessesProto.AppProcesses.parseFrom(buffer);
-            Set<Integer> newJdwpPids = new HashSet<Integer>();
-            // Map from pid to the associated data.
-            Map<Integer, ProfileableClientImpl> newProfileable = new HashMap<>();
-            for (AppProcessesProto.ProcessEntry process : processes.getProcessList()) {
-                if (process.getDebuggable()) {
-                    newJdwpPids.add(Integer.valueOf((int) process.getPid()));
-                }
-                // A debuggable process must be profileable.
-                if (process.getProfileable() || process.getDebuggable()) {
-                    // Use an empty name first, will retrieve process names later.
-                    ProfileableClientImpl client =
-                            new ProfileableClientImpl(
-                                    (int) process.getPid(),
-                                    DeviceImpl.UNKNOWN_PACKAGE,
-                                    process.getArchitecture());
-                    newProfileable.put((int) process.getPid(), client);
-                }
-            }
-
-            updateJdwpClients(getDevice(), newJdwpPids);
-            updateProfileableClients(getDevice(), newProfileable);
-        }
-
-        void updateProfileableClients(
-                @NonNull DeviceImpl device,
-                @NonNull Map<Integer, ProfileableClientImpl> currentProfileable) {
-            // Map from pid to the associated data, for profileable apps discovered before.
-            Map<Integer, ProfileableClientImpl> previousProfileable = new HashMap<>();
-            for (ProfileableClientImpl client : device.getProfileableClients()) {
-                previousProfileable.put(client.getProfileableClientData().getPid(), client);
-            }
-            Set<Integer> addPids =
-                    Sets.difference(currentProfileable.keySet(), previousProfileable.keySet());
-            Set<Integer> removePids =
-                    Sets.difference(previousProfileable.keySet(), currentProfileable.keySet());
-            if (addPids.isEmpty() && removePids.isEmpty()) {
-                return;
-            }
-
-            Set<Integer> pidsWithoutNames = Sets.newTreeSet(addPids);
-            // Populate names for profileable apps that have been discovered before
-            previousProfileable.forEach(
-                    (pid, client) -> {
-                        if (!currentProfileable.containsKey(pid)) {
-                            return;
-                        }
-                        String name = client.getProfileableClientData().getProcessName();
-                        if (name != null && !name.isEmpty()) {
-                            currentProfileable
-                                    .get(pid)
-                                    .getProfileableClientData()
-                                    .setProcessName(name);
-                        } else {
-                            pidsWithoutNames.add(pid);
-                        }
-                    });
-            findProcessJdwpNames(device, currentProfileable, pidsWithoutNames);
-            device.updateProfileableClientList(Lists.newArrayList(currentProfileable.values()));
-            AndroidDebugBridge.deviceChanged(device, IDevice.CHANGE_PROFILEABLE_CLIENT_LIST);
-
-            for (Integer pid : pidsWithoutNames) {
-                // Create an instance of CmdlineFileProcessor for each pid, and register the socket
-                // to the Selector of DeviceClientMonitorTask.
-                new CmdlineFileProcessor(device, pid).connect();
-            }
-        }
-
-        /**
-         * Find names for pids in {@link pidsWithoutNames} and populate {@link pidClientMap} with
-         * the findings. Assume {@link pidClientMap} contains every pid from {@link
-         * pidsWithoutNames}. If the name of a pid is successfully found, the pid will be removed
-         * from {@link pidsWithoutNames}.
-         *
-         * <p>Prefer the names from jdwp channel. It's fast and accurate. May query
-         * /proc/PID/cmdline file but there's a latency (e.g., tens of milliseconds) for each query.
-         */
-        private void findProcessJdwpNames(
-                @NonNull DeviceImpl device,
-                @NonNull Map<Integer, ProfileableClientImpl> pidClientMap,
-                Set<Integer> pidsWithoutNames) {
-
-            Map<Integer, String> jdwpClientNames = new HashMap<>();
-            for (Client client : device.getNativeClients()) {
-                ClientData clientData = client.getClientData();
-                jdwpClientNames.put(clientData.getPid(), clientData.getPackageName());
-            }
-            for (Integer pid : Sets.newTreeSet(pidsWithoutNames)) {
-                // Prefer the name from jdwp. It's faster and more accurate as it comes from APNM
-                // packet. If the debuggable app is newly launched, its name may not be set yet.
-                @Nullable String name = jdwpClientNames.get(pid);
-                if (name != null && !name.isEmpty()) {
-                    pidClientMap.get(pid).getProfileableClientData().setProcessName(name);
-                    pidsWithoutNames.remove(pid);
-                }
-            }
-        }
     }
 
     private class TrackJdwpProcessor extends TrackServiceProcessor {
