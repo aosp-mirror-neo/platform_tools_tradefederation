@@ -21,6 +21,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
+import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.StreamUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -81,11 +82,15 @@ public class ContentProviderHandler {
     // Error thrown by device if the content provider is not installed for any reason.
     private static final String ERROR_PROVIDER_NOT_INSTALLED =
             "Could not find provider: android.tradefed.contentprovider";
+    // Error thrown by device when content provider is not ready yet.
+    private static final String ERROR_PROVIDER_NOT_READY =
+            "Error while accessing provider:android.tradefed.contentprovider";
 
     private final Integer mUserId;
     private ITestDevice mDevice;
     private File mContentProviderApk = null;
     private boolean mReportNotFound = false;
+    private boolean mReportNotReady = false;
 
     /** Constructor. */
     public ContentProviderHandler(ITestDevice device) throws DeviceNotAvailableException {
@@ -117,11 +122,10 @@ public class ContentProviderHandler {
      * @return True if ready to be used, False otherwise.
      */
     public boolean setUp() throws DeviceNotAvailableException {
-        if (mUserId != null && mUserId == 0) {
-            if (mDevice.isPackageInstalled(PACKAGE_NAME, Integer.toString(getEffectiveUserId()))) {
-                mReportNotFound = false;
-                return true;
-            }
+        if (mDevice.isPackageInstalled(PACKAGE_NAME, Integer.toString(getEffectiveUserId()))) {
+            mReportNotFound = false;
+            mReportNotReady = false;
+            return true;
         }
         if (mContentProviderApk == null || !mContentProviderApk.exists()) {
             try {
@@ -162,6 +166,7 @@ public class ContentProviderHandler {
         if (CommandStatus.SUCCESS.equals(appOpsResult.getStatus())
                 && appOpsResult.getStdout().contains(PROPERTY_RESULT)) {
             mReportNotFound = false;
+            mReportNotReady = false;
             return true;
         }
         CLog.e(
@@ -309,6 +314,9 @@ public class ContentProviderHandler {
         String stderr = result.getStderr();
         if (stderr != null && stderr.contains(ERROR_PROVIDER_NOT_INSTALLED)) {
             mReportNotFound = true;
+        }
+        if (stderr != null && stderr.contains(ERROR_PROVIDER_NOT_READY)) {
+            mReportNotReady = true;
         }
         return Strings.isNullOrEmpty(stderr);
     }
@@ -478,15 +486,25 @@ public class ContentProviderHandler {
             throws DeviceNotAvailableException {
         String contentUri = createEscapedContentUri(deviceFilePath);
         String pushCommand = String.format("content write --user %d --uri %s", userId, contentUri);
-        CommandResult pushResult = mDevice.executeShellV2Command(pushCommand, fileToPush);
 
-        if (isSuccessful(pushResult)) {
-            return true;
-        }
+        int retryCount = (userId == 0 ? 0 : 2);
+        do {
+            CommandResult pushResult = mDevice.executeShellV2Command(pushCommand, fileToPush);
 
-        CLog.e(
-                "Failed to push a file '%s' at %s using content provider. Error: '%s'",
-                fileToPush, deviceFilePath, pushResult.getStderr());
+            if (isSuccessful(pushResult)) {
+                return true;
+            }
+
+            CLog.e(
+                    "Failed to push a file '%s' at %s using content provider. Error: '%s'",
+                    fileToPush, deviceFilePath, pushResult.getStderr());
+            if (!mReportNotReady) {
+                return false;
+            }
+            // Retry in some cases.
+            retryCount--;
+            RunUtil.getDefault().sleep(5000L);
+        } while (retryCount > 0);
         return false;
     }
 
