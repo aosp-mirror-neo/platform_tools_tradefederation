@@ -288,38 +288,63 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
     @VisibleForTesting
     void setNewDeviceImage(IBuildInfo buildInfo, File newDeviceDir)
             throws TargetSetupError, IOException {
-        CLog.i(
-                "Before mixing kernel, the device image %s is of size %d",
-                buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE.getFileKey()).toString(),
-                buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE.getFileKey()).length());
+        File oldDeviceImage = buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE.getFileKey());
+        if (oldDeviceImage.isFile()) {
+            CLog.i(
+                    "Before mixing kernel, the device image %s is a file of size %d",
+                    oldDeviceImage.toString(), oldDeviceImage.length());
+            File newDeviceImage = FileUtil.findFile(newDeviceDir, ".*-img-.*.zip.*");
+            if (newDeviceImage == null || !newDeviceImage.exists()) {
+                throw new TargetSetupError(
+                        "Failed to get a new device image after mixing",
+                        InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+            }
+            CLog.i(
+                    "After mixing kernel, the device image %s is a file of size %d",
+                    newDeviceImage.toString(), newDeviceImage.length());
+            try {
+                // A zipped device image cannot work with incremental flashing so
+                // self disable it.
+                CLog.d("Disabling incremental flashing.");
+                mConfig.injectOptionValue("incremental-flashing", "false");
+                mConfig.injectOptionValue("force-disable-incremental-flashing", "true");
+            } catch (ConfigurationException ignore) {
+                CLog.e(ignore);
+            }
+            String oldPath = oldDeviceImage.getAbsolutePath();
+            CLog.i("Delete old device image %s", oldDeviceImage);
+            oldDeviceImage.delete();
+            CLog.i("Create hardlink %s for %s", oldPath, newDeviceImage);
+            FileUtil.hardlinkFile(newDeviceImage, new File(oldPath));
 
-        File newDeviceImage = FileUtil.findFile(newDeviceDir, ".*-img-.*.zip$");
-        if (newDeviceImage == null || !newDeviceImage.exists()) {
+        } else if (oldDeviceImage.isDirectory()) {
+            CLog.i(
+                    "Before mixing kernel, the device image %s is a directory of size %d",
+                    oldDeviceImage.toString(), FileUtil.sizeOfDirectory(oldDeviceImage));
+            CLog.i(
+                    "After mixing kernel, the device image %s is a directory of size %d",
+                    newDeviceDir.toString(), FileUtil.sizeOfDirectory(newDeviceDir));
+            for (File image : oldDeviceImage.listFiles()) {
+                String imgName = image.getName();
+                File newImage = FileUtil.findFile(newDeviceDir, imgName);
+                if (newImage == null || !newImage.exists()) {
+                    throw new TargetSetupError(
+                            String.format(
+                                    "Failed to find device image %s in %s", imgName, newDeviceDir),
+                            InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+                }
+                String oldPath = image.getAbsolutePath();
+                CLog.i("Delete old device image file %s", image);
+                image.delete();
+                CLog.i("Create hardlink %s for %s", oldPath, newImage);
+                FileUtil.hardlinkFile(newImage, new File(oldPath));
+            }
+        } else {
             throw new TargetSetupError(
-                    "Failed to get a new device image after mixing",
+                    String.format("Device image %s does not exist", oldDeviceImage.toString()),
                     InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
         }
-        CLog.i(
-                "Successfully generated new device image %s of size %d",
-                newDeviceImage, newDeviceImage.length());
-        String deviceImagePath = buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE).getAbsolutePath();
-        buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE.getFileKey()).delete();
-        FileUtil.hardlinkFile(newDeviceImage, new File(deviceImagePath));
 
-        try {
-            // Modifying device image cannot work with incremental flashing so
-            // self disable it.
-            CLog.d("Disabling incremental flashing.");
-            mConfig.injectOptionValue("incremental-flashing", "false");
-            mConfig.injectOptionValue("force-disable-incremental-flashing", "true");
-        } catch (ConfigurationException ignore) {
-            CLog.e(ignore);
-        }
-
-        CLog.i(
-                "After mixing kernel, the device image %s is of size %d",
-                buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE.getFileKey()).toString(),
-                buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE.getFileKey()).length());
     }
 
     /**
