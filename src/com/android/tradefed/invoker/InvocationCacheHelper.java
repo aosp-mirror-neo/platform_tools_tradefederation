@@ -212,10 +212,17 @@ public class InvocationCacheHelper {
             commandArray =
                     TradefedDelegator.clearCommandlineFromOneArg(commandArray, "invocation-data");
             commandArray = TradefedDelegator.clearCommandlineFromOneArg(commandArray, "build-id");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(commandArray, "cts-build-id");
             commandArray = TradefedDelegator.clearCommandlineFromOneArg(commandArray, "serial");
-            commandArray = TradefedDelegator.clearCommandlineFromOneArg(commandArray, "extra-target-downloads");
-            commandArray = TradefedDelegator.clearCommandlineFromOneArg(commandArray, "gce-driver-param");
-            commandArray = TradefedDelegator.clearCommandlineFromOneArg(commandArray, "max-testcase-run-count");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(
+                            commandArray, "extra-target-downloads");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(commandArray, "gce-driver-param");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(
+                            commandArray, "max-testcase-run-count");
         } catch (ConfigurationException e) {
             throw new RuntimeException(e);
         }
