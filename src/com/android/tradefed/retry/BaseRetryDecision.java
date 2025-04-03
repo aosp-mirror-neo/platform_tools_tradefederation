@@ -561,6 +561,13 @@ public class BaseRetryDecision
                                     .getInvocationData()
                                     .containsKey(SubprocessTfLauncher.SUBPROCESS_TAG_NAME)
                             && !mUseSnapshotForReset));
+            for (ITestDevice device : devices) {
+                // Force content provider to re-issue an install to ensure readiness for tests
+                // retrying
+                if (device instanceof NativeDevice) {
+                    ((NativeDevice) device).resetContentProviderSetup();
+                }
+            }
         } finally {
             InvocationMetricLogger.addInvocationPairMetrics(
                     InvocationMetricKey.RESET_RETRY_ISOLATION_PAIR,
