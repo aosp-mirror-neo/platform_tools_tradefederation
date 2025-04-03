@@ -6224,6 +6224,7 @@ public class NativeDevice
         // Construct a content provider if null, or if the current user has changed since last time.
         if (mContentProvider == null || mContentProvider.getUserId() != userId) {
             mContentProvider = new ContentProviderHandler(this, userId);
+            mContentProvider.setRunUtil(getRunUtil());
         }
         // Force the install if we saw an error with content provider installation.
         if (mContentProvider.contentProviderNotFound()) {

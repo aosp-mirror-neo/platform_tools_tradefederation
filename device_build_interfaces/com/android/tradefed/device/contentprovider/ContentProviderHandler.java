@@ -21,6 +21,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
+import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.StreamUtil;
 
@@ -88,6 +89,7 @@ public class ContentProviderHandler {
 
     private final Integer mUserId;
     private ITestDevice mDevice;
+    private IRunUtil mRunUtil;
     private File mContentProviderApk = null;
     private boolean mReportNotFound = false;
     private boolean mReportNotReady = false;
@@ -100,6 +102,17 @@ public class ContentProviderHandler {
     public ContentProviderHandler(ITestDevice device, @Nullable Integer userId) {
         mUserId = userId;
         mDevice = device;
+    }
+
+    public void setRunUtil(IRunUtil runUtil) {
+        mRunUtil = runUtil;
+    }
+
+    public IRunUtil getRunUtil() {
+        if (mRunUtil != null) {
+            return mRunUtil;
+        }
+        return RunUtil.getDefault();
     }
 
     /** Returns the userId that this instance is initialized with. */
@@ -498,14 +511,16 @@ public class ContentProviderHandler {
             CLog.e(
                     "Failed to push a file '%s' at %s using content provider. Error: '%s'",
                     fileToPush, deviceFilePath, pushResult.getStderr());
-            if (!mReportNotReady) {
+            if (mReportNotFound) {
+                setUp();
+            } else if (!mReportNotReady) {
                 return false;
             }
             // Retry in some cases.
             retryCount--;
             // Skip sleeping after the last attempt
             if (retryCount > 0) {
-                RunUtil.getDefault().sleep(5000L);
+                getRunUtil().sleep(5000L);
             }
         } while (retryCount > 0);
         return false;
