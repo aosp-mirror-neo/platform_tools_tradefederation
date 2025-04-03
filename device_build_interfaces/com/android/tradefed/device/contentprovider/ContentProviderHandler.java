@@ -487,7 +487,7 @@ public class ContentProviderHandler {
         String contentUri = createEscapedContentUri(deviceFilePath);
         String pushCommand = String.format("content write --user %d --uri %s", userId, contentUri);
 
-        int retryCount = (userId == 0 ? 0 : 2);
+        int retryCount = (userId == 0 ? 0 : 3);
         do {
             CommandResult pushResult = mDevice.executeShellV2Command(pushCommand, fileToPush);
 
@@ -503,7 +503,10 @@ public class ContentProviderHandler {
             }
             // Retry in some cases.
             retryCount--;
-            RunUtil.getDefault().sleep(5000L);
+            // Skip sleeping after the last attempt
+            if (retryCount > 0) {
+                RunUtil.getDefault().sleep(5000L);
+            }
         } while (retryCount > 0);
         return false;
     }
