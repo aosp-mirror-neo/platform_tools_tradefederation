@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 
 /** Holds the state of a device as reported by the "adb devices -l" command. */
 public final class AdbDevice {
-    private final static Pattern SERIAL_PATTERN =
+    private static final Pattern SERIAL_PATTERN =
             Pattern.compile("([\\S&&[^\\(]]\\S*|\\(.*\\))\\s+(\\S+)\\s*.*$");
 
     /** Serial number of the device or null if none */

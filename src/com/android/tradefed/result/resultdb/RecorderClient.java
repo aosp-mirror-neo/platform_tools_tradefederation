@@ -77,7 +77,6 @@ public class RecorderClient implements IRecorderClient {
         ManagedChannel channel =
                 ManagedChannelBuilder.forAddress(SERVER_ADDRESS, SERVER_PORT)
                         .executor(Executors.newCachedThreadPool())
-                        .maxInboundMessageSize(32 * 1024)
                         .build();
         RecorderGrpc.RecorderBlockingStub stub =
                 RecorderGrpc.newBlockingStub(channel)
@@ -279,6 +278,11 @@ public class RecorderClient implements IRecorderClient {
             try {
                 mStub.batchCreateTestResults(request.build());
             } catch (StatusRuntimeException e) {
+                // TODO: ResultDB may reject the test result upload request if some fields are
+                // invalid
+                // (eg. test identifier is too long).
+                // We need some way to surface this error to avoid silently dropping
+                // test results.
                 CLog.e("Error uploading results: %s", e);
             }
             CLog.i("Uploaded %d results to invocation %s", allResults.size(), mInvocationId);

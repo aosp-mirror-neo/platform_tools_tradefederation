@@ -148,7 +148,7 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
     @Option(
             name = "cancel-ota-snapshot",
             description = "In case an OTA snapshot is in progress, cancel it.")
-    private boolean mCancelSnapshot = false;
+    private boolean mCancelSnapshot = true;
 
     @Option(
             name = "incremental-flashing",
