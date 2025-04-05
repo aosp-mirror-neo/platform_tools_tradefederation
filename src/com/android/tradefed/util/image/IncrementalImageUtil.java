@@ -786,13 +786,6 @@ public class IncrementalImageUtil {
             CLog.d("mSkipBootloaderVersionCheck=true, removing bootloader requirements.");
             File androidInfo = new File(imageDirectory, "android-info.txt");
             FastbootDeviceFlasher.removeLine(androidInfo);
-            try {
-                CLog.d(
-                        "android-info.txt after rewrite:\n%s",
-                        FileUtil.readStringFromFile(androidInfo));
-            } catch (IOException e) {
-                CLog.e(e);
-            }
         }
         Map<String, String> envMap = new HashMap<>();
         envMap.put("ANDROID_PRODUCT_OUT", imageDirectory.getAbsolutePath());

@@ -15,6 +15,10 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.TestIdentifier;
+import com.android.resultdb.proto.Variant;
+import com.android.tradefed.result.TestDescription;
+
 import java.nio.charset.StandardCharsets;
 
 /** Utility class for ResultDB reporter. */
@@ -88,5 +92,44 @@ public final class ResultDBUtil {
             validKey = "num_" + validKey;
         }
         return validKey;
+    }
+
+    /**
+     * Converts a TestDescription to a TestIdentifier.
+     *
+     * @param moduleName the module name
+     * @param moduleVariant the module variant
+     * @param testDescription the test description
+     * @return the ResultDB test identifier. This test identifier is not guaranteed to be valid
+     *     (i.e. ResultDB may reject it, returning a invalid_argument error). This is because
+     *     ResultDB has more strict requirements on the test identifier, such as the field length
+     *     and character set.
+     */
+    public static TestIdentifier toTestIdentifier(
+            String moduleName, Variant moduleVariant, TestDescription testDescription) {
+
+        String fullClassName = testDescription.getClassName();
+        int lastDotIndex = fullClassName.lastIndexOf('.');
+
+        String packageName;
+        String className;
+        if (fullClassName.isEmpty()) {
+            packageName = "empty-package";
+            className = "empty-class";
+        } else if (lastDotIndex == -1) {
+            packageName = "empty-package";
+            className = fullClassName;
+        } else {
+            packageName = fullClassName.substring(0, lastDotIndex);
+            className = fullClassName.substring(lastDotIndex + 1);
+        }
+        return TestIdentifier.newBuilder()
+                .setModuleName(moduleName)
+                .setModuleScheme("junit")
+                .setModuleVariant(moduleVariant)
+                .setCoarseName(packageName)
+                .setFineName(className)
+                .setCaseName(testDescription.getTestName())
+                .build();
     }
 }

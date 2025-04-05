@@ -887,13 +887,6 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
             CLog.d("mSkipBootloaderVersionCheck=true, removing bootloader requirements.");
             File androidInfo = new File(deviceBuild.getDeviceImageFile(), "android-info.txt");
             removeLine(androidInfo);
-            try {
-                CLog.d(
-                        "android-info.txt after rewrite:\n%s",
-                        FileUtil.readStringFromFile(androidInfo));
-            } catch (IOException e) {
-                CLog.e(e);
-            }
         }
         try {
             Map<String, String> systemVarMap = new HashMap<>();
@@ -911,18 +904,33 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         }
     }
 
+    /** It is essential to copy the file to ensure we don't corrupt the hardlink from the cache */
     public static void removeLine(File androidInfo) throws TargetSetupError {
-        try (Stream<String> streamLine = Files.lines(androidInfo.toPath())) {
+        File copy = new File(androidInfo.getParent(), "android-info.txt_copy");
+        try {
+            FileUtil.copyFile(androidInfo, copy);
+        } catch (IOException e) {
+            throw new TargetSetupError(e.getMessage(), e);
+        }
+        try (Stream<String> streamLine = Files.lines(copy.toPath())) {
             List<String> out = streamLine
                 .filter(line -> !line.contains("require version-bootloader="))
                             .collect(Collectors.toList());
             Files.write(
-                    androidInfo.toPath(),
+                    copy.toPath(),
                     out,
                     StandardOpenOption.WRITE,
                     StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
             throw new TargetSetupError(e.getMessage(), e);
+        }
+        try {
+            FileUtil.deleteFile(androidInfo);
+            FileUtil.copyFile(copy, androidInfo);
+            FileUtil.deleteFile(copy);
+            CLog.d("android-info.txt after rewrite:\n%s", FileUtil.readStringFromFile(androidInfo));
+        } catch (IOException e) {
+            CLog.e(e);
         }
     }
 

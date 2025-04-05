@@ -105,6 +105,14 @@ public class MoblyYamlResultParser {
         return resultHandler.handle(docMap);
     }
 
+    private boolean isTimeout(MoblyYamlResultRecordHandler.Record record) {
+        String stackTrace = record.getStackTrace();
+        return MoblyYamlResultRecordHandler.RecordResult.SKIP.equals(record.getResult())
+                && record.getEndTime() == 0L
+                && stackTrace.contains("timeout")
+                && stackTrace.contains("Test received a SIGTERM.");
+    }
+
     @VisibleForTesting
     protected void reportToListeners(
             List<ITestInvocationListener> listeners,
@@ -153,6 +161,12 @@ public class MoblyYamlResultParser {
                             if (mRunFailed) {
                                 SkipReason reason = new SkipReason(record.getStackTrace(), "");
                                 listener.testSkipped(testDescription, reason);
+                            } else if (isTimeout(record)) {
+                                FailureDescription timeoutFailureDescription =
+                                        FailureDescription.create(
+                                                record.getStackTrace(),
+                                                TestRecordProto.FailureStatus.TIMED_OUT);
+                                listener.testFailed(testDescription, timeoutFailureDescription);
                             } else {
                                 listener.testIgnored(testDescription);
                             }

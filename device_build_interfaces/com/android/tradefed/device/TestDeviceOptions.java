@@ -156,7 +156,7 @@ public class TestDeviceOptions {
             name = "snapuserd-timeout",
             description = "time to wait for a device to finish committing patches with snapuserd",
             isTimeVal = true)
-    private long mSnapuserdTimeout = 10 * 60 * 1000;
+    private long mSnapuserdTimeout = 20 * 60 * 1000;
 
     @Option(name = "conn-check-url",
             description = "default URL to be used for connectivity checks.")

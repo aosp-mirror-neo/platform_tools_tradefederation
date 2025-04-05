@@ -6136,13 +6136,13 @@ public class TestDeviceTest {
             boolean res = spy.pushFile(tmpFile, fakeRemotePath);
 
             assertFalse(res);
-            // Tried twice due to retry
-            verify(spy, times(2))
+            // Tried 4 times due to retry
+            verify(spy, times(4))
                     .installPackage(Mockito.any(), Mockito.anyBoolean(), Mockito.anyBoolean());
             // Since it fails, requesting the content provider again will re-do setup.
             ContentProviderHandler cp = spy.getContentProvider(mTestDevice.getCurrentUser());
             assertFalse(cp.contentProviderNotFound());
-            verify(spy, times(3))
+            verify(spy, times(4))
                     .installPackage(Mockito.any(), Mockito.anyBoolean(), Mockito.anyBoolean());
             cp.tearDown();
         } finally {
