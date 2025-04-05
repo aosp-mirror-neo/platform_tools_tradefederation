@@ -76,6 +76,80 @@ public class MoblyYamlResultParserTest {
                 + "AttributeError:\\\n"
                 + "    \\ 'AndroidDevice' object has no attribute 'uia'\\n"
                 + "\"";
+    private static final String SAMPLE_STACK_TRACE_TIMED_OUT =
+            "\"Traceback (most recent call last):\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/base_test.py\\\","
+                + " line 1036, in run\\n"
+                + "    setup_class_result = self._setup_class()\\n"
+                + "                       ^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/base_test.py\\\","
+                + " line 418, in _setup_class\\n"
+                + "    self.setup_class()\\n"
+                + "  File \\\"/tmp/Soong.python_okl5njgm/sdv_sample_comm_stack_one_vm_test.py\\\","
+                + " line 16, in setup_class\\n"
+                + "    super().setup_class()\\n"
+                + "  File"
+                + " \\\"/tmp/Soong.python_okl5njgm/sdv_test_fw/test_execution/sdv_base_test.py\\\","
+                + " line 200, in setup_class\\n"
+                + "    self.__prepare_logcat(device)\\n"
+                + "  File"
+                + " \\\"/tmp/Soong.python_okl5njgm/sdv_test_fw/test_execution/sdv_base_test.py\\\","
+                + " line 124, in __prepare_logcat\\n"
+                + "    device.adb().verify_logcat_is_running()\\n"
+                + "  File"
+                + " \\\"/tmp/Soong.python_okl5njgm/sdv_test_fw/test_execution/sdv_device.py\\\","
+                + " line 57, in verify_logcat_is_running\\n"
+                + "    if self.grep_from_logcat(self.LOGCAT_NON_EMPTY_LINES_GREP_TEXT):\\n"
+                + "       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/Soong.python_okl5njgm/sdv_test_fw/test_execution/sdv_device.py\\\","
+                + " line 378, in grep_from_logcat\\n"
+                + "    return self.execute_shell_command(logcat_command, raise_exception=False)\\n"
+                + "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/Soong.python_okl5njgm/sdv_test_fw/test_execution/sdv_device.py\\\","
+                + " line 222, in execute_shell_command\\n"
+                + "    self.__android_device.adb.shell(shell_command)\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/controllers/android_device_lib/adb.py\\\","
+                + " line 557, in adb_call\\n"
+                + "    return self._exec_adb_cmd(name,\\n"
+                + "           ^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/controllers/android_device_lib/adb.py\\\","
+                + " line 291, in _exec_adb_cmd\\n"
+                + "    out = self._exec_cmd(adb_cmd, shell=shell, timeout=timeout,"
+                + " stderr=stderr)\\n"
+                + "          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/controllers/android_device_lib/adb.py\\\","
+                + " line 187, in _exec_cmd\\n"
+                + "    (ret, out, err) = utils.run_command(args, shell=shell, timeout=timeout)\\n"
+                + "                     "
+                + " ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/utils.py\\\","
+                + " line 481, in run_command\\n"
+                + "    out, err = process.communicate()\\n"
+                + "           ^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File \\\"/usr/lib/python3.12/subprocess.py\\\", line 1209, in communicate\\n"
+                + "    stdout, stderr = self._communicate(input, endtime, timeout)\\n"
+                + "                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File \\\"/usr/lib/python3.12/subprocess.py\\\", line 2115, in _communicate\\n"
+                + "    ready = selector.select(timeout)\\n"
+                + "            ^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File \\\"/usr/lib/python3.12/selectors.py\\\", line 415, in select\\n"
+                + "    fd_event_list = self._selector.poll(timeout)\\n"
+                + "                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n"
+                + "  File"
+                + " \\\"/tmp/tf-workfolder56278238750643711/local_atest-virtualenv/lib/python3.12/site-packages/mobly/test_runner.py\\\","
+                + " line 425, in sigterm_handler\\n"
+                + "    raise signals.TestAbortAll('Test received a SIGTERM.')\\n"
+                + "mobly.signals.TestAbortAll: Details=All remaining tests aborted due to: Test"
+                + " received a SIGTERM., Extras=None\\n"
+                + "\"";
     private static final Map<String, Object> mRecordMap;
 
     static {
@@ -278,6 +352,36 @@ public class MoblyYamlResultParserTest {
         assertEquals(DEFAULT_TEST_CLASS, ((Record) result).getTestClass());
         assertEquals(DEFAULT_TEST_NAME, ((Record) result).getTestName());
         assertTrue(((Record) result).getStackTrace().contains("Traceback (most recent call last)"));
+    }
+
+    @Test
+    public void testReportToListenersFailedTestForTimedout() {
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        IMoblyYamlResultHandler.ITestResult skipRecord =
+                new Record.Builder()
+                        .setTestName(DEFAULT_TEST_NAME)
+                        .setTestClass(DEFAULT_TEST_CLASS)
+                        .setBeginTime("null")
+                        .setEndTime("null")
+                        .setResult(MoblyYamlResultRecordHandler.RecordResult.SKIP)
+                        .setStackTrace(SAMPLE_STACK_TRACE_TIMED_OUT)
+                        .build();
+        List<IMoblyYamlResultHandler.ITestResult> resultCache = ImmutableList.of(skipRecord);
+        mParser.reportToListeners(mListeners, resultCache);
+
+        assertTrue(
+                mFailureDescriptionCaptor
+                        .getValue()
+                        .getErrorMessage()
+                        .contains("Test received a SIGTERM."));
+        assertTrue(
+                mFailureDescriptionCaptor
+                        .getValue()
+                        .getFailureStatus()
+                        .equals(TestRecordProto.FailureStatus.TIMED_OUT));
+        assertEquals(DEFAULT_TEST_CLASS, mEndDescCaptor.getValue().getClassName());
+        assertEquals(DEFAULT_TEST_NAME, mEndDescCaptor.getValue().getTestName());
+        assertEquals(0L, (long) mEndTimeCaptor.getValue());
     }
 
     @Test
