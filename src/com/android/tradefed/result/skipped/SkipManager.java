@@ -360,4 +360,8 @@ public class SkipManager implements IDisableable {
     public boolean reportInvocationSkippedModule() {
         return mReportInvocationModuleSkipped;
     }
+
+    public boolean isConsideredForContentAnalysis() {
+        return mConsideredForContent;
+    }
 }

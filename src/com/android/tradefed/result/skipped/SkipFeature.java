@@ -81,30 +81,40 @@ public class SkipFeature
     public FeatureResponse execute(FeatureRequest request) {
         FeatureResponse.Builder responseBuilder = FeatureResponse.newBuilder();
         if (mConfig != null) {
-            boolean presubmit = InvocationContext.isPresubmit(mInfo.getContext());
-            MultiPartResponse.Builder multiPartBuilder = MultiPartResponse.newBuilder();
-            multiPartBuilder.addResponsePart(
-                    PartResponse.newBuilder().setKey(DELIMITER_NAME).setValue(ESCAPED_DELIMITER));
-            multiPartBuilder.addResponsePart(
-                    PartResponse.newBuilder()
-                            .setKey(PRESUBMIT)
-                            .setValue(Boolean.toString(presubmit)));
-            multiPartBuilder.addResponsePart(
-                    PartResponse.newBuilder()
-                            .setKey(SKIPPED_MODULES)
-                            .setValue(
-                                    Joiner.on(DELIMITER)
-                                            .join(mConfig.getSkipManager().getUnchangedModules())));
-            multiPartBuilder.addResponsePart(
-                    PartResponse.newBuilder()
-                            .setKey(IMAGE_DIGESTS)
-                            .setValue(
-                                    Joiner.on(DELIMITER)
-                                            .join(
-                                                    serializeDigest(
-                                                            mConfig.getSkipManager()
-                                                                    .getImageToDigest()))));
-            responseBuilder.setMultiPartResponse(multiPartBuilder);
+            if (!mConfig.getSkipManager().isConsideredForContentAnalysis()) {
+                responseBuilder.setErrorInfo(
+                        ErrorInfo.newBuilder()
+                                .setErrorTrace("considered-for-content-analysis=false"));
+            } else {
+                boolean presubmit = InvocationContext.isPresubmit(mInfo.getContext());
+                MultiPartResponse.Builder multiPartBuilder = MultiPartResponse.newBuilder();
+                multiPartBuilder.addResponsePart(
+                        PartResponse.newBuilder()
+                                .setKey(DELIMITER_NAME)
+                                .setValue(ESCAPED_DELIMITER));
+                multiPartBuilder.addResponsePart(
+                        PartResponse.newBuilder()
+                                .setKey(PRESUBMIT)
+                                .setValue(Boolean.toString(presubmit)));
+                multiPartBuilder.addResponsePart(
+                        PartResponse.newBuilder()
+                                .setKey(SKIPPED_MODULES)
+                                .setValue(
+                                        Joiner.on(DELIMITER)
+                                                .join(
+                                                        mConfig.getSkipManager()
+                                                                .getUnchangedModules())));
+                multiPartBuilder.addResponsePart(
+                        PartResponse.newBuilder()
+                                .setKey(IMAGE_DIGESTS)
+                                .setValue(
+                                        Joiner.on(DELIMITER)
+                                                .join(
+                                                        serializeDigest(
+                                                                mConfig.getSkipManager()
+                                                                        .getImageToDigest()))));
+                responseBuilder.setMultiPartResponse(multiPartBuilder);
+            }
         } else {
             responseBuilder.setErrorInfo(
                     ErrorInfo.newBuilder().setErrorTrace("Configuration not set."));
