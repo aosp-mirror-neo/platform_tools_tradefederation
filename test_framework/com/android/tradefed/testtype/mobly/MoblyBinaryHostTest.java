@@ -762,6 +762,12 @@ public class MoblyBinaryHostTest
                     if (cleanName.contains("mp4")) {
                         type = LogDataType.MP4;
                     }
+                    if (cleanName.contains("bugreport") && cleanName.endsWith("zip")) {
+                        type = LogDataType.BUGREPORTZ;
+                    }
+                    if (cleanName.endsWith("png")) {
+                        type = LogDataType.PNG;
+                    }
                     listener.testLog(cleanName, type, dataStream);
                 }
             }
