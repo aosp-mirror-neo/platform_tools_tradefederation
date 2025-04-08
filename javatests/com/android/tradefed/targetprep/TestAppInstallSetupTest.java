@@ -582,6 +582,29 @@ public class TestAppInstallSetupTest {
                 .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
     }
 
+    @Test
+    public void testInstallFailedConflictingProvider() throws Exception {
+        final String obsoletePackageName = "obsolete.package.name";
+        final String failure = String.format(
+            "%s: the provider name a.b.c is already used by %s [other info]",
+            "INSTALL_FAILED_CONFLICTING_PROVIDER",
+            obsoletePackageName);
+        when(mMockTestDevice.installPackage(Mockito.eq(fakeApk), Mockito.eq(true)))
+                .thenReturn(failure);
+        when(mMockTestDevice.uninstallPackage(obsoletePackageName)).thenReturn(null);
+        when(mMockTestDevice.installPackage(Mockito.eq(fakeApk), Mockito.eq(true)))
+                .thenReturn(null);
+        when(mMockTestDevice.installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true)))
+                .thenReturn(failure);
+        when(mMockTestDevice.uninstallPackage(obsoletePackageName)).thenReturn(null);
+        when(mMockTestDevice.installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true)))
+                .thenReturn(null);
+
+        mPrep.setUp(mTestInfo);
+        verify(mMockTestDevice, atLeastOnce())
+                .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
+    }
+
     /**
      * Test {@link TestAppInstallSetup#setUp(TestInformation)} with a missing apk. TargetSetupError
      * expected.
