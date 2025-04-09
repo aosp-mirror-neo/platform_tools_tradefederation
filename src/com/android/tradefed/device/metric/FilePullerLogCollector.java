@@ -70,6 +70,8 @@ public class FilePullerLogCollector extends FilePullerDeviceMetricCollector {
             return LogDataType.PB;
         } else if (".png".equals(ext)) {
             return LogDataType.PNG;
+        } else if (".ppm".equals(ext)) {
+            return LogDataType.PPM;
         } else if (baseName.contains("winscope") || baseName.contains("uiTrace_")) {
             return LogDataType.WINSCOPE;
         } else if (".perfetto-trace".equals(ext)) {
