@@ -142,19 +142,6 @@ public class OtaUpdateDeviceFlasher implements IDeviceFlasher {
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.FLASHING_METHOD, FlashingMethod.USERSPACE_OTA.toString());
         device.enableAdbRoot();
-        // TODO(guangzhu): Remove this once wipe via OTA script is properly supported
-        if (UserDataFlashOption.WIPE.equals(mUserDataFlashOptions)) {
-            // starts the framework in case it was stopped (or no-op)
-            // this is still not the ideal solution as it needs a functioning framework
-            device.executeShellCommand("start");
-            device.waitForDeviceAvailable();
-            device.executeShellCommand("cmd recovery wipe");
-            // device will reboot from the above command
-            device.waitForDeviceAvailable();
-            device.enableAdbRoot();
-            // ensure that the device won't enter suspend mode
-            device.executeShellCommand("svc power stayon true");
-        }
         // allow OTA downgrade since it can't be assumed that incoming builds are always newer
         device.setProperty(OTA_DOWNGRADE_PROP, "1");
         // trigger the actual flashing
