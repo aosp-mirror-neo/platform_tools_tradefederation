@@ -892,6 +892,23 @@ public class NativeDeviceTest {
     @Test
     public void testConnectToWifiNetworkIfNeeded_alreadyConnected()
             throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean enableAdbRoot() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper(boolean useV2) throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+                };
         when(mMockWifi.checkConnectivity(mTestDevice.getOptions().getConnCheckUrl()))
                 .thenReturn(true);
 
@@ -1247,6 +1264,23 @@ public class NativeDeviceTest {
     /** Unit test for {@link NativeDevice#checkWifiConnection(String)}. */
     @Test
     public void testCheckWifiConnection() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean enableAdbRoot() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper(boolean useV2) throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+                };
         when(mMockWifi.isWifiEnabled()).thenReturn(true);
         when(mMockWifi.getSSID()).thenReturn("\"" + FAKE_NETWORK_SSID + "\"");
         when(mMockWifi.hasValidIp()).thenReturn(true);
@@ -1267,6 +1301,23 @@ public class NativeDeviceTest {
     /** Unit test for {@link NativeDevice#isWifiEnabled()}. */
     @Test
     public void testIsWifiEnabled() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean enableAdbRoot() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper(boolean useV2) throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+                };
         when(mMockWifi.isWifiEnabled()).thenReturn(true);
 
         assertTrue(mTestDevice.isWifiEnabled());
@@ -1277,6 +1328,23 @@ public class NativeDeviceTest {
      */
     @Test
     public void testIsWifiEnabled_exception() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean enableAdbRoot() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper(boolean useV2) throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+                };
         when(mMockWifi.isWifiEnabled()).thenThrow(new RuntimeException());
 
         assertFalse(mTestDevice.isWifiEnabled());
@@ -1344,6 +1412,23 @@ public class NativeDeviceTest {
     /** Unit test for {@link NativeDevice#reconnectToWifiNetwork()}. */
     @Test
     public void testReconnectToWifiNetwork() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean enableAdbRoot() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+
+                    @Override
+                    IWifiHelper createWifiHelper(boolean useV2) throws DeviceNotAvailableException {
+                        return mMockWifi;
+                    }
+                };
         when(mMockWifi.checkConnectivity(mTestDevice.getOptions().getConnCheckUrl()))
                 .thenReturn(false, true);
 
