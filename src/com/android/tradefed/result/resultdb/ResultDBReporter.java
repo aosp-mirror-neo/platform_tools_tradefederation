@@ -63,17 +63,19 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@OptionClass(alias = "resultdb-reporter")
 /** Result reporter that uploads test results to ResultDB. */
+@OptionClass(alias = "resultdb-reporter")
 public class ResultDBReporter
         implements ITestSummaryListener,
                 ILogSaverListener,
                 ISupportGranularResults,
                 IConfigurationReceiver {
 
-    public static final int MAX_SUMMARY_HTML_BYTES = 4096;
+    private static final String BUILD_ENV_INVOCATION_CONTEXT_KEY = "android-build-environment";
 
-    public static final int MAX_PRIMARY_ERROR_MESSAGE_BYTES = 1024;
+    private static final int MAX_SUMMARY_HTML_BYTES = 4096;
+
+    private static final int MAX_PRIMARY_ERROR_MESSAGE_BYTES = 1024;
 
     // Link to redirect to the result page.
     private static final String RESULT_LINK = "https://ci.chromium.org/ui/inv/invocations/%s";
@@ -136,13 +138,14 @@ public class ResultDBReporter
     }
 
     @VisibleForTesting
-    IRecorderClient createRecorderClient(String invocationId, String updateToken) {
-        return RecorderClient.create(invocationId, updateToken);
+    IRecorderClient createRecorderClient(
+            String invocationId, String updateToken, Boolean isStaging) {
+        return RecorderClient.create(invocationId, updateToken, isStaging);
     }
 
     @VisibleForTesting
-    IRecorderClient createRecorderClient(CreateInvocationRequest request) {
-        return RecorderClient.createWithNewInvocation(request);
+    IRecorderClient createRecorderClient(CreateInvocationRequest request, Boolean isStaging) {
+        return RecorderClient.createWithNewInvocation(request, isStaging);
     }
 
     // Generate a random hexadecimal string of length 8.
@@ -166,7 +169,7 @@ public class ResultDBReporter
             String updateToken = context.getAttribute("resultdb_invocation_update_token");
             if (!invocationId.isEmpty() && !updateToken.isEmpty()) {
                 mInvocationId = invocationId;
-                mRecorder = createRecorderClient(invocationId, updateToken);
+                mRecorder = createRecorderClient(invocationId, updateToken, isStaging(context));
             } else if (mCreateLocalInvocation) {
                 Invocation invocation =
                         Invocation.newBuilder()
@@ -179,7 +182,8 @@ public class ResultDBReporter
                                 CreateInvocationRequest.newBuilder()
                                         .setInvocation(invocation)
                                         .setInvocationId(mInvocationId)
-                                        .build());
+                                        .build(),
+                                isStaging(context));
                 mManageInvocation = true;
 
             } else {
@@ -225,6 +229,11 @@ public class ResultDBReporter
         mBaseVariant = mBaseVariantBuilder.build();
         CLog.logAndDisplay(
                 LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
+    }
+
+    private Boolean isStaging(IInvocationContext context) {
+        String buildEnvironment = context.getAttribute(BUILD_ENV_INVOCATION_CONTEXT_KEY);
+        return !buildEnvironment.equals("prod");
     }
 
     @Override

@@ -54,12 +54,12 @@ public class ResultDBReporterTest {
         }
 
         @Override
-        IRecorderClient createRecorderClient(String invocationId, String updateToken) {
+        IRecorderClient createRecorderClient(String invocationId, String updateToken, Boolean isStaging) {
             return mRecorder;
         }
 
         @Override
-        IRecorderClient createRecorderClient(CreateInvocationRequest request) {
+        IRecorderClient createRecorderClient(CreateInvocationRequest request, Boolean isStaging) {
             return mRecorder;
         }
 
