@@ -60,9 +60,12 @@ public class PerfettoTraceRecorder {
      * PerfettoTraceRecorder#stopTrace(ITestDevice)} afterwards to stop the trace recording.
      *
      * @param device A {@link ITestDevice} where trace will be recorded.
+     * @param traceConfigFileName Name of the trace config file in the test artifacts. If null, use
+     *     the default config instead.
      * @param extraConfigs A map of extra configs that needs to be added in the trace config file.
      */
-    public void startTrace(ITestDevice device, Map<String, String> extraConfigs)
+    public void startTrace(
+            ITestDevice device, String traceConfigFileName, Map<String, String> extraConfigs)
             throws IOException {
         if (deviceMetadataMap.containsKey(device)) {
             CLog.d(
@@ -87,12 +90,27 @@ public class PerfettoTraceRecorder {
         RunUtil.getDefault()
                 .runTimedCmd(10000, "chmod", "u+x", perfettoExecutable.getAbsolutePath());
 
-        // Get the trace config file from resource
-        File traceConfigFile = FileUtil.createTempFile("trace_config", ".textproto");
-        InputStream configStream =
-                PerfettoTraceRecorder.class.getResourceAsStream("/perfetto/trace_config.textproto");
-        String configStr = StreamUtil.getStringFromStream(configStream);
-        // insert extra configs in the trace config file
+        // Read the trace config into a string.
+        String configStr = null;
+        if (traceConfigFileName == null) {
+            // If no file name was given, get the default trace config from resource.
+            InputStream configStream =
+                    PerfettoTraceRecorder.class.getResourceAsStream(
+                            "/perfetto/trace_config.textproto");
+            configStr = StreamUtil.getStringFromStream(configStream);
+        } else {
+            // Otherwise retrieve it from the test artifacts.
+            File file = SearchArtifactUtil.searchFile(traceConfigFileName, true);
+            if (file == null) {
+                CLog.e(
+                        "Failed to retrieve trace config file %s from test artifacts",
+                        traceConfigFileName);
+                return;
+            }
+            configStr = FileUtil.readStringFromFile(file);
+        }
+
+        // insert extra configs in the trace config
         if (extraConfigs != null) {
             StringBuilder sb = new StringBuilder();
             for (Map.Entry<String, String> configKeyValue : extraConfigs.entrySet()) {
@@ -103,6 +121,9 @@ public class PerfettoTraceRecorder {
             String injectedStr = sb.toString();
             configStr = configStr.replace("# {injected_config}", injectedStr);
         }
+
+        // Write the trace config to a temp file.
+        File traceConfigFile = FileUtil.createTempFile("trace_config", ".textproto");
         FileUtil.writeToFile(configStr, traceConfigFile);
 
         deviceTraceMetadata.setTraceConfig(traceConfigFile, true);

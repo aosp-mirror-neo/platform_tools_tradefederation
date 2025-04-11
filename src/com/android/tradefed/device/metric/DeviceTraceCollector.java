@@ -16,6 +16,7 @@
 
 package com.android.tradefed.device.metric;
 
+import com.android.tradefed.config.Option;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.IInvocationContext;
@@ -30,10 +31,18 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
 /**
  * Collector that will start perfetto trace when a test run starts and log trace file at the end.
  */
 public class DeviceTraceCollector extends BaseDeviceMetricCollector {
+    @Option(
+            name = "trace-config-file",
+            description =
+                    "Name of the trace config file in the test artifacts. "
+                            + "Can be used to optionally override the default trace config.")
+    private String mTraceConfigFile = null;
+
     // Format of the trace name should be: device-trace_<device-serial>_<trace-count>_<event-name>.
     private static final String NAME_FORMAT = "device-trace_%s_%d_%s";
     private PerfettoTraceRecorder mPerfettoTraceRecorder = new PerfettoTraceRecorder();
@@ -75,7 +84,7 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
             if (mInstrumentationPkgName != null) {
                 extraConfigs.put("atrace_apps", String.format("\"%s\"", mInstrumentationPkgName));
             }
-            mPerfettoTraceRecorder.startTrace(device, extraConfigs);
+            mPerfettoTraceRecorder.startTrace(device, mTraceConfigFile, extraConfigs);
         } catch (IOException e) {
             CLog.d(
                     "Failed to start perfetto trace on %s trace-count:%d with error: %s",
