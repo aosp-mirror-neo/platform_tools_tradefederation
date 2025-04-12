@@ -71,6 +71,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -97,6 +99,13 @@ public class TestAppInstallSetup extends BaseTargetPreparer
     // device so that installation can continue like normal.
     private static final String INSTALL_FAILED_UPDATE_INCOMPATIBLE =
             "INSTALL_FAILED_UPDATE_INCOMPATIBLE";
+    // An error message that occurs when the test APK fails to be installed because the provider
+    // name is used by an old package. When this occurs, the old package is removed from the device
+    // so that installation can continue like normal.
+    private static final String INSTALL_FAILED_CONFLICTING_PROVIDER =
+            "INSTALL_FAILED_CONFLICTING_PROVIDER";
+    private static final Pattern CONFLICTING_PROVIDER_PATTERN =
+        Pattern.compile("is already used by (?<packageName>[A-Za-z0-9\\.]+)");
 
     @VisibleForTesting static final String TEST_FILE_NAME_OPTION = "test-file-name";
 
@@ -597,6 +606,18 @@ public class TestAppInstallSetup extends BaseTargetPreparer
                 // Try to uninstall package and reinstall.
                 uninstallPackage(testDevice, packageName);
                 result = installPackage(testDevice, apkFiles);
+            }
+        }
+
+        if (result != null) {
+            if (result.startsWith(INSTALL_FAILED_CONFLICTING_PROVIDER)) {
+                // Try to uninstall the conflicting package and reinstall this package.
+                Matcher matcher = CONFLICTING_PROVIDER_PATTERN.matcher(result);
+                if (matcher.find()) {
+                    String oldPackageName = matcher.group("packageName");
+                    uninstallPackage(testDevice, oldPackageName);
+                    result = installPackage(testDevice, apkFiles);
+                }
             }
         }
 

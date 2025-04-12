@@ -558,7 +558,6 @@ public class FileUtil {
      * @param destDir the destination folder
      * @param ignoreExistingFile If True and the file being linked already exists, skip the
      *     exception.
-     * @param copyInsteadofHardlink Set of files that needs to be copied instead of linked.
      * @throws IOException
      */
     public static void recursiveHardlink(File sourceDir, File destDir, boolean ignoreExistingFile)
