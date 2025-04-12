@@ -3375,7 +3375,12 @@ public class NativeDevice
      */
     @Override
     public boolean checkConnectivity() throws DeviceNotAvailableException {
-        IWifiHelper wifi = createWifiHelper();
+        IWifiHelper wifi = null;
+        if (!getOptions().useCmdWifiCommands() || !enableAdbRoot() || getApiLevel() < 31) {
+            wifi = createWifiHelper(false);
+        } else {
+            wifi = createWifiHelper(true);
+        }
         return wifi.checkConnectivity(mOptions.getConnCheckUrl());
     }
 
@@ -3405,7 +3410,12 @@ public class NativeDevice
      */
     @Override
     public boolean isWifiEnabled() throws DeviceNotAvailableException {
-        final IWifiHelper wifi = createWifiHelper();
+        IWifiHelper wifi = null;
+        if (!getOptions().useCmdWifiCommands() || !enableAdbRoot() || getApiLevel() < 31) {
+            wifi = createWifiHelper(false);
+        } else {
+            wifi = createWifiHelper(true);
+        }
         try {
             return wifi.isWifiEnabled();
         } catch (RuntimeException e) {
