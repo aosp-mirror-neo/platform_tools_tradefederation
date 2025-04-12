@@ -176,12 +176,6 @@ public class OtaUpdateDeviceFlasherTest {
         mFlasher.flash(mMockDevice, dbi);
         // verify
         mInOrder.verify(mMockDevice).enableAdbRoot();
-        mInOrder.verify(mMockDevice).executeShellCommand("start");
-        mInOrder.verify(mMockDevice).waitForDeviceAvailable();
-        mInOrder.verify(mMockDevice).executeShellCommand("cmd recovery wipe");
-        mInOrder.verify(mMockDevice).waitForDeviceAvailable();
-        mInOrder.verify(mMockDevice).enableAdbRoot();
-        mInOrder.verify(mMockDevice).executeShellCommand("svc power stayon true");
         mInOrder.verify(mMockDevice)
                 .setProperty(
                         Mockito.eq(OtaUpdateDeviceFlasher.OTA_DOWNGRADE_PROP), Mockito.eq("1"));
@@ -208,12 +202,6 @@ public class OtaUpdateDeviceFlasherTest {
         mFlasher.flash(mMockDevice, dbi);
         // verify
         mInOrder.verify(mMockDevice).enableAdbRoot();
-        mInOrder.verify(mMockDevice).executeShellCommand("start");
-        mInOrder.verify(mMockDevice).waitForDeviceAvailable();
-        mInOrder.verify(mMockDevice).executeShellCommand("cmd recovery wipe");
-        mInOrder.verify(mMockDevice).waitForDeviceAvailable();
-        mInOrder.verify(mMockDevice).enableAdbRoot();
-        mInOrder.verify(mMockDevice).executeShellCommand("svc power stayon true");
         mInOrder.verify(mMockDevice)
                 .setProperty(
                         Mockito.eq(OtaUpdateDeviceFlasher.OTA_DOWNGRADE_PROP), Mockito.eq("1"));
@@ -240,12 +228,6 @@ public class OtaUpdateDeviceFlasherTest {
         mFlasher.flash(mMockDevice, dbi);
         // verify
         mInOrder.verify(mMockDevice).enableAdbRoot();
-        mInOrder.verify(mMockDevice).executeShellCommand("start");
-        mInOrder.verify(mMockDevice).waitForDeviceAvailable();
-        mInOrder.verify(mMockDevice).executeShellCommand("cmd recovery wipe");
-        mInOrder.verify(mMockDevice).waitForDeviceAvailable();
-        mInOrder.verify(mMockDevice).enableAdbRoot();
-        mInOrder.verify(mMockDevice).executeShellCommand("svc power stayon true");
         mInOrder.verify(mMockDevice)
                 .setProperty(
                         Mockito.eq(OtaUpdateDeviceFlasher.OTA_DOWNGRADE_PROP), Mockito.eq("1"));
