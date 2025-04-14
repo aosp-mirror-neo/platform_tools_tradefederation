@@ -4076,7 +4076,7 @@ public class NativeDevice
                         getSerialNumber(), rebootMode.name(), reason);
             }
             doAdbReboot(rebootMode, reason);
-            postAdbReboot();
+            postAdbReboot(rebootMode);
         }
     }
 
@@ -4085,13 +4085,18 @@ public class NativeDevice
      *
      * @throws DeviceNotAvailableException
      */
-    protected void postAdbReboot() throws DeviceNotAvailableException {
+    protected void postAdbReboot(RebootMode rebootMode) throws DeviceNotAvailableException {
         // Check if device shows as unavailable (as expected after reboot).
         boolean notAvailable = waitForDeviceNotAvailable(DEFAULT_UNAVAILABLE_TIMEOUT);
         if (!notAvailable) {
             CLog.w("Did not detect device %s becoming unavailable after reboot", getSerialNumber());
         }
-        getConnection().reconnect(getSerialNumber());
+        if (RebootMode.REBOOT_INTO_BOOTLOADER.equals(rebootMode)
+                || RebootMode.REBOOT_INTO_FASTBOOTD.equals(rebootMode)) {
+            CLog.d("Skipping postAdbReboot reconnection for mode %s", rebootMode);
+        } else {
+            getConnection().reconnect(getSerialNumber());
+        }
     }
 
     /**
