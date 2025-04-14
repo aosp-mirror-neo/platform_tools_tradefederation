@@ -54,8 +54,6 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -67,7 +65,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /** A class that relies on fastboot to flash an image on physical Android hardware. */
 public class FastbootDeviceFlasher implements IDeviceFlasher {
@@ -77,11 +74,14 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final int RETRY_SLEEP = 2 * 1000; // 2s sleep between retries
 
+    private static final String FORCE_FLASH_PARAM = "--force";
     private static final String SLOT_PROP = "ro.boot.slot_suffix";
     private static final String SLOT_VAR = "current-slot";
     private static final String SKIP_REBOOT_PARAM = "--skip-reboot";
     private static final ImmutableSet<String> DISK_SPACE_ERRORS =
-        ImmutableSet.of("No space left on device", "failed to create temporary file");
+            ImmutableSet.of("No space left on device", "failed to create temporary file");
+    private static final Pattern BOOTLOADER_VERSION_ERROR =
+            Pattern.compile("Checking\\s+'version-bootloader'\\s+FAILED");
 
     private long mWipeTimeout = 4 * 60 * 1000;
 
@@ -265,6 +265,10 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 cmdArgs.add(SKIP_REBOOT_PARAM);
             }
             cmdArgs.addAll(mFlashOptions);
+            if (mSkipBootloaderVersionCheck) {
+                CLog.d("Adding --force to fastboot command to skip bootloader version check");
+                cmdArgs.add(FORCE_FLASH_PARAM);
+            }
         }
         cmdArgs.add(action);
         cmdArgs.addAll(Arrays.asList(args));
@@ -883,11 +887,6 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
      */
     private void flashWithAll(ITestDevice device, IDeviceBuildInfo deviceBuild)
             throws DeviceNotAvailableException, TargetSetupError {
-        if (mSkipBootloaderVersionCheck) {
-            CLog.d("mSkipBootloaderVersionCheck=true, removing bootloader requirements.");
-            File androidInfo = new File(deviceBuild.getDeviceImageFile(), "android-info.txt");
-            removeLine(androidInfo);
-        }
         try {
             Map<String, String> systemVarMap = new HashMap<>();
             systemVarMap.put(
@@ -901,36 +900,6 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                             + "the image you are flashing can boot properly.",
                     e,
                     device.getSerialNumber());
-        }
-    }
-
-    /** It is essential to copy the file to ensure we don't corrupt the hardlink from the cache */
-    public static void removeLine(File androidInfo) throws TargetSetupError {
-        File copy = new File(androidInfo.getParent(), "android-info.txt_copy");
-        try {
-            FileUtil.copyFile(androidInfo, copy);
-        } catch (IOException e) {
-            throw new TargetSetupError(e.getMessage(), e);
-        }
-        try (Stream<String> streamLine = Files.lines(copy.toPath())) {
-            List<String> out = streamLine
-                .filter(line -> !line.contains("require version-bootloader="))
-                            .collect(Collectors.toList());
-            Files.write(
-                    copy.toPath(),
-                    out,
-                    StandardOpenOption.WRITE,
-                    StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
-            throw new TargetSetupError(e.getMessage(), e);
-        }
-        try {
-            FileUtil.deleteFile(androidInfo);
-            FileUtil.copyFile(copy, androidInfo);
-            FileUtil.deleteFile(copy);
-            CLog.d("android-info.txt after rewrite:\n%s", FileUtil.readStringFromFile(androidInfo));
-        } catch (IOException e) {
-            CLog.e(e);
         }
     }
 
@@ -1042,8 +1011,10 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         while (attempts < MAX_RETRY_ATTEMPTS) {
             CLog.v("Executing short fastboot command 'getvar %s'", versionQuery);
             CommandResult result = device.executeFastbootCommand("getvar", versionQuery);
+            boolean skipBootloaderVersionCheck = false; // Doesn't apply to "getvar"
             String queryOutput =
-                    internalHandleFastbootResult(device, result, "getvar", versionQuery);
+                    internalHandleFastbootResult(
+                            device, result, skipBootloaderVersionCheck, "getvar", versionQuery);
             Matcher matcher = versionOutputPattern.matcher(queryOutput);
             if (matcher.find()) {
                 return matcher.group(1);
@@ -1168,7 +1139,9 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     String handleFastbootResult(ITestDevice device, CommandResult result, String... cmdArgs)
             throws TargetSetupError {
         try {
-            String res = internalHandleFastbootResult(device, result, cmdArgs);
+            String res =
+                    internalHandleFastbootResult(
+                            device, result, mSkipBootloaderVersionCheck, cmdArgs);
             mFbCmdStatus = CommandStatus.SUCCESS;
             return res;
         } catch (TargetSetupError e) {
@@ -1177,8 +1150,20 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         }
     }
 
+    public static boolean stderrContainsFailed(String stderr, boolean skipBootloaderVersionCheck) {
+        if (skipBootloaderVersionCheck) {
+            CLog.d("Ignore bootloader version check failures");
+            stderr = BOOTLOADER_VERSION_ERROR.matcher(stderr).replaceAll("");
+        }
+        return stderr.contains("FAILED");
+    }
+
     private static String internalHandleFastbootResult(
-            ITestDevice device, CommandResult result, String... cmdArgs) throws TargetSetupError {
+            ITestDevice device,
+            CommandResult result,
+            boolean skipBootloaderVersionCheck,
+            String... cmdArgs)
+            throws TargetSetupError {
         CLog.v("fastboot stdout: " + result.getStdout());
         CLog.v("fastboot stderr: " + result.getStderr());
         CommandStatus status = result.getStatus();
@@ -1197,8 +1182,8 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
             errorIdentifier = InfraErrorIdentifier.ANTI_ROLLBACK_ERROR;
             status = CommandStatus.FAILED;
         }
-
-        if (!specialErrorIdentified && result.getStderr().contains("FAILED")) {
+        if (!specialErrorIdentified
+                && stderrContainsFailed(result.getStderr(), skipBootloaderVersionCheck)) {
             // if output contains "FAILED", just override to failure
             status = CommandStatus.FAILED;
         }
