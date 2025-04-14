@@ -779,4 +779,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
     public void useMerkleTreeComparison(boolean enableMerkleTreeComparison) {
         mUseMerkleTreeComparison = enableMerkleTreeComparison;
     }
+
+    public void addFlasherExtraMetadata(Map<String, String> metadata) {
+        mFlasherMetadata.putAll(metadata);
+    }
 }
