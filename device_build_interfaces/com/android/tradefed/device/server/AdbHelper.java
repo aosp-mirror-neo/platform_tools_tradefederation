@@ -1372,6 +1372,9 @@ public final class AdbHelper {
 
     public static AdbCommandRejectedException createHiddenException(String message) {
         try {
+            AdbCommandRejectedException.class
+                    .getDeclaredConstructor(String.class)
+                    .setAccessible(true);
             return AdbCommandRejectedException.class
                     .getDeclaredConstructor(String.class)
                     .newInstance(message);
@@ -1381,13 +1384,16 @@ public final class AdbHelper {
                 | InvocationTargetException
                 | NoSuchMethodException
                 | SecurityException e) {
-            throw new RuntimeException(message);
+            throw new CommandRejectedException(message);
         }
     }
 
     public static AdbCommandRejectedException createHiddenException(
             String message, boolean errorDuringDeviceSelection) {
         try {
+            AdbCommandRejectedException.class
+                    .getDeclaredConstructor(String.class, Boolean.class)
+                    .setAccessible(true);
             return AdbCommandRejectedException.class
                     .getDeclaredConstructor(String.class, Boolean.class)
                     .newInstance(message, errorDuringDeviceSelection);
@@ -1397,7 +1403,7 @@ public final class AdbHelper {
                 | InvocationTargetException
                 | NoSuchMethodException
                 | SecurityException e) {
-            throw new RuntimeException(message);
+            throw new CommandRejectedException(message);
         }
     }
 }

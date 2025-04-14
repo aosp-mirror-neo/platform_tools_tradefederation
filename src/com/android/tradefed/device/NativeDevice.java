@@ -43,6 +43,7 @@ import com.android.tradefed.device.connection.AbstractConnection;
 import com.android.tradefed.device.connection.DefaultConnection;
 import com.android.tradefed.device.connection.DefaultConnection.ConnectionBuilder;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
+import com.android.tradefed.device.server.CommandRejectedException;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
@@ -2744,7 +2745,7 @@ public class NativeDevice
                         // this is a logic problem, doesn't need recovery or to be retried
                         return false;
                     }
-                } catch (AdbCommandRejectedException e) {
+                } catch (AdbCommandRejectedException | CommandRejectedException e) {
                     // Workaround to not recover device if TCP adb is used.
                     if (isAdbTcp()
                             && (action instanceof RebootDeviceAction)
