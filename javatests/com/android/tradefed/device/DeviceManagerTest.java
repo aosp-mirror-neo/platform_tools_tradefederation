@@ -30,13 +30,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.android.ddmlib.AndroidDebugBridge.IDeviceChangeListener;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IDevice.DeviceState;
 import com.android.tradefed.command.remote.DeviceDescriptor;
 import com.android.tradefed.config.IGlobalConfiguration;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.IManagedTestDevice.DeviceEventResponse;
-import com.android.tradefed.device.server.AndroidDebugBridge.IDeviceChangeListener;
 import com.android.tradefed.host.HostOptions;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.log.ILogRegistry.EventType;

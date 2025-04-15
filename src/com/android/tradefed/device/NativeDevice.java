@@ -43,6 +43,7 @@ import com.android.tradefed.device.connection.AbstractConnection;
 import com.android.tradefed.device.connection.DefaultConnection;
 import com.android.tradefed.device.connection.DefaultConnection.ConnectionBuilder;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
+import com.android.tradefed.device.server.CommandRejectedException;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
@@ -2744,7 +2745,7 @@ public class NativeDevice
                         // this is a logic problem, doesn't need recovery or to be retried
                         return false;
                     }
-                } catch (AdbCommandRejectedException e) {
+                } catch (AdbCommandRejectedException | CommandRejectedException e) {
                     // Workaround to not recover device if TCP adb is used.
                     if (isAdbTcp()
                             && (action instanceof RebootDeviceAction)
@@ -4075,7 +4076,7 @@ public class NativeDevice
                         getSerialNumber(), rebootMode.name(), reason);
             }
             doAdbReboot(rebootMode, reason);
-            postAdbReboot();
+            postAdbReboot(rebootMode);
         }
     }
 
@@ -4084,13 +4085,18 @@ public class NativeDevice
      *
      * @throws DeviceNotAvailableException
      */
-    protected void postAdbReboot() throws DeviceNotAvailableException {
+    protected void postAdbReboot(RebootMode rebootMode) throws DeviceNotAvailableException {
         // Check if device shows as unavailable (as expected after reboot).
         boolean notAvailable = waitForDeviceNotAvailable(DEFAULT_UNAVAILABLE_TIMEOUT);
         if (!notAvailable) {
             CLog.w("Did not detect device %s becoming unavailable after reboot", getSerialNumber());
         }
-        getConnection().reconnect(getSerialNumber());
+        if (RebootMode.REBOOT_INTO_BOOTLOADER.equals(rebootMode)
+                || RebootMode.REBOOT_INTO_FASTBOOTD.equals(rebootMode)) {
+            CLog.d("Skipping postAdbReboot reconnection for mode %s", rebootMode);
+        } else {
+            getConnection().reconnect(getSerialNumber());
+        }
     }
 
     /**
