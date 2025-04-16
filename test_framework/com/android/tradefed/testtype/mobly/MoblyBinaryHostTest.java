@@ -28,10 +28,7 @@ import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.FailureDescription;
-import com.android.tradefed.result.FileInputStreamSource;
 import com.android.tradefed.result.ITestInvocationListener;
-import com.android.tradefed.result.InputStreamSource;
-import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.error.TestErrorIdentifier;
 import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.testtype.IBuildReceiver;
@@ -146,6 +143,7 @@ public class MoblyBinaryHostTest
     private ITestDevice mDevice;
     private IBuildInfo mBuildInfo;
     private File mLogDir;
+    private MoblyArtifactReporter mArtifactReporter;
     private TestInformation mTestInfo;
     private IRunUtil mRunUtil;
     private Set<String> mIncludeFilters = new LinkedHashSet<>();
@@ -264,10 +262,16 @@ public class MoblyBinaryHostTest
                 continue;
             }
             parFile.setExecutable(true);
+            MoblyArtifactReporter artifactReporter = getArtifactReporter();
             try {
-                runSingleParFile(parFile.getAbsolutePath(), parFile.getName(), listener);
+                runSingleParFile(
+                        parFile.getAbsolutePath(), parFile.getName(), listener, artifactReporter);
             } finally {
-                reportLogs(getLogDir(), listener);
+                artifactReporter.reportRunArtifacts(listener);
+                // reset log dir and artifact reporter to be recreated for retries
+                FileUtil.recursiveDelete(mLogDir);
+                mLogDir = null;
+                mArtifactReporter = null;
             }
         }
     }
@@ -377,7 +381,10 @@ public class MoblyBinaryHostTest
     }
 
     private void runSingleParFile(
-            String parFilePath, String runName, ITestInvocationListener listener) {
+            String parFilePath,
+            String runName,
+            ITestInvocationListener listener,
+            MoblyArtifactReporter artifactReporter) {
         if (mInjectAndroidSerialVar) {
             getRunUtil().setEnvVariable(ANDROID_SERIAL_VAR, getDevice().getSerialNumber());
         }
@@ -477,7 +484,8 @@ public class MoblyBinaryHostTest
                             return getRunUtil().runTimedCmd(getTestTimeout(), command);
                         },
                         executor);
-        MoblyYamlResultParser parser = new MoblyYamlResultParser(listener, runName, !mListTests);
+        MoblyYamlResultParser parser =
+                new MoblyYamlResultParser(listener, runName, !mListTests, artifactReporter);
         File yamlSummaryFile = null;
         InputStream inputStream = null;
         boolean reportRunFailed = true;
@@ -683,6 +691,14 @@ public class MoblyBinaryHostTest
     }
 
     @VisibleForTesting
+    protected MoblyArtifactReporter getArtifactReporter() {
+        if (mArtifactReporter == null) {
+            mArtifactReporter = new MoblyArtifactReporter(getLogDir());
+        }
+        return mArtifactReporter;
+    }
+
+    @VisibleForTesting
     protected String getLogDirAbsolutePath() {
         return getLogDir().getAbsolutePath();
     }
@@ -736,45 +752,6 @@ public class MoblyBinaryHostTest
         // Add all the other options
         commandLine.addAll(getTestOptions());
         return commandLine.toArray(new String[0]);
-    }
-
-    @VisibleForTesting
-    protected void reportLogs(File logDir, ITestInvocationListener listener) {
-        for (File subFile : logDir.listFiles()) {
-            if (subFile.isDirectory()) {
-                reportLogs(subFile, listener);
-            } else {
-                if (!subFile.exists()) {
-                    continue;
-                }
-                try (InputStreamSource dataStream = new FileInputStreamSource(subFile, true)) {
-                    String cleanName = subFile.getName().replace(",", "_");
-                    LogDataType type = LogDataType.TEXT;
-                    if (cleanName.contains("trace")) {
-                        type = LogDataType.PERFETTO;
-                    }
-                    if (cleanName.contains("logcat")) {
-                        type = LogDataType.LOGCAT;
-                    }
-                    if (cleanName.contains("btsnoop")) {
-                        type = LogDataType.BT_SNOOP_LOG;
-                    }
-                    if (cleanName.contains("mp4")) {
-                        type = LogDataType.MP4;
-                    }
-                    if (cleanName.contains("bugreport") && cleanName.endsWith("zip")) {
-                        type = LogDataType.BUGREPORTZ;
-                    }
-                    if (cleanName.endsWith("png")) {
-                        type = LogDataType.PNG;
-                    }
-                    listener.testLog(cleanName, type, dataStream);
-                }
-            }
-        }
-        FileUtil.recursiveDelete(logDir);
-        // reset log dir to be recreated for retries
-        mLogDir = null;
     }
 
     @VisibleForTesting

@@ -87,6 +87,7 @@ public class MoblyBinaryHostTestTest {
     private ITestDevice mMockDevice2;
     private IRunUtil mMockRunUtil;
     private MoblyYamlResultParser mMockParser;
+    private MoblyArtifactReporter mMockArtifactReporter;
     private InputStream mMockSummaryInputStream;
     private File mMoblyTestDir;
     private File mMoblyBinary; // used by mobly-binaries option
@@ -101,6 +102,7 @@ public class MoblyBinaryHostTestTest {
         mMockDevice = Mockito.mock(ITestDevice.class);
         mMockRunUtil = Mockito.mock(IRunUtil.class);
         mMockBuildInfo = Mockito.mock(DeviceBuildInfo.class);
+        mMockArtifactReporter = Mockito.mock(MoblyArtifactReporter.class);
         IInvocationContext context = new InvocationContext();
         context.addAllocatedDevice("device", mMockDevice);
         context.addDeviceBuildInfo("device", mMockBuildInfo);
@@ -114,6 +116,7 @@ public class MoblyBinaryHostTestTest {
         Mockito.doReturn(mTestInfo).when(mSpyTest).getTestInfo();
         Mockito.doReturn(mMockRunUtil).when(mSpyTest).getRunUtil();
         Mockito.doReturn(DEFAULT_TIME_OUT).when(mSpyTest).getTestTimeout();
+        Mockito.doReturn(mMockArtifactReporter).when(mSpyTest).getArtifactReporter();
         Mockito.doReturn("not_adb").when(mSpyTest).getAdbPath();
         mMoblyTestDir = FileUtil.createTempDir("mobly_tests");
         mMoblyBinary = FileUtil.createTempFile("mobly_binary", ".par", mMoblyTestDir);
@@ -164,7 +167,7 @@ public class MoblyBinaryHostTestTest {
 
         mSpyTest.run(mTestInfo, Mockito.mock(ITestInvocationListener.class));
 
-        verify(mSpyTest, never()).reportLogs(any(), any());
+        verify(mMockArtifactReporter, never()).reportRunArtifacts(any());
     }
 
     @Test
@@ -209,7 +212,7 @@ public class MoblyBinaryHostTestTest {
 
         mSpyTest.run(mTestInfo, mockListener);
 
-        verify(mSpyTest, never()).reportLogs(any(), any());
+        verify(mMockArtifactReporter, never()).reportRunArtifacts(any());
         verify(mockListener, times(1)).testRunStarted(eq(mMoblyBinary2.getName()), eq(0));
         verify(mockListener, times(1)).testRunFailed(any(FailureDescription.class));
         verify(mockListener, times(1)).testRunEnded(eq(0L), eq(new HashMap<String, Metric>()));
@@ -497,7 +500,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testBuildCommandLineArrayWithOutConfig() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         Mockito.doReturn(DEVICE_SERIAL).when(mMockDevice).getSerialNumber();
         Mockito.doReturn(LOG_PATH).when(mSpyTest).getLogDirAbsolutePath();
         List<String> expOptions = Arrays.asList("--option1", "--option2=test_option");
@@ -518,7 +520,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testBuildCommandLineArrayWithOutConfigWithWildcardOn() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-par-file-name", mMoblyBinary2.getName());
         setter.setOptionValue("mobly-wildcard-config", "true");
@@ -560,7 +561,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_testListWithOnlyBadTestNames() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -590,7 +590,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_testListWithOnlyGoodTestNames() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -623,7 +622,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_testListWithBadTestNames() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -659,7 +657,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withoutTests() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-par-file-name", mMoblyBinary2.getName());
         Mockito.doReturn(mMoblyTestDir)
@@ -694,7 +691,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withoutFilters() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-par-file-name", mMoblyBinary2.getName());
         Mockito.doReturn(mMoblyTestDir)
@@ -735,7 +731,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withIncludeFiltersExact() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -786,7 +781,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withIncludeFiltersPrefix() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -836,7 +830,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withExcludeFiltersExact() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -886,7 +879,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withExcludeFiltersNoTests() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -922,7 +914,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withBothIncludeAndExcludeFilters() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
@@ -972,7 +963,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_withSharding() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-par-file-name", mMoblyBinary2.getName());
         Mockito.doReturn(mMoblyTestDir)
@@ -1005,7 +995,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testRun_oneTest_twoShards() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-par-file-name", mMoblyBinary2.getName());
         Mockito.doReturn(mMoblyTestDir)
@@ -1042,8 +1031,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testFilterTests_withIncludeFilters() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
-
         mSpyTest.addAllIncludeFilters(
                 Set.of("test_foo", "BarTest#test_bar_1", "BarTest#test_bar_3"));
 
@@ -1077,8 +1064,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testFilterTests_withExcludeFilters() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
-
         mSpyTest.addAllExcludeFilters(
                 Set.of("FooTest", "BarTest#test_bar_1", "BarTest#test_bar_3"));
 
@@ -1106,8 +1091,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testFilterTests_withBothIncludeAndExcludeFilters() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
-
         mSpyTest.addAllIncludeFilters(Set.of("BarTest"));
         mSpyTest.addAllExcludeFilters(Set.of("test_bar_1", "BarTest#test_bar_3"));
 
@@ -1135,7 +1118,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testBuildCommandLineArrayWithConfig() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         Mockito.doReturn(DEVICE_SERIAL).when(mMockDevice).getSerialNumber();
         Mockito.doReturn(LOG_PATH).when(mSpyTest).getLogDirAbsolutePath();
         List<String> expOptions = Arrays.asList("--option1", "--option2=test_option");
@@ -1177,7 +1159,6 @@ public class MoblyBinaryHostTestTest {
 
     @Test
     public void testProcessYamlTestResultsSuccess() throws Exception {
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         mMockSummaryInputStream = Mockito.mock(InputStream.class);
         mMockParser = Mockito.mock(MoblyYamlResultParser.class);
         mSpyTest.processYamlTestResults(
@@ -1192,7 +1173,6 @@ public class MoblyBinaryHostTestTest {
     public void testUpdateConfigFile() throws Exception {
         Mockito.doReturn(DEVICE_SERIAL).when(mMockDevice).getSerialNumber();
         Mockito.doReturn(LOG_PATH).when(mSpyTest).getLogDirAbsolutePath();
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         Mockito.doReturn("testBedName").when(mSpyTest).getTestBed();
         String configString =
                 new StringBuilder()
@@ -1235,7 +1215,6 @@ public class MoblyBinaryHostTestTest {
         Mockito.doReturn(DEVICE_SERIAL).when(mMockDevice).getSerialNumber();
         Mockito.doReturn(DEVICE_SERIAL_2).when(mMockDevice2).getSerialNumber();
         Mockito.doReturn(LOG_PATH).when(mSpyTest).getLogDirAbsolutePath();
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         Mockito.doReturn("testBedName").when(mSpyTest).getTestBed();
         String configString =
                 new StringBuilder()
@@ -1283,7 +1262,6 @@ public class MoblyBinaryHostTestTest {
         Mockito.doReturn(DEVICE_SERIAL).when(mMockDevice).getSerialNumber();
         Mockito.doReturn(DEVICE_SERIAL_2).when(mMockDevice2).getSerialNumber();
         Mockito.doReturn(LOG_PATH).when(mSpyTest).getLogDirAbsolutePath();
-        Mockito.doNothing().when(mSpyTest).reportLogs(any(), any());
         Mockito.doReturn("testBedName").when(mSpyTest).getTestBed();
         String configString =
                 new StringBuilder()
