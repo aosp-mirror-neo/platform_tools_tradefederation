@@ -1392,10 +1392,10 @@ public final class AdbHelper {
             String message, boolean errorDuringDeviceSelection) {
         try {
             AdbCommandRejectedException.class
-                    .getDeclaredConstructor(String.class, Boolean.class)
+                    .getDeclaredConstructor(String.class, boolean.class)
                     .setAccessible(true);
             return AdbCommandRejectedException.class
-                    .getDeclaredConstructor(String.class, Boolean.class)
+                    .getDeclaredConstructor(String.class, boolean.class)
                     .newInstance(message, errorDuringDeviceSelection);
         } catch (InstantiationException
                 | IllegalAccessException
