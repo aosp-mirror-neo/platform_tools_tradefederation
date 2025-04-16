@@ -16,7 +16,6 @@
 package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
-import com.android.ddmlib.AdbHelper;
 
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;

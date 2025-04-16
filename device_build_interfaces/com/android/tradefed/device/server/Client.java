@@ -17,7 +17,6 @@ package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
 import com.android.ddmlib.IDevice;
-import com.android.ddmlib.internal.ClientImpl;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;

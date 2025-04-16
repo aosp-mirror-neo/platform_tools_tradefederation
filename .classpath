@@ -17,7 +17,6 @@
 	<classpathentry kind="src" path="global_configuration"/>
 	<classpathentry excluding="Android.bp" kind="src" path="device_build_interfaces"/>
 	<classpathentry combineaccessrules="false" exported="true" kind="src" path="/tf-remote-client"/>
-	<classpathentry combineaccessrules="false" kind="src" path="/ddmlib"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/loganalysis"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER">
 		<attributes>

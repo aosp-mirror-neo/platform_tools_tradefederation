@@ -18,10 +18,9 @@ package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.ddmlib.AdbHelper;
 import com.android.ddmlib.IDevice;
-import com.android.ddmlib.Log;
 import com.android.ddmlib.TimeoutException;
+import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -74,22 +73,21 @@ public class DeviceListMonitorTask implements Runnable {
     public void run() {
         do {
             if (mAdbConnection == null) {
-                Log.d("DeviceMonitor", "Opening adb connection");
+                CLog.d("Opening adb connection");
                 try {
                     mAdbConnection = AndroidDebugBridge.openConnection();
                 } catch (IOException exception) {
-                    Log.d("DeviceMonitor", "Unable to open connection to ADB server: " + exception);
+                    CLog.d("Unable to open connection to ADB server: " + exception);
                 }
                 if (mAdbConnection == null) {
                     mConnectionAttempt++;
 
                     // Only log on first retry attempt to avoid spamming logs.
                     if (mConnectionAttempt == 1) {
-                        Log.e("DeviceMonitor", "Cannot reach ADB server, attempting to reconnect.");
+                        CLog.e("Cannot reach ADB server, attempting to reconnect.");
                         mAdbDisconnectionStopwatch = Stopwatch.createStarted();
                         if (AndroidDebugBridge.isUserManagedAdbMode()) {
-                            Log.i(
-                                    "DeviceMonitor",
+                            CLog.i(
                                     "Will not automatically restart the ADB server because ddmlib"
                                             + " is in user managed mode");
                         }
@@ -100,21 +98,20 @@ public class DeviceListMonitorTask implements Runnable {
                                 TimeUnit.MILLISECONDS)) {
                             mRestartAttemptCount++;
                         } else {
-                            Log.i("DeviceMonitor", "adb restarted");
+                            CLog.i("adb restarted");
                             mRestartAttemptCount = 0;
                         }
                     }
                     Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
                 } else {
                     if (mConnectionAttempt > 0) {
-                        Log.i(
-                                "DeviceMonitor",
+                        CLog.i(
                                 "ADB connection re-established after "
                                         + mAdbDisconnectionStopwatch.elapsed(TimeUnit.SECONDS)
                                         + " seconds.");
                         mAdbDisconnectionStopwatch.reset();
                     } else {
-                        Log.i("DeviceMonitor", "Connected to adb for device monitoring");
+                        CLog.i("Connected to adb for device monitoring");
                     }
                     mConnectionAttempt = 0;
                 }
@@ -152,12 +149,12 @@ public class DeviceListMonitorTask implements Runnable {
             AdbHelper.AdbResponse resp = AdbHelper.readAdbResponse(mAdbConnection, false);
             if (!resp.okay) {
                 // request was refused by adb!
-                Log.e("DeviceMonitor", "adb refused request: " + resp.message);
+                CLog.e("adb refused request: " + resp.message);
             }
 
             return resp.okay;
         } catch (IOException e) {
-            Log.e("DeviceMonitor", "Sending Tracking request failed!");
+            CLog.e("DeviceMonitor", "Sending Tracking request failed!");
             mAdbConnection.close();
             throw e;
         }
@@ -166,9 +163,9 @@ public class DeviceListMonitorTask implements Runnable {
     private void handleExceptionInMonitorLoop(@NonNull Exception e) {
         if (!mQuit) {
             if (e instanceof TimeoutException) {
-                Log.e("DeviceMonitor", "Adb connection Error: timeout");
+                CLog.e("Adb connection Error: timeout");
             } else {
-                Log.e("DeviceMonitor", "Adb connection Error:" + e.getMessage());
+                CLog.e("Adb connection Error:" + e.getMessage());
             }
             mMonitoring = false;
             if (mAdbConnection != null) {

@@ -17,9 +17,10 @@ package com.android.ddmlib;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.ddmlib.clientmanager.DeviceClientManager;
-import com.android.ddmlib.log.LogReceiver;
 import com.android.sdklib.AndroidVersion;
+import com.android.tradefed.device.server.Client;
+import com.android.tradefed.device.server.ProfileableClient;
+import com.android.tradefed.device.server.SyncService;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.Sets;
@@ -357,13 +358,6 @@ public interface IDevice extends IShellEnabledDevice {
         return new ProfileableClient[0]; // Returns an empty array by default
     }
 
-    @NonNull
-    default DeviceClientManager getClientManager() {
-        String message =
-                String.format("%s is not supported", DeviceClientManager.class.getSimpleName());
-        throw new UnsupportedOperationException(message);
-    }
-
     /**
      * Force stop an application by its application name. This removes all pending alarms and queued
      * computation.
@@ -500,37 +494,6 @@ public interface IDevice extends IShellEnabledDevice {
                     IOException {
         throw new UnsupportedOperationException();
     }
-
-    /**
-     * Runs the event log service and outputs the event log to the {@link LogReceiver}.
-     *
-     * <p>This call is blocking until {@link LogReceiver#isCancelled()} returns true.
-     *
-     * @param receiver the receiver to receive the event log entries.
-     * @throws TimeoutException in case of timeout on the connection. This can only be thrown if the
-     *     timeout happens during setup. Once logs start being received, no timeout will occur as
-     *     it's not possible to detect a difference between no log and timeout.
-     * @throws AdbCommandRejectedException if adb rejects the command
-     * @throws IOException in case of I/O error on the connection.
-     */
-    void runEventLogService(LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException;
-
-    /**
-     * Runs the log service for the given log and outputs the log to the {@link LogReceiver}.
-     *
-     * <p>This call is blocking until {@link LogReceiver#isCancelled()} returns true.
-     *
-     * @param logname the logname of the log to read from.
-     * @param receiver the receiver to receive the event log entries.
-     * @throws TimeoutException in case of timeout on the connection. This can only be thrown if the
-     *     timeout happens during setup. Once logs start being received, no timeout will occur as
-     *     it's not possible to detect a difference between no log and timeout.
-     * @throws AdbCommandRejectedException if adb rejects the command
-     * @throws IOException in case of I/O error on the connection.
-     */
-    void runLogService(String logname, LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException;
 
     /**
      * Creates a port forwarding between a local and a remote port.

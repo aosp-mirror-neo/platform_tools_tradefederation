@@ -19,8 +19,8 @@ import com.android.ddmlib.IDevice.DeviceState;
 
 /**
  * A more fully featured representation of device state than {@link DeviceState}.
- * <p/>
- * Logically this should extend  {@link DeviceState} to just add the FASTBOOT and NOT_AVAILABLE
+ *
+ * <p>Logically this should extend {@link DeviceState} to just add the FASTBOOT and NOT_AVAILABLE
  * states, but extending enums is not allowed.
  */
 public enum TestDeviceState {
@@ -34,6 +34,7 @@ public enum TestDeviceState {
 
     /**
      * Converts from {@link TestDeviceState} to {@link DeviceState}
+     *
      * @return the {@link DeviceState} or <code>null</code>
      */
     DeviceState getDdmsState() {
@@ -49,9 +50,7 @@ public enum TestDeviceState {
         }
     }
 
-    /**
-     * Returns the {@link TestDeviceState} corresponding to the {@link DeviceState}.
-     */
+    /** Returns the {@link TestDeviceState} corresponding to the {@link DeviceState}. */
     static TestDeviceState getStateByDdms(DeviceState ddmsState) {
         if (ddmsState == null) {
             return TestDeviceState.NOT_AVAILABLE;

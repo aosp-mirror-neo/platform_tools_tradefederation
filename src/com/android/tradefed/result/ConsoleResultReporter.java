@@ -221,7 +221,7 @@ public class ConsoleResultReporter extends TestResultListener
                         "%s: %s: %s (%dms)\n",
                         testTag,
                         testId.toString(),
-                        testResult.getStatus(),
+                        testResult.getResultStatus(),
                         testResult.getEndTime() - testResult.getStartTime()));
         String stack = testResult.getStackTrace();
         if (stack != null && !stack.isEmpty()) {

@@ -16,8 +16,6 @@
 
 package com.android.tradefed.device.server;
 
-import com.android.ddmlib.NativeStackCallInfo;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

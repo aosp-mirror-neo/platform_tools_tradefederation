@@ -19,15 +19,9 @@ package com.android.tradefed.device.server;
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
 import com.android.annotations.concurrency.GuardedBy;
-import com.android.ddmlib.AvdData;
-import com.android.ddmlib.CommandFailedException;
-import com.android.ddmlib.DdmPreferences;
-import com.android.ddmlib.EmulatorConsole;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IDevice.DeviceState;
-import com.android.ddmlib.Log;
-import com.android.ddmlib.internal.CommandService;
-import com.android.ddmlib.internal.jdwp.JdwpProxyServer;
+import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -61,8 +55,6 @@ public final class DeviceMonitor implements ClientTracker {
     private final AndroidDebugBridge mServer;
     private DeviceListMonitorTask mDeviceListMonitorTask;
     @Nullable private DeviceClientMonitorTask myDeviceClientMonitorTask;
-    private JdwpProxyServer mJdwpProxy;
-    private CommandService mDdmlibCommandService;
     private final Object mDevicesGuard = new Object();
 
     @GuardedBy("mDevicesGuard")
@@ -81,15 +73,6 @@ public final class DeviceMonitor implements ClientTracker {
     /** Starts the monitoring. */
     public void start() {
         try {
-            if (DdmPreferences.isJdwpProxyEnabled()) {
-                mJdwpProxy =
-                        new JdwpProxyServer(
-                                DdmPreferences.getJdwpProxyPort(), this::jdwpProxyChangedState);
-                mJdwpProxy.start();
-            }
-            if (DdmPreferences.isDdmlibCommandServiceEnabled()) {
-                mDdmlibCommandService = new CommandService(DdmPreferences.getDdmCommandPort());
-            }
 
             // To terminate thread call stop on each respective task.
             mDeviceListMonitorTask =
@@ -101,7 +84,7 @@ public final class DeviceMonitor implements ClientTracker {
             new Thread(mDeviceListMonitorTask, "Device List Monitor").start(); // $NON-NLS-1$
         } catch (IOException ex) {
             // Not expected.
-            Log.e("DeviceMonitor", ex);
+            CLog.e(ex);
         }
     }
 
@@ -117,9 +100,6 @@ public final class DeviceMonitor implements ClientTracker {
 
     /** Stops the monitoring. */
     public void stop() {
-        if (mJdwpProxy != null) {
-            mJdwpProxy.stop();
-        }
 
         if (mDeviceListMonitorTask != null) {
             mDeviceListMonitorTask.stop();
@@ -187,9 +167,9 @@ public final class DeviceMonitor implements ClientTracker {
         if (hasDevice
                 && AndroidDebugBridge.getClientSupport()
                 && myDeviceClientMonitorTask != null) {
-            Log.d("DeviceMonitor", "Restarting monitoring service for " + device);
+            CLog.d("Restarting monitoring service for " + device);
             if (!myDeviceClientMonitorTask.register(device)) {
-                Log.e("DeviceMonitor", "Failed to start monitoring " + device.getSerialNumber());
+                CLog.e("Failed to start monitoring " + device.getSerialNumber());
             }
         }
     }
@@ -256,9 +236,7 @@ public final class DeviceMonitor implements ClientTracker {
         if (AndroidDebugBridge.getClientSupport()) {
             for (DeviceImpl device : newlyOnline) {
                 if (!myDeviceClientMonitorTask.register(device)) {
-                    Log.e(
-                            "DeviceMonitor",
-                            "Failed to start monitoring " + device.getSerialNumber());
+                    CLog.e("Failed to start monitoring " + device.getSerialNumber());
                 }
             }
         }
@@ -287,37 +265,7 @@ public final class DeviceMonitor implements ClientTracker {
     }
 
     private static void setProperties(@NonNull DeviceImpl device) {
-        AvdData avdData = null;
-
-        try {
-            if (!device.isEmulator()) {
-                device.setAvdData(null);
-                return;
-            }
-
-            EmulatorConsole console = EmulatorConsole.getConsole(device);
-
-            if (console == null) {
-                device.setAvdData(null);
-                return;
-            }
-
-            String avdName = console.getAvdName();
-            String avdPath;
-
-            try {
-                avdPath = console.getAvdPath();
-            } catch (CommandFailedException exception) {
-                Log.e("DeviceMonitor", exception);
-                avdPath = null;
-            }
-
-            console.close();
-
-            avdData = new AvdData(avdName, avdPath);
-        } finally {
-            device.setAvdData(avdData);
-        }
+        device.setAvdData(null);
     }
 
     private class DeviceListUpdateListener implements DeviceListMonitorTask.UpdateListener {
