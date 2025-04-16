@@ -39,6 +39,7 @@ public class TradefedDelegator {
     public static final String DELEGATE_OBJECT = "DELEGATE";
 
     private static final String DELETEGATED_OPTION_NAME = "delegated-tf";
+    private static final String DELEGATED_OPTION_NOOP_ALLOCATION = "delegated-tf-noop-allocation";
 
     @Option(
             name = DELETEGATED_OPTION_NAME,
@@ -46,6 +47,13 @@ public class TradefedDelegator {
                     "Points to the root dir of another Tradefed binary that will be used to drive"
                             + " the invocation")
     private File mDelegatedTfRootDir;
+
+    @Option(
+            name = DELEGATED_OPTION_NOOP_ALLOCATION,
+            description =
+                    "Allow to bypass allocation at delegation level. This isn't safe if device is"
+                            + " managed by Tradefed.")
+    private boolean mDelegatedNoopAllocation = false;
 
     @Option(
             name = CommandOptions.INVOCATION_DATA,
@@ -78,6 +86,10 @@ public class TradefedDelegator {
     /** Returns the directory of a Tradefed binary. */
     public File getTfRootDir() {
         return mDelegatedTfRootDir;
+    }
+
+    public boolean noopAllocation() {
+        return mDelegatedNoopAllocation;
     }
 
     /** Creates the classpath out of the jars in the directory. */
@@ -114,6 +126,8 @@ public class TradefedDelegator {
     public static String[] clearCommandline(String[] originalCommand)
             throws ConfigurationException {
         String[] commandLine = clearCommandlineFromOneArg(originalCommand, DELETEGATED_OPTION_NAME);
+        commandLine =
+                clearCommandlineFromOneArg(commandLine, DELEGATED_OPTION_NOOP_ALLOCATION, true);
         return commandLine;
     }
 
