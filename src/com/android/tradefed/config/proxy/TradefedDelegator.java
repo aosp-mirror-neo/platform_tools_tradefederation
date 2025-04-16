@@ -107,12 +107,20 @@ public class TradefedDelegator {
     /** Remove a given option from the command line. */
     public static String[] clearCommandlineFromOneArg(String[] originalCommand, String optionName)
             throws ConfigurationException {
+        return clearCommandlineFromOneArg(originalCommand, optionName, false);
+    }
+
+    /** Remove a given option from the command line. */
+    public static String[] clearCommandlineFromOneArg(String[] originalCommand, String optionName, boolean booleanOption)
+            throws ConfigurationException {
         List<String> argsList = new ArrayList<>(Arrays.asList(originalCommand));
         try {
             while (argsList.contains("--" + optionName)) {
                 int index = argsList.indexOf("--" + optionName);
                 if (index != -1) {
-                    argsList.remove(index + 1);
+                    if (!booleanOption) {
+                        argsList.remove(index + 1);
+                    }
                     argsList.remove(index);
                 }
             }

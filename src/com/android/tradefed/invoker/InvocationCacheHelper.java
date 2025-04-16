@@ -223,6 +223,15 @@ public class InvocationCacheHelper {
             commandArray =
                     TradefedDelegator.clearCommandlineFromOneArg(
                             commandArray, "max-testcase-run-count");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(
+                            commandArray, "max-testrun-run-count");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(
+                            commandArray, "retry-strategy");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(
+                            commandArray, "reboot-at-last-retry", true);
         } catch (ConfigurationException e) {
             throw new RuntimeException(e);
         }
