@@ -16,6 +16,7 @@
 
 package com.android.tradefed.device;
 
+import com.android.ddmlib.AndroidDebugBridge.IDeviceChangeListener;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IDevice.DeviceState;
@@ -28,7 +29,6 @@ import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.IDeviceMonitor.DeviceLister;
 import com.android.tradefed.device.IManagedTestDevice.DeviceEventResponse;
 import com.android.tradefed.device.cloud.VmRemoteDevice;
-import com.android.tradefed.device.server.AndroidDebugBridge.IDeviceChangeListener;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.ILogRegistry.EventType;
