@@ -27,7 +27,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Objects that helps delegating the invocation to another Tradefed binary. */
@@ -59,6 +61,13 @@ public class TradefedDelegator {
                             + "it so it knows how to parse it.")
     private List<String> mCtsParams = new ArrayList<>();
 
+    @Option(
+            name = "delegation-environment",
+            description =
+                    "Option for compatibility with TradefedDelegator to receive environment"
+                            + " options.")
+    private Map<String, String> mDelegationEnvironment = new LinkedHashMap<>();
+
     private String[] mCommandLine = null;
 
     /** Whether or not trigger the delegation logic. */
@@ -83,6 +92,10 @@ public class TradefedDelegator {
 
     public String[] getCommandLine() {
         return mCommandLine;
+    }
+
+    public Map<String, String> getEnvironment() {
+        return mDelegationEnvironment;
     }
 
     /**

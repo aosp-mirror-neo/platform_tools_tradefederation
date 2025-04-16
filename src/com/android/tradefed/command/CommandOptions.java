@@ -381,6 +381,13 @@ public class CommandOptions implements ICommandOptions {
                     "Actually enable the reporting of invocation caching status in presubmit.")
     private boolean mEnableCachingInvocationResultsInPresubmit = false;
 
+    @Option(
+            name = "delegation-environment",
+            description =
+                    "Option for compatibility with TradefedDelegator to receive environment"
+                            + " options. inop if not using delegation mode.")
+    private Map<String, String> mDelegationEnvironment = new LinkedHashMap<>();
+
     /**
      * Set the help mode for the config.
      * <p/>
