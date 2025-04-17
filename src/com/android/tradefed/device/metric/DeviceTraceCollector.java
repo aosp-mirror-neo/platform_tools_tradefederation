@@ -132,6 +132,7 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
         super.rebootStarted(device);
         // save previous trace running on this device.
         collectTraceFileFromDevice(device, "rebootStarted");
+        logTraceFiles();
     }
 
     @Override
