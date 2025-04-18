@@ -409,6 +409,9 @@ public class InvocationMetricLogger {
         TestContentAnalyzer("TestContentAnalyzer", true),
         screen_on_setup("screen_on_setup", true),
 
+        // Suite and order
+        RUNTIME_EXCLUDE_FILTER("runtime_exclude_filter", true),
+
         // Test caching metrics
         CACHED_MODULE_RESULTS_COUNT("cached_module_results_count", true),
         DEVICE_IMAGE_HASH("device_image_hash", false),
