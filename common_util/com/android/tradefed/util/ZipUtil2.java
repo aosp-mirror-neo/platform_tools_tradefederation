@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
@@ -90,6 +91,9 @@ public class ZipUtil2 {
                     noPermissions.add(entry.getName());
                 }
                 continue;
+            } else if (entry.isUnixSymlink()) {
+                String linkTarget = StreamUtil.getStringFromStream(zipFile.getInputStream(entry));
+                Files.createSymbolicLink(childFile.toPath(), Paths.get(linkTarget));
             } else {
                 if (!extractZipEntry(zipFile, entry, childFile)) {
                     noPermissions.add(entry.getName());
