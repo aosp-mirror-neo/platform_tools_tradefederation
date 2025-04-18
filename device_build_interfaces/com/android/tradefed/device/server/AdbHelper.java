@@ -29,12 +29,14 @@ import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.log.LogReceiver;
 import com.android.tradefed.log.Log;
+import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.base.Strings;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
@@ -1372,12 +1374,10 @@ public final class AdbHelper {
 
     public static AdbCommandRejectedException createHiddenException(String message) {
         try {
-            AdbCommandRejectedException.class
-                    .getDeclaredConstructor(String.class)
-                    .setAccessible(true);
-            return AdbCommandRejectedException.class
-                    .getDeclaredConstructor(String.class)
-                    .newInstance(message);
+            Constructor<AdbCommandRejectedException> ctor =
+                    AdbCommandRejectedException.class.getDeclaredConstructor(String.class);
+            ctor.setAccessible(true);
+            return ctor.newInstance(message);
         } catch (InstantiationException
                 | IllegalAccessException
                 | IllegalArgumentException
@@ -1391,18 +1391,18 @@ public final class AdbHelper {
     public static AdbCommandRejectedException createHiddenException(
             String message, boolean errorDuringDeviceSelection) {
         try {
-            AdbCommandRejectedException.class
-                    .getDeclaredConstructor(String.class, Boolean.class)
-                    .setAccessible(true);
-            return AdbCommandRejectedException.class
-                    .getDeclaredConstructor(String.class, Boolean.class)
-                    .newInstance(message, errorDuringDeviceSelection);
+            Constructor<AdbCommandRejectedException> ctor =
+                    AdbCommandRejectedException.class.getDeclaredConstructor(
+                            String.class, boolean.class);
+            ctor.setAccessible(true);
+            return ctor.newInstance(message, errorDuringDeviceSelection);
         } catch (InstantiationException
                 | IllegalAccessException
                 | IllegalArgumentException
                 | InvocationTargetException
                 | NoSuchMethodException
                 | SecurityException e) {
+            CLog.e(e);
             throw new CommandRejectedException(message);
         }
     }

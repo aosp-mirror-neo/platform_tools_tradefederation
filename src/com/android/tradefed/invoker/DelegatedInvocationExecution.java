@@ -55,6 +55,7 @@ import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map.Entry;
 
 /** {@link InvocationExecution} which delegate the execution to another Tradefed binary. */
 public class DelegatedInvocationExecution extends InvocationExecution {
@@ -164,7 +165,7 @@ public class DelegatedInvocationExecution extends InvocationExecution {
             mStderrFile = FileUtil.createTempFile("stderr_delegate_", ".log", mTmpDelegatedDir);
             mStderr = new FileOutputStream(mStderrFile);
             mStdout = new FileOutputStream(mStdoutFile);
-            IRunUtil runUtil = createRunUtil(receiver.getSocketServerPort(), config);
+            IRunUtil runUtil = createRunUtil(receiver.getSocketServerPort(), config, delegator);
             CommandResult result = null;
             RuntimeException runtimeException = null;
             CLog.d("Command line: %s", commandLine);
@@ -231,12 +232,17 @@ public class DelegatedInvocationExecution extends InvocationExecution {
         FileUtil.deleteFile(mGlobalConfig);
     }
 
-    private IRunUtil createRunUtil(int port, IConfiguration config) throws IOException {
+    private IRunUtil createRunUtil(int port, IConfiguration config, TradefedDelegator delegator)
+            throws IOException {
         IRunUtil runUtil = new RunUtil();
         // Handle the global configs for the subprocess
         runUtil.unsetEnvVariable(GlobalConfiguration.GLOBAL_CONFIG_VARIABLE);
         runUtil.unsetEnvVariable(GlobalConfiguration.GLOBAL_CONFIG_SERVER_CONFIG_VARIABLE);
         runUtil.setEnvVariablePriority(EnvPriority.SET);
+        // Add the user injected environment
+        for (Entry<String, String> envKeyValue : delegator.getEnvironment().entrySet()) {
+            runUtil.setEnvVariable(envKeyValue.getKey(), envKeyValue.getValue());
+        }
         mGlobalConfig = createGlobalConfig();
         runUtil.setEnvVariable(
                 GlobalConfiguration.GLOBAL_CONFIG_VARIABLE, mGlobalConfig.getAbsolutePath());

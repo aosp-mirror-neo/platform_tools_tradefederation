@@ -50,10 +50,14 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Base implementation of {@link FilePullerDeviceMetricCollector} that allows
- * pulling the perfetto files from the device and collect the metrics from it.
- * Also used for converting the raw trace file into perfetto metric file.
+ * Base implementation of {@link FilePullerDeviceMetricCollector} that allows pulling the perfetto
+ * files from the device and collect the metrics from it. Also used for converting the raw trace
+ * file into perfetto metric file.
+ *
+ * @deprecated Use {@link PerfettoFilePullerCollector} and {@link PerfettoTracePostProcessor}
+ *     instead.
  */
+@Deprecated
 @OptionClass(alias = "perfetto-metric-collector")
 public class PerfettoPullerMetricCollector extends FilePullerDeviceMetricCollector {
 

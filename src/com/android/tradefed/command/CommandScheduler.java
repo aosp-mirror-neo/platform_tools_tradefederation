@@ -1975,6 +1975,12 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
         if (config.getDeviceConfig().isEmpty()) {
             return null;
         }
+        TradefedDelegator delegator = null;
+        if (config.getConfigurationObject(TradefedDelegator.DELEGATE_OBJECT) != null) {
+            delegator =
+                    (TradefedDelegator)
+                            config.getConfigurationObject(TradefedDelegator.DELEGATE_OBJECT);
+        }
         // If we need to replicate the setup on all devices
         ParentShardReplicate.replicatedSetup(config, getKeyStoreClient());
         synchronized (this) {
@@ -1983,9 +1989,12 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 if (excludeDevices.contains(deviceConfig.getDeviceName())) {
                     continue;
                 }
+                boolean useFakeDevice = deviceConfig.isFake();
+                if (delegator != null && delegator.noopAllocation()) {
+                    useFakeDevice = true;
+                }
                 device =
-                        manager.allocateDevice(
-                                deviceConfig.getDeviceRequirements(), deviceConfig.isFake());
+                        manager.allocateDevice(deviceConfig.getDeviceRequirements(), useFakeDevice);
                 if (device != null) {
                     devices.put(deviceConfig.getDeviceName(), device);
                 } else {
