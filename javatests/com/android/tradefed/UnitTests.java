@@ -136,6 +136,7 @@ import com.android.tradefed.device.metric.HostStatsdMetricCollectorTest;
 import com.android.tradefed.device.metric.JavaCodeCoverageCollectorTest;
 import com.android.tradefed.device.metric.LogcatOnFailureCollectorTest;
 import com.android.tradefed.device.metric.LogcatTimingMetricCollectorTest;
+import com.android.tradefed.device.metric.PerfettoFilePullerCollectorTest;
 import com.android.tradefed.device.metric.PerfettoPullerMetricCollectorTest;
 import com.android.tradefed.device.metric.RebootReasonCollectorTest;
 import com.android.tradefed.device.metric.RuntimeRestartCollectorTest;
@@ -195,6 +196,7 @@ import com.android.tradefed.postprocessor.AveragePostProcessorTest;
 import com.android.tradefed.postprocessor.BasePostProcessorTest;
 import com.android.tradefed.postprocessor.MetricFilePostProcessorTest;
 import com.android.tradefed.postprocessor.PerfettoGenericPostProcessorTest;
+import com.android.tradefed.postprocessor.PerfettoTracePostProcessorTest;
 import com.android.tradefed.postprocessor.StatsdBeforeAfterGaugeMetricPostProcessorTest;
 import com.android.tradefed.postprocessor.StatsdEventMetricPostProcessorTest;
 import com.android.tradefed.postprocessor.StatsdGenericPostProcessorTest;
@@ -686,6 +688,7 @@ import org.junit.runners.Suite.SuiteClasses;
     JavaCodeCoverageCollectorTest.class,
     LogcatOnFailureCollectorTest.class,
     LogcatTimingMetricCollectorTest.class,
+    PerfettoFilePullerCollectorTest.class,
     PerfettoPullerMetricCollectorTest.class,
     RebootReasonCollectorTest.class,
     RuntimeRestartCollectorTest.class,
@@ -768,6 +771,7 @@ import org.junit.runners.Suite.SuiteClasses;
     BasePostProcessorTest.class,
     MetricFilePostProcessorTest.class,
     PerfettoGenericPostProcessorTest.class,
+    PerfettoTracePostProcessorTest.class,
     StatsdBeforeAfterGaugeMetricPostProcessorTest.class,
     StatsdEventMetricPostProcessorTest.class,
     StatsdGenericPostProcessorTest.class,

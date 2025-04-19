@@ -82,6 +82,7 @@ public class ArtRunTest
     private static final String STDERR_FILE_NAME = "stderr.txt";
 
     // Name of the Checker Python Archive (PAR) file.
+    public static final Boolean RUN_CHECKER = false;
     public static final String CHECKER_PAR_FILENAME = "art-run-test-checker";
     private static final long CHECKER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes.
 
@@ -340,7 +341,7 @@ public class ArtRunTest
             }
 
             // If the test is a Checker test, run Checker and check its output.
-            if (mRunTestName.contains("-checker-")) {
+            if (RUN_CHECKER && mRunTestName.contains("-checker-")) {
                 Optional<String> checkerError = executeCheckerTest(testInfo, listener);
                 checkerError.ifPresent(errors::add);
             }

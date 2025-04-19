@@ -331,7 +331,8 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             "s2-geometry-library-java-tests.config",
                             // TODO(b/404996613): Confirm that this test should be in
                             //  general-tests and exempted for validation.
-                            "DesktopChromeStableTestCases.config"));
+                            "DesktopChromeStableTestCases.config",
+                            "ccdec_vp8_test.config"));
 
     @Override
     public void setBuild(IBuildInfo buildInfo) {

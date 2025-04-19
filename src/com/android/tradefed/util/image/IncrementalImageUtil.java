@@ -51,6 +51,7 @@ import com.android.tradefed.util.ZipUtil2;
 import com.android.tradefed.util.executor.ParallelDeviceExecutor;
 import com.android.tradefed.util.image.DeviceImageTracker.FileCacheTracker;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
 import java.io.File;
@@ -782,23 +783,24 @@ public class IncrementalImageUtil {
         if (mDevice instanceof NativeDevice) {
             ((NativeDevice) mDevice).invalidatePropertyCache();
         }
-        if (mSkipBootloaderVersionCheck) {
-            CLog.d("mSkipBootloaderVersionCheck=true, removing bootloader requirements.");
-            File androidInfo = new File(imageDirectory, "android-info.txt");
-            FastbootDeviceFlasher.removeLine(androidInfo);
-        }
         Map<String, String> envMap = new HashMap<>();
         envMap.put("ANDROID_PRODUCT_OUT", imageDirectory.getAbsolutePath());
+        ImmutableList.Builder<String> cmdArgsBuilder = new ImmutableList.Builder<>();
+        cmdArgsBuilder.add("flashall", "--exclude-dynamic-partitions", "--disable-super-optimization");
+        if (mSkipBootloaderVersionCheck) {
+            cmdArgsBuilder.add("--force");
+        }
+        List<String> cmdArgs = cmdArgsBuilder.build();
         CommandResult fastbootResult =
                 mDevice.executeLongFastbootCommand(
                         envMap,
-                        "flashall",
-                        "--exclude-dynamic-partitions",
-                        "--disable-super-optimization");
+                        cmdArgs.toArray(new String[cmdArgs.size()]));
         CLog.d("Status: %s", fastbootResult.getStatus());
         CLog.d("stdout: %s", fastbootResult.getStdout());
         CLog.d("stderr: %s", fastbootResult.getStderr());
-        if (!CommandStatus.SUCCESS.equals(fastbootResult.getStatus())) {
+        if ((!CommandStatus.SUCCESS.equals(fastbootResult.getStatus())
+                && FastbootDeviceFlasher.stderrContainsFailed(
+                        fastbootResult.getStderr(), mSkipBootloaderVersionCheck))) {
             return false;
         }
         RecoveryMode recoveryMode = mDevice.getRecoveryMode();

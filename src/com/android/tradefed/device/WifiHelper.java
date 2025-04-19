@@ -543,14 +543,20 @@ public class WifiHelper implements IWifiHelper {
 
     private boolean checkConnectivityV2(long timeout) throws DeviceNotAvailableException {
         long startTime = System.currentTimeMillis();
+        CommandResult statusOutput = null;
         while (System.currentTimeMillis() < (startTime + timeout)) {
-            CommandResult statusOutput =
-                    mDevice.executeShellV2Command(String.format("cmd -w wifi status"));
+            statusOutput = mDevice.executeShellV2Command(String.format("cmd -w wifi status"));
             if (CommandStatus.SUCCESS.equals(statusOutput.getStatus())
                     && statusOutput.getStdout().contains("Wifi is connected")) {
                 return true;
             }
             getRunUtil().sleep(getPollTime());
+        }
+        if (statusOutput != null) {
+            // if wifi connection failed, log the last status output for debugging
+            CLog.d(
+                    "Current wifi status:\n%s\nstderr:%s",
+                    statusOutput.getStdout(), statusOutput.getStderr());
         }
         CLog.w("Wifi is not connected after timeout: %d ms.", timeout);
         return false;

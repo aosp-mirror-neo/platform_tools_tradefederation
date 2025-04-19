@@ -177,10 +177,21 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
 
     private static final String TEST_MAPPING_EXCLUDE_FILTER = "exclude-filter";
 
+    // Environment variable to indicate if it is in BWYN test discovery mode.
+    public static final String IS_BWYN_ENV_VAR_KEY = "IS_BWYN";
+
     private IBuildInfo mBuildInfo;
+
+    // If the environment variable is set, TestMappingSuiteRunner is in BWYN mode.
+    private boolean isBWYN = System.getenv(IS_BWYN_ENV_VAR_KEY) != null;
 
     public TestMappingSuiteRunner() {
         setSkipjarLoading(true);
+        // If TestMappingSuiteRunner is in BWYN test discovery mode, do include
+        // test mapping imports.
+        if (isBWYN) {
+            mIgnoreTestMappingImports = false;
+        }
     }
 
     public Set<TestInfo> loadTestInfos() {

@@ -149,6 +149,9 @@ public class TestMappingDiscoveryAgent {
             throws ConfigurationException, TestDiscoveryException, JSONException, IOException {
         IConfiguration config = mTestDiscoveryUtil.getConfiguration(args);
 
+        // Set TestDiscoveryInvoker to BWYN mode.
+        mTestDiscoveryInvoker.setIsBWYN(true);
+
         if (isValidationTestConfig(config)) {
             System.out.print("Discovered that test config is a validation test.");
             isValidationTestDiscovered = true;

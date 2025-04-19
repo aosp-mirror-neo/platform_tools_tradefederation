@@ -63,19 +63,16 @@ public class RecorderClient implements IRecorderClient {
 
     private final RecorderGrpc.RecorderBlockingStub mStub;
     private final Credentials mCredentials;
-
-    // Both prod and staging Tradedfed instances should report to ResultDB prod server.
-    public static final String SERVER_ADDRESS = "results.api.cr.dev";
     public static final int SERVER_PORT = 443;
 
-    private RecorderClient() {
+    private RecorderClient(Boolean isStaging) {
         try {
             mCredentials = GoogleCredentials.getApplicationDefault();
         } catch (IOException e) {
             throw new RuntimeException("Failed to get application default credentials", e);
         }
         ManagedChannel channel =
-                ManagedChannelBuilder.forAddress(SERVER_ADDRESS, SERVER_PORT)
+                ManagedChannelBuilder.forAddress(getServerAddress(isStaging), SERVER_PORT)
                         .executor(Executors.newCachedThreadPool())
                         .build();
         RecorderGrpc.RecorderBlockingStub stub =
@@ -89,18 +86,27 @@ public class RecorderClient implements IRecorderClient {
         mUploadThread.start();
     }
 
-    public static IRecorderClient create(String invocationId, String updateToken) {
-        RecorderClient client = new RecorderClient();
+    public static IRecorderClient create(
+            String invocationId, String updateToken, Boolean isStaging) {
+        RecorderClient client = new RecorderClient(isStaging);
         client.mInvocationId = invocationId;
         client.mUpdateToken = updateToken;
         return client;
     }
 
-    public static IRecorderClient createWithNewInvocation(CreateInvocationRequest request) {
-        RecorderClient client = new RecorderClient();
+    public static IRecorderClient createWithNewInvocation(
+            CreateInvocationRequest request, Boolean isStaging) {
+        RecorderClient client = new RecorderClient(isStaging);
         Invocation invocation = client.createInvocation(request);
         client.mInvocationId = invocation.getName().replace("invocations/", "");
         return client;
+    }
+
+    private String getServerAddress(Boolean isStaging) {
+        if (isStaging) {
+            return "staging.results.api.cr.dev";
+        }
+        return "results.api.cr.dev";
     }
 
     // Interceptor that adds the update token to requests.

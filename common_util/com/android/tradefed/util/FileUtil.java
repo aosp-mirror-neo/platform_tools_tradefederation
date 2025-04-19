@@ -83,7 +83,7 @@ public class FileUtil {
 
     private static String sChmod = "chmod";
     private static final List<String> HIGH_LINK_COUNT_FILES =
-            Arrays.asList("libc++.so");
+            Arrays.asList("libc++.so", "liblog.so");
 
     /** A map of {@link PosixFilePermission} to its corresponding Unix file mode */
     private static final Map<PosixFilePermission, Integer> PERM_MODE_MAP = new HashMap<>();

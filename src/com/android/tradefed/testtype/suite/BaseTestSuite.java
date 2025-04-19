@@ -129,6 +129,13 @@ public class BaseTestSuite extends ITestSuite {
     private List<String> mTestArgs = new ArrayList<>();
 
     @Option(
+            name = "runtime-exclude-module",
+            description =
+                    "Exclude a module from running right before it should. This is not meant for"
+                        + " configuration. This is intended to control some of the module order.")
+    private Set<String> mRuntimeExcludeModule = new LinkedHashSet<String>();
+
+    @Option(
             name = "run-suite-tag",
             description =
                     "The tag that must be run. If specified, only configurations containing the "
@@ -702,6 +709,16 @@ public class BaseTestSuite extends ITestSuite {
     @Override
     protected boolean shouldModuleRun(ModuleDefinition module) {
         String moduleId = module.getId();
+        if (mRuntimeExcludeModule.contains(moduleId)
+                || mRuntimeExcludeModule.contains(
+                        module.getModuleInvocationContext()
+                                .getConfigurationDescriptor()
+                                .getModuleName())) {
+            CLog.d("Skipping '%s' as requested by runtime-exclude-module", moduleId);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.RUNTIME_EXCLUDE_FILTER, 1);
+            return false;
+        }
         LinkedHashSet<SuiteTestFilter> excludeFilters = mExcludeFiltersParsed.get(moduleId);
         CLog.d("Filters for '%s': %s", moduleId, excludeFilters);
         if (excludeFilters == null || excludeFilters.isEmpty()) {

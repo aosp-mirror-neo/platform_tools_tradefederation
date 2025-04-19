@@ -1302,7 +1302,7 @@ public class TestDevice extends NativeDevice {
                 CLog.v("framework reboot: device unresponsive to shell command, using fallback");
                 return false;
             }
-            postAdbReboot();
+            postAdbReboot(rebootMode);
             return true;
         } else {
             CLog.v("framework reboot: not supported");

@@ -142,9 +142,13 @@ public class TestContentAnalyzer {
                     CLog.d("Content analysis results for %s: invalid", ac.contentEntry());
                 } else {
                     CLog.d("content analysis results for %s: %s", ac.contentEntry(), results);
+                    String key = TESTS_DIR_KEY + "_" + ac.contentEntry();
+                    // Normalize the build-id if it's part of the name
+                    if (key.contains(information.getBuildInfo().getBuildId())) {
+                        key = key.replace(information.getBuildInfo().getBuildId(), "ABCDEF");
+                    }
                     results.addArtifactDigestMapping(
-                            TESTS_DIR_KEY + "_" + ac.contentEntry(),
-                            ContentMerkleTree.buildTestsDirFromContext(ac, discoveredModules));
+                            key, ContentMerkleTree.buildTestsDirFromContext(ac, discoveredModules));
                 }
                 allResults.add(results);
             }

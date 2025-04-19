@@ -1983,6 +1983,85 @@ public class ITestSuiteTest {
         assertEquals(FailureStatus.NOT_EXECUTED, failures.get(1).getFailureStatus());
     }
 
+    /**
+     * Verify module events are not reported when module is skipped via {@link
+     * ITestSuite#shouldModuleRun(ModuleDefinition)}.
+     */
+    @Test
+    public void testRun_withSkippedModule() throws Exception {
+        List<ISystemStatusChecker> sysChecker = new ArrayList<>();
+        sysChecker.add(mMockSysChecker);
+        mTestSuite =
+                new TestSuiteImpl() {
+                    @Override
+                    public LinkedHashMap<String, IConfiguration> loadTests() {
+                        LinkedHashMap<String, IConfiguration> testConfig = new LinkedHashMap<>();
+                        try {
+                            IConfiguration moduleOne =
+                                    ConfigurationFactory.getInstance()
+                                            .createConfigurationFromArgs(
+                                                    new String[] {EMPTY_CONFIG});
+                            moduleOne.setTest(new StubCollectingTest());
+                            testConfig.put("MODULE_1", moduleOne);
+
+                            IConfiguration moduleTwo =
+                                    ConfigurationFactory.getInstance()
+                                            .createConfigurationFromArgs(
+                                                    new String[] {EMPTY_CONFIG});
+                            moduleTwo.setTest(new StubCollectingTest());
+                            testConfig.put("MODULE_2", moduleTwo);
+
+                            IConfiguration moduleThree =
+                                    ConfigurationFactory.getInstance()
+                                            .createConfigurationFromArgs(
+                                                    new String[] {EMPTY_CONFIG});
+                            moduleThree.setTest(new StubCollectingTest());
+                            testConfig.put("MODULE_3", moduleThree);
+                        } catch (ConfigurationException e) {
+                            CLog.e(e);
+                            throw new RuntimeException(e);
+                        }
+                        return testConfig;
+                    }
+
+                    @Override
+                    protected boolean shouldModuleRun(ModuleDefinition module) {
+                        if (module.getId().equals("MODULE_2")) {
+                            // skip module 2
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    }
+                };
+        mTestSuite.setDevice(mMockDevice);
+        mTestSuite.setBuild(mMockBuildInfo);
+        mTestSuite.setInvocationContext(mContext);
+        mTestSuite.setSystemStatusChecker(sysChecker);
+        mTestSuite.setConfiguration(mStubMainConfiguration);
+        OptionSetter setter = new OptionSetter(mTestSuite);
+        setter.setOptionValue("skip-all-system-status-check", "true");
+        setter.setOptionValue("reboot-per-module", "true");
+        when(mMockDevice.getProperty("ro.build.type")).thenReturn("user");
+
+        mTestSuite.run(mTestInfo, mMockListener);
+
+        verify(mMockListener, times(2)).testModuleStarted(Mockito.any());
+        verify(mMockListener, times(1))
+                .testRunStarted(
+                        Mockito.eq("MODULE_1"), Mockito.eq(1), Mockito.eq(0), Mockito.anyLong());
+        verify(mMockListener, times(1))
+                .testRunStarted(
+                        Mockito.eq("MODULE_3"), Mockito.eq(1), Mockito.eq(0), Mockito.anyLong());
+        verify(mMockListener, times(2)).testStarted(Mockito.any(), Mockito.anyLong());
+        verify(mMockListener, times(2))
+                .testEnded(
+                        Mockito.any(), Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+        verify(mMockListener, times(2))
+                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+        verify(mMockListener, times(2)).testModuleEnded();
+    }
+
     public static class FakePostProcessor extends BasePostProcessor {
         private final String mKey;
 

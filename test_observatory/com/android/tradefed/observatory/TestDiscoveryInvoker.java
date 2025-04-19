@@ -29,6 +29,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.FileInputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
+import com.android.tradefed.testtype.suite.TestMappingSuiteRunner;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
@@ -78,6 +79,7 @@ public class TestDiscoveryInvoker {
     private File mTestMappingZip;
     private IBuildInfo mBuildInfo;
     private ITestLogger mLogger;
+    private boolean mIsBWYN = false;
 
     private static final TestDiscoveryUtil mTestDiscoveryUtil = new TestDiscoveryUtil();
 
@@ -138,6 +140,10 @@ public class TestDiscoveryInvoker {
 
     public void setBuildInfo(IBuildInfo buildInfo) {
         mBuildInfo = buildInfo;
+    }
+
+    public void setIsBWYN(boolean isBWYN) {
+        mIsBWYN = isBWYN;
     }
 
     public void setTestLogger(ITestLogger logger) {
@@ -202,6 +208,11 @@ public class TestDiscoveryInvoker {
                 getRunUtil()
                         .setEnvVariable(
                                 ROOT_DIRECTORY_ENV_VARIABLE_KEY, mRootDir.getAbsolutePath());
+            }
+            // If it is in BWYN test discovery mode, we should always not ignore test mapping
+            // imports through setting the env var that consumed by TestMappingSuiteRunner.
+            if (mIsBWYN) {
+                getRunUtil().setEnvVariable(TestMappingSuiteRunner.IS_BWYN_ENV_VAR_KEY, "true");
             }
             getRunUtil().setEnvVariable(OUTPUT_FILE, outputFile.getAbsolutePath());
             getRunUtil().setEnvVariable(DISCOVERY_TRACE_FILE, traceFile.getAbsolutePath());
