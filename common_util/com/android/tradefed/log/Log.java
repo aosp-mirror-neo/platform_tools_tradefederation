@@ -15,11 +15,14 @@
  */
 package com.android.tradefed.log;
 
+import com.google.common.collect.Sets;
+
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Log class that mirrors the API in main Android sources.
@@ -154,6 +157,7 @@ public final class Log {
     private static LogLevel sLevel = LogLevel.VERBOSE;
 
     private static ILogOutput sLogOutput;
+    private static final Set<ILogOutput> sOutputLoggers = Sets.newCopyOnWriteArraySet();
 
     private Log() {}
 
@@ -214,9 +218,15 @@ public final class Log {
      * @param message The message to output.
      */
     public static void logAndDisplay(LogLevel logLevel, String tag, String message) {
+        if (!sOutputLoggers.isEmpty()) {
+            for (ILogOutput logger : sOutputLoggers) {
+                logger.printAndPromptLog(logLevel, tag, message);
+            }
+        }
+
         if (sLogOutput != null) {
             sLogOutput.printAndPromptLog(logLevel, tag, message);
-        } else {
+        } else if (sOutputLoggers.isEmpty()) {
             println(logLevel, tag, message);
         }
     }
@@ -251,12 +261,26 @@ public final class Log {
         sLogOutput = logOutput;
     }
 
+    public static void addLogger(ILogOutput logOutput) {
+        sOutputLoggers.add(logOutput);
+    }
+
+    public static void removeLogger(ILogOutput logOutput) {
+        sOutputLoggers.remove(logOutput);
+    }
+
     /* currently prints to stdout; could write to a log window */
     private static void println(LogLevel logLevel, String tag, String message) {
         if (logLevel.getPriority() >= sLevel.getPriority()) {
+            if (!sOutputLoggers.isEmpty()) {
+                for (ILogOutput logger : sOutputLoggers) {
+                    logger.printLog(logLevel, tag, message);
+                }
+            }
+
             if (sLogOutput != null) {
                 sLogOutput.printLog(logLevel, tag, message);
-            } else {
+            } else if (sOutputLoggers.isEmpty()) {
                 printLog(logLevel, tag, message);
             }
         }
