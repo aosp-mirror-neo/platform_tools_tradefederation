@@ -23,6 +23,7 @@ import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.TestDeviceState;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.TestDescription;
 
@@ -38,10 +39,28 @@ public class PrettyTestEventLogger implements ITestInvocationListener {
 
     private static final String TAG = "TradefedEventsTag";
     private final List<ITestDevice> mDevices;
+    private final boolean mMethodLevel;
     private String mTrace = null;
+    private String mRunTrace = null;
 
-    public PrettyTestEventLogger(List<ITestDevice> devices) {
+    public PrettyTestEventLogger(List<ITestDevice> devices, boolean methodLevelLogging) {
         mDevices = devices;
+        mMethodLevel = methodLevelLogging;
+    }
+
+    @Override
+    public void testRunStarted(String runName, int testCount) {
+        if (mMethodLevel) {
+            return;
+        }
+        Date date = new Date();
+        mRunTrace = null;
+        String message =
+                String.format(
+                        "==================== %s RUN STARTED: %s ====================",
+                        runName, date.toString());
+        CLog.logAndDisplay(LogLevel.DEBUG, "\n" + message);
+        logOnAllDevices(message);
     }
 
     @Override
@@ -53,12 +72,21 @@ public class PrettyTestEventLogger implements ITestInvocationListener {
                         "==================== %s STARTED: %s ====================",
                         test.toString(), date.toString());
         CLog.logAndDisplay(LogLevel.DEBUG, "\n" + message);
-        logOnAllDevices(message);
+        if (mMethodLevel) {
+            logOnAllDevices(message);
+        }
     }
 
     @Override
     public void testFailed(TestDescription test, String trace) {
         mTrace = trace;
+        mRunTrace = trace;
+    }
+
+    @Override
+    public void testFailed(TestDescription test, FailureDescription failure) {
+        mTrace = failure.getErrorMessage();
+        mRunTrace = failure.getErrorMessage();
     }
 
     @Override
@@ -71,6 +99,26 @@ public class PrettyTestEventLogger implements ITestInvocationListener {
         CLog.logAndDisplay(LogLevel.DEBUG, "\n" + message);
         if (mTrace != null
                 && mTrace.contains(DeviceNotAvailableException.class.getCanonicalName())) {
+            CLog.d("Skip logging device side, device was unavailable.");
+            return;
+        }
+        if (mMethodLevel) {
+            logOnAllDevices(message);
+        }
+    }
+
+    @Override
+    public void testRunEnded(long elapsedTimeMillis, HashMap<String, Metric> runMetrics) {
+        if (mMethodLevel) {
+            return;
+        }
+        Date date = new Date();
+        String message =
+                String.format(
+                        "==================== RUN ENDED: %s ====================", date.toString());
+        CLog.logAndDisplay(LogLevel.DEBUG, "\n" + message);
+        if (mRunTrace != null
+                && mRunTrace.contains(DeviceNotAvailableException.class.getCanonicalName())) {
             CLog.d("Skip logging device side, device was unavailable.");
             return;
         }
