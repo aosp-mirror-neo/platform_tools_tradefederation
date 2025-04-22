@@ -17,7 +17,6 @@ package com.android.ddmlib;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.device.server.Client;
 import com.android.tradefed.device.server.ProfileableClient;
 import com.android.tradefed.device.server.SyncService;
@@ -1000,14 +999,6 @@ public interface IDevice extends IShellEnabledDevice {
      */
     @Nullable
     String getRegion();
-
-    /**
-     * Returns the API level of the device.
-     *
-     * @return the API level if it can be determined, {@link AndroidVersion#DEFAULT} otherwise.
-     */
-    @NonNull
-    AndroidVersion getVersion();
 
     /**
      * Invoke the host:exec service on a remote device. Return a socket channel that is connected to

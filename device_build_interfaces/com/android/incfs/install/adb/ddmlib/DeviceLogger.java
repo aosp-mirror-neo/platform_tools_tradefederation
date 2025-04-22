@@ -17,12 +17,13 @@ package com.android.incfs.install.adb.ddmlib;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
+import com.android.incfs.install.ILogger;
 
 /** Bridge class to use utils.ILogger for Incremental. */
-public class DeviceLogger implements com.android.incfs.install.ILogger {
-    private @NonNull com.android.utils.ILogger mLogger;
+public class DeviceLogger implements ILogger {
+    private @NonNull ILogger mLogger;
 
-    public DeviceLogger(@NonNull com.android.utils.ILogger logger) {
+    public DeviceLogger(@NonNull ILogger logger) {
         mLogger = logger;
     }
 

@@ -47,7 +47,6 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
-import com.android.utils.FileUtils;
 
 import com.google.common.truth.Truth;
 
@@ -146,10 +145,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -187,10 +186,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -236,10 +235,10 @@ public class MoblyBinaryHostTestTest {
                                 anyLong(), any(OutputStream.class), any(OutputStream.class), any()))
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -293,10 +292,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
         CommandResult result = new CommandResult(CommandStatus.SUCCESS);
@@ -329,10 +328,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -357,7 +356,7 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, testResultContent);
+                            FileUtil.writeToFile(testResultContent, testResult);
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -386,7 +385,7 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, testResultContent);
+                            FileUtil.writeToFile(testResultContent, testResult);
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -415,7 +414,7 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, testResultContent);
+                            FileUtil.writeToFile(testResultContent, testResult);
                             return new CommandResult(CommandStatus.FAILED);
                         });
 
@@ -444,7 +443,7 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, testResultContent);
+                            FileUtil.writeToFile(testResultContent, testResult);
                             CommandResult res = new CommandResult(CommandStatus.FAILED);
                             res.setStderr("Some error message");
                             return res;
@@ -536,10 +535,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -574,10 +573,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -599,17 +598,17 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> ClassTest <==========\n"
-                                        + "test_foo\n"
-                                        + "test_baz\n"
-                                        + "ClassTest.test_bar");
+                                            + "test_foo\n"
+                                            + "test_baz\n"
+                                            + "ClassTest.test_bar");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -631,20 +630,20 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> ClassTest <==========\n"
-                                        + "test_foo\n"
-                                        + "abc\n"
-                                        + "test_baz\n"
-                                        + "ClassTest.test_bar\n"
-                                        + "ClassTest.\n"
-                                        + "test");
+                                            + "test_foo\n"
+                                            + "abc\n"
+                                            + "test_baz\n"
+                                            + "ClassTest.test_bar\n"
+                                            + "ClassTest.\n"
+                                            + "test");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -672,10 +671,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -706,10 +705,10 @@ public class MoblyBinaryHostTestTest {
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -742,17 +741,17 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> FooTest <==========\n"
-                                        + "test_foo\n"
-                                        + "test_baz\n"
-                                        + "test_bar");
+                                            + "test_foo\n"
+                                            + "test_baz\n"
+                                            + "test_bar");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -791,17 +790,17 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> FooTest <==========\n"
-                                        + "test_foo\n"
-                                        + "test_baz\n"
-                                        + "test_bar");
+                                            + "test_foo\n"
+                                            + "test_baz\n"
+                                            + "test_bar");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -841,17 +840,17 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> FooTest <==========\n"
-                                        + "test_foo\n"
-                                        + "test_baz\n"
-                                        + "test_bar");
+                                            + "test_foo\n"
+                                            + "test_baz\n"
+                                            + "test_bar");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -891,17 +890,17 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> FooTest <==========\n"
-                                        + "test_foo\n"
-                                        + "test_baz\n"
-                                        + "test_bar");
+                                            + "test_foo\n"
+                                            + "test_baz\n"
+                                            + "test_bar");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 
@@ -925,17 +924,17 @@ public class MoblyBinaryHostTestTest {
                             CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                             res.setStdout(
                                     "==========> FooTest <==========\n"
-                                        + "test_foo\n"
-                                        + "test_baz\n"
-                                        + "test_bar");
+                                            + "test_foo\n"
+                                            + "test_baz\n"
+                                            + "test_bar");
                             return res;
                         })
                 .thenAnswer(
                         invocation -> {
-                            FileUtils.createFile(testResult, "");
-                            FileUtils.createFile(
-                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"),
-                                    "log content");
+                            testResult.createNewFile();
+                            FileUtil.writeToFile(
+                                    "log content",
+                                    new File(mSpyTest.getLogDirAbsolutePath(), "log"));
                             return new CommandResult(CommandStatus.SUCCESS);
                         });
 

@@ -16,7 +16,6 @@
 
 package com.android.ddmlib.testrunner;
 
-import com.android.SdkConstants;
 import com.android.annotations.NonNull;
 import com.android.ddmlib.testrunner.TestResult.TestStatus;
 import com.android.tradefed.log.Log;
@@ -159,8 +158,8 @@ public class XmlTestRunListener implements ITestRunListener {
         try {
             stream = createOutputResultStream(reportDir);
             KXmlSerializer serializer = new KXmlSerializer();
-            serializer.setOutput(stream, SdkConstants.UTF_8);
-            serializer.startDocument(SdkConstants.UTF_8, null);
+            serializer.setOutput(stream, "UTF-8");
+            serializer.startDocument("UTF-8", null);
             serializer.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true);
             // TODO: insert build info
             printTestResults(serializer, timestamp, elapsedTime);

@@ -16,7 +16,6 @@
 
 package com.android.tradefed.device.server;
 
-import com.android.SdkConstants;
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
 import com.android.ddmlib.DdmPreferences;
@@ -911,9 +910,7 @@ public class AndroidDebugBridge {
                         // Display special message if it is the STATUS_DLL_NOT_FOUND code, and
                         // ignore adb output
                         // since it's empty anyway
-                        if (exitValue == STATUS_DLL_NOT_FOUND
-                                && SdkConstants.currentPlatform()
-                                        == SdkConstants.PLATFORM_WINDOWS) {
+                        if (exitValue == STATUS_DLL_NOT_FOUND) {
                             errorMessage +=
                                     ". ADB depends on the Windows Universal C Runtime, which is"
                                         + " usually installed by default via Windows Update. You"
