@@ -29,7 +29,6 @@ java_library_host {
         "com/**/*.java",
     ],
     libs: [
-        "ddmlib-prebuilt",
         "jsr305",
         "tradefed-common-util",
         "tradefed-protos",
