@@ -52,16 +52,42 @@ public class DeviceDescriptor implements Serializable {
         this(null, false, null, null, null, null, null, null);
     }
 
-    public DeviceDescriptor(String serial, boolean isStubDevice, DeviceAllocationState state,
-            String product, String productVariant, String sdkVersion, String buildId,
+    public DeviceDescriptor(
+            String serial,
+            boolean isStubDevice,
+            DeviceAllocationState state,
+            String product,
+            String productVariant,
+            String sdkVersion,
+            String buildId,
             String batteryLevel) {
-        this(serial, isStubDevice, state, product, productVariant, sdkVersion, buildId,
-                batteryLevel, "", "", "", "");
+        this(
+                serial,
+                isStubDevice,
+                state,
+                product,
+                productVariant,
+                sdkVersion,
+                buildId,
+                batteryLevel,
+                "",
+                "",
+                "",
+                "");
     }
 
-    public DeviceDescriptor(String serial, boolean isStubDevice, DeviceAllocationState state,
-            String product, String productVariant, String sdkVersion, String buildId,
-            String batteryLevel, String deviceClass, String macAddress, String simState,
+    public DeviceDescriptor(
+            String serial,
+            boolean isStubDevice,
+            DeviceAllocationState state,
+            String product,
+            String productVariant,
+            String sdkVersion,
+            String buildId,
+            String batteryLevel,
+            String deviceClass,
+            String macAddress,
+            String simState,
             String simOperator) {
         this(
                 serial,
@@ -370,9 +396,7 @@ public class DeviceDescriptor implements Serializable {
         return mIDevice.getProperty(name);
     }
 
-    /**
-     * Provides a description with serials, product and build id
-     */
+    /** Provides a description with serials, product and build id */
     @Override
     public String toString() {
         return String.format("[%s %s:%s %s]", mSerial, mProduct, mProductVariant, mBuildId);

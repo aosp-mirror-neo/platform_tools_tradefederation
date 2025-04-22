@@ -1315,11 +1315,8 @@ public class TestInvocation implements ITestInvocation {
                     reportHostLog(listener, config);
                     reportInvocationEnded(config, info.getContext(), listener, 0L);
                     // Still upload results for caching
-                    if (mInvocationProtoResultReporter != null
-                            && !mInvocationProtoResultReporter.stopCaching()) {
-                        InvocationCacheHelper.uploadInvocationResults(
-                                config, mInvocationProtoResultReporter.getOutputFile(), info);
-                    }
+                    InvocationCacheHelper.uploadInvocationResults(
+                            config, mInvocationProtoResultReporter, info);
                     return;
                 }
             }
@@ -1463,11 +1460,8 @@ public class TestInvocation implements ITestInvocation {
 
             performInvocation(config, info, invocationPath, listener, deviceInit);
             setExitCode(ExitCode.NO_ERROR, null);
-            if (mInvocationProtoResultReporter != null
-                    && !mInvocationProtoResultReporter.stopCaching()) {
-                InvocationCacheHelper.uploadInvocationResults(
-                        config, mInvocationProtoResultReporter.getOutputFile(), info);
-            }
+            InvocationCacheHelper.uploadInvocationResults(
+                    config, mInvocationProtoResultReporter, info);
         } catch (IOException e) {
             CLog.e(e);
         } finally {

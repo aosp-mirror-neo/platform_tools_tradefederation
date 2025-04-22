@@ -27,6 +27,7 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.proto.InvocationProtoResultReporter;
 import com.android.tradefed.result.proto.ModuleProtoResultReporter;
 import com.android.tradefed.util.CacheClientFactory;
 import com.android.tradefed.util.FileUtil;
@@ -68,14 +69,20 @@ public class InvocationCacheHelper {
      * Upload invocation results
      *
      * @param mainConfig
-     * @param protoResults
+     * @param protoResultsReporter
      * @param testInfo
      */
     public static void uploadInvocationResults(
-            IConfiguration mainConfig, File protoResults, TestInformation testInfo) {
+            IConfiguration mainConfig,
+            InvocationProtoResultReporter protoResultsReporter,
+            TestInformation testInfo) {
         if (testInfo.getDevices().size() > 1) {
             return;
         }
+        if (protoResultsReporter == null) {
+            return;
+        }
+        File protoResults = protoResultsReporter.getOutputFile();
         boolean emptyTestsDir = false;
         File invocationTestsDir = null;
         if (testInfo.getBuildInfo().getFile(BuildInfoFileKey.ROOT_DIRECTORY) == null
@@ -104,7 +111,12 @@ public class InvocationCacheHelper {
                             getCommonCommandLine(mainConfig.getCommandLine()),
                             computeEnvironment(mainConfig),
                             60000L);
-            ExecutableActionResult result = ExecutableActionResult.create(0, protoResults, null);
+            int exitCode = 0;
+            if (protoResultsReporter.stopCaching()) {
+                exitCode = 10;
+            }
+            ExecutableActionResult result =
+                    ExecutableActionResult.create(exitCode, protoResults, null);
             CLog.d("Uploading cache for %s and %s", action, protoResults);
             cacheClient.uploadCache(action, result);
         } catch (IOException | RuntimeException | InterruptedException e) {
@@ -157,6 +169,13 @@ public class InvocationCacheHelper {
             ExecutableActionResult cachedResults = cacheClient.lookupCache(action);
             if (cachedResults == null) {
                 CLog.d("No cached results for the invocation.");
+                return null;
+            } else if (cachedResults.exitCode() > 0) {
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.INVOCATION_CACHE_HIT_WITH_FAILURE, 1);
+                CLog.d("Cached invocation but with failures.");
+                FileUtil.deleteFile(cachedResults.stdOut());
+                FileUtil.deleteFile(cachedResults.stdErr());
                 return null;
             } else {
                 InvocationMetricLogger.addInvocationMetrics(

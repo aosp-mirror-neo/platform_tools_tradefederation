@@ -16,8 +16,6 @@
 package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
-import com.android.ddmlib.ProfileableClient;
-import com.android.ddmlib.ProfileableClientData;
 
 /**
  * This represents a single profileable client, usually a Dalvik VM process.

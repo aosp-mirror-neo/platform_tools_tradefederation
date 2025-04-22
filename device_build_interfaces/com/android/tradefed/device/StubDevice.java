@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 package com.android.tradefed.device;
+
 import com.android.ddmlib.AdbCommandRejectedException;
-import com.android.ddmlib.Client;
 import com.android.ddmlib.FileListingService;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IShellOutputReceiver;
@@ -25,10 +25,10 @@ import com.android.ddmlib.RawImage;
 import com.android.ddmlib.ScreenRecorderOptions;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.SyncException;
-import com.android.ddmlib.SyncService;
 import com.android.ddmlib.TimeoutException;
-import com.android.ddmlib.log.LogReceiver;
 import com.android.sdklib.AndroidVersion;
+import com.android.tradefed.device.server.Client;
+import com.android.tradefed.device.server.SyncService;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+
 /** Stub placeholder implementation of a {@link IDevice}. */
 public class StubDevice implements IDevice, Serializable {
     private static final long serialVersionUID = 1L;
@@ -296,18 +297,6 @@ public class StubDevice implements IDevice, Serializable {
     @Override
     public void removeRemotePackage(String remoteFilePath) throws InstallException {
         throw new InstallException(new IOException("stub"));
-    }
-    /** {@inheritDoc} */
-    @Override
-    public void runEventLogService(LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        throw new IOException("stub");
-    }
-    /** {@inheritDoc} */
-    @Override
-    public void runLogService(String logname, LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        throw new IOException("stub");
     }
     /** {@inheritDoc} */
     @Override

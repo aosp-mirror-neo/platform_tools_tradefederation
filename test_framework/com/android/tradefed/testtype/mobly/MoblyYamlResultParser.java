@@ -19,6 +19,7 @@ package com.android.tradefed.testtype.mobly;
 import com.android.tradefed.log.LogUtil;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
+import com.android.tradefed.result.ResultForwarder;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.result.skipped.SkipReason;
@@ -52,12 +53,17 @@ public class MoblyYamlResultParser {
     private boolean mEnded;
     private boolean mRunFailed;
     private StringBuilder mYamlString = new StringBuilder();
+    private MoblyArtifactReporter mArtifactReporter;
 
     public MoblyYamlResultParser(
-            ITestInvocationListener listener, String runName, boolean reportRunStart) {
+            ITestInvocationListener listener,
+            String runName,
+            boolean reportRunStart,
+            MoblyArtifactReporter artifactReporter) {
         mListenersBuilder.add(listener);
         mRunName = runName;
         mReportRunStart = reportRunStart;
+        mArtifactReporter = artifactReporter;
     }
 
     public boolean parse(InputStream inputStream)
@@ -65,17 +71,14 @@ public class MoblyYamlResultParser {
                     IllegalAccessException,
                     InstantiationException,
                     IOException {
-        if (mEnded)
-            return mEnded;
+        if (mEnded) return mEnded;
         int available = inputStream.available();
-        if (available == 0)
-            return false;
+        if (available == 0) return false;
         byte[] bytes = new byte[available];
         inputStream.read(bytes);
         mYamlString.append(new String(bytes, 0, available, StandardCharsets.UTF_8));
         int yamlEnd = mYamlString.lastIndexOf("\n...");
-        if (yamlEnd == -1)
-            return false;
+        if (yamlEnd == -1) return false;
         ArrayList<ITestResult> resultCache = new ArrayList<>();
         Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
         try {
@@ -117,15 +120,15 @@ public class MoblyYamlResultParser {
     protected void reportToListeners(
             List<ITestInvocationListener> listeners,
             List<IMoblyYamlResultHandler.ITestResult> resultCache) {
+        ITestInvocationListener listener = new ResultForwarder(listeners);
+
         for (IMoblyYamlResultHandler.ITestResult result : resultCache) {
             switch (result.getType()) {
                 case TEST_NAME_LIST:
                     if (mReportRunStart) {
                         MoblyYamlResultTestNameListHandler.TestNameList testList =
                                 (MoblyYamlResultTestNameListHandler.TestNameList) result;
-                        for (ITestInvocationListener listener : listeners) {
-                            listener.testRunStarted(mRunName, testList.getTestList().size());
-                        }
+                        listener.testRunStarted(mRunName, testList.getTestList().size());
                     }
                     break;
                 case RECORD:
@@ -141,9 +144,7 @@ public class MoblyYamlResultParser {
                             record.getResult())) {
                         // Non-test failure reports indicates some early failure so we fail the run
                         if (!testDescription.getTestName().startsWith("test_")) {
-                            for (ITestInvocationListener listener : listeners) {
-                                listener.testRunFailed(failureDescription);
-                            }
+                            listener.testRunFailed(failureDescription);
                             mRunFailed = true;
                             continue;
                         }
@@ -153,32 +154,31 @@ public class MoblyYamlResultParser {
                                     ? record.getBeginTime()
                                     : Math.min(mRunStartTime, record.getBeginTime());
                     mRunEndTime = Math.max(mRunEndTime, record.getEndTime());
-                    for (ITestInvocationListener listener : listeners) {
-                        listener.testStarted(testDescription, record.getBeginTime());
-                        if (MoblyYamlResultRecordHandler.RecordResult.SKIP.equals(
-                                record.getResult())) {
-                            // In case of run failed, the most likely is that test did not execute
-                            if (mRunFailed) {
-                                SkipReason reason = new SkipReason(record.getStackTrace(), "");
-                                listener.testSkipped(testDescription, reason);
-                            } else if (isTimeout(record)) {
-                                FailureDescription timeoutFailureDescription =
-                                        FailureDescription.create(
-                                                record.getStackTrace(),
-                                                TestRecordProto.FailureStatus.TIMED_OUT);
-                                listener.testFailed(testDescription, timeoutFailureDescription);
-                            } else {
-                                listener.testIgnored(testDescription);
-                            }
-                        } else if (!MoblyYamlResultRecordHandler.RecordResult.PASS.equals(
-                                record.getResult())) {
-                            listener.testFailed(testDescription, failureDescription);
+                    listener.testStarted(testDescription, record.getBeginTime());
+                    mArtifactReporter.reportArtifactsForRecord(listener, record);
+                    if (MoblyYamlResultRecordHandler.RecordResult.SKIP.equals(
+                            record.getResult())) {
+                        // In case of run failed, the most likely is that test did not execute
+                        if (mRunFailed) {
+                            SkipReason reason = new SkipReason(record.getStackTrace(), "");
+                            listener.testSkipped(testDescription, reason);
+                        } else if (isTimeout(record)) {
+                            FailureDescription timeoutFailureDescription =
+                                    FailureDescription.create(
+                                            record.getStackTrace(),
+                                            TestRecordProto.FailureStatus.TIMED_OUT);
+                            listener.testFailed(testDescription, timeoutFailureDescription);
+                        } else {
+                            listener.testIgnored(testDescription);
                         }
-                        listener.testEnded(
-                                testDescription,
-                                record.getEndTime(),
-                                new HashMap<String, String>());
+                    } else if (!MoblyYamlResultRecordHandler.RecordResult.PASS.equals(
+                            record.getResult())) {
+                        listener.testFailed(testDescription, failureDescription);
                     }
+                    listener.testEnded(
+                            testDescription,
+                            record.getEndTime(),
+                            new HashMap<String, String>());
                     break;
                 case USER_DATA:
                     long timestamp =

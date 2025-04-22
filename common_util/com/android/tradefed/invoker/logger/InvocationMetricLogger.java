@@ -430,6 +430,7 @@ public class InvocationMetricLogger {
         // Invocation level caching
         INVOCATION_RESULTS_CHECKING_CACHE("invocation_results_checking_cache", true),
         INVOCATION_CACHE_HIT("invocation_cache_hit", true),
+        INVOCATION_CACHE_HIT_WITH_FAILURE("invocation_cache_hit_with_failure", true),
 
         // Oxygenation metrics
         PORTFORWARD_LHP_SUCCESS_COUNT("portfoward_lhp_success_count", true),

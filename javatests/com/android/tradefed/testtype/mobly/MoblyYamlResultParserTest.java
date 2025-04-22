@@ -21,10 +21,12 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.TestDescription;
@@ -211,10 +213,12 @@ public class MoblyYamlResultParserTest {
     private ArgumentCaptor<FailureDescription> mFailureDescriptionCaptor;
     private ArgumentCaptor<TestDescription> mEndDescCaptor;
     private ArgumentCaptor<Long> mEndTimeCaptor;
+    private MoblyArtifactReporter mMockArtifactReporter;
 
     @Before
     public void setUp() throws Exception {
         mMockListener = Mockito.mock(ITestInvocationListener.class);
+        mMockArtifactReporter = Mockito.mock(MoblyArtifactReporter.class);
         mListeners = ImmutableList.of(mMockListener);
         setUpArgumentCaptors();
     }
@@ -237,12 +241,15 @@ public class MoblyYamlResultParserTest {
         mEndTimeCaptor = ArgumentCaptor.forClass(Long.class);
         Mockito.doNothing()
                 .when(mMockListener)
-                .testEnded(mEndDescCaptor.capture(), mEndTimeCaptor.capture(), any(Map.class));
+                .testEnded(
+                        mEndDescCaptor.capture(),
+                        mEndTimeCaptor.capture(),
+                        eq(new HashMap<String, Metric>()));
     }
 
     @Test
     public void testReportToListenersPassRecord() {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         IMoblyYamlResultHandler.ITestResult passRecord =
                 new Record.Builder()
                         .setTestName(DEFAULT_TEST_NAME)
@@ -265,7 +272,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testReportToListenersFailRecord() {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         IMoblyYamlResultHandler.ITestResult failRecord =
                 new Record.Builder()
                         .setTestName(DEFAULT_TEST_NAME)
@@ -300,7 +307,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testReportToListenersUserData() {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         List<IMoblyYamlResultHandler.ITestResult> resultCache =
                 ImmutableList.of(new UserData.Builder().setTimestamp(DEFAULT_BEGIN_TIME).build());
         mParser.reportToListeners(mListeners, resultCache);
@@ -311,7 +318,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testReportToListenersControllerInfo() {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         List<IMoblyYamlResultHandler.ITestResult> resultCache =
                 ImmutableList.of(
                         new ControllerInfo.Builder().setTimestamp("1571681322.791003").build());
@@ -323,7 +330,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParseDocumentMapRecordPass() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         Map<String, Object> detailMap = new HashMap<>();
         detailMap.put("Result", "PASS");
         detailMap.put("Stacktrace", "null");
@@ -339,7 +346,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParseDocumentMapRecordFail() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         Map<String, Object> detailMap = new HashMap<>();
         detailMap.put("Stacktrace", SAMPLE_STACK_TRACE);
         detailMap.put("Result", "FAIL");
@@ -356,7 +363,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testReportToListenersFailedTestForTimedout() {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         IMoblyYamlResultHandler.ITestResult skipRecord =
                 new Record.Builder()
                         .setTestName(DEFAULT_TEST_NAME)
@@ -386,7 +393,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParseDocumentMapSummary() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         Map<String, Object> docMap = new HashMap<>();
         docMap.put("Type", "Summary");
         docMap.put("Executed", "10");
@@ -399,7 +406,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParseDocumentMapControllerInfo() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         Map<String, Object> docMap = new HashMap<>();
         docMap.put("Type", "ControllerInfo");
         docMap.put("Timestamp", "1571681322.791003");
@@ -411,7 +418,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParseDocumentMapUserData() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         Map<String, Object> docMap = new HashMap<>();
         docMap.put("Type", "UserData");
         docMap.put("timestamp", DEFAULT_BEGIN_TIME);
@@ -422,7 +429,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParseDocumentMapTestNameList() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         Map<String, Object> docMap = new HashMap<>();
         docMap.put("Type", "TestNameList");
         docMap.put("Requested Tests", Arrays.asList("test1", "test2"));
@@ -432,7 +439,7 @@ public class MoblyYamlResultParserTest {
 
     @Test
     public void testParse() throws Exception {
-        mParser = new MoblyYamlResultParser(mMockListener, "runName", false);
+        mParser = new MoblyYamlResultParser(mMockListener, "runName", false, mMockArtifactReporter);
         MoblyYamlResultParser spyParser = Mockito.spy(mParser);
 
         String passRecord = buildTestRecordString(new HashMap<>());

@@ -35,9 +35,7 @@ import com.android.ddmlib.RawImage;
 import com.android.ddmlib.ScreenRecorderOptions;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.SyncException;
-import com.android.ddmlib.SyncService;
 import com.android.ddmlib.TimeoutException;
-import com.android.ddmlib.log.LogReceiver;
 import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.log.Log;
 
@@ -767,18 +765,6 @@ public final class DeviceImpl implements IDevice {
     }
 
     @Override
-    public void runEventLogService(LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        AdbHelper.runEventLogService(AndroidDebugBridge.getSocketAddress(), this, receiver);
-    }
-
-    @Override
-    public void runLogService(String logname, LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        AdbHelper.runLogService(AndroidDebugBridge.getSocketAddress(), this, logname, receiver);
-    }
-
-    @Override
     public void createForward(int localPort, int remotePort)
             throws TimeoutException, AdbCommandRejectedException, IOException {
         AdbHelper.createForward(
@@ -846,12 +832,12 @@ public final class DeviceImpl implements IDevice {
     }
 
     @Override
-    public com.android.ddmlib.internal.ClientImpl[] getClients() {
+    public ClientImpl[] getClients() {
         throw new UnsupportedOperationException("You should use #getNativeClients instead");
     }
 
     @Override
-    public com.android.ddmlib.internal.ClientImpl getClient(String applicationName) {
+    public ClientImpl getClient(String applicationName) {
         throw new UnsupportedOperationException("You should use #getNativeClients instead");
     }
 
