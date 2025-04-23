@@ -154,10 +154,18 @@ public class ExecutableTargetTest extends ExecutableBaseTest implements IDeviceT
         if (mDevice == null) {
             throw new IllegalArgumentException("Device has not been set");
         }
-        CommandResult result =
-                mDevice.executeShellV2Command(
-                        binaryPath, getTimeoutPerBinaryMs(), TimeUnit.MILLISECONDS);
-        checkCommandResult(result, listener, description);
+        try {
+            CommandResult result =
+                    mDevice.executeShellV2Command(
+                            binaryPath,
+                            getTimeoutPerBinaryMs(),
+                            TimeUnit.MILLISECONDS,
+                            0 /* No retry at that level */);
+            checkCommandResult(result, listener, description);
+        } catch (DeviceNotAvailableException dnae) {
+            listener.testRunFailed(dnae.getMessage());
+            throw dnae;
+        }
     }
 
     /**

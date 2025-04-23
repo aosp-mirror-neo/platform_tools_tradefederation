@@ -15,7 +15,10 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
+import com.android.resultdb.proto.BatchCreateArtifactsRequest;
 import com.android.resultdb.proto.BatchCreateTestResultsRequest;
+import com.android.resultdb.proto.CreateArtifactRequest;
 import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.CreateTestResultRequest;
 import com.android.resultdb.proto.FinalizeInvocationRequest;
@@ -43,7 +46,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -54,8 +56,6 @@ public class RecorderClient implements IRecorderClient {
     // The key for the update token used to create/update resources undera ResultDB invocation.
     private static final Metadata.Key<String> UPDATE_TOKEN_METADATA_KEY =
             Metadata.Key.of("update-token", Metadata.ASCII_STRING_MARSHALLER);
-    private final Uploader mUploader;
-    private final Thread mUploadThread;
     // The id of the ResultDB invocation used in upload results, update and finalize invocation
     // request. Currently only one ResultDB invocation per TF invocation is supported.
     private String mInvocationId;
@@ -64,6 +64,10 @@ public class RecorderClient implements IRecorderClient {
     private final RecorderGrpc.RecorderBlockingStub mStub;
     private final Credentials mCredentials;
     public static final int SERVER_PORT = 443;
+
+    private final BatchChannel<TestResult> mTestResultChannel;
+
+    private final BatchChannel<Artifact> mArtifactChannel;
 
     private RecorderClient(Boolean isStaging) {
         try {
@@ -80,10 +84,10 @@ public class RecorderClient implements IRecorderClient {
                         .withCallCredentials(MoreCallCredentials.from(mCredentials))
                         .withInterceptors(recorderInterceptor());
         mStub = stub;
-        mUploader = new Uploader();
-        mUploadThread = new Thread(mUploader, "Recorder upload thread");
-        mUploadThread.setDaemon(true);
-        mUploadThread.start();
+        mTestResultChannel =
+                new BatchChannel<TestResult>(500, "test results", this::batchUploadTestResults);
+
+        mArtifactChannel = new BatchChannel<Artifact>(500, "artifacts", this::batchUploadArtifacts);
     }
 
     public static IRecorderClient create(
@@ -180,118 +184,54 @@ public class RecorderClient implements IRecorderClient {
 
     @Override
     public void uploadTestResult(TestResult result) {
-        mUploader.enqueue(result);
+        try {
+            mTestResultChannel.enqueue(result);
+        } catch (InterruptedException e) {
+            CLog.e("Failed to enqueue test result: " + e.getMessage());
+        }
     }
 
     @Override
-    public void finalizeTestResults() {
-        mUploader.cancel();
+    public void uploadArtifact(Artifact artifact) {
         try {
-            mUploadThread.join();
+            mArtifactChannel.enqueue(artifact);
         } catch (InterruptedException e) {
-            CLog.e("Error joining upload thread: %s", e);
+            CLog.e("Failed to enqueue artifact: " + e.getMessage());
         }
     }
 
-    private class Uploader implements Runnable {
-        private static final int BATCH_SIZE = 500;
+    @Override
+    public void finalizeUpload() {
+        try {
+            mTestResultChannel.finalizeUpload();
+            mArtifactChannel.finalizeUpload();
+        } catch (InterruptedException e) {
+            CLog.e("Failed to finalize result or artifact upload: " + e.getMessage());
+        }
+    }
 
-        private final List<List<TestResult>> mPendingBatches = new ArrayList<>();
-        private List<TestResult> currentBatch = new ArrayList<>();
-        private volatile boolean mCanceled = false;
-
-        public void enqueue(TestResult result) {
-            if (mCanceled) {
-                throw new IllegalStateException(
-                        "Attempted to upload results after upload thread was cancelled");
-            }
-            synchronized (this) {
-                if (currentBatch.size() + 1 >= BATCH_SIZE) {
-                    mPendingBatches.add(currentBatch);
-                    currentBatch = new ArrayList<>();
-                    this.notifyAll();
-                }
-                currentBatch.add(result);
-            }
+    private void batchUploadTestResults(List<TestResult> allResults) throws StatusRuntimeException {
+        BatchCreateTestResultsRequest.Builder request =
+                BatchCreateTestResultsRequest.newBuilder()
+                        .setInvocation(String.format("invocations/%s", mInvocationId))
+                        .setRequestId(UUID.randomUUID().toString());
+        for (TestResult result : allResults) {
+            request.addRequests(CreateTestResultRequest.newBuilder().setTestResult(result).build());
         }
 
-        public synchronized void forceUpload() {
-            synchronized (this) {
-                if (!currentBatch.isEmpty()) {
-                    mPendingBatches.add(currentBatch);
-                }
-                while (!mPendingBatches.isEmpty()) {
-                    int lastIndex = mPendingBatches.size() - 1;
-                    upload(mPendingBatches.remove(lastIndex));
-                }
-            }
+        mStub.batchCreateTestResults(request.build());
+        CLog.i("Uploaded %d results to invocation %s", allResults.size(), mInvocationId);
+    }
+
+    private void batchUploadArtifacts(List<Artifact> allArtifacts) throws StatusRuntimeException {
+        BatchCreateArtifactsRequest.Builder request =
+                BatchCreateArtifactsRequest.newBuilder()
+                        .setParent(String.format("invocations/%s", mInvocationId));
+        for (Artifact artifact : allArtifacts) {
+            request.addRequests(CreateArtifactRequest.newBuilder().setArtifact(artifact).build());
         }
 
-        public synchronized void cancel() {
-            CLog.i("Canceling recorder uploader");
-            mCanceled = true;
-            this.notifyAll();
-        }
-
-        @Override
-        public void run() {
-            List<TestResult> uploadBatch = new ArrayList<TestResult>();
-            while (!mCanceled) {
-                synchronized (this) {
-                    // Wait with a timeout of 10 seconds when nothing to upload.
-                    if (mPendingBatches.isEmpty()) {
-                        try {
-                            this.wait(10000L);
-                        } catch (InterruptedException e) {
-                            // ignore
-                        }
-                    }
-                    if (!mPendingBatches.isEmpty()) {
-                        int lastIndex = mPendingBatches.size() - 1;
-                        CLog.i(
-                                "Starting batch upload of %d results",
-                                mPendingBatches.get(lastIndex).size());
-                        uploadBatch.addAll(mPendingBatches.remove(lastIndex));
-                    }
-                }
-                if (!uploadBatch.isEmpty()) {
-                    upload(uploadBatch);
-                    uploadBatch.clear();
-                }
-            }
-            // Upload any remaining results.
-            synchronized (this) {
-                if (!currentBatch.isEmpty()) {
-                    mPendingBatches.add(currentBatch);
-                }
-                while (!mPendingBatches.isEmpty()) {
-                    int lastIndex = mPendingBatches.size() - 1;
-                    upload(mPendingBatches.remove(lastIndex));
-                }
-            }
-            CLog.i("Uploader terminating");
-        }
-
-        private void upload(List<TestResult> allResults) {
-            BatchCreateTestResultsRequest.Builder request =
-                    BatchCreateTestResultsRequest.newBuilder()
-                            .setInvocation(String.format("invocations/%s", mInvocationId))
-                            .setRequestId(UUID.randomUUID().toString());
-            for (TestResult result : allResults) {
-                request.addRequests(
-                        CreateTestResultRequest.newBuilder().setTestResult(result).build());
-            }
-            try {
-                mStub.batchCreateTestResults(request.build());
-            } catch (StatusRuntimeException e) {
-                // TODO: ResultDB may reject the test result upload request if some fields are
-                // invalid
-                // (eg. test identifier is too long).
-                // We need some way to surface this error to avoid silently dropping
-                // test results.
-                CLog.e("Error uploading results: %s", e);
-            }
-            CLog.i("Uploaded %d results to invocation %s", allResults.size(), mInvocationId);
-        }
+        mStub.batchCreateArtifacts(request.build());
+        CLog.i("Uploaded %d artifacts to invocation %s", allArtifacts.size(), mInvocationId);
     }
 }

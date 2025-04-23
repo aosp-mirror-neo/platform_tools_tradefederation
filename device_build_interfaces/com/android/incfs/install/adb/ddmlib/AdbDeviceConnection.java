@@ -22,7 +22,6 @@ import com.android.ddmlib.TimeoutException;
 import com.android.incfs.install.IDeviceConnection;
 import com.android.incfs.install.IncrementalInstallSession;
 import com.android.tradefed.device.server.AndroidDebugBridge;
-import com.android.utils.ILogger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

@@ -22,7 +22,6 @@ import com.android.ddmlib.AdbCommandRejectedException;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.TimeoutException;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.log.Log;
 import com.android.tradefed.log.LogUtil.CLog;
 
@@ -416,10 +415,6 @@ class DeviceClientMonitorTask implements Runnable {
             device.addClient(client);
             monitorThread.addClient(client);
         }
-    }
-
-    private static boolean isDeviceVersionAtLeastS(@NonNull DeviceImpl device) {
-        return device.getVersion().getFeatureLevel() >= AndroidVersion.VersionCodes.S;
     }
 
     /**

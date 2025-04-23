@@ -17,9 +17,11 @@ package com.android.tradefed.result.resultdb;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.TestIdentifier;
+import com.android.resultdb.proto.TestIdentifierBase;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.TestStatus;
 import com.android.resultdb.proto.Variant;
@@ -27,6 +29,8 @@ import com.android.tradefed.build.BuildInfo;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.result.FailureDescription;
+import com.android.tradefed.result.LogDataType;
+import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 
@@ -37,6 +41,10 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @RunWith(JUnit4.class)
 public class ResultDBReporterTest {
@@ -54,7 +62,8 @@ public class ResultDBReporterTest {
         }
 
         @Override
-        IRecorderClient createRecorderClient(String invocationId, String updateToken, Boolean isStaging) {
+        IRecorderClient createRecorderClient(
+                String invocationId, String updateToken, Boolean isStaging) {
             return mRecorder;
         }
 
@@ -285,5 +294,58 @@ public class ResultDBReporterTest {
                                                 .setPrimaryErrorMessage("Failure Message"))
                                 .setSummaryHtml("TF error type: TIMED_OUT")
                                 .build());
+    }
+
+    @Test
+    public void uploadTestArtifacts() {
+        LogFile testLog = new LogFile("/tmp/test.log", getLogUrl("test.log"), LogDataType.TEXT);
+        LogFile testRunLog =
+                new LogFile("/tmp/test-run.log", getLogUrl("test-run.log"), LogDataType.TEXT);
+        LogFile invocationLog =
+                new LogFile("/tmp/invocation.log", getLogUrl("invocation.log"), LogDataType.PNG);
+        mSimulator
+                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withTest("com.google.ExampleClass", "testExampleMethod")
+                .withTestLog(testLog)
+                .withTestRunLog(testRunLog)
+                .withInvocationLog(invocationLog)
+                .simulateInvocation(mReporter);
+
+        assertThat(mReporter.mRecorder.getArtifacts())
+                .containsExactly(
+                        Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/test.log_9000.dat")
+                                .setContentType("text/plain")
+                                .setTestIdStructured(
+                                        TestIdentifierBase.newBuilder()
+                                                .setModuleName("example-module")
+                                                .setModuleScheme("junit")
+                                                .setCoarseName("com.google")
+                                                .setFineName("ExampleClass")
+                                                .setCaseName("testExampleMethod")
+                                                .build())
+                                .setResultId("1234abcd-00001")
+                                .setTestStatus(TestStatus.PASS)
+                                .build(),
+                        Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
+                                .setContentType("text/plain")
+                                .build(),
+                        Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
+                                .setContentType("image/png")
+                                .build());
+    }
+
+    private String getLogUrl(String log) {
+        try {
+            return String.format(
+                    "https://android-build.googleplex.com/builds/submitted/18274/docs/0/tests/1488327372312/18274/stub/inv_9000/%s_9000.dat",
+                    URLEncoder.encode(log, StandardCharsets.UTF_8.name()));
+        } catch (UnsupportedEncodingException e) {
+            // ignore
+        }
+        return "";
     }
 }

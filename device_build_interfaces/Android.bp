@@ -28,7 +28,6 @@ java_library_host {
         "com/**/*.java",
     ],
     libs: [
-        "ddmlib-prebuilt",
         "error_prone_annotations",
         "guava",
         "tradefed-protos",

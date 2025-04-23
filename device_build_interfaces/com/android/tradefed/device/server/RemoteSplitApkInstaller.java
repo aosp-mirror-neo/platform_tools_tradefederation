@@ -127,7 +127,6 @@ public class RemoteSplitApkInstaller extends SplitApkInstallerBase {
     }
 
     private static void validateArguments(@NonNull IDevice device, @NonNull List<String> apks) {
-        validateApiLevel(device);
 
         if (apks.isEmpty()) {
             throw new IllegalArgumentException(

@@ -30,8 +30,6 @@ tradefed_java_library_host {
   static_libs: [
     "json-prebuilt",
     "jsr305",
-    "tools-common-prebuilt",
-    "sdklib-prebuilt",
     "guava",
     "devtools-annotations-prebuilt",
   ],

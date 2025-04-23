@@ -26,7 +26,6 @@ import com.android.ddmlib.ScreenRecorderOptions;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.SyncException;
 import com.android.ddmlib.TimeoutException;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.device.server.Client;
 import com.android.tradefed.device.server.SyncService;
 
@@ -481,11 +480,7 @@ public class StubDevice implements IDevice, Serializable {
     public String getRegion() {
         return null;
     }
-    /** {@inheritDoc} */
-    @Override
-    public AndroidVersion getVersion() {
-        return null;
-    }
+
     /** {@inheritDoc} */
     @Override
     public boolean isRoot()

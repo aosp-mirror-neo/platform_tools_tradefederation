@@ -18,8 +18,6 @@ package com.android.ddmlib.testrunner;
 import com.android.ddmlib.testrunner.TestResult.TestStatus;
 import com.android.tradefed.log.LogUtil.CLog;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -170,7 +168,6 @@ public class TestRunResult implements ITestRunListener {
         testStarted(test, System.currentTimeMillis());
     }
 
-    @VisibleForTesting
     void testStarted(TestIdentifier test, long startTime) {
         TestResult res = new TestResult();
         res.setStartTime(startTime);
@@ -213,7 +210,6 @@ public class TestRunResult implements ITestRunListener {
         testEnded(test, System.currentTimeMillis(), testMetrics);
     }
 
-    @VisibleForTesting
     void testEnded(TestIdentifier test, long endTime, Map<String, String> testMetrics) {
         TestResult result = mTestResults.get(test);
         if (result == null) {

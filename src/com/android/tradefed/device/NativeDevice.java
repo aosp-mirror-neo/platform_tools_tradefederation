@@ -400,7 +400,10 @@ public class NativeDevice
             if (mResult.getStatus() == CommandStatus.EXCEPTION) {
                 throw new IOException(mResult.getStderr());
             } else if (mResult.getStatus() == CommandStatus.TIMED_OUT) {
-                throw new TimeoutException(mResult.getStderr());
+                String message =
+                        String.format(
+                                "Stdout: %s\nStderr: %s", mResult.getStdout(), mResult.getStderr());
+                throw new TimeoutException(message);
             }
             String stdErr = mResult.getStderr();
             if (stdErr != null) {

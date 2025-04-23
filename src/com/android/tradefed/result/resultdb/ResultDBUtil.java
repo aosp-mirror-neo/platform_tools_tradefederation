@@ -19,6 +19,8 @@ import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.result.TestDescription;
 
+import com.google.common.base.Strings;
+
 import java.nio.charset.StandardCharsets;
 
 /** Utility class for ResultDB reporter. */
@@ -122,6 +124,9 @@ public final class ResultDBUtil {
         } else {
             packageName = fullClassName.substring(0, lastDotIndex);
             className = fullClassName.substring(lastDotIndex + 1);
+        }
+        if (Strings.isNullOrEmpty(moduleName)) {
+            moduleName = "empty-module";
         }
         return TestIdentifier.newBuilder()
                 .setModuleName(moduleName)

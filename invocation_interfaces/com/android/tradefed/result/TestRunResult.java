@@ -15,13 +15,14 @@
  */
 package com.android.tradefed.result;
 
-import com.android.annotations.VisibleForTesting;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.retry.MergeStrategy;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
+
+import com.google.common.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;

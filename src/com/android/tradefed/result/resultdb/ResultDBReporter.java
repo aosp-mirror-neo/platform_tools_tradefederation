@@ -15,10 +15,13 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.StringPair;
+import com.android.resultdb.proto.TestIdentifier;
+import com.android.resultdb.proto.TestIdentifierBase;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.TestStatus;
 import com.android.resultdb.proto.Variant;
@@ -49,9 +52,12 @@ import com.android.tradefed.util.MultiMap;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -62,6 +68,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Result reporter that uploads test results to ResultDB. */
 @OptionClass(alias = "resultdb-reporter")
@@ -85,6 +93,11 @@ public class ResultDBReporter
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
     // Tag name for the test mapping source
     private static final String TEST_MAPPING_TAG = "test_mapping_source";
+
+    // Pattern to extract artifact id from logsaver URL.
+    private static final Pattern LOGSAVER_PATTERN =
+            Pattern.compile(
+                    "https:\\/\\/android-build.googleplex.com\\/builds\\/.+\\/.+\\/.+\\/.+\\/tests\\/\\d+\\/(.+)");
 
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
@@ -110,6 +123,8 @@ public class ResultDBReporter
     private AtomicInteger mResultCounter = new AtomicInteger(0);
     // Base for generate test result ID.
     private String mResultIdBase;
+    // No more log associations can be uploaded with in Result reporter after this set to true.
+    private boolean mLogAssociationTerminated = false;
 
     @Override
     public void setConfiguration(IConfiguration configuration) {
@@ -123,7 +138,61 @@ public class ResultDBReporter
 
     @Override
     public void logAssociation(String dataName, LogFile logFile) {
-        // TODO: implement this method.
+        if (mDisable) {
+            return;
+        }
+        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
+        if (mLogAssociationTerminated) {
+            // TODO: Tradefed still upload logs after invocationEnd is called. We need to figure out
+            // how to upload these logs to ResultDB.
+            return;
+        }
+        String contentType = logFile.getType().getContentType();
+        Artifact.Builder artifactBuilder =
+                Artifact.newBuilder()
+                        .setArtifactId(getArtifactId(logFile))
+                        .setContentType(contentType)
+                        .setContents(ByteString.EMPTY);
+
+        if (mCurrentTestResult != null) {
+            TestIdentifier testId = mCurrentTestResult.getTestIdStructured();
+
+            artifactBuilder
+                    .setTestIdStructured(
+                            TestIdentifierBase.newBuilder()
+                                    .setModuleName(testId.getModuleName())
+                                    .setModuleScheme(testId.getModuleScheme())
+                                    .setCoarseName(testId.getCoarseName())
+                                    .setFineName(testId.getFineName())
+                                    .setCaseName(testId.getCaseName()))
+                    .setResultId(mCurrentTestResult.getResultId())
+                    .setTestStatus(mCurrentTestResult.getStatus());
+        }
+        mRecorder.uploadArtifact(artifactBuilder.build());
+    }
+
+    private String getArtifactId(LogFile logFile) {
+        String artifactId = "";
+        // Fallback to use the file name in the logFile path.
+        String[] pathSegments = logFile.getPath().split("/");
+        if (pathSegments.length > 0) {
+            artifactId = pathSegments[pathSegments.length - 1];
+        }
+        if (logFile.getUrl() == null) {
+            return artifactId;
+        }
+        Matcher m = LOGSAVER_PATTERN.matcher(logFile.getUrl());
+        if (!m.find()) {
+            return artifactId;
+        }
+        try {
+            // We need to decode the resourceId because the backend expects that it is unencoded,
+            // but TF gives as the url that is already encoded.
+            artifactId = new URI(m.group(1)).getPath();
+        } catch (URISyntaxException e) {
+            // ignore
+        }
+        return artifactId;
     }
 
     @Override
@@ -199,7 +268,8 @@ public class ResultDBReporter
             if (mRecorder != null) {
                 // Make sure we cancel the client, otherwise it will leak a thread since
                 // invocationEnded will be skipped.
-                mRecorder.finalizeTestResults();
+                mRecorder.finalizeUpload();
+                mLogAssociationTerminated = true;
             }
             throw new RuntimeException(e);
         }
@@ -256,7 +326,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mRecorder.finalizeTestResults();
+        mRecorder.finalizeUpload();
+        mLogAssociationTerminated = true;
         if (mManageInvocation) {
             mRecorder.finalizeInvocation();
         }

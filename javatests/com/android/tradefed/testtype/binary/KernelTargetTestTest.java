@@ -18,6 +18,7 @@ package com.android.tradefed.testtype.binary;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 
@@ -273,7 +274,9 @@ public class KernelTargetTestTest {
         mCommandResult = new CommandResult(CommandStatus.SUCCESS);
         mCommandResult.setStdout(TEST_KTAP_RESULT_1);
         mCommandResult.setExitCode(0);
-        Mockito.when(mMockITestDevice.executeShellV2Command(eq(TEST_CMD_1), anyLong(), any()))
+        Mockito.when(
+                        mMockITestDevice.executeShellV2Command(
+                                eq(TEST_CMD_1), anyLong(), any(), anyInt()))
                 .thenReturn(mCommandResult);
 
         ArrayList<Pair<TestDescription, Boolean>> expectedTestResults = new ArrayList<>();
