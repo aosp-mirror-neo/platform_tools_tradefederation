@@ -302,15 +302,6 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
             CLog.i(
                     "After mixing kernel, the device image %s is a file of size %d",
                     newDeviceImage.toString(), newDeviceImage.length());
-            try {
-                // A zipped device image cannot work with incremental flashing so
-                // self disable it.
-                CLog.d("Disabling incremental flashing.");
-                mConfig.injectOptionValue("incremental-flashing", "false");
-                mConfig.injectOptionValue("force-disable-incremental-flashing", "true");
-            } catch (ConfigurationException ignore) {
-                CLog.e(ignore);
-            }
             String oldPath = oldDeviceImage.getAbsolutePath();
             CLog.i("Delete old device image %s", oldDeviceImage);
             oldDeviceImage.delete();
@@ -345,6 +336,16 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
                     InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
         }
 
+        try {
+            // Modifying device image cannot work with incremental flashing so
+            // self disable it.
+            CLog.d("Disabling incremental flashing.");
+            mConfig.injectOptionValue("incremental-flashing", "false");
+            mConfig.injectOptionValue("force-disable-incremental-flashing", "true");
+            mConfig.injectOptionValue("skip-bootloader-version-check", "true");
+        } catch (ConfigurationException ignore) {
+            CLog.e(ignore);
+        }
     }
 
     /**
