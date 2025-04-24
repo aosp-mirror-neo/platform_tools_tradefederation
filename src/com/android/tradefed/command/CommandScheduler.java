@@ -45,6 +45,7 @@ import com.android.tradefed.device.DeviceAllocationState;
 import com.android.tradefed.device.DeviceManager;
 import com.android.tradefed.device.DeviceManager.FastbootDevice;
 import com.android.tradefed.device.DeviceNotAvailableException;
+import com.android.tradefed.device.DeviceSelectionOptions;
 import com.android.tradefed.device.DeviceUnresponsiveException;
 import com.android.tradefed.device.FreeDeviceState;
 import com.android.tradefed.device.IDeviceManager;
@@ -1991,7 +1992,12 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 }
                 boolean useFakeDevice = deviceConfig.isFake();
                 if (delegator != null && delegator.noopAllocation()) {
+                    CLog.logAndDisplay(
+                            com.android.tradefed.log.Log.LogLevel.WARN, "USing fake device.");
                     useFakeDevice = true;
+                    // Match the request to null to leverage the fake device
+                    ((DeviceSelectionOptions) deviceConfig.getDeviceRequirements())
+                            .setNullDeviceRequested(true);
                 }
                 device =
                         manager.allocateDevice(deviceConfig.getDeviceRequirements(), useFakeDevice);
