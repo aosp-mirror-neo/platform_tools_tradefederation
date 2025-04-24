@@ -216,6 +216,8 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
 
     private boolean mUseModuleResultsForwarder = false;
 
+    private boolean mRemoveModuleBuffering = false;
+
     @VisibleForTesting
     public ModuleDefinition() {
         mModuleInvocationContext = null;
@@ -598,13 +600,6 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                 if (!mPassThroughFilters.isEmpty()) {
                     applyFilterToTest(test, mPassThroughFilters);
                 }
-                mCurrentTestWrapper =
-                        prepareGranularRetriableWrapper(
-                                test,
-                                listener,
-                                skipTestCases,
-                                perModuleRetryQuota);
-                mCurrentTestWrapper.setCollectTestsOnly(mCollectTestsOnly);
                 // Resolve the dynamic options for that one test.
                 preparationException =
                         invokeRemoteDynamic(moduleInfo.getDevice(), mInternalTestConfiguration);
@@ -616,6 +611,10 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                             true);
                     return;
                 }
+                mCurrentTestWrapper =
+                        prepareGranularRetriableWrapper(
+                                test, listener, skipTestCases, perModuleRetryQuota);
+                mCurrentTestWrapper.setCollectTestsOnly(mCollectTestsOnly);
                 try (CloseableTraceScope ignored = new CloseableTraceScope("module_test")) {
                     mCurrentTestWrapper.run(moduleInfo, listener);
                 } catch (DeviceNotAvailableException dnae) {
@@ -716,6 +715,16 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                 CLog.e("Exception while running tearDown:");
                 CLog.e(e);
                 tearDownException = e;
+                if (mRemoveModuleBuffering) {
+                    // report the error as a new run failure
+                    mInvocationListener.testRunStarted(
+                            getId(), 0, mTargetPreparerRetryCount, System.currentTimeMillis());
+                    FailureDescription failure =
+                            CurrentInvocation.createFailure(StreamUtil.getStackTrace(e), null)
+                                    .setCause(e);
+                    mInvocationListener.testRunFailed(failure);
+                    mInvocationListener.testRunEnded(0, new HashMap<String, Metric>());
+                }
             } finally {
                 InvocationMetricLogger
                         .addInvocationPairMetrics(InvocationMetricKey.MODULE_TEARDOWN_PAIR,
@@ -724,49 +733,53 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                 // finalize results
                 if (preparationException == null) {
                     mModuleConfiguration.cleanConfigurationData();
-                    if (mMergeAttempts) {
-                        reportFinalResults(
-                                mInvocationListener,
-                                mExpectedTests,
-                                mTestsResults,
-                                null,
-                                tearDownException);
-                        mTestsResults.clear();
-                        mExpectedTests = 0;
-                    } else {
-                        boolean reported = false;
-                        // Push the attempts one by one
-                        for (int i = 0; i < maxRunLimit; i++) {
-                            // Get all the results for the attempt
-                            List<TestRunResult> runResultList = new ArrayList<TestRunResult>();
-                            int expectedCount = 0;
-                            for (ModuleListener attemptListener : mRunListenersResults) {
-                                for (String runName : attemptListener.getTestRunNames()) {
-                                    TestRunResult run =
-                                            attemptListener.getTestRunAtAttempt(runName, i);
-                                    if (run != null) {
-                                        runResultList.add(run);
-                                        expectedCount += run.getExpectedTestCount();
+                    if (!mRemoveModuleBuffering) {
+                        if (mMergeAttempts) {
+                            reportFinalResults(
+                                    mInvocationListener,
+                                    mExpectedTests,
+                                    mTestsResults,
+                                    null,
+                                    tearDownException);
+                            mTestsResults.clear();
+                            mExpectedTests = 0;
+                        } else {
+                            boolean reported = false;
+                            // Push the attempts one by one
+                            for (int i = 0; i < maxRunLimit; i++) {
+                                // Get all the results for the attempt
+                                List<TestRunResult> runResultList = new ArrayList<TestRunResult>();
+                                int expectedCount = 0;
+                                for (ModuleListener attemptListener : mRunListenersResults) {
+                                    for (String runName : attemptListener.getTestRunNames()) {
+                                        TestRunResult run =
+                                                attemptListener.getTestRunAtAttempt(runName, i);
+                                        if (run != null) {
+                                            runResultList.add(run);
+                                            expectedCount += run.getExpectedTestCount();
+                                        }
                                     }
                                 }
-                            }
 
-                            if (!runResultList.isEmpty() || (
-                                !reported && mRetriedModulePreparationSuccess)) {
-                                if (runResultList.isEmpty()) {
-                                    reported = true;
-                                    CLog.i("Module preparation retry pass but no test cases were " +
-                                            "executed. Keep reporting the result to notify it " +
-                                            "failed in the 1st run but passed after retrying.");
+                                if (!runResultList.isEmpty()
+                                        || (!reported && mRetriedModulePreparationSuccess)) {
+                                    if (runResultList.isEmpty()) {
+                                        reported = true;
+                                        CLog.i(
+                                                "Module preparation retry pass but no test cases"
+                                                    + " were executed. Keep reporting the result to"
+                                                    + " notify it failed in the 1st run but passed"
+                                                    + " after retrying.");
+                                    }
+                                    reportFinalResults(
+                                            mInvocationListener,
+                                            expectedCount,
+                                            runResultList,
+                                            i,
+                                            tearDownException);
+                                } else {
+                                    CLog.d("No results to be forwarded for attempt %s.", i);
                                 }
-                                reportFinalResults(
-                                        mInvocationListener,
-                                        expectedCount,
-                                        runResultList,
-                                        i,
-                                        tearDownException);
-                            } else {
-                                CLog.d("No results to be forwarded for attempt %s.", i);
                             }
                         }
                     }
@@ -795,7 +808,13 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
             int maxRunLimit) {
         GranularRetriableTestWrapper retriableTest =
                 new GranularRetriableTestWrapper(
-                        test, this, listener, maxRunLimit, mUseModuleResultsForwarder);
+                        test,
+                        this,
+                        listener,
+                        maxRunLimit,
+                        mUseModuleResultsForwarder,
+                        mRemoveModuleBuffering,
+                        mTargetPreparerRetryCount);
         retriableTest.setModuleId(getId());
         retriableTest.setMarkTestsSkipped(skipTestCases);
         retriableTest.setMetricCollectors(mRunMetricCollectors);
@@ -1373,31 +1392,46 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
             listener.testModuleStarted(getModuleInvocationContext());
         }
         if (mCurrentTestWrapper != null)  {
-            // do not report results if already reported once
-            if (!mFinalResultsReported) {
-                mRunListenersResults.add(mCurrentTestWrapper.getResultListener());
+            if (mRemoveModuleBuffering) {
                 HarnessRuntimeException interruptedException =
                         new HarnessRuntimeException(
                                 message, TestErrorIdentifier.MODULE_DID_NOT_EXECUTE);
-                for (int i = 0; i < mMaxRetry; i++) {
-                    // Get all the results for the attempt
-                    List<TestRunResult> runResultList = new ArrayList<TestRunResult>();
-                    int expectedCount = 0;
-                    for (ModuleListener attemptListener : mRunListenersResults) {
-                        for (String runName : attemptListener.getTestRunNames()) {
-                            TestRunResult run = attemptListener.getTestRunAtAttempt(runName, i);
-                            if (run != null) {
-                                runResultList.add(run);
-                                expectedCount += run.getExpectedTestCount();
+                FailureDescription description =
+                        CurrentInvocation.createFailure(
+                                        StreamUtil.getStackTrace(interruptedException), null)
+                                .setCause(interruptedException);
+                mCurrentTestWrapper.backfillMissingEvents(listener, description);
+            } else {
+                // do not report results if already reported once
+                if (!mFinalResultsReported) {
+                    mRunListenersResults.add(mCurrentTestWrapper.getResultListener());
+                    HarnessRuntimeException interruptedException =
+                            new HarnessRuntimeException(
+                                    message, TestErrorIdentifier.MODULE_DID_NOT_EXECUTE);
+                    for (int i = 0; i < mMaxRetry; i++) {
+                        // Get all the results for the attempt
+                        List<TestRunResult> runResultList = new ArrayList<TestRunResult>();
+                        int expectedCount = 0;
+                        for (ModuleListener attemptListener : mRunListenersResults) {
+                            for (String runName : attemptListener.getTestRunNames()) {
+                                TestRunResult run = attemptListener.getTestRunAtAttempt(runName, i);
+                                if (run != null) {
+                                    runResultList.add(run);
+                                    expectedCount += run.getExpectedTestCount();
+                                }
                             }
                         }
-                    }
 
-                    if (!runResultList.isEmpty()) {
-                        reportFinalResults(
-                                listener, expectedCount, runResultList, i, interruptedException);
-                    } else {
-                        CLog.d("No results to be forwarded for attempt %s.", i);
+                        if (!runResultList.isEmpty()) {
+                            reportFinalResults(
+                                    listener,
+                                    expectedCount,
+                                    runResultList,
+                                    i,
+                                    interruptedException);
+                        } else {
+                            CLog.d("No results to be forwarded for attempt %s.", i);
+                        }
                     }
                 }
             }
@@ -1617,5 +1651,9 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
 
     public void setUseModuleResultsForwarder(boolean useModuleResultsForwarder) {
         mUseModuleResultsForwarder = useModuleResultsForwarder;
+    }
+
+    public void setRemoveModuleBuffering(boolean removeModuleBuffering) {
+        mRemoveModuleBuffering = removeModuleBuffering;
     }
 }

@@ -413,7 +413,12 @@ public abstract class ITestSuite
             description =
                     "Feature flag to enable whether metrics should be forwarded by ModuleListener"
                             + " or the new forwarder.")
-    private boolean mUseModuleResultsForwarder = true;
+    private boolean mUseModuleResultsForwarder = false;
+
+    @Option(
+            name = "remove-module-buffering",
+            description = "Feature flag to remove module buffering.")
+    private boolean mRemoveModuleBuffering = false;
 
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
@@ -1331,6 +1336,9 @@ public abstract class ITestSuite
             }
             if (mUseModuleResultsForwarder) {
                 module.setUseModuleResultsForwarder(mUseModuleResultsForwarder);
+            }
+            if (mRemoveModuleBuffering) {
+                module.setRemoveModuleBuffering(mRemoveModuleBuffering);
             }
             // Pass the run defined collectors to be used.
             module.setMetricCollectors(CollectorHelper.cloneCollectors(mMetricCollectors));

@@ -17,7 +17,10 @@
 package com.android.tradefed.result;
 
 import com.android.tradefed.invoker.logger.CurrentInvocation.IsolationGrade;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement;
+import com.android.tradefed.result.error.InfraErrorIdentifier;
+import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
 
 import java.util.ArrayList;
@@ -36,6 +39,11 @@ public class ModuleResultsAndMetricsForwarder extends ResultAndLogForwarder {
     private List<String> mTestMappingSources = new ArrayList<>();
     private static final String TEST_MAPPING_SOURCE = "test_mapping_source";
     private String mModuleId = null;
+    private boolean mSkip = false;
+    private int mTestCount;
+    private int mTestsRan;
+    private String mCurrentRunName;
+    private boolean mTestRunFailed = false;
 
     public ModuleResultsAndMetricsForwarder(ITestInvocationListener... listeners) {
         super(listeners);
@@ -55,9 +63,9 @@ public class ModuleResultsAndMetricsForwarder extends ResultAndLogForwarder {
         mModuleId = moduleId;
     }
 
-    @Override
-    public void testRunStarted(String runName, int testCount) {
-        super.testRunStarted(mModuleId, testCount);
+    /** Whether or not to mark all the test cases skipped. */
+    public void setMarkTestsSkipped(boolean skip) {
+        mSkip = skip;
     }
 
     @Override
@@ -68,25 +76,38 @@ public class ModuleResultsAndMetricsForwarder extends ResultAndLogForwarder {
     @Override
     public void testRunStarted(String runName, int testCount, int attemptNumber, long startTime) {
         super.testRunStarted(mModuleId, testCount, attemptNumber, startTime);
+        mTestRunFailed = false;
+        mCurrentRunName = runName;
+        mTestCount = testCount;
     }
 
     @Override
     public void testStarted(TestDescription test) {
-        super.testStarted(test);
+        testStarted(test, System.currentTimeMillis());
     }
 
     @Override
     public void testStarted(TestDescription test, long startTime) {
         super.testStarted(test, startTime);
+        mTestsRan++;
+        if (mSkip) {
+            super.testIgnored(test);
+        }
     }
 
     @Override
     public void testFailed(TestDescription test, String trace) {
+        if (mSkip) {
+            return;
+        }
         super.testFailed(test, trace);
     }
 
     @Override
     public void testFailed(TestDescription test, FailureDescription failure) {
+        if (mSkip) {
+            return;
+        }
         super.testFailed(test, failure);
     }
 
@@ -112,16 +133,30 @@ public class ModuleResultsAndMetricsForwarder extends ResultAndLogForwarder {
     @Override
     public void testRunFailed(String errorMessage) {
         super.testRunFailed(errorMessage);
+        mTestRunFailed = true;
     }
 
     @Override
     public void testRunFailed(FailureDescription failure) {
         super.testRunFailed(failure);
+        mTestRunFailed = true;
     }
 
     @Override
     public void testRunEnded(
             long elapsedTime, HashMap<String, MetricMeasurement.Metric> runMetrics) {
+        if (!mTestRunFailed && (mTestsRan != mTestCount)) {
+            String error =
+                    String.format(
+                            "TestRun %s only ran %d out of %d expected tests.",
+                            mCurrentRunName, mTestsRan, mTestCount);
+            FailureDescription mismatch =
+                    FailureDescription.create(error)
+                            .setFailureStatus(TestRecordProto.FailureStatus.TEST_FAILURE)
+                            .setErrorIdentifier(InfraErrorIdentifier.EXPECTED_TESTS_MISMATCH);
+            CLog.e(error);
+            super.testRunFailed(mismatch);
+        }
         if (!IsolationGrade.NOT_ISOLATED.equals(mAttemptIsolation)) {
             runMetrics.put(
                     "run-isolated", TfMetricProtoUtil.stringToMetric(mAttemptIsolation.toString()));
@@ -129,10 +164,30 @@ public class ModuleResultsAndMetricsForwarder extends ResultAndLogForwarder {
             mAttemptIsolation = IsolationGrade.NOT_ISOLATED;
         }
         super.testRunEnded(elapsedTime, runMetrics);
+        mTestRunFailed = false;
+        mTestCount = 0;
+        mTestsRan = 0;
+        mCurrentRunName = null;
     }
 
     @Override
     public void testRunEnded(long elapsedTimeMillis, Map<String, String> runMetrics) {
+        if (!mTestRunFailed && (mTestsRan != mTestCount)) {
+            String error =
+                    String.format(
+                            "TestRun %s only ran %d out of %d expected tests.",
+                            mCurrentRunName, mTestsRan, mTestCount);
+            FailureDescription mismatch =
+                    FailureDescription.create(error)
+                            .setFailureStatus(TestRecordProto.FailureStatus.TEST_FAILURE)
+                            .setErrorIdentifier(InfraErrorIdentifier.EXPECTED_TESTS_MISMATCH);
+            CLog.e(error);
+            super.testRunFailed(mismatch);
+        }
         super.testRunEnded(elapsedTimeMillis, runMetrics);
+        mTestRunFailed = false;
+        mTestCount = 0;
+        mTestsRan = 0;
+        mCurrentRunName = null;
     }
 }
