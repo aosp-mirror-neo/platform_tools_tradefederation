@@ -25,7 +25,7 @@ import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
 
-import java.util.Map;
+import java.util.Locale;
 
 /**
  * A {@link ITargetPreparer} that switches to the specified user kind in setUp. By default it
@@ -50,36 +50,31 @@ public class SwitchUserTargetPreparer extends BaseTargetPreparer {
         setUserToSwitchTo(device);
 
         mPreExecutionCurrentUser = device.getCurrentUser();
-        Map<Integer, UserInfo> userInfos = device.getUserInfos();
 
-        if (userInfos
-                .get(mPreExecutionCurrentUser)
-                .isUserType(mUserToSwitchTo, mPreExecutionCurrentUser)) {
+        int userIdToSwitch = getUserIdOfType(device, mUserToSwitchTo);
+        if (userIdToSwitch == UserInfo.USER_NULL) {
+            throw new TargetSetupError(
+                    String.format(
+                            Locale.ENGLISH,
+                            "Failed to switch to user type %s: No user of this type was found on"
+                                    + " the device.",
+                            mUserToSwitchTo),
+                    device.getDeviceDescriptor());
+        }
+
+        if (userIdToSwitch == mPreExecutionCurrentUser) {
             CLog.i(
-                    "User %d is already user type %s, no action.",
-                    mPreExecutionCurrentUser, mUserToSwitchTo.toString());
+                    "Current user %d is already the target user; no switch required.",
+                    mPreExecutionCurrentUser);
             return;
         }
 
-        for (UserInfo userInfo : userInfos.values()) {
-            if (userInfo.isUserType(mUserToSwitchTo, mPreExecutionCurrentUser)) {
-                CLog.i(
-                        "User %d is user type %s, switching from %d",
-                        userInfo.userId(), mUserToSwitchTo.toString(), mPreExecutionCurrentUser);
-                if (!device.switchUser(userInfo.userId())) {
-                    throw new TargetSetupError(
-                            String.format("Device failed to switch to user %d", userInfo.userId()),
-                            device.getDeviceDescriptor());
-                }
-                return;
-            }
+        if (!device.switchUser(userIdToSwitch)) {
+            throw new TargetSetupError(
+                    String.format(
+                            Locale.ENGLISH, "Device failed to switch to user %d.", userIdToSwitch),
+                    device.getDeviceDescriptor());
         }
-
-        throw new TargetSetupError(
-                String.format(
-                        "Failed switch to user type %s, no user of that type exists",
-                        mUserToSwitchTo),
-                device.getDeviceDescriptor());
     }
 
     @Override
@@ -96,18 +91,37 @@ public class SwitchUserTargetPreparer extends BaseTargetPreparer {
     /**
      * In some form factors running on headless system user mode, it is restricted to switch to the
      * {@link UserInfo.UserType#SYSTEM SYSTEM} user. In such cases, change the {@link
-     * #mUserToSwitchTo} to the {@link UserInfo.UserType#MAIN MAIN} user.
+     * #mUserToSwitchTo} to the first {@link UserInfo.UserType#FULL FULL} user.
      */
     private void setUserToSwitchTo(ITestDevice device) throws DeviceNotAvailableException {
         try {
             if (UserInfo.UserType.SYSTEM.equals(mUserToSwitchTo)
                     && device.isHeadlessSystemUserMode()
                     && !device.canSwitchToHeadlessSystemUser()) {
-                mUserToSwitchTo = UserInfo.UserType.MAIN;
-                CLog.i("SwitchUserTargetPreparer is configured to switch to the MAIN user.");
+                mUserToSwitchTo = UserInfo.UserType.FULL;
+                CLog.i("SwitchUserTargetPreparer is configured to switch to a FULL user.");
             }
         } catch (HarnessRuntimeException e) {
             CLog.w("Unable to get the main user switch-ability. Error: ", e);
         }
+    }
+
+    /**
+     * Returns the ID of the first user matching the specified {@link UserInfo.UserType}. Returns
+     * {@code UserInfo.USER_NULL} if no such user is found.
+     */
+    private int getUserIdOfType(ITestDevice device, UserInfo.UserType userType)
+            throws DeviceNotAvailableException {
+        int currentUser = device.getCurrentUser();
+        for (UserInfo userInfo : device.getUserInfos().values()) {
+            if (userInfo.isUserType(userType, currentUser)) {
+                CLog.i(
+                        "Found user %d (type: %s) as the target for switching.",
+                        userInfo.userId(), userType.toString());
+                return userInfo.userId();
+            }
+        }
+        CLog.w("No user found matching the type: %s.", userType.toString());
+        return UserInfo.USER_NULL;
     }
 }

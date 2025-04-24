@@ -100,7 +100,7 @@ public class SwitchUserTargetPreparerTest {
     }
 
     @Test
-    public void testSetUpRunAsSystem_ifSystemSwitchIsNotAllowed_switchToMain() throws Exception {
+    public void testSetUpRunAsSystem_ifSystemSwitchIsNotAllowed_switchToFull() throws Exception {
         mOptionSetter.setOptionValue("user-type", "system");
 
         // setup
@@ -109,7 +109,7 @@ public class SwitchUserTargetPreparerTest {
                 mMockDevice,
                 /* userIds= */ new Integer[] {0, 10, 11},
                 /* flags= */ new Integer[] {
-                    UserInfo.FLAG_PRIMARY, UserInfo.FLAG_MAIN, UserInfo.FLAG_GUEST
+                    UserInfo.FLAG_PRIMARY, UserInfo.FLAG_FULL, UserInfo.FLAG_GUEST
                 });
 
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(true);
@@ -124,7 +124,7 @@ public class SwitchUserTargetPreparerTest {
     }
 
     @Test
-    public void testSetUpRunAsSystem_ifSystemSwitchIsNotAllowed_noSwitchIfAlreadyOnMainUser()
+    public void testSetUpRunAsSystem_ifSystemSwitchIsNotAllowed_noSwitchIfAlreadyOnFullUser()
             throws Exception {
         mOptionSetter.setOptionValue("user-type", "system");
 
@@ -134,7 +134,7 @@ public class SwitchUserTargetPreparerTest {
                 mMockDevice,
                 /* userIds= */ new Integer[] {0, 10, 11},
                 /* flags= */ new Integer[] {
-                    UserInfo.FLAG_PRIMARY, UserInfo.FLAG_MAIN, UserInfo.FLAG_GUEST
+                    UserInfo.FLAG_PRIMARY, UserInfo.FLAG_FULL, UserInfo.FLAG_GUEST
                 });
 
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(true);
