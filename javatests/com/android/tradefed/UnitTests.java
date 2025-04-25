@@ -332,6 +332,7 @@ import com.android.tradefed.targetprep.suite.SuiteApkInstallerTest;
 import com.android.tradefed.testtype.AndroidJUnitTestTest;
 import com.android.tradefed.testtype.ArtGTestTest;
 import com.android.tradefed.testtype.ArtRunTestTest;
+import com.android.tradefed.testtype.ArtTestTest;
 import com.android.tradefed.testtype.DeviceBatteryLevelCheckerTest;
 import com.android.tradefed.testtype.DeviceJUnit4ClassRunnerTest;
 import com.android.tradefed.testtype.DeviceSuiteTest;
@@ -947,6 +948,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AndroidJUnitTestTest.class,
     ArtGTestTest.class,
     ArtRunTestTest.class,
+    ArtTestTest.class,
     CoverageMeasurementForwarderTest.class,
     DeviceBatteryLevelCheckerTest.class,
     DeviceJUnit4ClassRunnerTest.class,
