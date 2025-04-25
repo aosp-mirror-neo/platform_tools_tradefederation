@@ -333,7 +333,8 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             // TODO(b/404996613): Confirm that this test should be in
                             //  general-tests and exempted for validation.
                             "DesktopChromeStableTestCases.config",
-                            "ccdec_vp8_test.config"));
+                            "ccdec_vp8_test.config",
+                            "ccdec_vp9_test.config"));
 
     @Override
     public void setBuild(IBuildInfo buildInfo) {
