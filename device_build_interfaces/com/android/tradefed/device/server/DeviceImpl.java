@@ -35,10 +35,7 @@ import com.android.ddmlib.RawImage;
 import com.android.ddmlib.ScreenRecorderOptions;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.SyncException;
-import com.android.ddmlib.SyncService;
 import com.android.ddmlib.TimeoutException;
-import com.android.ddmlib.log.LogReceiver;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.log.Log;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -142,7 +139,6 @@ public final class DeviceImpl implements IDevice {
 
     @Nullable private Set<String> mAdbFeatures;
 
-    @Nullable private AndroidVersion mVersion;
     private String mName;
 
     @NonNull
@@ -337,15 +333,16 @@ public final class DeviceImpl implements IDevice {
                     // Currently physical watches do not support screen recording.
                     return false;
                 }
-                if (!getVersion().isGreaterOrEqualThan(19)) {
+                /*if (!getVersion().isGreaterOrEqualThan(19)) {
                     return false;
-                }
+                }*/
                 if (mHasScreenRecorder == null) {
                     mHasScreenRecorder = hasBinary(SCREEN_RECORDER_DEVICE_PATH);
                 }
                 return mHasScreenRecorder;
             case PROCSTATS:
-                return getVersion().isGreaterOrEqualThan(19);
+                // return getVersion().isGreaterOrEqualThan(19);
+                return true;
             case ABB_EXEC:
                 return getAdbFeatures().contains("abb_exec");
             case REAL_PKG_NAME:
@@ -401,28 +398,6 @@ public final class DeviceImpl implements IDevice {
             return getHardwareCharacteristics().contains(feature.getCharacteristic());
         } catch (Exception e) {
             return false;
-        }
-    }
-
-    @NonNull
-    @Override
-    public AndroidVersion getVersion() {
-        if (mVersion != null) {
-            return mVersion;
-        }
-
-        try {
-            String buildApi = getProperty(PROP_BUILD_API_LEVEL);
-            if (buildApi == null) {
-                return AndroidVersion.DEFAULT;
-            }
-
-            int api = Integer.parseInt(buildApi);
-            String codeName = getProperty(PROP_BUILD_CODENAME);
-            mVersion = new AndroidVersion(api, codeName);
-            return mVersion;
-        } catch (Exception e) {
-            return AndroidVersion.DEFAULT;
         }
     }
 
@@ -767,18 +742,6 @@ public final class DeviceImpl implements IDevice {
     }
 
     @Override
-    public void runEventLogService(LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        AdbHelper.runEventLogService(AndroidDebugBridge.getSocketAddress(), this, receiver);
-    }
-
-    @Override
-    public void runLogService(String logname, LogReceiver receiver)
-            throws TimeoutException, AdbCommandRejectedException, IOException {
-        AdbHelper.runLogService(AndroidDebugBridge.getSocketAddress(), this, logname, receiver);
-    }
-
-    @Override
     public void createForward(int localPort, int remotePort)
             throws TimeoutException, AdbCommandRejectedException, IOException {
         AdbHelper.createForward(
@@ -846,12 +809,12 @@ public final class DeviceImpl implements IDevice {
     }
 
     @Override
-    public com.android.ddmlib.internal.ClientImpl[] getClients() {
+    public ClientImpl[] getClients() {
         throw new UnsupportedOperationException("You should use #getNativeClients instead");
     }
 
     @Override
-    public com.android.ddmlib.internal.ClientImpl getClient(String applicationName) {
+    public ClientImpl getClient(String applicationName) {
         throw new UnsupportedOperationException("You should use #getNativeClients instead");
     }
 

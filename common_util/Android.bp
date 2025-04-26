@@ -50,7 +50,6 @@ java_library_host {
         "google-http-client-jackson2-1.28.0",
     ],
     libs: [
-        "ddmlib-prebuilt",
         "guava",
         "tradefed-protos",
         "devtools-annotations-prebuilt",

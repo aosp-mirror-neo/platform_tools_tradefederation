@@ -18,11 +18,13 @@ package com.android.tradefed.testtype.suite;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
+import com.android.tradefed.result.ResultAndLogForwarder;
 import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.testtype.IRemoteTest;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -31,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Note that this enforcer doesn't interrupt the tests, but will make them fail.
  */
-public class RemoteTestTimeOutEnforcer implements ITestInvocationListener {
+public class RemoteTestTimeOutEnforcer extends ResultAndLogForwarder {
 
     // The option name & description we want to share across class that uses the enforcer.
     public static final String REMOTE_TEST_TIMEOUT_OPTION = "remote-test-timeout";
@@ -41,7 +43,7 @@ public class RemoteTestTimeOutEnforcer implements ITestInvocationListener {
     private IRemoteTest mIRemoteTest;
     private Duration mTimeOut;
     private ModuleDefinition mModuleDefinition;
-    private ModuleListener mListener;
+    private ModuleListener mGranularListener;
 
     /**
      * Create the {@link RemoteTestTimeOutEnforcer} with the given timeout to enforce.
@@ -52,14 +54,18 @@ public class RemoteTestTimeOutEnforcer implements ITestInvocationListener {
      * @param timeOut The {@link Duration} of the time out per test run.
      */
     public RemoteTestTimeOutEnforcer(
-            ModuleListener listener,
+            List<ITestInvocationListener> allListeners,
             ModuleDefinition moduleDefinition,
             IRemoteTest test,
             Duration timeOut) {
-        mListener = listener;
+        super(allListeners);
         mIRemoteTest = test;
         mModuleDefinition = moduleDefinition;
         mTimeOut = timeOut;
+    }
+
+    public void setGranularListener(ModuleListener listener) {
+        mGranularListener = listener;
     }
 
     @Override
@@ -72,11 +78,13 @@ public class RemoteTestTimeOutEnforcer implements ITestInvocationListener {
                             getMetaData(Integer.toString(mIRemoteTest.hashCode())),
                     TimeUnit.MILLISECONDS.toSeconds(elapsedTime),
                     mTimeOut.toSeconds());
-            if (!mListener.hasLastAttemptFailed()) {
+            if (!mGranularListener.hasLastAttemptFailed()) {
                 FailureDescription failure = FailureDescription.create(
                         failureString, FailureStatus.TIMED_OUT).setRetriable(false);
-                mListener.testRunFailed(failure);
+                mGranularListener.testRunFailed(failure);
+                super.testRunFailed(failure);
             }
         }
+        super.testRunEnded(elapsedTime, runMetrics);
     }
 }

@@ -201,12 +201,18 @@ public class HostTest
     private ShardUnit mShardUnit = ShardUnit.CLASS;
 
     @Option(
-        name = "enable-pretty-logs",
-        description =
-                "whether or not to enable a logging for each test start and end on both host and "
-                        + "device side."
-    )
+            name = "enable-pretty-logs",
+            description =
+                    "whether or not to enable a logging for each run start and end on both host and"
+                            + " device side.")
     private boolean mEnableHostDeviceLogs = true;
+
+    @Option(
+            name = "enable-pretty-logs-method",
+            description =
+                    "whether or not to enable a logging for each test start and end on both host"
+                            + " and device side.")
+    private boolean mEnableHostDeviceLogsForMethod = false;
 
     @Option(
             name = TestTimeoutEnforcer.TEST_CASE_TIMEOUT_OPTION,
@@ -586,7 +592,9 @@ public class HostTest
 
             // Add a pretty logger to the events to mark clearly start/end of test cases.
             if (mEnableHostDeviceLogs) {
-                PrettyTestEventLogger logger = new PrettyTestEventLogger(mTestInfo.getDevices());
+                PrettyTestEventLogger logger =
+                        new PrettyTestEventLogger(
+                                mTestInfo.getDevices(), mEnableHostDeviceLogsForMethod);
                 listener = new ResultForwarder(logger, listener);
             }
             if (mTestMethods != null) {

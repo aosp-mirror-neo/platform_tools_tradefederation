@@ -18,11 +18,8 @@ package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.ddmlib.AllocationInfo;
-import com.android.ddmlib.AllocationsParser;
-import com.android.ddmlib.HeapSegment;
-import com.android.ddmlib.HeapSegment.HeapSegmentElement;
 import com.android.ddmlib.IDevice;
+import com.android.tradefed.device.server.HeapSegment.HeapSegmentElement;
 
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;

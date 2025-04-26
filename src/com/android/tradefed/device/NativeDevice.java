@@ -25,7 +25,6 @@ import com.android.ddmlib.Log.LogLevel;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.SyncException;
 import com.android.ddmlib.SyncException.SyncError;
-import com.android.ddmlib.SyncService;
 import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.testrunner.IRemoteAndroidTestRunner;
 import com.android.ddmlib.testrunner.ITestRunListener;
@@ -44,6 +43,7 @@ import com.android.tradefed.device.connection.DefaultConnection;
 import com.android.tradefed.device.connection.DefaultConnection.ConnectionBuilder;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
 import com.android.tradefed.device.server.CommandRejectedException;
+import com.android.tradefed.device.server.SyncService;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
@@ -400,7 +400,10 @@ public class NativeDevice
             if (mResult.getStatus() == CommandStatus.EXCEPTION) {
                 throw new IOException(mResult.getStderr());
             } else if (mResult.getStatus() == CommandStatus.TIMED_OUT) {
-                throw new TimeoutException(mResult.getStderr());
+                String message =
+                        String.format(
+                                "Stdout: %s\nStderr: %s", mResult.getStdout(), mResult.getStderr());
+                throw new TimeoutException(message);
             }
             String stdErr = mResult.getStderr();
             if (stdErr != null) {

@@ -18,8 +18,8 @@ package com.android.tradefed.device.server;
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
 import com.android.ddmlib.IDevice;
-import com.android.ddmlib.Log;
 import com.android.ddmlib.MultiLineReceiver;
+import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.util.concurrent.SettableFuture;
 
@@ -34,7 +34,6 @@ import java.util.regex.Pattern;
 
 /** Fetches battery level from device. */
 class BatteryFetcher {
-    private static final String LOG_TAG = "BatteryFetcher";
 
     /**
      * On Pixel 3 and Pixel 3 XL devices, the battery level reported in the UI is read from this
@@ -81,8 +80,7 @@ class BatteryFetcher {
                         // multiple matches, check if they are different
                         Integer tmpLevel = Integer.parseInt(batteryMatch.group(1));
                         if (!mBatteryLevel.equals(tmpLevel)) {
-                            Log.w(
-                                    LOG_TAG,
+                            CLog.w(
                                     String.format(
                                             "Multiple lines matched with different value; Original:"
                                                     + " %s, Current: %s (keeping original)",
@@ -118,8 +116,7 @@ class BatteryFetcher {
                     try {
                         mBatteryLevel = Integer.parseInt(batteryMatch.group(1));
                     } catch (NumberFormatException e) {
-                        Log.w(
-                                LOG_TAG,
+                        CLog.w(
                                 String.format(
                                         "Failed to parse %s as an integer", batteryMatch.group(1)));
                     }
@@ -129,8 +126,7 @@ class BatteryFetcher {
                     try {
                         mBatteryScale = Integer.parseInt(scaleMatch.group(1));
                     } catch (NumberFormatException e) {
-                        Log.w(
-                                LOG_TAG,
+                        CLog.w(
                                 String.format(
                                         "Failed to parse %s as an integer", batteryMatch.group(1)));
                     }
@@ -247,15 +243,14 @@ class BatteryFetcher {
     }
 
     private synchronized void handleBatteryLevelFailure(Throwable e) {
-        Log.w(
-                LOG_TAG,
+        CLog.w(
                 String.format(
                         "%s getting battery level for device %s: %s",
                         e.getClass().getSimpleName(), mDevice.getSerialNumber(), e.getMessage()));
         if (mPendingRequest != null) {
             if (!mPendingRequest.setException(e)) {
                 // should never happen
-                Log.e(LOG_TAG, "Future.setException failed");
+                CLog.e("Future.setException failed");
                 mPendingRequest.set(null);
             }
         }

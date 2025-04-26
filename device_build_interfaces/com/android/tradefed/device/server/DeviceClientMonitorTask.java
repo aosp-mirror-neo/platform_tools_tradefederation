@@ -19,12 +19,9 @@ package com.android.tradefed.device.server;
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
 import com.android.ddmlib.AdbCommandRejectedException;
-import com.android.ddmlib.AdbHelper;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.TimeoutException;
-import com.android.ddmlib.internal.jdwp.chunkhandler.HandleHello;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.log.Log;
 import com.android.tradefed.log.LogUtil.CLog;
 
@@ -418,10 +415,6 @@ class DeviceClientMonitorTask implements Runnable {
             device.addClient(client);
             monitorThread.addClient(client);
         }
-    }
-
-    private static boolean isDeviceVersionAtLeastS(@NonNull DeviceImpl device) {
-        return device.getVersion().getFeatureLevel() >= AndroidVersion.VersionCodes.S;
     }
 
     /**

@@ -17,7 +17,6 @@
 package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
-import com.android.ddmlib.DdmConstants;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.tradefed.device.server.AndroidDebugBridge.IClientChangeListener;
@@ -239,7 +238,7 @@ public class ClientImpl extends JdwpAgent implements Client {
             String file =
                     "/sdcard/"
                             + mClientData.getClientDescription().replaceAll("\\:.*", "")
-                            + DdmConstants.DOT_TRACE;
+                            + ".trace";
             HandleProfiling.sendMPRS(this, file, bufferSize, 0 /*flags*/);
         }
     }

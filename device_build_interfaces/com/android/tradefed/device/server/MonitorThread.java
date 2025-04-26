@@ -17,11 +17,11 @@
 package com.android.tradefed.device.server;
 
 import com.android.ddmlib.IDevice;
-import com.android.ddmlib.Log;
-import com.android.ddmlib.Log.LogLevel;
 import com.android.tradefed.device.server.jdwp.JdwpExtension;
 import com.android.tradefed.device.server.jdwp.chunkhandler.ChunkHandler;
 import com.android.tradefed.device.server.jdwp.chunkhandler.JdwpPacket;
+import com.android.tradefed.log.Log;
+import com.android.tradefed.log.Log.LogLevel;
 
 import java.io.IOException;
 import java.nio.BufferOverflowException;

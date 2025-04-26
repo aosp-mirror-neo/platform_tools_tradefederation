@@ -93,9 +93,10 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private IInvocationContext mModuleInvocationContext;
     private IConfiguration mModuleConfiguration;
     private ModuleListener mMainGranularRunListener;
+    private ITestInvocationListener mAllListeners;
     private RetryLogSaverResultForwarder mRetryAttemptForwarder;
     private ITestInvocationListener mRemoteTestTimeOutEnforcer;
-    private ModuleResultsAndMetricsForwarder listenerWithModuleMetricsForwarder;
+    private ModuleResultsAndMetricsForwarder mListenerWithModuleMetricsForwarder;
     private ILogSaver mLogSaver;
     private String mModuleId;
     private int mMaxRunLimit;
@@ -107,6 +108,9 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private int mCountRetryUsed = 0;
 
     private boolean mUseModuleResultsForwarder = false;
+    private boolean mRemoveModuleBuffering = false;
+    private int mTargetPreparerRetryCount;
+    private StartEndCollector mCurrentStartEndCollector;
 
     public GranularRetriableTestWrapper(
             IRemoteTest test,
@@ -120,7 +124,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             ModuleDefinition module,
             ITestInvocationListener mainListener,
             int maxRunLimit) {
-        this(test, module, mainListener, maxRunLimit, false);
+        this(test, module, mainListener, maxRunLimit, false, false, 0);
     }
 
     public GranularRetriableTestWrapper(
@@ -128,10 +132,14 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             ModuleDefinition module,
             ITestInvocationListener mainListener,
             int maxRunLimit,
-            boolean useModuleResultsForwarder) {
+            boolean useModuleResultsForwarder,
+            boolean removeModuleBuffering,
+            int targetPreparerRetryCount) {
         mTest = test;
         mModule = module;
         mUseModuleResultsForwarder = useModuleResultsForwarder;
+        mRemoveModuleBuffering = removeModuleBuffering;
+        mTargetPreparerRetryCount = targetPreparerRetryCount;
         IInvocationContext context = null;
         if (module != null) {
             context = module.getModuleInvocationContext();
@@ -162,6 +170,9 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
      */
     public void setMarkTestsSkipped(boolean skipTestCases) {
         mMainGranularRunListener.setMarkTestsSkipped(skipTestCases);
+        if (mUseModuleResultsForwarder) {
+            mListenerWithModuleMetricsForwarder.setMarkTestsSkipped(skipTestCases);
+        }
     }
 
     /**
@@ -212,13 +223,15 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
      */
     private void initializeGranularRunListener(
             ITestInvocationListener listener, IInvocationContext moduleContext) {
-        ModuleResultsAndMetricsForwarder mListenerWithModuleMetricsForwarder = null;
         if (mUseModuleResultsForwarder) {
             mListenerWithModuleMetricsForwarder = new ModuleResultsAndMetricsForwarder(listener);
-            mListenerWithModuleMetricsForwarder.setModuleId(mModuleId);
             listener = mListenerWithModuleMetricsForwarder;
         }
-        mMainGranularRunListener = new ModuleListener(listener, moduleContext);
+        if (mRemoveModuleBuffering) {
+            mMainGranularRunListener = new ModuleListener(null, moduleContext);
+        } else {
+            mMainGranularRunListener = new ModuleListener(listener, moduleContext);
+        }
         mMainGranularRunListener.setUseModuleResultsForwarder(mUseModuleResultsForwarder);
         if (mModule != null) {
             ConfigurationDescriptor configDesc =
@@ -228,8 +241,19 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                 Duration duration = Duration.parse(
                         configDesc.getMetaData(
                                 RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION).get(0));
-                mRemoteTestTimeOutEnforcer = new RemoteTestTimeOutEnforcer(
-                        mMainGranularRunListener, mModule, mTest, duration);
+                RemoteTestTimeOutEnforcer remoteTestTimeOutEnforcer;
+                if (mRemoveModuleBuffering) {
+                    remoteTestTimeOutEnforcer =
+                            new RemoteTestTimeOutEnforcer(
+                                    Arrays.asList(listener), mModule, mTest, duration);
+                    listener = remoteTestTimeOutEnforcer;
+                } else {
+                    remoteTestTimeOutEnforcer =
+                            new RemoteTestTimeOutEnforcer(
+                                    new ArrayList<>(), mModule, mTest, duration);
+                }
+                remoteTestTimeOutEnforcer.setGranularListener(mMainGranularRunListener);
+                mRemoteTestTimeOutEnforcer = remoteTestTimeOutEnforcer;
             }
             List<String> testMappingSources =
                     configDesc.getMetaData(Integer.toString(mTest.hashCode()));
@@ -240,6 +264,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                 }
             }
         }
+        mAllListeners = listener;
     }
 
     /**
@@ -252,15 +277,28 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
      */
     private ITestInvocationListener initializeListeners() throws DeviceNotAvailableException {
         List<ITestInvocationListener> currentTestListener = new ArrayList<>();
-        currentTestListener.add(mMainGranularRunListener);
-
-        if (mRemoteTestTimeOutEnforcer != null) {
-            currentTestListener.add(mRemoteTestTimeOutEnforcer);
+        if (mRemoveModuleBuffering) {
+            currentTestListener.add(mAllListeners);
+            currentTestListener.add(mMainGranularRunListener);
+        } else {
+            currentTestListener.add(mMainGranularRunListener);
+            if (mRemoteTestTimeOutEnforcer != null) {
+                currentTestListener.add(mRemoteTestTimeOutEnforcer);
+            }
         }
 
-        mRetryAttemptForwarder =
-                new RetryLogSaverResultForwarder(
-                        mLogSaver, currentTestListener, mModuleConfiguration);
+        if (mRemoveModuleBuffering) {
+            mRetryAttemptForwarder =
+                    new RetryLogSaverResultForwarder(
+                            mLogSaver,
+                            currentTestListener,
+                            mModuleConfiguration,
+                            mTargetPreparerRetryCount);
+        } else {
+            mRetryAttemptForwarder =
+                    new RetryLogSaverResultForwarder(
+                            mLogSaver, currentTestListener, mModuleConfiguration);
+        }
         ITestInvocationListener runListener = mRetryAttemptForwarder;
 
         // The module collectors itself are added: this list will be very limited.
@@ -294,6 +332,9 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     public void run(TestInformation testInfo, ITestInvocationListener listener)
             throws DeviceNotAvailableException {
         mMainGranularRunListener.setCollectTestsOnly(mCollectTestsOnly);
+        if (mUseModuleResultsForwarder) {
+            mListenerWithModuleMetricsForwarder.setModuleId(mModuleId);
+        }
         ITestInvocationListener allListeners = initializeListeners();
         // First do the regular run, not retried.
         DeviceNotAvailableException dnae = intraModuleRun(testInfo, allListeners, 0);
@@ -366,12 +407,12 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             TestInformation testInfo, ITestInvocationListener runListener, int attempt) {
         DeviceNotAvailableException exception = null;
         mMainGranularRunListener.setAttemptIsolation(CurrentInvocation.runCurrentIsolation());
-        if (listenerWithModuleMetricsForwarder != null) {
-            listenerWithModuleMetricsForwarder.setAttemptIsolation(
+        if (mListenerWithModuleMetricsForwarder != null) {
+            mListenerWithModuleMetricsForwarder.setAttemptIsolation(
                     CurrentInvocation.runCurrentIsolation());
         }
-        StartEndCollector startEndCollector = new StartEndCollector(runListener);
-        runListener = startEndCollector;
+        mCurrentStartEndCollector = new StartEndCollector(runListener);
+        runListener = mCurrentStartEndCollector;
         try (CloseableTraceScope ignored =
                 new CloseableTraceScope(
                         "attempt " + attempt + " " + mTest.getClass().getCanonicalName())) {
@@ -409,14 +450,18 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             CLog.e("Module '%s' - test '%s' threw exception:", mModuleId, mTest.getClass());
             CLog.e(re);
             CLog.e("Proceeding to the next test.");
-            if (!startEndCollector.mRunStartReported) {
-                CLog.e("Event mismatch ! the test runner didn't report any testRunStart.");
-                runListener.testRunStarted(mModule.getId(), 0);
-            }
-            runListener.testRunFailed(createFromException(re));
-            if (!startEndCollector.mRunEndedReported) {
-                CLog.e("Event mismatch ! the test runner didn't report any testRunEnded.");
-                runListener.testRunEnded(0L, new HashMap<String, Metric>());
+            if (mRemoveModuleBuffering) {
+                backfillMissingEvents(runListener, createFromException(re));
+            } else {
+                if (!mCurrentStartEndCollector.mRunStartReported) {
+                    CLog.e("Event mismatch ! the test runner didn't report any testRunStart.");
+                    runListener.testRunStarted(mModule.getId(), 0);
+                }
+                runListener.testRunFailed(createFromException(re));
+                if (!mCurrentStartEndCollector.mRunEndedReported) {
+                    CLog.e("Event mismatch ! the test runner didn't report any testRunEnded.");
+                    runListener.testRunEnded(0L, new HashMap<String, Metric>());
+                }
             }
         } catch (DeviceUnresponsiveException due) {
             // being able to catch a DeviceUnresponsiveException here implies that recovery was
@@ -426,17 +471,25 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                             + "successful, proceeding with next module. Stack trace:");
             CLog.w(due);
             CLog.w("Proceeding to the next test.");
-            // If it already was marked as failure do not remark it.
-            if (!mMainGranularRunListener.hasLastAttemptFailed()) {
-                runListener.testRunFailed(createFromException(due));
+            if (mRemoveModuleBuffering) {
+                backfillMissingEvents(runListener, createFromException(due));
+            } else {
+                // If it already was marked as failure do not remark it.
+                if (!mMainGranularRunListener.hasLastAttemptFailed()) {
+                    runListener.testRunFailed(createFromException(due));
+                }
             }
         } catch (DeviceNotAvailableException dnae) {
             // TODO: See if it's possible to report IReportNotExecuted
             CLog.e("Run in progress was not completed due to:");
             CLog.e(dnae);
-            // If it already was marked as failure do not remark it.
-            if (!mMainGranularRunListener.hasLastAttemptFailed()) {
-                runListener.testRunFailed(createFromException(dnae));
+            if (mRemoveModuleBuffering) {
+                backfillMissingEvents(runListener, createFromException(dnae));
+            } else {
+                // If it already was marked as failure do not remark it.
+                if (!mMainGranularRunListener.hasLastAttemptFailed()) {
+                    runListener.testRunFailed(createFromException(dnae));
+                }
             }
             exception = dnae;
         } finally {
@@ -445,6 +498,30 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             CurrentInvocation.setRunIsolation(IsolationGrade.NOT_ISOLATED);
         }
         return exception;
+    }
+
+    public void backfillMissingEvents(
+            ITestInvocationListener listener, FailureDescription failure) {
+        if (mCurrentStartEndCollector == null) {
+            // module never started. No need to backfill.
+            return;
+        }
+        if (!mCurrentStartEndCollector.mRunStartReported) {
+            listener.testRunStarted(
+                    mModuleId,
+                    0,
+                    mRetryAttemptForwarder.getCurrentAttempt(),
+                    System.currentTimeMillis());
+        }
+        if (!mCurrentStartEndCollector.mRunEndedReported) {
+            if (mCurrentStartEndCollector.mTestInProgress) {
+                listener.testFailed(mCurrentStartEndCollector.mCurrentTest, failure);
+                listener.testEnded(
+                        mCurrentStartEndCollector.mCurrentTest, new HashMap<String, Metric>());
+            }
+            listener.testRunFailed(failure);
+            listener.testRunEnded(0, new HashMap<String, Metric>());
+        }
     }
 
     /** Get the merged TestRunResults from each {@link IRemoteTest} run. */
@@ -528,6 +605,8 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
 
         public boolean mRunStartReported = false;
         public boolean mRunEndedReported = false;
+        public boolean mTestInProgress = false;
+        public TestDescription mCurrentTest = null;
 
         StartEndCollector(ITestInvocationListener listener) {
             super(listener);
@@ -537,12 +616,14 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
         public void testRunStarted(String runName, int testCount) {
             super.testRunStarted(runName, testCount);
             mRunStartReported = true;
+            mRunEndedReported = false;
         }
 
         @Override
         public void testRunStarted(String runName, int testCount, int attemptNumber) {
             super.testRunStarted(runName, testCount, attemptNumber);
             mRunStartReported = true;
+            mRunEndedReported = false;
         }
 
         @Override
@@ -550,18 +631,64 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                 String runName, int testCount, int attemptNumber, long startTime) {
             super.testRunStarted(runName, testCount, attemptNumber, startTime);
             mRunStartReported = true;
+            mRunEndedReported = false;
         }
 
         @Override
         public void testRunEnded(long elapsedTime, HashMap<String, Metric> runMetrics) {
             super.testRunEnded(elapsedTime, runMetrics);
             mRunEndedReported = true;
+            mRunStartReported = false;
         }
 
         @Override
         public void testRunEnded(long elapsedTimeMillis, Map<String, String> runMetrics) {
             super.testRunEnded(elapsedTimeMillis, runMetrics);
             mRunEndedReported = true;
+            mRunStartReported = false;
+        }
+
+        @Override
+        public void testStarted(TestDescription test) {
+            super.testStarted(test);
+            mTestInProgress = true;
+            mCurrentTest = test;
+        }
+
+        @Override
+        public void testStarted(TestDescription test, long startTime) {
+            super.testStarted(test, startTime);
+            mTestInProgress = true;
+            mCurrentTest = test;
+        }
+
+        @Override
+        public void testEnded(TestDescription test, HashMap<String, Metric> testMetrics) {
+            super.testEnded(test, testMetrics);
+            mTestInProgress = false;
+            mCurrentTest = null;
+        }
+
+        @Override
+        public void testEnded(
+                TestDescription test, long endTime, HashMap<String, Metric> testMetrics) {
+            super.testEnded(test, endTime, testMetrics);
+            mTestInProgress = false;
+            mCurrentTest = null;
+        }
+
+        @Override
+        public void testEnded(TestDescription test, Map<String, String> testMetrics) {
+            super.testEnded(test, testMetrics);
+            mTestInProgress = false;
+            mCurrentTest = null;
+        }
+
+        @Override
+        public void testEnded(TestDescription test, long endTime, Map<String, String> testMetrics) {
+            super.testEnded(test, endTime, testMetrics);
+            mTestInProgress = false;
+            mCurrentTest = null;
         }
     }
 }

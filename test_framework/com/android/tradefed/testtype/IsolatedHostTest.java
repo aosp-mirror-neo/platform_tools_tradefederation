@@ -445,6 +445,15 @@ public class IsolatedHostTest
         if (mRavenwoodResources) {
             // For the moment, swap in the default JUnit upstream runner
             cmdArgs.add("-Dandroid.junit.runner=org.junit.runners.JUnit4");
+
+            // Hardcode version 1 for now.
+            cmdArgs.add("-Dandroid.ravenwood.version=1");
+
+            // Set the runtime path.
+            cmdArgs.add(
+                    "-Dandroid.ravenwood.runtime_path="
+                            + getRavenwoodRuntimeDir(findTestDirectory()).getAbsolutePath()
+                            + "/");
         }
 
         if (this.debug) {

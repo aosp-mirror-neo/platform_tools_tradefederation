@@ -28,7 +28,6 @@ java_library_host {
         "com/**/*.java",
     ],
     libs: [
-        "ddmlib-prebuilt",
         "error_prone_annotations",
         "guava",
         "tradefed-protos",
@@ -36,6 +35,7 @@ java_library_host {
         "tradefed-common-util",
         "tf-remote-client",
         "tradefed-result-interfaces",
+        "kxml2-2.3.0",
     ],
     // b/267831518: Pin tradefed and dependencies to Java 11.
     java_version: "11",

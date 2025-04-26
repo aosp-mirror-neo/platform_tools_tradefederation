@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.UpdateInvocationRequest;
@@ -25,6 +26,7 @@ import java.util.List;
 /** Stub implementation of IRecorderClient for testing. */
 class StubClient implements IRecorderClient {
     private List<TestResult> mTestResults = new ArrayList<>();
+    private List<Artifact> mArtifacts = new ArrayList<>();
     private Invocation mInvocation;
 
     public static StubClient create() {
@@ -49,8 +51,17 @@ class StubClient implements IRecorderClient {
         mTestResults.add(result);
     }
 
+    @Override
+    public void uploadArtifact(Artifact artifact) {
+        mArtifacts.add(artifact);
+    }
+
     public List<TestResult> getTestResults() {
         return mTestResults;
+    }
+
+    public List<Artifact> getArtifacts() {
+        return mArtifacts;
     }
 
     public Invocation getInvocation() {
@@ -58,7 +69,7 @@ class StubClient implements IRecorderClient {
     }
 
     @Override
-    public void finalizeTestResults() {
+    public void finalizeUpload() {
         // Do nothing.
     }
 }

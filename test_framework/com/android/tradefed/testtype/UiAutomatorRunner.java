@@ -22,8 +22,8 @@ import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.testrunner.IRemoteAndroidTestRunner;
 import com.android.ddmlib.testrunner.ITestRunListener;
-import com.android.ddmlib.testrunner.InstrumentationResultParser;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.ddmlib.InstrumentationResultParser;
 import com.android.tradefed.util.ArrayUtil;
 
 import java.io.IOException;

@@ -23,7 +23,6 @@ import com.android.ddmlib.InstallException;
 import com.android.ddmlib.InstallReceiver;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.TimeoutException;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.log.Log;
 
 import com.google.common.base.CharMatcher;
@@ -43,12 +42,13 @@ public abstract class SplitApkInstallerBase {
     protected SplitApkInstallerBase(@NonNull IDevice device, @NonNull String options) {
         this.mDevice = device;
         this.mOptions = options;
-        this.mPrefix =
-                mDevice.getVersion()
-                                .isGreaterOrEqualThan(
-                                        AndroidVersion.BINDER_CMD_AVAILABLE.getApiLevel())
-                        ? "cmd package"
-                        : "pm";
+        /*this.mPrefix =
+        mDevice.getVersion()
+                        .isGreaterOrEqualThan(
+                                AndroidVersion.BINDER_CMD_AVAILABLE.getApiLevel())
+                ? "cmd package"
+                : "pm";*/
+        this.mPrefix = "cmd package";
     }
 
     protected String createMultiInstallSession(
@@ -183,17 +183,5 @@ public abstract class SplitApkInstallerBase {
         }
 
         return sb.toString();
-    }
-
-    protected static void validateApiLevel(@NonNull IDevice device) {
-        int apiWithSplitApk = AndroidVersion.ALLOW_SPLIT_APK_INSTALLATION.getApiLevel();
-        if (!device.getVersion().isGreaterOrEqualThan(apiWithSplitApk)) {
-            throw new IllegalArgumentException(
-                    String.format(
-                            "Device %s API level=%d. Cannot install split APKs with API level < %d",
-                            device.getSerialNumber(),
-                            device.getVersion().getApiLevel(),
-                            apiWithSplitApk));
-        }
     }
 }

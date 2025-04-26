@@ -16,7 +16,6 @@
 package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
-import com.android.ddmlib.internal.ClientImpl;
 
 import com.google.common.collect.ImmutableMap;
 

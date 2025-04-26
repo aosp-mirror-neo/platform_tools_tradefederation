@@ -33,7 +33,6 @@ java_library_host {
         "gson",
     ],
     libs: [
-        "ddmlib-prebuilt",
         "json-prebuilt",
         "guava",
     ],

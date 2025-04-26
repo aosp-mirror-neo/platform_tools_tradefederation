@@ -30,10 +30,7 @@ tradefed_java_library_host {
   static_libs: [
     "json-prebuilt",
     "jsr305",
-    "tools-common-prebuilt",
-    "sdklib-prebuilt",
     "guava",
-    "ddmlib-prebuilt",
     "devtools-annotations-prebuilt",
   ],
   // b/267831518: Pin tradefed and dependencies to Java 11.

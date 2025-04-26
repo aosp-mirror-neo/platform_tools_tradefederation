@@ -30,7 +30,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -47,15 +46,14 @@ import com.android.ddmlib.InstallException;
 import com.android.ddmlib.InstallReceiver;
 import com.android.ddmlib.RawImage;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
-import com.android.ddmlib.SplitApkInstaller;
 import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.testrunner.IRemoteAndroidTestRunner;
-import com.android.sdklib.AndroidVersion;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.ITestDevice.ApexInfo;
 import com.android.tradefed.device.ITestDevice.MountPointInfo;
 import com.android.tradefed.device.ITestDevice.RecoveryMode;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
+import com.android.tradefed.device.server.SplitApkInstaller;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.host.HostOptions;
 import com.android.tradefed.host.IHostOptions;
@@ -1938,32 +1936,6 @@ public class TestDeviceTest {
                         Mockito.eq("--apex"));
     }
 
-    /** Test SplitApkInstaller with Split Apk Not Supported */
-    @Test
-    public void testInstallPackages_splitApkNotSupported() throws Exception {
-        List<File> mLocalApks = new ArrayList<File>();
-        for (int i = 0; i < 3; i++) {
-            mLocalApks.add(File.createTempFile("test", ".apk"));
-        }
-        List<String> mInstallOptions = new ArrayList<String>();
-        try {
-            when(mMockIDevice.getVersion())
-                    .thenReturn(
-                            new AndroidVersion(
-                                    AndroidVersion.ALLOW_SPLIT_APK_INSTALLATION.getApiLevel() - 1));
-
-            SplitApkInstaller.create(mMockIDevice, mLocalApks, true, mInstallOptions);
-            verify(mMockIDevice, times(1)).getVersion();
-            fail("IllegalArgumentException expected");
-        } catch (IllegalArgumentException e) {
-            // expected
-        } finally {
-            for (File apkFile : mLocalApks) {
-                apkFile.delete();
-            }
-        }
-    }
-
     /** Test SplitApkInstaller with Split Apk Supported */
     @Test
     public void testInstallPackages_splitApkSupported() throws Exception {
@@ -1973,12 +1945,7 @@ public class TestDeviceTest {
         }
         List<String> mInstallOptions = new ArrayList<String>();
         try {
-            when(mMockIDevice.getVersion())
-                    .thenReturn(
-                            new AndroidVersion(
-                                    AndroidVersion.ALLOW_SPLIT_APK_INSTALLATION.getApiLevel()));
             SplitApkInstaller.create(mMockIDevice, mLocalApks, true, mInstallOptions);
-            verify(mMockIDevice, atLeastOnce()).getVersion();
         } finally {
             for (File apkFile : mLocalApks) {
                 apkFile.delete();

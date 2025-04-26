@@ -304,6 +304,7 @@ public class InvocationMetricLogger {
         AB_LIST_API_TIME_PAIR("ab_list_api_time_pair", true),
         AB_TEST_ZIP_NAME("ab_test_zip_name", true),
         AB_MODULE_IN_ZIP("ab_module_in_zip", true),
+        ZIP_PATTERN_NO_MATCH("zip_pattern_no_match", true),
 
         // Ab log saver metrics
         AB_LOG_SAVER_STAGING_TIME("ab_log_saver_staging_time", true),
@@ -430,6 +431,7 @@ public class InvocationMetricLogger {
         // Invocation level caching
         INVOCATION_RESULTS_CHECKING_CACHE("invocation_results_checking_cache", true),
         INVOCATION_CACHE_HIT("invocation_cache_hit", true),
+        INVOCATION_CACHE_HIT_WITH_FAILURE("invocation_cache_hit_with_failure", true),
 
         // Oxygenation metrics
         PORTFORWARD_LHP_SUCCESS_COUNT("portfoward_lhp_success_count", true),

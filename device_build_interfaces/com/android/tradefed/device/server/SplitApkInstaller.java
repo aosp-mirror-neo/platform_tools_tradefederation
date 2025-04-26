@@ -177,7 +177,6 @@ public class SplitApkInstaller extends SplitApkInstallerBase {
     }
 
     private static void validateArguments(@NonNull IDevice device, @NonNull List<File> apks) {
-        validateApiLevel(device);
 
         if (apks.isEmpty()) {
             throw new IllegalArgumentException(

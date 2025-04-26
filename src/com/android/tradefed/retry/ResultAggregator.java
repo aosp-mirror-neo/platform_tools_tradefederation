@@ -125,6 +125,7 @@ public class ResultAggregator extends CollectingTestListener {
         mRetryStrategy = strategy;
         MergeStrategy mergeStrategy = MergeStrategy.getMergeStrategy(mRetryStrategy);
         setMergeStrategy(mergeStrategy);
+        setIsAggregrateMetrics(true);
     }
 
     /** Sets the new reporting. */

@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.UpdateInvocationRequest;
@@ -27,9 +28,30 @@ public interface IRecorderClient {
 
     public Invocation updateInvocation(UpdateInvocationRequest request);
 
+    /**
+     * Finalize the invocation. This method should be called after all test results and artifacts
+     * have been uploaded.
+     */
     public Invocation finalizeInvocation();
 
+    /**
+     * Enqueue a test result to upload to ResultDB.
+     *
+     * @param result The test result to upload.
+     */
     public void uploadTestResult(TestResult result);
 
-    public void finalizeTestResults();
+    /**
+     * Enqueue an artifact to upload to ResultDB.
+     *
+     * @param artifact The artifact to upload.
+     */
+    public void uploadArtifact(Artifact artifact);
+
+    /**
+     * Finalize the upload of test results and artifacts. This method should be called after all
+     * test results and artifacts have been uploaded. Any uploadTestResult and uploadArtifact calls
+     * after this method will be ignored.
+     */
+    public void finalizeUpload();
 }

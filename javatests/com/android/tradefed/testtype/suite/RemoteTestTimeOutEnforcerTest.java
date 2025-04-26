@@ -35,6 +35,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.Mockito;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 /** Unit tests for {@link RemoteTestTimeOutEnforcer}. */
@@ -66,7 +67,9 @@ public class RemoteTestTimeOutEnforcerTest {
         mListener =
                 new ModuleListener(mock(ITestInvocationListener.class), mModuleInvocationContext);
         mEnforcer =
-                new RemoteTestTimeOutEnforcer(mListener, mModuleDefinition, mIRemoteTest, mTimeout);
+                new RemoteTestTimeOutEnforcer(
+                        new ArrayList<>(), mModuleDefinition, mIRemoteTest, mTimeout);
+        mEnforcer.setGranularListener(mListener);
     }
 
     @Test

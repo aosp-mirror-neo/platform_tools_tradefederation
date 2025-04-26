@@ -16,7 +16,6 @@
 
 package com.android.tradefed.device;
 
-import com.android.ddmlib.AndroidDebugBridge;
 import com.android.tradefed.command.remote.DeviceDescriptor;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.IRunUtil;
