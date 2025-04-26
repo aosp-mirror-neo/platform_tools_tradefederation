@@ -172,7 +172,6 @@ public class TestMappingsValidation implements IBuildReceiver {
                     "OverlayRemountedTest",
                     "CtsPermission3TestCases",
                     "CtsPermissionUiTestCases",
-                    "sharedlibs_host_tests",
                     "CtsDevicePolicyManagerTestCases",
                     "CtsDevicePolicyManagerTestCases_Permissions",
                     "CtsDevicePolicyManagerTestCases_LockSettingsTest",
