@@ -91,6 +91,7 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
     private DeviceMetricData mRunData;
     private DeviceMetricData mTestData;
     private String mRunName;
+    private String mTestName;
 
     /**
      * Variable for whether or not to skip the collection of one test case because it was filtered.
@@ -446,6 +447,7 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
     public final void testStarted(TestDescription test, long startTime) {
         if (!mDeviceNoAvailable) {
             mTestData = new DeviceMetricData(mContext);
+            mTestName = test.toString();
             mSkipTestCase = shouldSkip(test);
             if (!mSkipTestCase) {
                 long start = System.currentTimeMillis();
@@ -639,6 +641,15 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
      */
     public String getRunName() {
         return mRunName;
+    }
+
+    /**
+     * Returns the name of test {@code mTestName} that triggers the collector.
+     *
+     * @return mTestName, the current test name.
+     */
+    public String getTestName() {
+        return mTestName;
     }
 
     public String getModuleName() {
