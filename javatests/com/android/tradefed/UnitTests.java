@@ -296,6 +296,7 @@ import com.android.tradefed.targetprep.InstrumentationPreparerTest;
 import com.android.tradefed.targetprep.KnownFailurePreparerTest;
 import com.android.tradefed.targetprep.LocalEmulatorLaunchTest;
 import com.android.tradefed.targetprep.MixKernelTargetPreparerTest;
+import com.android.tradefed.targetprep.MixRadioTargetPreparerTest;
 import com.android.tradefed.targetprep.ModuleOemTargetPreparerTest;
 import com.android.tradefed.targetprep.ModulePusherTest;
 import com.android.tradefed.targetprep.OtaUpdateDeviceFlasherTest;
@@ -868,6 +869,7 @@ import org.junit.runners.Suite.SuiteClasses;
     KnownFailurePreparerTest.class,
     LocalEmulatorLaunchTest.class,
     MixKernelTargetPreparerTest.class,
+    MixRadioTargetPreparerTest.class,
     ModuleOemTargetPreparerTest.class,
     ModulePusherTest.class,
     PushFilePreparerTest.class,
