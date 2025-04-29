@@ -334,7 +334,8 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             //  general-tests and exempted for validation.
                             "DesktopChromeStableTestCases.config",
                             "ccdec_vp8_test.config",
-                            "ccdec_vp9_test.config"));
+                            "ccdec_vp9_test.config",
+                            "ccdec_h264_test.config"));
 
     @Override
     public void setBuild(IBuildInfo buildInfo) {
