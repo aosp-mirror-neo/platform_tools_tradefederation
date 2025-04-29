@@ -103,6 +103,7 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             "com.android.tradefed.testtype.StubTest",
                             "com.android.tradefed.testtype.ArtRunTest",
                             "com.android.tradefed.testtype.ArtGTest",
+                            "com.android.tradefed.testtype.ArtTest",
                             "com.android.tradefed.testtype.mobly.MoblyBinaryHostTest",
                             "com.android.tradefed.testtype.pandora.PtsBotTest",
                             // VTS runners
