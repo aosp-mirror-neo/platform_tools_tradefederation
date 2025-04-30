@@ -18,10 +18,10 @@ package com.android.tradefed.device;
 import com.android.ddmlib.IDevice;
 
 /**
- * A placeholder {@link IDevice} used by {@link DeviceManager} to allocate when
- * {@link IDeviceSelection#nullDeviceRequested()} is <code>true</code>
+ * A placeholder {@link IDevice} used by {@link DeviceManager} to allocate when {@link
+ * IDeviceSelection#nullDeviceRequested()} is <code>true</code>
  */
-public class NullDevice extends StubDevice {
+public class NullDevice extends StubDevice implements ITemporaryDevice {
 
     /** Naming pattern for auto-created null devices */
     public static final String TEMP_NULL_DEVICE_PREFIX = "null-device-temp-";
@@ -41,7 +41,8 @@ public class NullDevice extends StubDevice {
      * Returns true if the device was created temporarily for the invocation and should be deleted
      * afterward.
      */
-    public final boolean isTemporary() {
+    @Override
+    public boolean isTemporary() {
         return mTemporaryDevice;
     }
 }

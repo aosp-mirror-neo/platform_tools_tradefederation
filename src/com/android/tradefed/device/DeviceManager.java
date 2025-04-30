@@ -100,7 +100,6 @@ public class DeviceManager implements IDeviceManager {
     static final IDeviceSelection ANY_DEVICE_OPTIONS = new DeviceSelectionOptions();
     private static final String NULL_DEVICE_SERIAL_PREFIX = "null-device";
     private static final String EMULATOR_SERIAL_PREFIX = "emulator";
-    private static final String TCP_DEVICE_SERIAL_PREFIX = "tcp-device";
     private static final String GCE_DEVICE_SERIAL_PREFIX = "gce-device";
     private static final String REMOTE_DEVICE_SERIAL_PREFIX = "remote-device";
     private static final String LOCAL_VIRTUAL_DEVICE_SERIAL_PREFIX = "local-virtual-device";
@@ -669,7 +668,10 @@ public class DeviceManager implements IDeviceManager {
     @Override
     public ITestDevice allocateDevice(IDeviceSelection options, boolean isTemporary) {
         checkInit();
-        if (isTemporary) {
+        if (options.shouldCreateTemporarilyPlaceholder()) {
+            String serial = options.getSerials().get(0);
+            addAvailableDevice(new RemoteAvdIDevice(serial, serial, true));
+        } else if (isTemporary) {
             String rand = UUID.randomUUID().toString();
             String serial = String.format("%s%s", NullDevice.TEMP_NULL_DEVICE_PREFIX, rand);
             addAvailableDevice(new NullDevice(serial, true));
@@ -728,9 +730,9 @@ public class DeviceManager implements IDeviceManager {
         // force stop capturing logcat just to be sure
         managedDevice.stopLogcat();
         IDevice ideviceToReturn = device.getIDevice();
-        if (ideviceToReturn instanceof NullDevice) {
-            NullDevice nullDevice = (NullDevice) ideviceToReturn;
-            if (nullDevice.isTemporary()) {
+        if (ideviceToReturn instanceof ITemporaryDevice) {
+            ITemporaryDevice idevice = (ITemporaryDevice) ideviceToReturn;
+            if (idevice.isTemporary()) {
                 DeviceEventResponse r =
                         mManagedDeviceList.handleDeviceEvent(
                                 managedDevice, DeviceEvent.FREE_UNKNOWN);
