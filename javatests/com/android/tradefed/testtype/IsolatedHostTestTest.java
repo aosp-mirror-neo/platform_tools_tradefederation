@@ -38,6 +38,8 @@ import com.android.tradefed.testtype.coverage.CoverageOptions;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.ResourceUtil;
 
+import com.google.common.collect.Lists;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -150,24 +152,58 @@ public class IsolatedHostTestTest {
     @Test
     public void testRavenwoodResourcesPositive() throws Exception {
         OptionSetter setter = new OptionSetter(mHostTest);
-        setter.setOptionValue("use-ravenwood-resources", "true");
 
-        File dir = new File(mMockTestDir, "ravenwood-runtime");
-        dir.mkdirs();
-        File.createTempFile("temp", ".jar", dir);
+        setter.setOptionValue("use-ravenwood-resources", "true");
+        setter.setOptionValue("jar", "mytest.jar");
+
+        List<String> expectedLdLibraryPath = new ArrayList<>();
+
+        // Set up the directory structure.
+        File testDir = new File(mMockTestDir, "testdir");
+        testDir.mkdirs();
+
+        // Test jar
+        var testJar = new File(testDir, "mytest.jar");
+        testJar.createNewFile();
+
+        File runtimeDir = new File(mMockTestDir, "ravenwood-runtime");
+        runtimeDir.mkdirs();
+        new File(runtimeDir, "runtime1.jar").createNewFile();
+        new File(runtimeDir, "runtime2.jar").createNewFile();
+        new File(runtimeDir, "z00-low-prio-1.jar").createNewFile();
+        new File(runtimeDir, "z10-low-prio-2.jar").createNewFile();
 
         // Create the JNI directories.
-        List<String> ldLibraryPath = new ArrayList<>();
-        makeDirAndAddToList(dir, "lib", ldLibraryPath);
-        makeDirAndAddToList(dir, "lib64", ldLibraryPath);
+        makeDirAndAddToList(testDir, "lib64", expectedLdLibraryPath);
+        makeDirAndAddToList(runtimeDir, "lib64", expectedLdLibraryPath);
 
+        // Set up mockito mocks
         doReturn(mMockTestDir).when(mMockBuildInfo).getFile(BuildInfoFileKey.HOST_LINKED_DIR);
         doReturn(36000).when(mMockServer).getLocalPort();
         doReturn(Inet4Address.getByName("localhost")).when(mMockServer).getInetAddress();
-        assertTrue(mHostTest.compileClassPath().contains("ravenwood-runtime"));
 
+        // ------------ Check start ------------
+
+        // build classpath and check it.
+        var classpath = mHostTest.compileClassPath();
+
+        // Remove the test top directory from classpath
+        classpath = classpath.replace(mMockTestDir.getAbsolutePath() + "/", "");
+
+        // We should have the following jars in classpath in the exact same order.
+        var expected =
+                Lists.newArrayList(
+                        "classpath/tradefed-isolation.jar",
+                        "ravenwood-runtime/runtime1.jar",
+                        "ravenwood-runtime/runtime2.jar",
+                        "testdir/mytest.jar",
+                        "ravenwood-runtime/z00-low-prio-1.jar",
+                        "ravenwood-runtime/z10-low-prio-2.jar");
+        assertEquals(String.join(":", expected), classpath);
+
+        // Check LD_LIBRARY_PATH too
         assertEquals(
-                String.join(java.io.File.pathSeparator, ldLibraryPath),
+                String.join(java.io.File.pathSeparator, expectedLdLibraryPath),
                 mHostTest.compileLdLibraryPathInner(null));
     }
 

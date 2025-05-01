@@ -78,6 +78,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -577,6 +579,9 @@ public class IsolatedHostTest
             Arrays.asList(mClasspathOverride.split(java.io.File.pathSeparator)).stream()
                     .forEach(p -> paths.add(new File(p)));
         } else {
+            // The jar files that should be put after the test jar in the classpath.
+            List<File> jarsAfterTest = new ArrayList<>();
+
             if (mRobolectricResources) {
                 // This is contingent on the current android-all version.
                 File androidAllJar = FileUtil.findFile(testDir, mAndroidAllName);
@@ -587,23 +592,50 @@ public class IsolatedHostTest
                 }
                 paths.add(androidAllJar);
             } else if (mRavenwoodResources) {
-                addAllFilesUnder(paths, getRavenwoodRuntimeDir(testDir));
+                // Find all the jars in the runtime dir.
+                Set<File> runtimeJars = getJarFilesUnder(getRavenwoodRuntimeDir(testDir));
+
+                // We have a lot of jar files in "ravenwood-runtime"
+                // (see frameworks/base/ravenwood/Android.bp), and almost all of them should
+                // be put before the test jar to prevent the test jar from overriding them.
+                // However, some of them are used as sort of "fallback", and we _do_ want to
+                // let the test jar to override them.
+                // We use this special naming prefix for them ("z" + digits) to control it.
+                var lowPrioJarMatcher = Pattern.compile("^z\\d+");
+
+                Predicate<File> lowPrioJarFilter =
+                        (file) -> lowPrioJarMatcher.matcher(file.getName()).find();
+
+                // Add the high-prio ones to the classpath.
+                paths.addAll(runtimeJars.stream().filter(lowPrioJarFilter.negate()).toList());
+
+                // Keep the low-prio ones here, so we'll add them later.
+                jarsAfterTest.addAll(runtimeJars.stream().filter(lowPrioJarFilter).toList());
             }
 
             for (String jar : mJars) {
                 File f = FileUtil.findFile(testDir, jar);
                 if (f != null && f.exists()) {
                     paths.add(f);
-                    addAllFilesUnder(paths, f.getParentFile());
+                    addJarFilesUnder(paths, f.getParentFile());
                 }
             }
+
+            paths.addAll(jarsAfterTest);
         }
 
         return paths;
     }
 
+    /** Returns an ordered set containing all the jar files under a given directory. */
+    private static Set<File> getJarFilesUnder(File parentDirectory) {
+        Set<File> paths = new LinkedHashSet<>();
+        addJarFilesUnder(paths, parentDirectory);
+        return paths;
+    }
+
     /** Add all files under {@code File} sorted by filename to {@code paths}. */
-    private static void addAllFilesUnder(Set<File> paths, File parentDirectory) {
+    private static void addJarFilesUnder(Set<File> paths, File parentDirectory) {
         var files = parentDirectory.listFiles((f) -> f.isFile() && f.getName().endsWith(".jar"));
         Arrays.sort(files, Comparator.comparing(File::getName));
 
