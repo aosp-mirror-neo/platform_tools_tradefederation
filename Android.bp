@@ -235,6 +235,7 @@ tradefed_java_library_host {
     device_common_java_resources: [
         ":TradefedContentProvider",
         ":TelephonyUtility",
+        ":GoogleAccountUtil",
         ":WifiUtil",
         ":test-services-normalized.apk",
         ":test-orchestrator-normalized.apk",
