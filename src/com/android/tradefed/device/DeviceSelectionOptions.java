@@ -107,6 +107,11 @@ public class DeviceSelectionOptions implements IDeviceSelection {
             description = "start a placeholder for a gce device that will be connected later.")
     private boolean mGceDeviceRequested = false;
 
+    @Option(
+            name = "create-temporary-placeholder",
+            description = "Create a temporary virtual device placeholder for the invocation.")
+    private boolean mCreateTemporaryPlaceholder = false;
+
     @Option(name = "device-type", description = "The type of the device requested to be allocated.")
     private DeviceRequestedType mRequestedType = null;
 
@@ -795,6 +800,11 @@ public class DeviceSelectionOptions implements IDeviceSelection {
         }
         mSerialMatch = false;
         return mNoMatchReason;
+    }
+
+    @Override
+    public boolean shouldCreateTemporarilyPlaceholder() {
+        return mCreateTemporaryPlaceholder;
     }
 
     /**

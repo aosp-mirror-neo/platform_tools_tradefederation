@@ -498,11 +498,6 @@ public class TestDiscoveryInvoker {
         // Parse to collect all values of --cts-params as well config name
         ctsOptionParser.parseBestEffort(fullCommandLineArgs, true);
 
-        List<String> ctsParams = ctsParserSettings.mCtsParams;
-        for (String globalFilter : ctsParserSettings.mStrictIncludeFilters) {
-            ctsParams.add("--" + GlobalTestFilter.STRICT_INCLUDE_FILTER_OPTION);
-            ctsParams.add(globalFilter);
-        }
         String configName = ctsParserSettings.mConfigName;
 
         if (configName == null) {
@@ -539,7 +534,13 @@ public class TestDiscoveryInvoker {
         args.add(configName);
 
         // Tokenize args to be passed to CtsTest/XtsTest
+        List<String> ctsParams = ctsParserSettings.mCtsParams;
         args.addAll(StringEscapeUtils.paramsToArgs(ctsParams));
+        // Add global filters as-is to avoid breaking down their escaping
+        for (String globalFilter : ctsParserSettings.mStrictIncludeFilters) {
+            args.add("--" + GlobalTestFilter.STRICT_INCLUDE_FILTER_OPTION);
+            args.add(globalFilter);
+        }
 
         return args;
     }

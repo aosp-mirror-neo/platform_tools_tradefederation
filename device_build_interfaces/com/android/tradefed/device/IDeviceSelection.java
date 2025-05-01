@@ -142,4 +142,7 @@ public interface IDeviceSelection extends IMatcher<IDevice> {
 
     /** Sets whether or not we want to do the battery check. */
     public void setRequireBatteryCheck(boolean requireCheck);
+
+    /** Create a temporary placeholder out of the metadata. */
+    public boolean shouldCreateTemporarilyPlaceholder();
 }

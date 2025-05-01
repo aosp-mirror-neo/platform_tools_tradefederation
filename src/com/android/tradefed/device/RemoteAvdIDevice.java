@@ -21,9 +21,11 @@ import com.android.ddmlib.IDevice;
  * A placeholder {@link IDevice} used by {@link DeviceManager} to allocate when {@link
  * DeviceSelectionOptions#gceDeviceRequested()} is <code>true</code>
  */
-public class RemoteAvdIDevice extends StubDevice implements IConfigurableVirtualDevice {
+public class RemoteAvdIDevice extends StubDevice
+        implements IConfigurableVirtualDevice, ITemporaryDevice {
 
     private String mKnownDeviceIp = null;
+    private boolean mIsTemporaryDevice = false;
     protected String mUser = null;
     protected Integer mDeviceNumOffset = null;
 
@@ -35,6 +37,12 @@ public class RemoteAvdIDevice extends StubDevice implements IConfigurableVirtual
     public RemoteAvdIDevice(String serial, String knownDeviceIp) {
         super(serial, false);
         this.mKnownDeviceIp = knownDeviceIp;
+    }
+
+    public RemoteAvdIDevice(String serial, String knownDeviceIp, boolean isTemporary) {
+        super(serial, false);
+        this.mKnownDeviceIp = knownDeviceIp;
+        this.mIsTemporaryDevice = isTemporary;
     }
 
     public RemoteAvdIDevice(String serial, String knownDeviceIp, String user, Integer offset) {
@@ -60,5 +68,10 @@ public class RemoteAvdIDevice extends StubDevice implements IConfigurableVirtual
     @Override
     public Integer getDeviceNumOffset() {
         return mDeviceNumOffset;
+    }
+
+    @Override
+    public boolean isTemporary() {
+        return mIsTemporaryDevice;
     }
 }

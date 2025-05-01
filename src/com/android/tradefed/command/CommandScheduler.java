@@ -1993,7 +1993,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 boolean useFakeDevice = deviceConfig.isFake();
                 if (delegator != null && delegator.noopAllocation()) {
                     CLog.logAndDisplay(
-                            com.android.tradefed.log.Log.LogLevel.WARN, "USing fake device.");
+                            com.android.tradefed.log.Log.LogLevel.WARN, "Using fake device.");
                     useFakeDevice = true;
                     // Match the request to null to leverage the fake device
                     ((DeviceSelectionOptions) deviceConfig.getDeviceRequirements())
