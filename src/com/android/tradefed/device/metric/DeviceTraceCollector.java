@@ -43,8 +43,12 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
                             + "Can be used to optionally override the default trace config.")
     private String mTraceConfigFile = null;
 
-    // Format of the trace name should be: device-trace_<device-serial>_<trace-count>_<event-name>.
-    private static final String NAME_FORMAT = "device-trace_%s_%d_%s";
+    @Option(name = "per-run", description = "Whether to collect traces per-run or per-test.")
+    private boolean mPerRun = true;
+
+    // Format of the trace name should be:
+    // device-trace_<device-serial>_<run-or-test-name>_<trace-count>_<event-name>.
+    private static final String NAME_FORMAT = "device-trace_%s_%s_%d_%s";
     private PerfettoTraceRecorder mPerfettoTraceRecorder = new PerfettoTraceRecorder();
     // package name for an instrumentation test, null otherwise.
     private String mInstrumentationPkgName;
@@ -61,8 +65,16 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
     public void extraInit(IInvocationContext context, ITestInvocationListener listener)
             throws DeviceNotAvailableException {
         super.extraInit(context, listener);
-        for (ITestDevice device : getRealDevices()) {
-            startTraceOnDevice(device);
+
+        if (mPerRun) {
+            startCollecting();
+        }
+    }
+
+    @Override
+    public void onTestStart(DeviceMetricData testData) throws DeviceNotAvailableException {
+        if (!mPerRun) {
+            startCollecting();
         }
     }
 
@@ -70,8 +82,30 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
     public void onTestRunEnd(
             DeviceMetricData runData, Map<String, MetricMeasurement.Metric> currentRunMetrics)
             throws DeviceNotAvailableException {
+        if (mPerRun) {
+            stopCollecting("testRunEnded");
+        }
+    }
+
+    @Override
+    public void onTestEnd(
+            DeviceMetricData testData,
+            final Map<String, MetricMeasurement.Metric> currentTestCaseMetrics)
+            throws DeviceNotAvailableException {
+        if (!mPerRun) {
+            stopCollecting("testEnded");
+        }
+    }
+
+    private void startCollecting() {
         for (ITestDevice device : getRealDevices()) {
-            collectTraceFileFromDevice(device, "testRunEnded");
+            startTraceOnDevice(device);
+        }
+    }
+
+    private void stopCollecting(String eventName) {
+        for (ITestDevice device : getRealDevices()) {
+            collectTraceFileFromDevice(device, eventName);
         }
         logTraceFiles();
     }
@@ -106,10 +140,20 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
                 eventName,
                 mTraceCountMap.get(device),
                 traceFile.length());
+
+        String runOrTestName = mPerRun ? getRunName() : getTestName();
+        if (runOrTestName == null) {
+            CLog.w(
+                    "Failed to get run or test name on device:%s event:%s trace-count:%d.",
+                    device.getSerialNumber(), eventName, mTraceCountMap.get(device));
+            runOrTestName = "";
+        }
+
         String name =
                 String.format(
                         NAME_FORMAT,
                         device.getSerialNumber(),
+                        runOrTestName,
                         mTraceCountMap.get(device),
                         eventName);
         mTraceFilesMap.put(traceFile, name);
@@ -121,6 +165,7 @@ public class DeviceTraceCollector extends BaseDeviceMetricCollector {
                 super.testLog(entry.getValue(), LogDataType.PERFETTO, source);
             }
         }
+        mTraceFilesMap.clear();
     }
 
     public void setInstrumentationPkgName(String packageName) {

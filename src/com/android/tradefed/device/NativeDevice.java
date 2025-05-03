@@ -5615,8 +5615,8 @@ public class NativeDevice
         IDevice idevice = getIDevice();
         try {
             boolean isTemporary = false;
-            if (idevice instanceof NullDevice) {
-                isTemporary = ((NullDevice) idevice).isTemporary();
+            if (idevice instanceof ITemporaryDevice) {
+                isTemporary = ((ITemporaryDevice) idevice).isTemporary();
             }
             if (shortDescriptor) {
                 // Return only info that do not require device inspection

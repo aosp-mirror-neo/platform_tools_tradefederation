@@ -465,10 +465,10 @@ public class RustBinaryHostTestTest {
         try {
             OptionSetter setter = new OptionSetter(mTest);
             setter.setOptionValue("test-file", binary.getAbsolutePath());
-            setter.setOptionValue("exclude-filter", "NotMe");
-            setter.setOptionValue("include-filter", "MyTest#OnlyMe");
-            setter.setOptionValue("exclude-filter", "MyTest#Other");
-            setter.setOptionValue("include-filter", "Me2");
+            setter.setOptionValue("exclude-filter", "binary#NotMe");
+            setter.setOptionValue("include-filter", "binary#MyTest#OnlyMe");
+            setter.setOptionValue("exclude-filter", "binary#MyTest#Other");
+            setter.setOptionValue("include-filter", "binary#Me2");
             // Multiple include filters are run one by one with --list.
             String[] selection1 = new String[] {"test1", "test2"};
             when(mMockRunUtil.runTimedCmd(

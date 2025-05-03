@@ -26,12 +26,15 @@ import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.TestStatus;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.BuildInfo;
+import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.proto.TestRecordProto;
+import com.android.tradefed.result.skipped.SkipManager;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 
 import com.google.protobuf.util.Durations;
@@ -51,6 +54,7 @@ public class ResultDBReporterTest {
 
     private InvocationSimulator mSimulator;
     private ResultDBReporterTester mReporter;
+    private ConfigurationTester mConfig;
     private OptionSetter mOption;
 
     private class ResultDBReporterTester extends ResultDBReporter {
@@ -88,6 +92,29 @@ public class ResultDBReporterTest {
         }
     }
 
+    private class ConfigurationTester extends Configuration {
+
+        SkipManager mSkipManager = new SkipManager();
+
+        public ConfigurationTester(String name, String description) {
+            super(name, description);
+        }
+
+        public void withDemotionFilters() throws ConfigurationException {
+            OptionSetter setter = new OptionSetter(mSkipManager);
+            setter.setOptionValue(
+                    "demotion-filters",
+                    "x86 module-name testClassSkipped#test-name-skipped",
+                    "test-skip-reason");
+            mSkipManager.setup(this, new InvocationContext());
+        }
+
+        @Override
+        public SkipManager getSkipManager() {
+            return mSkipManager;
+        }
+    }
+
     private TestResult.Builder newTestResult(String method) {
         return TestResult.newBuilder()
                 .setTestIdStructured(
@@ -114,6 +141,8 @@ public class ResultDBReporterTest {
     public void setUp() throws ConfigurationException {
         mReporter = new ResultDBReporterTester();
         mSimulator = InvocationSimulator.create().withModule("example-module");
+        mConfig = new ConfigurationTester("name", "description");
+        mReporter.setConfiguration(mConfig);
         mOption = new OptionSetter(mReporter);
     }
 
@@ -242,7 +271,9 @@ public class ResultDBReporterTest {
                                 .setResultId("1234abcd-00005")
                                 .setStatus(TestStatus.SKIP)
                                 .setStartTime(Timestamps.fromMillis(1536333825800L))
-                                .setSummaryHtml("bug_id: bugId<br>trigger: skip trigger<br>")
+                                .setSummaryHtml(
+                                        "bug_id: bugId<br>trigger: skip trigger<br>reason: skip"
+                                                + " reason message<br>")
                                 .setExpected(true)
                                 .build());
     }
@@ -293,6 +324,44 @@ public class ResultDBReporterTest {
                                         FailureReason.newBuilder()
                                                 .setPrimaryErrorMessage("Failure Message"))
                                 .setSummaryHtml("TF error type: TIMED_OUT")
+                                .build());
+    }
+
+    @Test
+    public void shouldUploadDemotedTests() throws ConfigurationException {
+        mConfig.withDemotionFilters();
+        mSimulator
+                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withModuleAttribute(ModuleDefinition.MODULE_ABI, "x86")
+                .withModuleAttribute(ModuleDefinition.MODULE_NAME, "module-name")
+                .simulateInvocation(mReporter);
+        Variant variant =
+                Variant.newBuilder()
+                        .putDef("module_abi", "x86")
+                        .putDef("name", "test tag")
+                        .putDef("scheduler", "ATP")
+                        .build();
+
+        assertThat(mReporter.mRecorder.getTestResults())
+                .containsExactly(
+                        TestResult.newBuilder()
+                                .setTestIdStructured(
+                                        TestIdentifier.newBuilder()
+                                                .setModuleName("example-module")
+                                                .setModuleScheme("junit")
+                                                .setModuleVariant(variant)
+                                                .setCoarseName("empty-package")
+                                                .setFineName("testClassSkipped")
+                                                .setCaseName("test-name-skipped")
+                                                .build())
+                                .setResultId("1234abcd-00001")
+                                .setStartTime(Timestamps.fromSeconds(1000000L))
+                                .setStatus(TestStatus.SKIP)
+                                .setExpected(true)
+                                .setSummaryHtml(
+                                        "trigger: UNKNOWN_TRIGGER<br>skip_reason_type:"
+                                                + " Demotion<br>reason: test-skip-reason<br>")
                                 .build());
     }
 

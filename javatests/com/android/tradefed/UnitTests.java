@@ -296,6 +296,7 @@ import com.android.tradefed.targetprep.InstrumentationPreparerTest;
 import com.android.tradefed.targetprep.KnownFailurePreparerTest;
 import com.android.tradefed.targetprep.LocalEmulatorLaunchTest;
 import com.android.tradefed.targetprep.MixKernelTargetPreparerTest;
+import com.android.tradefed.targetprep.MixRadioTargetPreparerTest;
 import com.android.tradefed.targetprep.ModuleOemTargetPreparerTest;
 import com.android.tradefed.targetprep.ModulePusherTest;
 import com.android.tradefed.targetprep.OtaUpdateDeviceFlasherTest;
@@ -332,6 +333,7 @@ import com.android.tradefed.targetprep.suite.SuiteApkInstallerTest;
 import com.android.tradefed.testtype.AndroidJUnitTestTest;
 import com.android.tradefed.testtype.ArtGTestTest;
 import com.android.tradefed.testtype.ArtRunTestTest;
+import com.android.tradefed.testtype.ArtTestTest;
 import com.android.tradefed.testtype.DeviceBatteryLevelCheckerTest;
 import com.android.tradefed.testtype.DeviceJUnit4ClassRunnerTest;
 import com.android.tradefed.testtype.DeviceSuiteTest;
@@ -867,6 +869,7 @@ import org.junit.runners.Suite.SuiteClasses;
     KnownFailurePreparerTest.class,
     LocalEmulatorLaunchTest.class,
     MixKernelTargetPreparerTest.class,
+    MixRadioTargetPreparerTest.class,
     ModuleOemTargetPreparerTest.class,
     ModulePusherTest.class,
     PushFilePreparerTest.class,
@@ -947,6 +950,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AndroidJUnitTestTest.class,
     ArtGTestTest.class,
     ArtRunTestTest.class,
+    ArtTestTest.class,
     CoverageMeasurementForwarderTest.class,
     DeviceBatteryLevelCheckerTest.class,
     DeviceJUnit4ClassRunnerTest.class,

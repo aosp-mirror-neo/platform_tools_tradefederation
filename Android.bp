@@ -326,6 +326,8 @@ java_library_host {
         "grpc-java-netty-shaded",
         "opencensus-java-api",
         "opencensus-java-contrib-grpc-metrics",
+        "libandroid_build_v2beta1_java",
+        "libandroid_build_v3_java",
     ],
     libs: [
         "loganalysis",

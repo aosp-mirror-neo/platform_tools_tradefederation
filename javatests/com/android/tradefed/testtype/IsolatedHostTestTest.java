@@ -169,9 +169,6 @@ public class IsolatedHostTestTest {
         assertEquals(
                 String.join(java.io.File.pathSeparator, ldLibraryPath),
                 mHostTest.compileLdLibraryPathInner(null));
-
-        List<String> commandArgs = mHostTest.compileCommandArgs("", null);
-        assertTrue(commandArgs.contains("-Dandroid.junit.runner=org.junit.runners.JUnit4"));
     }
 
     @Test

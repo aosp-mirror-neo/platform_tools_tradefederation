@@ -29,6 +29,7 @@ import com.android.tradefed.testtype.IRemoteTest;
 import com.android.tradefed.testtype.ITestFilterReceiver;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -213,8 +214,12 @@ public abstract class RustTestBase
             CLog.w("b/294857452 -- filters are not yet supported for rust benchmarks");
             return;
         }
-        if (!"".equals(filter)) {
-            args.add(cleanFilter(filter));
+        if (!Strings.isNullOrEmpty(filter)) {
+            if (!filter.contains("#")) {
+                CLog.w("Filter: %s isn't formatted like a method", filter);
+            } else {
+                args.add(cleanFilter(filter));
+            }
         }
         args.add("--exact");
         for (String s : mExcludeFilters) {

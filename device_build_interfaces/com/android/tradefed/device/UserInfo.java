@@ -23,15 +23,20 @@ package com.android.tradefed.device;
  * <p>Stores data and basic logic around the information for one user.
  */
 public final class UserInfo {
-    // From android.content.pm.UserInfo
+    // From {@link android.os.UserHandle}
+    public static final int USER_SYSTEM = 0;
+    public static final int USER_NULL = -10000;
+
+    // From {@link android.content.pm.UserInfo}
     public static final int FLAG_PRIMARY = 0x00000001;
     public static final int FLAG_GUEST = 0x00000004;
     public static final int FLAG_RESTRICTED = 0x00000008;
     public static final int FLAG_EPHEMERAL = 0x00000100;
     public static final int FLAG_MANAGED_PROFILE = 0x00000020;
     public static final int FLAG_PROFILE = 0x00001000;
-    public static final int USER_SYSTEM = 0;
+    public static final int FLAG_FULL = 0x00000400;
     public static final int FLAG_MAIN = 0x00004000;
+
     public static final int FLAG_FOR_TESTING = 0x00008000;
 
     public static final int FLAGS_NOT_SECONDARY =
@@ -60,10 +65,17 @@ public final class UserInfo {
         PRIMARY,
         /** system user = user 0 */
         SYSTEM,
+        /** undefined user id */
+        NULL,
+        /** Indicates a "full" user, which is a non-profile, human user. */
+        FULL,
         /**
-         * user flagged as main user on the device; on non-hsum main user = system user = user 0 on
-         * hsum main user = first human user.
+         * Indicates the "main" user, which is the designated primary user on the device, as defined
+         * by {@link UserManager#getMainUser()}.
+         *
+         * @deprecated Use FULL instead.
          */
+        @Deprecated
         MAIN,
         /** secondary user, i.e. non-primary and non-system. */
         SECONDARY,
@@ -92,6 +104,14 @@ public final class UserInfo {
             return this == SYSTEM;
         }
 
+        public boolean isFull() {
+            return this == FULL;
+        }
+
+        /**
+         * @deprecated Use {@link #isFull()} instead.
+         */
+        @Deprecated
         public boolean isMain() {
             return this == MAIN;
         }
@@ -163,6 +183,18 @@ public final class UserInfo {
         return mUserId == USER_SYSTEM;
     }
 
+    public boolean isNull() {
+        return mUserId == USER_NULL;
+    }
+
+    public boolean isFull() {
+        return (mFlag & FLAG_FULL) == FLAG_FULL;
+    }
+
+    /**
+     * @deprecated Use {@link #isFull()} instead.
+     */
+    @Deprecated
     public boolean isMain() {
         return (mFlag & FLAG_MAIN) == FLAG_MAIN;
     }
@@ -202,6 +234,10 @@ public final class UserInfo {
                 return isPrimary();
             case SYSTEM:
                 return isSystem();
+            case NULL:
+                return isNull();
+            case FULL:
+                return isFull();
             case MAIN:
                 return isMain();
             case SECONDARY:

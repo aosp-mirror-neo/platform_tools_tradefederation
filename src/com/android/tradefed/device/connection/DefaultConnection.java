@@ -18,10 +18,10 @@ package com.android.tradefed.device.connection;
 import com.android.ddmlib.IDevice;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.device.IConfigurableVirtualDevice;
+import com.android.tradefed.device.ITemporaryDevice;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.ManagedTestDeviceFactory;
 import com.android.tradefed.device.NativeDevice;
-import com.android.tradefed.device.NullDevice;
 import com.android.tradefed.device.RemoteAndroidDevice;
 import com.android.tradefed.device.RemoteAvdIDevice;
 import com.android.tradefed.device.TestDeviceOptions.InstanceType;
@@ -152,8 +152,8 @@ public class DefaultConnection extends AbstractConnection {
             mInitialUser = null;
             mInitialDeviceNumOffset = null;
         }
-        if (idevice instanceof NullDevice) {
-            mTemporaryHolder = ((NullDevice) idevice).isTemporary();
+        if (idevice instanceof ITemporaryDevice) {
+            mTemporaryHolder = ((ITemporaryDevice) idevice).isTemporary();
         } else {
             mTemporaryHolder = false;
         }
