@@ -303,7 +303,8 @@ public class ITestSuiteTest {
         public void run(TestInformation testInfo, ITestInvocationListener listener)
             throws DeviceNotAvailableException {
             // To simulate that no tests would be run.
-            return;
+            listener.testRunStarted(TEST_CONFIG_NAME, 0);
+            listener.testRunEnded(0, new HashMap<String, Metric>());
         }
     }
 
@@ -762,22 +763,56 @@ public class ITestSuiteTest {
 
         mTestSuite.run(mTestInfo, mMockListener);
 
-        verify(mMockListener, times(1))
-                .testRunStarted(
-                        Mockito.eq(TEST_CONFIG_NAME),
-                        Mockito.eq(1),
-                        Mockito.eq(0),
-                        Mockito.anyLong());
-        verify(mMockListener, times(1))
-                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
         verify(mMockListener).testModuleStarted(Mockito.any());
-        ArgumentCaptor<FailureDescription> captureRunFailure =
-                ArgumentCaptor.forClass(FailureDescription.class);
-        verify(mMockListener).testRunFailed(captureRunFailure.capture());
+        if (mTestSuite.isRemoveModuleBuffering()) {
+            // test run ended will be reported twice. First to report the test count mismatch,
+            // second to report the runtime exception failure
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(0),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(2))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            ArgumentCaptor<FailureDescription> captureRunFailure =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener, times(2)).testRunFailed(captureRunFailure.capture());
+            FailureDescription failureOne = captureRunFailure.getAllValues().get(0);
+            assertTrue(
+                    failureOne
+                            .getErrorMessage()
+                            .equals(
+                                    "TestRun "
+                                            + TEST_CONFIG_NAME
+                                            + " only ran 0 out of 1 expected tests."));
+            assertEquals(FailureStatus.TEST_FAILURE, failureOne.getFailureStatus());
+            FailureDescription failureTwo = captureRunFailure.getAllValues().get(1);
+            assertTrue(failureTwo.getErrorMessage().equals("unresponsive"));
+            assertEquals(FailureStatus.LOST_SYSTEM_UNDER_TEST, failureTwo.getFailureStatus());
+        } else {
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(1))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            ArgumentCaptor<FailureDescription> captureRunFailure =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener).testRunFailed(captureRunFailure.capture());
+            FailureDescription failure = captureRunFailure.getValue();
+            assertTrue(failure.getErrorMessage().equals("unresponsive"));
+            assertEquals(FailureStatus.LOST_SYSTEM_UNDER_TEST, failure.getFailureStatus());
+        }
         verify(mMockListener).testModuleEnded();
-        FailureDescription failure = captureRunFailure.getValue();
-        assertTrue(failure.getErrorMessage().equals("unresponsive"));
-        assertEquals(FailureStatus.LOST_SYSTEM_UNDER_TEST, failure.getFailureStatus());
     }
 
     /**
@@ -828,30 +863,69 @@ public class ITestSuiteTest {
         }
 
         verify(mMockListener, times(2)).testModuleStarted(Mockito.any());
-        verify(mMockListener, times(1))
-                .testRunStarted(
-                        Mockito.eq(TEST_CONFIG_NAME),
-                        Mockito.eq(1),
-                        Mockito.eq(0),
-                        Mockito.anyLong());
-        verify(mMockListener, times(2))
-                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
-        verify(mMockListener, times(2)).testModuleEnded();
-        ArgumentCaptor<FailureDescription> captureRunFailure =
-                ArgumentCaptor.forClass(FailureDescription.class);
-        verify(mMockListener, times(2)).testRunFailed(captureRunFailure.capture());
-        verify(mMockListener)
-                .testRunStarted(
-                        Mockito.eq("NOT_RUN"), Mockito.eq(0), Mockito.eq(0), Mockito.anyLong());
-        verify(mMockListener).testRunEnded(0L, new HashMap<String, Metric>());
+        if (mTestSuite.isRemoveModuleBuffering()) {
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(0),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener)
+                    .testRunStarted(
+                            Mockito.eq("NOT_RUN"), Mockito.eq(0), Mockito.eq(0), Mockito.anyLong());
+            verify(mMockListener, times(3))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            ArgumentCaptor<FailureDescription> captureRunFailure =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener, times(3)).testRunFailed(captureRunFailure.capture());
 
-        List<FailureDescription> failures = captureRunFailure.getAllValues();
-        assertTrue(failures.get(0).getErrorMessage().equals("I failed"));
-        assertTrue(
-                failures.get(1)
-                        .getErrorMessage()
-                        .equals("Module did not run due to device not available."));
-        assertEquals(FailureStatus.NOT_EXECUTED, failures.get(1).getFailureStatus());
+            List<FailureDescription> failures = captureRunFailure.getAllValues();
+            assertTrue(
+                    failures.get(0)
+                            .getErrorMessage()
+                            .equals(
+                                    "TestRun "
+                                            + TEST_CONFIG_NAME
+                                            + " only ran 0 out of 1 expected tests."));
+            assertTrue(failures.get(1).getErrorMessage().equals("I failed"));
+            assertTrue(
+                    failures.get(2)
+                            .getErrorMessage()
+                            .equals("Module did not run due to device not available."));
+            assertEquals(FailureStatus.TEST_FAILURE, failures.get(0).getFailureStatus());
+            assertEquals(FailureStatus.NOT_EXECUTED, failures.get(2).getFailureStatus());
+        } else {
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(2))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            ArgumentCaptor<FailureDescription> captureRunFailure =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener, times(2)).testRunFailed(captureRunFailure.capture());
+            verify(mMockListener)
+                    .testRunStarted(
+                            Mockito.eq("NOT_RUN"), Mockito.eq(0), Mockito.eq(0), Mockito.anyLong());
+            verify(mMockListener).testRunEnded(0L, new HashMap<String, Metric>());
+
+            List<FailureDescription> failures = captureRunFailure.getAllValues();
+            assertTrue(failures.get(0).getErrorMessage().equals("I failed"));
+            assertTrue(
+                    failures.get(1)
+                            .getErrorMessage()
+                            .equals("Module did not run due to device not available."));
+            assertEquals(FailureStatus.NOT_EXECUTED, failures.get(1).getFailureStatus());
+        }
+        verify(mMockListener, times(2)).testModuleEnded();
     }
 
     /**
@@ -893,23 +967,58 @@ public class ITestSuiteTest {
 
         mTestSuite.run(mTestInfo, mMockListener);
 
-        verify(mMockListener, times(1))
-                .testRunStarted(
-                        Mockito.eq(TEST_CONFIG_NAME),
-                        Mockito.eq(1),
-                        Mockito.eq(0),
-                        Mockito.anyLong());
-        verify(mMockListener, times(1))
-                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
         verify(mMockListener).testModuleStarted(Mockito.any());
-        ArgumentCaptor<FailureDescription> captured =
-                ArgumentCaptor.forClass(FailureDescription.class);
-        verify(mMockListener).testRunFailed(captured.capture());
-        verify(mMockListener).testModuleEnded();
+        if (mTestSuite.isRemoveModuleBuffering()) {
+            // test run ended will be reported twice. First to report the test count mismatch,
+            // second to report the runtime exception failure
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            // another testRunStart event during backfilling of runtime exception failure
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(0),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(2))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            ArgumentCaptor<FailureDescription> captured =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener, times(2)).testRunFailed(captured.capture());
 
-        FailureDescription exception = captured.getValue();
-        assertTrue(exception.getErrorMessage().contains("runtime"));
-        assertFalse(exception instanceof MultiFailureDescription);
+            FailureDescription exceptionOne = captured.getAllValues().get(0);
+            FailureDescription exceptionTwo = captured.getAllValues().get(1);
+            assertTrue(
+                    exceptionOne
+                            .getErrorMessage()
+                            .contains(
+                                    "TestRun "
+                                            + TEST_CONFIG_NAME
+                                            + " only ran 0 out of 1 expected tests."));
+            assertTrue(exceptionTwo.getErrorMessage().contains("runtime"));
+            assertFalse(exceptionTwo instanceof MultiFailureDescription);
+        } else {
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq(TEST_CONFIG_NAME),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(1))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            ArgumentCaptor<FailureDescription> captured =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener).testRunFailed(captured.capture());
+
+            FailureDescription exception = captured.getValue();
+            assertTrue(exception.getErrorMessage().contains("runtime"));
+            assertFalse(exception instanceof MultiFailureDescription);
+        }
+        verify(mMockListener).testModuleEnded();
     }
 
     /**
@@ -1958,29 +2067,76 @@ public class ITestSuiteTest {
         }
 
         verify(mMockListener, times(2)).testModuleStarted(Mockito.any());
-        verify(mMockListener, times(1))
-                .testRunStarted(
-                        Mockito.eq("in-progress"), Mockito.eq(1), Mockito.eq(0), Mockito.anyLong());
-        ArgumentCaptor<FailureDescription> captureRunFailure =
-                ArgumentCaptor.forClass(FailureDescription.class);
-        verify(mMockListener, times(2)).testRunFailed(captureRunFailure.capture());
-        verify(mMockListener, times(2))
-                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+        if (mTestSuite.isRemoveModuleBuffering()) {
+            // test run ended will be reported twice. First to report the test count mismatch,
+            // second to report the DNAE exception failure
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq("in-progress"),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq("in-progress"),
+                            Mockito.eq(0),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq("not-executed"),
+                            Mockito.eq(0),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            ArgumentCaptor<FailureDescription> captureRunFailure =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener, times(3)).testRunFailed(captureRunFailure.capture());
+            verify(mMockListener, times(3))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            List<FailureDescription> failures = captureRunFailure.getAllValues();
+            assertTrue(
+                    failures.get(0)
+                            .getErrorMessage()
+                            .equals(
+                                    "TestRun "
+                                            + TEST_CONFIG_NAME
+                                            + " only ran 0 out of 1 expected tests."));
+            assertEquals(FailureStatus.TEST_FAILURE, failures.get(0).getFailureStatus());
+            assertTrue(failures.get(1).getErrorMessage().equals("unavailable"));
+            assertEquals(FailureStatus.LOST_SYSTEM_UNDER_TEST, failures.get(1).getFailureStatus());
+            assertTrue(
+                    failures.get(2)
+                            .getErrorMessage()
+                            .equals("Module did not run due to device not available."));
+            assertEquals(FailureStatus.NOT_EXECUTED, failures.get(2).getFailureStatus());
+        } else {
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq("in-progress"),
+                            Mockito.eq(1),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            ArgumentCaptor<FailureDescription> captureRunFailure =
+                    ArgumentCaptor.forClass(FailureDescription.class);
+            verify(mMockListener, times(2)).testRunFailed(captureRunFailure.capture());
+            verify(mMockListener, times(2))
+                    .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+            verify(mMockListener, times(1))
+                    .testRunStarted(
+                            Mockito.eq("not-executed"),
+                            Mockito.eq(0),
+                            Mockito.eq(0),
+                            Mockito.anyLong());
+            List<FailureDescription> failures = captureRunFailure.getAllValues();
+            assertTrue(failures.get(0).getErrorMessage().equals("unavailable"));
+            assertEquals(FailureStatus.LOST_SYSTEM_UNDER_TEST, failures.get(0).getFailureStatus());
+            assertTrue(
+                    failures.get(1)
+                            .getErrorMessage()
+                            .equals("Module did not run due to device not available."));
+            assertEquals(FailureStatus.NOT_EXECUTED, failures.get(1).getFailureStatus());
+        }
         verify(mMockListener, times(2)).testModuleEnded();
-        verify(mMockListener, times(1))
-                .testRunStarted(
-                        Mockito.eq("not-executed"),
-                        Mockito.eq(0),
-                        Mockito.eq(0),
-                        Mockito.anyLong());
-        List<FailureDescription> failures = captureRunFailure.getAllValues();
-        assertTrue(failures.get(0).getErrorMessage().equals("unavailable"));
-        assertEquals(FailureStatus.LOST_SYSTEM_UNDER_TEST, failures.get(0).getFailureStatus());
-        assertTrue(
-                failures.get(1)
-                        .getErrorMessage()
-                        .equals("Module did not run due to device not available."));
-        assertEquals(FailureStatus.NOT_EXECUTED, failures.get(1).getFailureStatus());
     }
 
     /**
