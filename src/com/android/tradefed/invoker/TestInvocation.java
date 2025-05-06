@@ -368,8 +368,11 @@ public class TestInvocation implements ITestInvocation {
         } finally {
             mTestDone = true;
             long bugreportStartTime = System.currentTimeMillis();
+            boolean isSubprocess = isSubprocess(config);
+            boolean shouldSkipParentProcessLog =
+                    config.getCommandOptions().shouldSkipParentProcessLogcat();
             // Only capture logcat for TEST if we started the test phase.
-            if (mTestStarted) {
+            if (mTestStarted && (isSubprocess || !shouldSkipParentProcessLog)) {
                 for (ITestDevice device : context.getDevices()) {
                     invocationPath.reportLogs(device, listener, Stage.TEST);
                 }
