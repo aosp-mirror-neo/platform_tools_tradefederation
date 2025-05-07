@@ -4066,6 +4066,7 @@ public class NativeDevice
         if (isStateBootloaderOrFastbootd()) {
             CLog.i("device %s in %s. Rebooting to userspace.", getSerialNumber(), getDeviceState());
             executeFastbootCommand("reboot");
+            postAdbReboot(rebootMode);
         } else {
             if (mOptions.shouldDisableReboot()) {
                 CLog.i("Device reboot disabled by options, skipped.");
