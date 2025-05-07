@@ -6381,11 +6381,6 @@ public class NativeDevice
      */
     @Override
     public boolean startTradeInModeTesting(final int timeoutMs) throws DeviceNotAvailableException {
-        if (!enableAdbRoot()) {
-            CLog.w("Trade in mode requires root.");
-            return false;
-        }
-
         final CommandResult result =
                 executeShellV2Command(
                         "tradeinmode wait-until-ready testing start",
