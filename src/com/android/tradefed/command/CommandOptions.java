@@ -388,6 +388,11 @@ public class CommandOptions implements ICommandOptions {
                             + " options. inop if not using delegation mode.")
     private Map<String, String> mDelegationEnvironment = new LinkedHashMap<>();
 
+    @Option(
+            name = "skip-parent-process-logcat",
+            description = "Whether to skip logcat for parent process.")
+    private boolean mSkipParentProcessLogcat = false;
+
     /**
      * Set the help mode for the config.
      * <p/>
@@ -935,5 +940,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean reportInvocationCacheResultsInPresubmit() {
         return mEnableCachingInvocationResultsInPresubmit;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean shouldSkipParentProcessLogcat() {
+        return mSkipParentProcessLogcat;
     }
 }

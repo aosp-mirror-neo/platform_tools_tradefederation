@@ -109,6 +109,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
 
     private boolean mUseModuleResultsForwarder = false;
     private boolean mRemoveModuleBuffering = false;
+    private boolean mIsEventsBackFilled = false;
     private int mTargetPreparerRetryCount;
     private StartEndCollector mCurrentStartEndCollector;
 
@@ -502,7 +503,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
 
     public void backfillMissingEvents(
             ITestInvocationListener listener, FailureDescription failure) {
-        if (mCurrentStartEndCollector == null) {
+        if (mCurrentStartEndCollector == null || mIsEventsBackFilled) {
             // module never started. No need to backfill.
             return;
         }
@@ -522,6 +523,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             listener.testRunFailed(failure);
             listener.testRunEnded(0, new HashMap<String, Metric>());
         }
+        mIsEventsBackFilled = true;
     }
 
     /** Get the merged TestRunResults from each {@link IRemoteTest} run. */
