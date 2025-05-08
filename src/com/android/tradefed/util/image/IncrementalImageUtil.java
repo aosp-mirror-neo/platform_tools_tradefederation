@@ -18,7 +18,6 @@ package com.android.tradefed.util.image;
 import static org.junit.Assert.assertTrue;
 
 import com.android.ddmlib.Log.LogLevel;
-import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.IDeviceBuildInfo;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.IManagedTestDevice;
@@ -97,9 +96,6 @@ public class IncrementalImageUtil {
     private final SnapuserdWaitPhase mWaitPhase;
 
     private boolean mAllowSameBuildFlashing = false;
-    private boolean mAllowUnzipBaseline = false;
-    private boolean mBootloaderNeedsFlashing = false;
-    private boolean mBasebandNeedsFlashing = false;
     private boolean mUpdateWasCompleted = false;
     private boolean mSkipBootloaderVersionCheck = false;
     private File mSourceDirectory;
@@ -115,7 +111,6 @@ public class IncrementalImageUtil {
             boolean isIsolatedSetup,
             boolean allowTrackerlessUpdate,
             Set<String> allowedTransition,
-            boolean newFlow,
             boolean updateBootloaderFromUserspace,
             SnapuserdWaitPhase waitPhase)
             throws DeviceNotAvailableException {
@@ -202,7 +197,6 @@ public class IncrementalImageUtil {
                 device,
                 build.getDeviceImageFile(),
                 createSnapshot,
-                newFlow,
                 updateBootloaderFromUserspace,
                 waitPhase,
                 merkleTreeDir);
@@ -212,14 +206,13 @@ public class IncrementalImageUtil {
             ITestDevice device,
             File targetImage,
             File createSnapshot,
-            boolean newFlow,
             boolean updateBootloaderFromUserspace,
             SnapuserdWaitPhase waitPhase,
             File deviceMerkleTree) {
         mDevice = device;
+        mNewFlow = true;
         mApplySnapshot = true;
         mWipeAfterApplySnapshot = true;
-        mNewFlow = newFlow;
         mUpdateBootloaderFromUserspace = updateBootloaderFromUserspace;
         mWaitPhase = waitPhase;
 
@@ -251,27 +244,6 @@ public class IncrementalImageUtil {
         mParallelSetup.start();
     }
 
-    private static File copyImage(File originalImage) throws IOException {
-        if (originalImage.isDirectory()) {
-            CLog.d("Baseline was already unzipped for %s", originalImage);
-            File copy =
-                    FileUtil.createTempDir(
-                            FileUtil.getBaseName(originalImage.getName()),
-                            CurrentInvocation.getWorkFolder());
-            FileUtil.recursiveHardlink(originalImage, copy);
-            return copy;
-        } else {
-            File copy =
-                    FileUtil.createTempFile(
-                            FileUtil.getBaseName(originalImage.getName()),
-                            ".img",
-                            CurrentInvocation.getWorkFolder());
-            copy.delete();
-            FileUtil.hardlinkFile(originalImage, copy);
-            return copy;
-        }
-    }
-
     /** Returns whether or not we can use the snapshot logic to update the device */
     public static boolean isSnapshotSupported(ITestDevice device, boolean useMerkle)
             throws DeviceNotAvailableException {
@@ -296,24 +268,12 @@ public class IncrementalImageUtil {
         return false;
     }
 
-    public void notifyBootloaderNeedsRevert() {
-        mBootloaderNeedsFlashing = true;
-    }
-
-    public void notifyBasebadNeedsRevert() {
-        mBasebandNeedsFlashing = true;
-    }
-
     public void allowSameBuildFlashing() {
         mAllowSameBuildFlashing = true;
     }
 
     public boolean isSameBuildFlashingAllowed() {
         return mAllowSameBuildFlashing;
-    }
-
-    public void allowUnzipBaseline() {
-        mAllowUnzipBaseline = true;
     }
 
     public boolean useUpdatedFlow() {
@@ -707,38 +667,6 @@ public class IncrementalImageUtil {
         }
     }
 
-    private void revertBootloaderAndBasebandifNeeded(File bootloader, File baseband)
-            throws DeviceNotAvailableException {
-        if (mBootloaderNeedsFlashing) {
-            if (bootloader == null) {
-                CLog.w("No bootloader file to flash.");
-            } else {
-                mDevice.rebootIntoBootloader();
-
-                CommandResult bootloaderFlashTarget =
-                        mDevice.executeFastbootCommand(
-                                "flash", "bootloader", bootloader.getAbsolutePath());
-                CLog.d("Status: %s", bootloaderFlashTarget.getStatus());
-                CLog.d("stdout: %s", bootloaderFlashTarget.getStdout());
-                CLog.d("stderr: %s", bootloaderFlashTarget.getStderr());
-            }
-        }
-        if (mBasebandNeedsFlashing) {
-            if (baseband == null) {
-                CLog.w("No baseband file to flash");
-            } else {
-                mDevice.rebootIntoBootloader();
-
-                CommandResult radioFlashTarget =
-                        mDevice.executeFastbootCommand(
-                                "flash", "radio", baseband.getAbsolutePath());
-                CLog.d("Status: %s", radioFlashTarget.getStatus());
-                CLog.d("stdout: %s", radioFlashTarget.getStdout());
-                CLog.d("stderr: %s", radioFlashTarget.getStderr());
-            }
-        }
-    }
-
     private void blockCompare(File srcImage, File srcMerkleTree, File targetImage, File workDir) {
         try (CloseableTraceScope ignored =
                 new CloseableTraceScope("block_compare:" + srcImage.getName())) {
@@ -786,7 +714,8 @@ public class IncrementalImageUtil {
         Map<String, String> envMap = new HashMap<>();
         envMap.put("ANDROID_PRODUCT_OUT", imageDirectory.getAbsolutePath());
         ImmutableList.Builder<String> cmdArgsBuilder = new ImmutableList.Builder<>();
-        cmdArgsBuilder.add("flashall", "--exclude-dynamic-partitions", "--disable-super-optimization");
+        cmdArgsBuilder.add(
+                "flashall", "--exclude-dynamic-partitions", "--disable-super-optimization");
         if (mSkipBootloaderVersionCheck) {
             cmdArgsBuilder.add("--force");
         }
@@ -884,25 +813,6 @@ public class IncrementalImageUtil {
             CLog.i("Bootloader is already version %s, skipping flashing", currentBaseBandVersion);
             return false;
         }
-    }
-
-    private static String getSplVersion(IBuildInfo build) {
-        File buildProp = build.getFile("build.prop");
-        if (buildProp == null) {
-            CLog.d("No target build.prop found for comparison.");
-            return null;
-        }
-        try {
-            String props = FileUtil.readStringFromFile(buildProp);
-            for (String line : props.split("\n")) {
-                if (line.startsWith("ro.build.version.security_patch=")) {
-                    return line.split("=")[1];
-                }
-            }
-        } catch (IOException e) {
-            CLog.e(e);
-        }
-        return null;
     }
 
     private class ParallelPreparation extends Thread {

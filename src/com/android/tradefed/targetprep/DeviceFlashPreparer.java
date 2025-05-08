@@ -389,7 +389,6 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                                 isIsolated,
                                 mAllowTrackerlessUpdate,
                                 mAllowedTransition,
-                                mNewIncrementalFlow,
                                 mUpdateBootloaderFromUserspace,
                                 mWaitPhase);
                 if (mIncrementalImageUtil == null) {
@@ -669,9 +668,6 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             RecoveryMode mode = testInfo.getDevice().getRecoveryMode();
             try {
                 testInfo.getDevice().setRecoveryMode(RecoveryMode.NONE);
-                if (mAllowUnzippedBaseline) {
-                    mIncrementalImageUtil.allowUnzipBaseline();
-                }
                 mIncrementalImageUtil.teardownDevice(testInfo);
             } finally {
                 testInfo.getDevice().setRecoveryMode(mode);
