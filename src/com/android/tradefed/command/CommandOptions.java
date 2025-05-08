@@ -259,6 +259,13 @@ public class CommandOptions implements ICommandOptions {
     private Map<String, String> mExperimentalFlags = new LinkedHashMap<>();
 
     @Option(
+            name = "rollout-flags",
+            description =
+                    "Map of rollout flags to enable features completely. Rollout flags are ignored"
+                            + " when TF objects are not present.")
+    private Map<String, String> mRolloutFlags = new LinkedHashMap<>();
+
+    @Option(
             name = "skip-trybot-experiment",
             description = "Whether to skip experiments for TRYBOT runs.")
     private boolean mSkipTrybotExperiment = true;
@@ -696,6 +703,12 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public Map<String, String> getExperimentalFlags() {
         return mExperimentalFlags;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Map<String, String> getRolloutFlags() {
+        return mRolloutFlags;
     }
 
     /** {@inheritDoc} */
