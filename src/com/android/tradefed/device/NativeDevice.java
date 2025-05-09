@@ -1668,7 +1668,9 @@ public class NativeDevice
                     new DeviceAction() {
                         @Override
                         public boolean run()
-                                throws TimeoutException, IOException, AdbCommandRejectedException,
+                                throws TimeoutException,
+                                        IOException,
+                                        AdbCommandRejectedException,
                                         SyncException {
                             SyncService syncService = null;
                             boolean status = false;
@@ -1682,6 +1684,10 @@ public class NativeDevice
                                         interpolatePathVariables(remoteFilePath),
                                         SyncService.getNullProgressMonitor());
                                 status = true;
+                                CLog.d(
+                                        "pushed %s to %s",
+                                        localFile.getAbsolutePath(),
+                                        interpolatePathVariables(remoteFilePath));
                             } catch (SyncException e) {
                                 CLog.w(
                                         "Failed to push %s to %s on device %s. Message: '%s'. "
