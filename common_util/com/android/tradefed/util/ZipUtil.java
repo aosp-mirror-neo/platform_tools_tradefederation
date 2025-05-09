@@ -30,6 +30,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -703,7 +704,11 @@ public class ZipUtil {
         }
 
         targetFile.getParentFile().mkdirs();
-        Files.createSymbolicLink(Paths.get(targetFile.getPath()), Paths.get(target));
+        try {
+            Files.createSymbolicLink(Paths.get(targetFile.getPath()), Paths.get(target));
+        } catch (FileAlreadyExistsException faee) {
+            CLog.w("Ignoring file already exists for symlink: %s", Paths.get(target));
+        }
     }
 
     protected static void validateDestinationDir(File destDir, String filename) throws IOException {
