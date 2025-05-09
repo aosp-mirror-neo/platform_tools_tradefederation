@@ -15,18 +15,23 @@
  */
 package com.android.tradefed.util.avd;
 
+import static com.android.tradefed.util.avd.HostOrchestratorClient.CreateSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.Cvd;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.ErrorResponseException;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.HoHttpClient;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.IHoHttpClient;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.ListCvdsResponse;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.Operation;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.StartCVDRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateBugreportRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationResultRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildListCvdsRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildPowerwashRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildRemoveInstanceRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildStartCvdRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildStopInstanceRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.saveToFile;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.sendRequest;
 
@@ -148,12 +153,10 @@ public class HostOrchestratorUtil {
         File tempFile = null;
         try {
             tempFile = Files.createTempFile(logName, ".txt").toFile();
-            if (mUseOxygenation) {
-                if (mHOTunnel == null || !mHOTunnel.isAlive()) {
-                    CLog.e("Failed portforwarding Host Orchestrator tunnel.");
-                    FileUtil.deleteFile(tempFile);
-                    return null;
-                }
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                CLog.e("Failed portforwarding Host Orchestrator tunnel.");
+                FileUtil.deleteFile(tempFile);
+                return null;
             }
             String baseUrl = getHOBaseUrl(mHOPortNumber);
             HttpRequest request =
@@ -169,22 +172,13 @@ public class HostOrchestratorUtil {
 
     /** Pull CF host logs via Host Orchestrator. */
     public File pullCvdHostLogs() {
-        // Basically, the rough processes to pull CF host logs are
-        // 1. Portforward CURL tunnel.
-        // 2. Run /cvds API and parse the json to get ${GROUP_NAME}.
-        // 3. Run /cvds/${GROUP_NAME}/:bugreport to get ${OPERATION_ID}
-        // 4. Periodically run /operations/${OPERATION_ID}, parse the json util get "done":true.
-        // 5. Run /operations/${OPERATION_ID}/result to get the ${UUID}.
-        // 6. Run /cvdbugreports/${UUID} to download the artifact.
         File cvdLogsDir = null;
         File cvdLogsZip = null;
         try {
             cvdLogsZip = Files.createTempFile(CVD_HOST_LOGZ, ".zip").toFile();
-            if (mUseOxygenation) {
-                if (mHOTunnel == null || !mHOTunnel.isAlive()) {
-                    CLog.e("Failed portforwarding Host Orchestrator CURL tunnel.");
-                    return null;
-                }
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                CLog.e("Failed portforwarding Host Orchestrator CURL tunnel.");
+                return null;
             }
             ListCvdsResponse listCvdsRes = listCvds();
             if (listCvdsRes.cvds.size() == 0) {
@@ -228,11 +222,9 @@ public class HostOrchestratorUtil {
      * @return True if device boot complete, false otherwise.
      */
     public boolean deviceBootCompleted(long maxWaitTime) {
-        if (mUseOxygenation) {
-            if (mHOTunnel == null || !mHOTunnel.isAlive()) {
-                CLog.e("Failed portforwarding Host Orchestrator CURL tunnel.");
-                return false;
-            }
+        if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+            CLog.e("Failed portforwarding Host Orchestrator CURL tunnel.");
+            return false;
         }
         long maxEndTime = System.currentTimeMillis() + maxWaitTime;
         while (System.currentTimeMillis() < maxEndTime) {
@@ -263,25 +255,14 @@ public class HostOrchestratorUtil {
     }
 
     /**
-     * Attempt to powerwash a GCE instance via Host Orchestrator.
+     * Attempt to powerwash a Cuttlefish instance via Host Orchestrator.
      *
      * @return A {@link CommandResult} containing the status and logs.
      */
     public CommandResult powerwashGce() {
-        // Basically, the rough processes to powerwash a GCE instance are
-        // 1. Portforward CURL tunnel
-        // 2. Obtain the necessary information to powerwash a GCE instance via Host Orchestrator.
-        // 3. Attempt to powerwash a GCE instance via Host Orchestrator.
-        // TODO(easoncylee): Flesh out this section when it's ready.
         try {
-            if (mUseOxygenation) {
-                if (mHOTunnel == null || !mHOTunnel.isAlive()) {
-                    CommandResult curlRes = new CommandResult(CommandStatus.EXCEPTION);
-                    String msg = "Failed portforwarding Host Orchestrator tunnel.";
-                    CLog.e(msg);
-                    curlRes.setStderr(msg);
-                    return curlRes;
-                }
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                return buildHOFailureResult();
             }
             ListCvdsResponse listCvdsRes = listCvds();
             if (listCvdsRes.cvds.size() == 0) {
@@ -294,27 +275,21 @@ public class HostOrchestratorUtil {
             Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
             waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
         } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
-            CLog.e("Failed powerwashing gce via Host Orchestrator: %s", e);
+            CLog.e("Failed to powerwash the cuttlefish instance via Host Orchestrator: %s", e);
             return new CommandResult(CommandStatus.EXCEPTION);
         }
         return new CommandResult(CommandStatus.SUCCESS);
     }
 
-    /** Remove Cuttlefish instance via Host Orchestrator. */
+    /**
+     * Attempt to remote a Cuttlefish instance via Host Orchestrator.
+     *
+     * @return A {@link CommandResult} containing the status and logs.
+     */
     public CommandResult removeInstance() {
-        // Basically, the rough processes to remove an instance are
-        // 1. Portforward CURL tunnel
-        // 2. Obtain the group and instance name.
-        // 3. Attempt to remove the Instance via Host Orchestrator.
         try {
-            if (mUseOxygenation) {
-                if (mHOTunnel == null || !mHOTunnel.isAlive()) {
-                    CommandResult curlRes = new CommandResult(CommandStatus.EXCEPTION);
-                    String msg = "Failed portforwarding Host Orchestrator tunnel.";
-                    CLog.e(msg);
-                    curlRes.setStderr(msg);
-                    return curlRes;
-                }
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                return buildHOFailureResult();
             }
             ListCvdsResponse listCvdsRes = listCvds();
             if (listCvdsRes.cvds.size() == 0) {
@@ -327,22 +302,103 @@ public class HostOrchestratorUtil {
             Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
             waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
         } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
-            CLog.e("Failed removing instance via Host Orchestrator: %s", e);
+            CLog.e("Failed to remove the cuttlefish instance via Host Orchestrator: %s", e);
             return new CommandResult(CommandStatus.EXCEPTION);
         }
         return new CommandResult(CommandStatus.SUCCESS);
     }
 
-    /** Attempt to snapshot a Cuttlefish instance via Host Orchestrator. */
-    public CommandResult snapshotGce() {
-        // TODO(b/339304559): Flesh out this section when the host orchestrator is supported.
-        return new CommandResult(CommandStatus.EXCEPTION);
+    /**
+     * Attempt to stop a Cuttlefish instance via Host Orchestrator.
+     *
+     * @return A {@link CommandResult} containing the status and logs.
+     */
+    public CommandResult stopInstance() {
+        try {
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                return buildHOFailureResult();
+            }
+            ListCvdsResponse listCvdsRes = listCvds();
+            if (listCvdsRes.cvds.size() == 0) {
+                CLog.e("No cvd found.");
+                return null;
+            }
+            Cvd cvd = listCvdsRes.cvds.get(0);
+            String baseUrl = getHOBaseUrl(mHOPortNumber);
+            HttpRequest httpRequest = buildStopInstanceRequest(baseUrl, cvd.group, cvd.name);
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+            waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
+        } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
+            CLog.e("Failed to stop the cuttlefish instance via Host Orchestrator: %s", e);
+            return new CommandResult(CommandStatus.EXCEPTION);
+        }
+        return new CommandResult(CommandStatus.SUCCESS);
     }
 
-    /** Attempt to restore snapshot of a Cuttlefish instance via Host Orchestrator. */
-    public CommandResult restoreSnapshotGce() {
-        // TODO(b/339304559): Flesh out this section when the host orchestrator is supported.
-        return new CommandResult(CommandStatus.EXCEPTION);
+    /**
+     * Attempt to snapshot a Cuttlefish instance with the given id via Host Orchestrator.
+     *
+     * @param snapshotId the id that the snapshot file should be stored.
+     * @return A {@link CommandResult} containing the status and logs.
+     */
+    public CommandResult snapshotInstance(String snapshotId) {
+        try {
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                return buildHOFailureResult();
+            }
+            ListCvdsResponse listCvdsRes = listCvds();
+            if (listCvdsRes.cvds.size() == 0) {
+                CLog.e("No cvd found.");
+                return null;
+            }
+            Cvd cvd = listCvdsRes.cvds.get(0);
+            String baseUrl = getHOBaseUrl(mHOPortNumber);
+            HttpRequest httpRequest =
+                    buildCreateSnapshotRequest(
+                            baseUrl, cvd.group, cvd.name, new CreateSnapshotRequest(snapshotId));
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+            waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
+        } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
+            CLog.e(
+                    "Failed to snapshot the cuttlefish instance with given id: %s via Host"
+                            + " Orchestrator: %s",
+                    snapshotId, e);
+            return new CommandResult(CommandStatus.EXCEPTION);
+        }
+        return new CommandResult(CommandStatus.SUCCESS);
+    }
+
+    /**
+     * Attempt to start CVD with a given id via Host Orchestrator.
+     *
+     * @param snapshotId the id that the snapshot file should be stored.
+     * @return A {@link CommandResult} containing the status and logs.
+     */
+    public CommandResult startCvd(String snapshotId) {
+        try {
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                return buildHOFailureResult();
+            }
+            ListCvdsResponse listCvdsRes = listCvds();
+            if (listCvdsRes.cvds.size() == 0) {
+                CLog.e("No cvd found.");
+                return null;
+            }
+            Cvd cvd = listCvdsRes.cvds.get(0);
+            String baseUrl = getHOBaseUrl(mHOPortNumber);
+            HttpRequest httpRequest =
+                    buildStartCvdRequest(
+                            baseUrl, cvd.group, cvd.name, new StartCVDRequest(snapshotId));
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+            waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
+        } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
+            CLog.e(
+                    "Failed to start a cuttlefish instance with the given id: %s via Host"
+                            + " Orchestrator: %s",
+                    snapshotId, e);
+            return new CommandResult(CommandStatus.EXCEPTION);
+        }
+        return new CommandResult(CommandStatus.SUCCESS);
     }
 
     /** Attempt to delete snapshot of a Cuttlefish instance via Host Orchestrator. */
@@ -536,5 +592,13 @@ public class HostOrchestratorUtil {
         if (mUseOxygenation) {
             mOxygenClient.closeLHPConnection(mHOTunnel);
         }
+    }
+
+    private CommandResult buildHOFailureResult() {
+        CommandResult curlRes = new CommandResult(CommandStatus.EXCEPTION);
+        String msg = "Failed portforwarding Host Orchestrator tunnel.";
+        CLog.e(msg);
+        curlRes.setStderr(msg);
+        return curlRes;
     }
 }
