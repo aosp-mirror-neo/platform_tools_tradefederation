@@ -629,6 +629,43 @@ public class TestDevice extends NativeDevice {
         return internalInstallPackage(packageFile, reinstall, args);
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public boolean installPackageWithIncrementalMode(
+            File[] apkFiles, String[] extraArgs, String userId) throws DeviceNotAvailableException {
+        List<String> adbCmd = new ArrayList<>();
+        adbCmd.add("install");
+        adbCmd.add("--incremental");
+        boolean runtimePermissionSupported = isRuntimePermissionSupported();
+        if (runtimePermissionSupported) {
+            adbCmd.add("-g");
+        }
+        if (userId != null) {
+            adbCmd.add("--user");
+            adbCmd.add(userId);
+        }
+        if (extraArgs.length > 0) {
+            adbCmd.addAll(Arrays.asList(extraArgs));
+        }
+        if (apkFiles.length > 1) {
+            adbCmd.add("install-multiple");
+        }
+        for (File apk : apkFiles) {
+            adbCmd.add(apk.getAbsolutePath());
+        }
+        CommandResult res = executeAdbV2Command(adbCmd.toArray(new String[0]));
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            CLog.e("Failed to install with incremental mode, output: %s", res);
+            throw new DeviceNotAvailableException(
+                    String.format(
+                            "Failed to install with incremental mode on device %s, output: %s",
+                            getSerialNumber(), res),
+                    getSerialNumber(),
+                    DeviceErrorIdentifier.APK_INSTALLATION_FAILED);
+        }
+        return true;
+    }
+
     /**
      * {@inheritDoc}
      */

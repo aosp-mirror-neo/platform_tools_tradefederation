@@ -209,6 +209,15 @@ public interface ITestDevice extends INativeDevice {
             throws DeviceNotAvailableException;
 
     /**
+     * Installs apks with incremental mode.
+     *
+     * @param apkFiles the apk files to install.
+     * @throws DeviceNotAvailableException
+     */
+    public boolean installPackageWithIncrementalMode(
+            File[] apkFiles, String[] extraArgs, String userId) throws DeviceNotAvailableException;
+
+    /**
      * Uninstall an Android package from device.
      *
      * @param packageName the Android package to uninstall

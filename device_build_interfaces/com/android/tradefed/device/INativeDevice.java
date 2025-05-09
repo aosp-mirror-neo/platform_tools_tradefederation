@@ -1251,15 +1251,15 @@ public interface INativeDevice {
     public void nonBlockingReboot() throws DeviceNotAvailableException;
 
     /**
-     * Turns on adb root. If the "enable-root" setting is "false", will log a message and
-     * return without enabling root.
-     * <p/>
-     * Enabling adb root may cause device to disconnect from adb. This method will block until
+     * Turns on adb root. If the "enable-root" setting is "false", will log a message and return
+     * without enabling root.
+     *
+     * <p>Enabling adb root may cause device to disconnect from adb. This method will block until
      * device is available.
      *
      * @return <code>true</code> if successful.
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
-     * recovered.
+     *     recovered.
      */
     public boolean enableAdbRoot() throws DeviceNotAvailableException;
 
