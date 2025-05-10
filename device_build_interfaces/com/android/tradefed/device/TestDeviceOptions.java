@@ -51,6 +51,8 @@ public class TestDeviceOptions {
         EMULATOR,
         /** Chrome OS VM (betty) */
         CHEEPS,
+        /** Device connected over network */
+        NETWORK_DEVICE,
     }
 
     /** The size of the host which Oxygen virtual device will be running on. */
@@ -978,6 +980,8 @@ public class TestDeviceOptions {
                 return "create";
             case EMULATOR:
                 return "create_gf";
+            case NETWORK_DEVICE:
+                return "invalid_shouldnt_be_used";
         }
         throw new RuntimeException("Unexpected InstanceType: " + type);
     }

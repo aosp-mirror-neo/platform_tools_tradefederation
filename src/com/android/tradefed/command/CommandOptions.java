@@ -259,6 +259,13 @@ public class CommandOptions implements ICommandOptions {
     private Map<String, String> mExperimentalFlags = new LinkedHashMap<>();
 
     @Option(
+            name = "rollout-flags",
+            description =
+                    "Map of rollout flags to enable features completely. Rollout flags are ignored"
+                            + " when TF objects are not present.")
+    private Map<String, String> mRolloutFlags = new LinkedHashMap<>();
+
+    @Option(
             name = "skip-trybot-experiment",
             description = "Whether to skip experiments for TRYBOT runs.")
     private boolean mSkipTrybotExperiment = true;
@@ -387,6 +394,11 @@ public class CommandOptions implements ICommandOptions {
                     "Option for compatibility with TradefedDelegator to receive environment"
                             + " options. inop if not using delegation mode.")
     private Map<String, String> mDelegationEnvironment = new LinkedHashMap<>();
+
+    @Option(
+            name = "skip-parent-process-logcat",
+            description = "Whether to skip logcat for parent process.")
+    private boolean mSkipParentProcessLogcat = false;
 
     /**
      * Set the help mode for the config.
@@ -695,6 +707,12 @@ public class CommandOptions implements ICommandOptions {
 
     /** {@inheritDoc} */
     @Override
+    public Map<String, String> getRolloutFlags() {
+        return mRolloutFlags;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public boolean skipTrybotExperiment() {
         return mSkipTrybotExperiment;
     }
@@ -935,5 +953,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean reportInvocationCacheResultsInPresubmit() {
         return mEnableCachingInvocationResultsInPresubmit;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean shouldSkipParentProcessLogcat() {
+        return mSkipParentProcessLogcat;
     }
 }

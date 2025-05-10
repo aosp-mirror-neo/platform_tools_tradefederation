@@ -544,7 +544,19 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
         if (fastbootd) {
             mode = TestDeviceState.FASTBOOTD;
         }
-        boolean result = waitForDeviceState(mode, waitTime);
+        boolean result = false;
+        // For a tcp connection, break down the wait due to the connection aspect which change the
+        // behavior.
+        if (getFastbootSerialNumber().contains("tcp:")) {
+            for (int i = 0; i < 4; i++) {
+                result = waitForDeviceState(mode, waitTime / 4);
+                if (result) {
+                    break;
+                }
+            }
+        } else {
+            result = waitForDeviceState(mode, waitTime);
+        }
         mMgr.removeFastbootListener(listener);
         return result;
     }

@@ -93,6 +93,10 @@ public class DefaultConnection extends AbstractConnection {
                 return new AdbSshConnection(builder);
             }
         }
+        if (type.equals(InstanceType.NETWORK_DEVICE)) {
+            CLog.d("NETWORK_DEVICE type, using an adb tcp connection");
+            return new AdbTcpConnection(builder);
+        }
 
         return new DefaultConnection(builder);
     }

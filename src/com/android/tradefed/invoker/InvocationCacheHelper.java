@@ -46,6 +46,8 @@ import java.util.Map.Entry;
 /** Utility to handle uploading and looking up invocation cache results. */
 public class InvocationCacheHelper {
 
+    private static final String CACHE_ERROR = "%%%CACHE_ERROR%%%";
+
     /** Describes the cache results. */
     public static class CacheInvocationResultDescriptor {
         private final boolean cacheHit;
@@ -98,6 +100,7 @@ public class InvocationCacheHelper {
             CLog.d("Cannot handle testsdir.");
             return;
         }
+        File errorInCache = null;
         try (CloseableTraceScope ignored = new CloseableTraceScope("upload_invocation_results")) {
             String cacheInstance = mainConfig.getCommandOptions().getRemoteCacheInstanceName();
             ICacheClient cacheClient =
@@ -111,18 +114,19 @@ public class InvocationCacheHelper {
                             getCommonCommandLine(mainConfig.getCommandLine()),
                             computeEnvironment(mainConfig),
                             60000L);
-            int exitCode = 0;
             if (protoResultsReporter.stopCaching()) {
-                exitCode = 10;
+                errorInCache = FileUtil.createTempFile("cache-error", ".txt");
+                FileUtil.writeToFile(CACHE_ERROR, errorInCache);
             }
             ExecutableActionResult result =
-                    ExecutableActionResult.create(exitCode, protoResults, null);
+                    ExecutableActionResult.create(0, protoResults, errorInCache);
             CLog.d("Uploading cache for %s and %s", action, protoResults);
             cacheClient.uploadCache(action, result);
         } catch (IOException | RuntimeException | InterruptedException e) {
             CLog.e(e);
         } finally {
             FileUtil.recursiveDelete(invocationTestsDir);
+            FileUtil.deleteFile(errorInCache);
         }
     }
 
@@ -150,6 +154,7 @@ public class InvocationCacheHelper {
             CLog.d("Cannot handle testsdir.");
             return new CacheInvocationResultDescriptor(false, null);
         }
+        ExecutableActionResult cachedResults = null;
         try (CloseableTraceScope ignored = new CloseableTraceScope("lookup_invocation_results")) {
             String cacheInstance = mainConfig.getCommandOptions().getRemoteCacheInstanceName();
             ICacheClient cacheClient =
@@ -166,16 +171,14 @@ public class InvocationCacheHelper {
             CLog.d("Looking up cache for %s", action);
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.INVOCATION_RESULTS_CHECKING_CACHE, 1);
-            ExecutableActionResult cachedResults = cacheClient.lookupCache(action);
+            cachedResults = cacheClient.lookupCache(action);
             if (cachedResults == null) {
                 CLog.d("No cached results for the invocation.");
                 return null;
-            } else if (cachedResults.exitCode() > 0) {
+            } else if (FileUtil.readStringFromFile(cachedResults.stdErr()).contains(CACHE_ERROR)) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.INVOCATION_CACHE_HIT_WITH_FAILURE, 1);
                 CLog.d("Cached invocation but with failures.");
-                FileUtil.deleteFile(cachedResults.stdOut());
-                FileUtil.deleteFile(cachedResults.stdErr());
                 return null;
             } else {
                 InvocationMetricLogger.addInvocationMetrics(
@@ -190,14 +193,16 @@ public class InvocationCacheHelper {
                                     metadata.get(ModuleProtoResultReporter.INVOCATION_ID_KEY));
                     CLog.d(details);
                 }
-                FileUtil.deleteFile(cachedResults.stdOut());
-                FileUtil.deleteFile(cachedResults.stdErr());
                 return new CacheInvocationResultDescriptor(true, details);
             }
         } catch (IOException | RuntimeException | InterruptedException e) {
             CLog.e(e);
         } finally {
             FileUtil.recursiveDelete(invocationTestsDir);
+            if (cachedResults != null) {
+                FileUtil.deleteFile(cachedResults.stdOut());
+                FileUtil.deleteFile(cachedResults.stdErr());
+            }
         }
         return null;
     }

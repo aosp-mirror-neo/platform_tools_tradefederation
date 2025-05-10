@@ -192,6 +192,12 @@ public interface ICommandOptions {
     /** Returns the experimental flags map, that can be used to feature gate projects. */
     public Map<String, String> getExperimentalFlags();
 
+    /**
+     * Returns the rollout flags map. Rollout flags are different from experimental flags, as they
+     * are intended to be used for every invocation.
+     */
+    public Map<String, String> getRolloutFlags();
+
     /** Whether to skip experiments for TRYBOT runs. */
     public boolean skipTrybotExperiment();
 
@@ -317,4 +323,7 @@ public interface ICommandOptions {
 
     /** Returns true if we should report invocation cache results when available in presubmit. */
     public boolean reportInvocationCacheResultsInPresubmit();
+
+    /** Whether to skip logcat for parent process. */
+    public boolean shouldSkipParentProcessLogcat();
 }

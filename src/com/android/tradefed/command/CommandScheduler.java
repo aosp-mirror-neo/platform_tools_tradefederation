@@ -684,6 +684,31 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                         }
                     }
                 }
+                // Set TF rollout flags
+                List<String> ignoredFlags = new LinkedList<>();
+                for (Map.Entry<String, String> entry :
+                        config.getCommandOptions().getRolloutFlags().entrySet()) {
+                    try {
+                        String optionName = entry.getKey();
+                        String optionValue = entry.getValue();
+                        // Support map flags, where optionValue is a key=value pair
+                        int equalsIndex = optionValue.indexOf('=');
+                        if (equalsIndex != -1) {
+                            String mapKey = optionValue.substring(0, equalsIndex);
+                            String mapValue = optionValue.substring(equalsIndex + 1);
+                            config.injectOptionValue(optionName, mapKey, mapValue);
+                        } else {
+                            config.injectOptionValue(optionName, optionValue);
+                        }
+                    } catch (ConfigurationException e) {
+                        ignoredFlags.add(entry.getKey());
+                    }
+                }
+                // report the ignored rollout flags
+                if (!ignoredFlags.isEmpty()) {
+                    CLog.w("Rollout flags ignored: %s", ignoredFlags);
+                }
+
                 mCmd.commandStarted();
                 long invocTimeout = config.getCommandOptions().getInvocationTimeout();
                 if (invocTimeout > 0) {

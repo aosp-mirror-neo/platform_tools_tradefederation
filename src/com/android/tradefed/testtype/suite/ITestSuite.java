@@ -413,12 +413,12 @@ public abstract class ITestSuite
             description =
                     "Feature flag to enable whether metrics should be forwarded by ModuleListener"
                             + " or the new forwarder.")
-    private boolean mUseModuleResultsForwarder = false;
+    private boolean mUseModuleResultsForwarder = true;
 
     @Option(
             name = "remove-module-buffering",
             description = "Feature flag to remove module buffering.")
-    private boolean mRemoveModuleBuffering = false;
+    private boolean mRemoveModuleBuffering = true;
 
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
@@ -2072,5 +2072,9 @@ public abstract class ITestSuite
     @com.google.common.annotations.VisibleForTesting
     protected void setPrioritizeHostConfig(boolean prioritizeHostConfig) {
         mPrioritizeHostConfig = prioritizeHostConfig;
+    }
+
+    public boolean isRemoveModuleBuffering() {
+        return mRemoveModuleBuffering;
     }
 }

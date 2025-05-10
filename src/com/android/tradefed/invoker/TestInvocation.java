@@ -368,8 +368,11 @@ public class TestInvocation implements ITestInvocation {
         } finally {
             mTestDone = true;
             long bugreportStartTime = System.currentTimeMillis();
+            boolean isSubprocess = isSubprocess(config);
+            boolean shouldSkipParentProcessLog =
+                    config.getCommandOptions().shouldSkipParentProcessLogcat();
             // Only capture logcat for TEST if we started the test phase.
-            if (mTestStarted) {
+            if (mTestStarted && (isSubprocess || !shouldSkipParentProcessLog)) {
                 for (ITestDevice device : context.getDevices()) {
                     invocationPath.reportLogs(device, listener, Stage.TEST);
                 }
@@ -642,8 +645,6 @@ public class TestInvocation implements ITestInvocation {
             logDeviceBatteryLevel(testInfo.getContext(), "setup -> test");
             mTestStarted = true;
             CurrentInvocation.setActionInProgress(ActionInProgress.TEST);
-            waitForSnapuserd(
-                    testInfo, config, SnapuserdWaitPhase.BLOCK_BEFORE_TEST, isSubprocess(config));
             invocationPath.runTests(testInfo, config, listener);
         } finally {
             if (mClient != null) {
@@ -2094,7 +2095,7 @@ public class TestInvocation implements ITestInvocation {
     }
 
     /** Always complete snapuserd before proceeding into test. */
-    private void waitForSnapuserd(
+    static void waitForSnapuserd(
             TestInformation testInfo,
             IConfiguration config,
             SnapuserdWaitPhase currentPhase,

@@ -17,21 +17,10 @@ package com.android.tradefed.device;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.verify;
 
 import com.android.ddmlib.IDevice;
 import com.android.helper.aoa.UsbDevice;
@@ -48,7 +37,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 
 /** Unit tests for {@link WaitDeviceRecovery}. */
 @RunWith(JUnit4.class)
@@ -79,6 +70,7 @@ public class WaitDeviceRecoveryTest {
                 };
 
         when(mMockMonitor.getSerialNumber()).thenReturn("serial");
+        when(mMockMonitor.getFastbootSerialNumber()).thenReturn("serial");
     }
 
     /**

@@ -498,9 +498,6 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                         && !deviceBuild.getBootloaderVersion().equals(currentBootloaderVersion))) {
             CLog.i("Flashing bootloader %s", deviceBuild.getBootloaderVersion());
             flashBootloader(device, deviceBuild.getBootloaderImageFile());
-            if (mIncrementalFlashing != null) {
-                mIncrementalFlashing.notifyBootloaderNeedsRevert();
-            }
             return true;
         } else {
             CLog.i("Bootloader is already version %s, skipping flashing", currentBootloaderVersion);
@@ -566,9 +563,6 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         if (checkShouldFlashBaseband(device, deviceBuild)) {
             CLog.i("Flashing baseband %s", deviceBuild.getBasebandVersion());
             flashBaseband(device, deviceBuild.getBasebandImageFile());
-            if (mIncrementalFlashing != null) {
-                mIncrementalFlashing.notifyBasebadNeedsRevert();
-            }
         }
     }
 
