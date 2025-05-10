@@ -57,6 +57,8 @@ public class AdbTcpConnection extends DefaultConnection {
     private File mAdbConnectLogs = null;
 
     private Map<ITestDevice, String> mInvocationSnapshots;
+    private String mHostname = null;
+    private String mPort = null;
 
     public AdbTcpConnection(ConnectionBuilder builder) {
         super(builder);
@@ -279,6 +281,9 @@ public class AdbTcpConnection extends DefaultConnection {
 
     /** Return the hostname associated with the device. Extracted from the serial. */
     public String getHostName(String serial) {
+        if (mHostname != null) {
+            return mHostname;
+        }
         if (!RemoteAndroidDevice.checkSerialFormatValid(serial)) {
             throw new RuntimeException(
                     String.format(
@@ -286,11 +291,15 @@ public class AdbTcpConnection extends DefaultConnection {
                                     + "should look like <hostname>:<port>",
                             serial));
         }
-        return serial.split(":")[0];
+        mHostname = serial.split(":")[0];
+        return mHostname;
     }
 
     /** Return the port number asociated with the device. Extracted from the serial. */
     public String getPortNum(String serial) {
+        if (mPort != null) {
+            return mPort;
+        }
         if (!RemoteAndroidDevice.checkSerialFormatValid(serial)) {
             throw new RuntimeException(
                     String.format(
@@ -298,6 +307,7 @@ public class AdbTcpConnection extends DefaultConnection {
                                     + "should look like <hostname>:<port>",
                             serial));
         }
-        return serial.split(":")[1];
+        mPort = serial.split(":")[1];
+        return mPort;
     }
 }

@@ -645,8 +645,6 @@ public class TestInvocation implements ITestInvocation {
             logDeviceBatteryLevel(testInfo.getContext(), "setup -> test");
             mTestStarted = true;
             CurrentInvocation.setActionInProgress(ActionInProgress.TEST);
-            waitForSnapuserd(
-                    testInfo, config, SnapuserdWaitPhase.BLOCK_BEFORE_TEST, isSubprocess(config));
             invocationPath.runTests(testInfo, config, listener);
         } finally {
             if (mClient != null) {
@@ -2097,7 +2095,7 @@ public class TestInvocation implements ITestInvocation {
     }
 
     /** Always complete snapuserd before proceeding into test. */
-    private void waitForSnapuserd(
+    static void waitForSnapuserd(
             TestInformation testInfo,
             IConfiguration config,
             SnapuserdWaitPhase currentPhase,

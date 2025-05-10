@@ -34,6 +34,7 @@ import com.android.tradefed.config.filter.GetPreviousPassedHelper;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.NativeDevice;
+import com.android.tradefed.device.SnapuserdWaitPhase;
 import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.cloud.GceAvdInfo;
 import com.android.tradefed.device.cloud.GceManager;
@@ -1180,6 +1181,11 @@ public class InvocationExecution implements IInvocationExecution {
         long start = System.currentTimeMillis();
         try (CloseableTraceScope ignored =
                 new CloseableTraceScope(InvocationMetricKey.test_execution.name())) {
+            TestInvocation.waitForSnapuserd(
+                    info,
+                    config,
+                    SnapuserdWaitPhase.BLOCK_BEFORE_TEST,
+                    TestInvocation.isSubprocess(config));
             GetPreviousPassedHelper previousPassHelper = new GetPreviousPassedHelper();
             // Add new exclude filters to global filters
             Set<String> previousPassedFilters = previousPassHelper.getPreviousPassedFilters(config);

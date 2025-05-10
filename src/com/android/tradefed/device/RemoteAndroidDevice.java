@@ -18,7 +18,10 @@ package com.android.tradefed.device;
 import com.android.ddmlib.IDevice;
 import com.android.tradefed.command.remote.DeviceDescriptor;
 import com.android.tradefed.device.connection.DefaultConnection;
+import com.android.tradefed.log.LogUtil.CLog;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,9 +62,18 @@ public class RemoteAndroidDevice extends TestDevice {
         String[] serial = serialString.split(":");
         if (serial.length == 2) {
             // Check first part is an IP
-            Matcher match = IP_PATTERN.matcher(serial[0]);
+            String hostname = serial[0];
+            Matcher match = IP_PATTERN.matcher(hostname);
             if (!match.find()) {
-                return false;
+                try {
+                    InetAddress address = InetAddress.getByName(hostname);
+                    String ipAddress = address.getHostAddress();
+                    CLog.d("The ip address of " + hostname + " is: " + ipAddress);
+                    return true;
+                } catch (UnknownHostException e) {
+                    CLog.e("Unable to find the IP address for " + hostname);
+                    return false;
+                }
             }
             // Check second part if a port
             try {
