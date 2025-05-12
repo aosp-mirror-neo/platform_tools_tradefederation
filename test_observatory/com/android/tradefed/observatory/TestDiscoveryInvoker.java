@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -209,11 +209,6 @@ public class TestDiscoveryInvoker {
                         .setEnvVariable(
                                 ROOT_DIRECTORY_ENV_VARIABLE_KEY, mRootDir.getAbsolutePath());
             }
-            // If it is in BWYN test discovery mode, we should always not ignore test mapping
-            // imports through setting the env var that consumed by TestMappingSuiteRunner.
-            if (mIsBWYN) {
-                getRunUtil().setEnvVariable(TestMappingSuiteRunner.IS_BWYN_ENV_VAR_KEY, "true");
-            }
             getRunUtil().setEnvVariable(OUTPUT_FILE, outputFile.getAbsolutePath());
             getRunUtil().setEnvVariable(DISCOVERY_TRACE_FILE, traceFile.getAbsolutePath());
             CommandResult res = getRunUtil().runTimedCmd(DISCOVERY_TIMEOUT_MS, subprocessArgs);
@@ -342,6 +337,12 @@ public class TestDiscoveryInvoker {
             if (mTestMappingZip != null) {
                 getRunUtil()
                         .setEnvVariable(TEST_MAPPING_ZIP_FILE, mTestMappingZip.getAbsolutePath());
+            }
+            // If it is in BWYN test discovery mode, we should always not ignore test mapping
+            // imports through setting the env var that consumed by TestMappingSuiteRunner.
+            if (mIsBWYN) {
+                CLog.i("Setting BWYN test discovery mode to avoid skip test mapping imports.");
+                getRunUtil().setEnvVariable(TestMappingSuiteRunner.IS_BWYN_ENV_VAR_KEY, "true");
             }
             if (mBuildInfo != null) {
                 if (mBuildInfo.getFile(TestMapping.TEST_MAPPINGS_ZIP) != null) {
