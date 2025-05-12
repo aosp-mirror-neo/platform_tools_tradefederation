@@ -16,6 +16,7 @@
 
 package com.android.tradefed.postprocessor;
 
+import com.android.annotations.Nullable;
 import com.android.annotations.VisibleForTesting;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
@@ -150,6 +151,15 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     private List<File> mSummarySpecFiles = new ArrayList<File>();
 
     @Option(
+            name = "add-sql-packages",
+            description =
+                    "Path to the directory of additional SQL packages to load when running the"
+                        + " trace processor. A path can be either absolute or relative to the test"
+                        + " artifacts. The Files from the directory will be treated as a new SQL"
+                        + " package and can be used for INCLUDE PERFETTO MODULE statements.")
+    private List<File> mAddSqlPackages = new ArrayList<File>();
+
+    @Option(
             name = "summary-spec-file-name",
             description =
                     "Parses the spec at the specified path and makes it available to other"
@@ -170,6 +180,8 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     private String mPerfettoTraceFileRegex = ".*\\.perfetto\\-trace.*";
 
     private Map<String, File> mTestArtifactFilePathMap = new HashMap<>();
+
+    private Map<String, File> mTestArtifactDirectoryMap = new HashMap<>();
 
     @Override
     public Map<String, Metric.Builder> processTestMetricsAndLogs(
@@ -296,6 +308,19 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
         FileUtil.chmodGroupRWX(mTraceProcessorBinary);
         List<String> commandArgsList = new ArrayList<String>();
         commandArgsList.add(mTraceProcessorBinary.getAbsolutePath());
+
+        for (File sqlPackage : mAddSqlPackages) {
+            commandArgsList.add("--add-sql-package");
+            // Resolve the SQL package directory from the absolute path or from the test artifacts.
+            File resolvedSqlPackage = maybeResolveTestDir(sqlPackage);
+            if (resolvedSqlPackage == null) {
+                CLog.e(
+                        "Failed to locate the SQL package directory for %s",
+                        sqlPackage.getAbsolutePath());
+                return new TraceProcessorResult(metricOutputFile, runtime, STATUS_FAILURE);
+            }
+            commandArgsList.add(resolvedSqlPackage.getAbsolutePath());
+        }
 
         if (metricVersion.contains(METRIC_VERSION_V1)) {
             metricOutputFilePrefix = "metric_";
@@ -490,6 +515,43 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
         }
         CLog.i("Successfully decompressed the perfetto trace file.");
         return decompressedFile;
+    }
+
+    /**
+     * Resolve the directory from the absolute path or from the test artifacts.
+     *
+     * @param directory directory to be resolved.
+     * @return resolved directory. Returns null if directory is not found.
+     */
+    @Nullable
+    File maybeResolveTestDir(File directory) {
+        // If the path is absolute, check if the file exists.
+        if (directory.isAbsolute()) {
+            return directory.exists() ? directory : null;
+        }
+        return getDirectoryFromTestArtifacts(directory.getName());
+    }
+
+    @VisibleForTesting
+    @Nullable
+    File getDirectoryFromTestArtifacts(String directoryName) {
+        if (mTestArtifactDirectoryMap.containsKey(directoryName)) {
+            return mTestArtifactDirectoryMap.get(directoryName);
+        }
+        // A relative path is searched from the test artifact dir.
+        File testArtifactDirectory =
+                SearchArtifactUtil.searchFile(
+                        directoryName, false, null, null, null, null, /* includeDirectory= */ true);
+        if (testArtifactDirectory == null || !testArtifactDirectory.exists()) {
+            CLog.e("Failed to retrieve directory %s from test artifacts", directoryName);
+            return null;
+        }
+
+        CLog.i(
+                "Using directory %s from %s",
+                directoryName, testArtifactDirectory.getAbsolutePath());
+        mTestArtifactDirectoryMap.put(directoryName, testArtifactDirectory);
+        return testArtifactDirectory;
     }
 
     /**
