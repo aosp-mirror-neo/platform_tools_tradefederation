@@ -69,6 +69,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -130,6 +131,9 @@ public class ResultDBReporter
     // No more log associations can be uploaded with in Result reporter after this set to true.
     private boolean mLogAssociationTerminated = false;
 
+    // Queue to store artifacts received before invocationStarted.
+    private ConcurrentLinkedQueue<Artifact> mEarlyArtifacts = new ConcurrentLinkedQueue<>();
+
     @Override
     public void setConfiguration(IConfiguration configuration) {
         mConfiguration = configuration;
@@ -145,18 +149,33 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
-        if (mLogAssociationTerminated) {
-            // TODO: Tradefed still upload logs after invocationEnd is called. We need to figure out
-            // how to upload these logs to ResultDB.
-            return;
-        }
+
         String contentType = logFile.getType().getContentType();
         Artifact.Builder artifactBuilder =
                 Artifact.newBuilder()
                         .setArtifactId(getArtifactId(logFile))
                         .setContentType(contentType)
                         .setContents(ByteString.EMPTY);
+
+        if (mRecorder == null) {
+            // InvocationStarted is not called. We save these early association to memory and will
+            // upload them once invocation is ready.
+            CLog.v(
+                    "Received early association %s %s %s",
+                    dataName, logFile.getPath(), logFile.getUrl());
+            mEarlyArtifacts.add(artifactBuilder.build());
+            return;
+        }
+
+        if (mLogAssociationTerminated) {
+            // TODO: Tradefed still upload logs after invocationEnd is called. We need to figure out
+            // how to upload these logs to ResultDB.
+            CLog.v(
+                    "Late association will be ignored for now %s %s %s",
+                    dataName, logFile.getPath(), logFile.getUrl());
+            return;
+        }
+        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
 
         if (mCurrentTestResult != null) {
             TestIdentifier testId = mCurrentTestResult.getTestIdStructured();
@@ -301,8 +320,19 @@ public class ResultDBReporter
                             .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
         }
         mBaseVariant = mBaseVariantBuilder.build();
+
+        // Upload early artifacts.
+        uploadEarlyArtifacts();
+
         CLog.logAndDisplay(
                 LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
+    }
+
+    private void uploadEarlyArtifacts() {
+        Artifact artifact;
+        while ((artifact = mEarlyArtifacts.poll()) != null) {
+            mRecorder.uploadArtifact(artifact);
+        }
     }
 
     private Boolean isStaging(IInvocationContext context) {
