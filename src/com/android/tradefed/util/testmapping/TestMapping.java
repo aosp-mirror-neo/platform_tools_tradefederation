@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -309,13 +309,17 @@ public class TestMapping {
             return;
         }
 
-        if (Files.notExists(testMappingDir)) {
-            CLog.d("TEST_MAPPING path not found: %s.", testMappingDir);
+        if (Files.notExists(testMappingDir) || !Files.isDirectory(testMappingDir)) {
+            CLog.d("TEST_MAPPING path not found or not a directory: %s.", testMappingDir);
             return;
         }
 
         try {
             Path testMappingPath = testMappingDir.resolve(TEST_MAPPING);
+            if (!Files.exists(testMappingPath)) {
+                CLog.d("TEST_MAPPING path not found: %s.", testMappingPath);
+                return;
+            }
             filePaths.add(testMappingPath);
             String content =
                     removeComments(
@@ -335,13 +339,23 @@ public class TestMapping {
                     Path normImportPath =
                             Paths.get(testMappingsRootDir.toString(), importPath.toString());
 
-                    Path importPathTestMappingPath = normImportPath.resolve(TEST_MAPPING);
-                    if (!filePaths.contains(importPathTestMappingPath)) {
-                        if (Files.exists(importPathTestMappingPath)) {
-                            filePaths.add(importPathTestMappingPath);
-                        }
-                        listTestMappingFiles(importPath, testMappingsRootDir, filePaths);
+                    if (!Files.exists(normImportPath)) {
+                        continue;
                     }
+                    // Force to import a directory to align with the search logic.
+                    if (Files.isRegularFile(normImportPath)){
+                        normImportPath = normImportPath.getParent();
+                    }
+
+                    Path importPathTestMappingPath = normImportPath.resolve(TEST_MAPPING);
+                    if (!Files.exists(importPathTestMappingPath)) {
+                        continue;
+                    }
+                    if (filePaths.contains(importPathTestMappingPath)) {
+                        continue;
+                    }
+                    filePaths.add(importPathTestMappingPath);
+                    listTestMappingFiles(normImportPath, testMappingsRootDir, filePaths);
                 }
             }
 
