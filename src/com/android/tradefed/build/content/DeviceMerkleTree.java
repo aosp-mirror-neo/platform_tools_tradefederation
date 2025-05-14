@@ -36,6 +36,10 @@ public class DeviceMerkleTree {
     public static Digest buildFromContext(
             ContentAnalysisContext context, AnalysisHeuristic analysisLevel) {
         try {
+            if (context.abortAnalysis()) {
+                CLog.d("Device digest computation isn't supported.");
+                return null;
+            }
             ArtifactDetails currentContent =
                     ArtifactDetails.parseFile(
                             context.contentInformation().currentContent, context.contentEntry());

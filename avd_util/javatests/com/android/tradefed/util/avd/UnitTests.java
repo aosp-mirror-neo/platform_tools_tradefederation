@@ -30,6 +30,7 @@ import org.junit.runners.Suite.SuiteClasses;
 @SuiteClasses({
     AcloudUtilTest.class,
     HostOrchestratorUtilTest.class,
+    HostOrchestratorClientTest.class,
     OxygenClientTest.class,
     InspectionUtilTest.class
 })

@@ -778,7 +778,7 @@ public class AdbSshConnection extends AdbTcpConnection {
         }
 
         if (getDevice().getOptions().useCvdCF()) {
-            snapshotRes = mHOUtil.snapshotGce();
+            snapshotRes = mHOUtil.snapshotInstance(snapshotId);
         } else {
             // Get the user from options instance-user if user is null.
             if (user == null) {
@@ -836,7 +836,7 @@ public class AdbSshConnection extends AdbTcpConnection {
         stopGce(user, offset);
         CommandResult restoreRes = null;
         if (getDevice().getOptions().useCvdCF()) {
-            restoreRes = mHOUtil.restoreSnapshotGce();
+            restoreRes = mHOUtil.startCvd(snapshotId);
         } else {
             // Get the user from options instance-user if user is null.
             if (user == null) {
@@ -904,7 +904,7 @@ public class AdbSshConnection extends AdbTcpConnection {
         long startTime = System.currentTimeMillis();
         CommandResult stopRes = null;
         if (getDevice().getOptions().useCvdCF()) {
-            stopRes = mHOUtil.removeInstance();
+            stopRes = mHOUtil.stopInstance();
         } else {
             // Get the user from options instance-user if user is null.
             if (user == null) {
