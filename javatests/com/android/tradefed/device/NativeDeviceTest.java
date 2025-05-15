@@ -1832,11 +1832,7 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected CommandResult simpleFastbootCommand(
-                            long timeout, Map<String, String> envVarMap, String[] fullCmd)
-                            throws UnsupportedOperationException {
-                        return new CommandResult(CommandStatus.SUCCESS);
-                    }
+                    public void waitForDeviceBootloader() throws DeviceNotAvailableException {}
                 };
         String into = "bootloader";
 
@@ -1873,11 +1869,7 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected CommandResult simpleFastbootCommand(
-                            long timeout, Map<String, String> envVarMap, String[] fullCmd)
-                            throws UnsupportedOperationException {
-                        return new CommandResult(CommandStatus.SUCCESS);
-                    }
+                    public void waitForDeviceBootloader() throws DeviceNotAvailableException {}
                 };
 
         testDevice.rebootIntoBootloader();
