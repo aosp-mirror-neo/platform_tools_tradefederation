@@ -113,7 +113,6 @@ public class SwitchUserTargetPreparerTest {
                 });
 
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(true);
-        when(mMockDevice.canSwitchToHeadlessSystemUser()).thenReturn(false);
         when(mMockDevice.switchUser(10)).thenReturn(true);
 
         // act
@@ -138,7 +137,6 @@ public class SwitchUserTargetPreparerTest {
                 });
 
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(true);
-        when(mMockDevice.canSwitchToHeadlessSystemUser()).thenReturn(false);
 
         // act
         mSwitchUserTargetPreparer.setUp(mTestInformation);
