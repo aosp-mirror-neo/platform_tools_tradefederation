@@ -71,7 +71,9 @@ public class RecorderClient implements IRecorderClient {
 
     private RecorderClient(Boolean isStaging) {
         try {
-            mCredentials = GoogleCredentials.getApplicationDefault();
+            mCredentials =
+                    GoogleCredentials.getApplicationDefault()
+                            .createScoped("https://www.googleapis.com/auth/userinfo.email");
         } catch (IOException e) {
             throw new RuntimeException("Failed to get application default credentials", e);
         }
