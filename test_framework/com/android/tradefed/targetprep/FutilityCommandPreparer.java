@@ -53,5 +53,10 @@ public class FutilityCommandPreparer extends BaseTargetPreparer {
             throw new TargetSetupError("Failed to write gbb flag.", device.getDeviceDescriptor());
         }
         device.reboot();
+
+        CommandResult afterStatus = device.executeShellV2Command("su root crossystem");
+        CLog.d("exit code: %s", afterStatus.getExitCode());
+        CLog.d("stdout: %s", afterStatus.getStdout());
+        CLog.d("stderr: %s", afterStatus.getStderr());
     }
 }
