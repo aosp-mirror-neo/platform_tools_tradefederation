@@ -379,31 +379,25 @@ public class BaseRetryDecision
             moduleSkipList.addAll(mSkipRetryingSet);
         }
 
-        boolean shouldRetry = false;
         long retryStartTime = System.currentTimeMillis();
-        if (test instanceof ITestFilterReceiver || test instanceof ITestFileFilterReceiver) {
-            // Record the attempt for the previous failed tests.
-            mRetryTracker.recordTestRun(previousResults, attemptJustExecuted, moduleSkipList);
 
+        // Record the attempt for the previous failed tests.
+        mRetryTracker.recordTestRun(previousResults, attemptJustExecuted, moduleSkipList);
+
+        // Check if we should retry.
+        boolean shouldRetry = mRetryTracker.shouldRetry();
+
+        if (test instanceof ITestFilterReceiver || test instanceof ITestFileFilterReceiver) {
             // Setup exclude filters.
             mExcludeManager.resetDefaultFilters();
             mExcludeManager.addExcludeFilters(mRetryTracker.getExcludedTests());
-
-            // Check if we should retry.
-            shouldRetry = mRetryTracker.shouldRetry();
-
-            if (shouldRetry && !isAlreadyRecovered) {
-                // In case of retry, go through the recovery routine
-                recoverStateOfDevices(getDevices(), attemptJustExecuted, module);
-            }
         } else if (test instanceof IAutoRetriableTest) {
             // Routine for IRemoteTest that don't support filters but still needs retry.
             IAutoRetriableTest autoRetryTest = (IAutoRetriableTest) test;
-            shouldRetry =
-                    autoRetryTest.shouldRetry(attemptJustExecuted, previousResults, moduleSkipList);
-            if (shouldRetry && !isAlreadyRecovered) {
-                recoverStateOfDevices(getDevices(), attemptJustExecuted, module);
-            }
+            shouldRetry = (
+                shouldRetry &&
+                autoRetryTest.shouldRetry(attemptJustExecuted, previousResults, moduleSkipList)
+            );
         } else {
             CLog.d(
                     "%s does not implement ITestFilterReceiver or ITestFileFilterReceiver or "
@@ -411,6 +405,11 @@ public class BaseRetryDecision
                     test);
             return false;
         }
+
+        if (shouldRetry && !isAlreadyRecovered) {
+            recoverStateOfDevices(getDevices(), attemptJustExecuted, module);
+        }
+
         long retryCost = System.currentTimeMillis() - retryStartTime;
         if (!shouldRetry) {
             retryCost = 0L;

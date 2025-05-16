@@ -335,6 +335,19 @@ public class BaseRetryDecisionTest {
     }
 
     @Test
+    public void testShouldRetry_autoRetriable_testcase() throws Exception {
+        OptionSetter setter = new OptionSetter(mRetryDecision);
+        setter.setOptionValue("max-testcase-run-count", "2");
+        setter.setOptionValue("max-testrun-run-count", "3");
+
+        TestRunResult result = createResult(null, FailureDescription.create("failure2"));
+        boolean res = mRetryDecision.shouldRetry(mAutoRetriableClass, 0, Arrays.asList(result));
+        assertTrue(res);
+        res = mRetryDecision.shouldRetry(mAutoRetriableClass, 1, Arrays.asList(result));
+        assertFalse(res);
+    }
+
+    @Test
     public void testShouldRetry_skip_retrying_list_test_no_module() throws Exception {
         final String SKIP_RETRYING_LIST = "skip-retrying-list";
         final String noModuleTest1 = "class#method2";
