@@ -182,6 +182,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
     private boolean mStopScheduling = false;
 
     private boolean mStarted = false;
+    private boolean mPrintSchedulingWarning = false;
 
     private WaitObj mCommandProcessWait = new WaitObj();
 
@@ -1362,7 +1363,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                     // clean warned list to avoid piling over time.
                     mUnscheduledWarning.remove(cmd);
                 } else {
-                    if (!mUnscheduledWarning.contains(cmd)) {
+                    if (mPrintSchedulingWarning || !mUnscheduledWarning.contains(cmd)) {
                         CLog.logAndDisplay(
                                 LogLevel.DEBUG,
                                 "No available device matching all the "
@@ -2689,5 +2690,10 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
     @Override
     public void setMaxPollTime(long polling) {
         mPollTime = polling;
+    }
+
+    @Override
+    public void setPrintSchedulingWarning(boolean print) {
+        mPrintSchedulingWarning = print;
     }
 }
