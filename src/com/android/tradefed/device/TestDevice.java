@@ -3122,8 +3122,8 @@ public class TestDevice extends NativeDevice {
     }
 
     /**
-     * Establish an adb connection to microdroid by letting Android forward the connection to
-     * microdroid. Wait until the connection is established and microdroid is booted.
+     * Establish an adb connection to microdroid, and wait until the connection is established
+     * and microdroid is booted.
      */
     private void adbConnectToMicrodroid(
             String cid, String microdroidSerial, int vmAdbPort, long adbConnectTimeoutMs) {
@@ -3137,8 +3137,6 @@ public class TestDevice extends NativeDevice {
         final String serial = getSerialNumber();
         final String from = "tcp:" + vmAdbPort;
         final String to = "vsock:" + cid + ":5555";
-        getRunUtil()
-                .runTimedCmd(10000, deviceManager.getAdbPath(), "-s", serial, "forward", from, to);
 
         boolean disconnected = true;
         while (disconnected && timeoutMillis >= 0) {
