@@ -483,10 +483,25 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                         InvocationMetricKey.FLASHING_METHOD,
                         FlashingMethod.FASTBOOT_UNCATEGORIZED.toString());
                 flasher.flash(device, deviceBuild);
-            } catch (DeviceNotAvailableException | TargetSetupError | RuntimeException e) {
+            } catch (DeviceNotAvailableException | RuntimeException e) {
                 CLog.e(e);
                 // Clear tracking in case of error
                 DeviceImageTracker.getDefaultCache().invalidateTracking(device.getSerialNumber());
+                throw e;
+            } catch (TargetSetupError e) {
+                CLog.e(e);
+                // Clear tracking in case of error
+                DeviceImageTracker.getDefaultCache().invalidateTracking(device.getSerialNumber());
+                if (InfraErrorIdentifier.ANTI_ROLLBACK_ERROR.equals(e.getErrorId())) {
+                    device.setRecoveryMode(RecoveryMode.NONE);
+                    try {
+                        device.reboot();
+                    } catch (DeviceNotAvailableException dnae) {
+                        // Ignore, this is best effort
+                        CLog.w("Failed reboot out of anti-rollback error.");
+                        CLog.w(dnae);
+                    }
+                }
                 throw e;
             } finally {
                 flashingTime = System.currentTimeMillis() - start;

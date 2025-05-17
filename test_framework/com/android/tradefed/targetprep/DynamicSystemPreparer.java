@@ -204,26 +204,37 @@ public class DynamicSystemPreparer extends BaseTargetPreparer implements ILabPre
             throws DeviceNotAvailableException, TargetSetupError {
         File pvmfwImg = null;
         try {
-            // Unzip pvmfw.img and save to temp file
-            CLog.i("Unzip pvmfw.img from %s", systemImageZipFile.getAbsolutePath());
-            try (ZipFile zipFile = new ZipFile(systemImageZipFile)) {
-                ZipEntry pvmfwEntry = zipFile.getEntry("pvmfw.img");
-                if (pvmfwEntry == null) {
+            if (systemImageZipFile.isDirectory()) {
+                pvmfwImg = systemImageZipFile.toPath().resolve("pvmfw.img").toFile();
+                if (!pvmfwImg.isFile()) {
                     throw new TargetSetupError(
-                            String.format("Cannot find pvmfw.img in %s", systemImageZipFile),
+                            String.format(
+                                    "Cannot find pvmfw.img in directory %s", systemImageZipFile),
                             device.getDeviceDescriptor(),
                             InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
                 }
-                pvmfwImg = FileUtil.createTempFile("pvmfw", ".img");
-                try (InputStream in = zipFile.getInputStream(pvmfwEntry);
-                        OutputStream out = new FileOutputStream(pvmfwImg)) {
-                    StreamUtil.copyStreams(in, out);
+            } else {
+                // Unzip pvmfw.img and save to temp file
+                CLog.i("Unzip pvmfw.img from %s", systemImageZipFile.getAbsolutePath());
+                try (ZipFile zipFile = new ZipFile(systemImageZipFile)) {
+                    ZipEntry pvmfwEntry = zipFile.getEntry("pvmfw.img");
+                    if (pvmfwEntry == null) {
+                        throw new TargetSetupError(
+                                String.format("Cannot find pvmfw.img in %s", systemImageZipFile),
+                                device.getDeviceDescriptor(),
+                                InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
+                    }
+                    pvmfwImg = FileUtil.createTempFile("pvmfw", ".img");
+                    try (InputStream in = zipFile.getInputStream(pvmfwEntry);
+                            OutputStream out = new FileOutputStream(pvmfwImg)) {
+                        StreamUtil.copyStreams(in, out);
+                    }
+                } catch (IOException e) {
+                    throw new TargetSetupError(
+                            String.format("Fail unzip pvmfw.img from %s", systemImageZipFile),
+                            device.getDeviceDescriptor(),
+                            InfraErrorIdentifier.FAIL_TO_CREATE_FILE);
                 }
-            } catch (IOException e) {
-                throw new TargetSetupError(
-                        String.format("Fail unzip pvmfw.img from %s", systemImageZipFile),
-                        device.getDeviceDescriptor(),
-                        InfraErrorIdentifier.FAIL_TO_CREATE_FILE);
             }
 
             device.waitForDeviceOnline();

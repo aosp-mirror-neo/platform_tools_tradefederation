@@ -865,6 +865,453 @@ public class HostOrchestratorUtilTest {
         Assert.assertFalse(mHOUtil.deviceBootCompleted(10));
     }
 
+    @Test
+    public void testStopInstance() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(
+                        mockHttpResponse(200, LIST_CVD_RES),
+                        mockHttpResponse(200, OPERATION_RES),
+                        mockHttpResponse(200, OPERATION_DONE_RES));
+        Assert.assertEquals(CommandStatus.SUCCESS, mHOUtil.stopInstance().getStatus());
+    }
+
+    @Test
+    public void testStopInstance_CreateHOFailed() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(null)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Assert.assertEquals(CommandStatus.EXCEPTION, mHOUtil.stopInstance().getStatus());
+    }
+
+    @Test
+    public void testStopInstance_ListCvdFailed() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(mockHttpResponse(500, "server error"));
+        Assert.assertEquals(CommandStatus.EXCEPTION, mHOUtil.stopInstance().getStatus());
+    }
+
+    @Test
+    public void testStopInstance_EmptyList() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(mockHttpResponse(200, LIST_CVD_EMPTY));
+        Assert.assertNull(mHOUtil.stopInstance());
+    }
+
+    @Test
+    public void testStartCvd() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(
+                        mockHttpResponse(200, LIST_CVD_RES),
+                        mockHttpResponse(200, OPERATION_RES),
+                        mockHttpResponse(200, OPERATION_DONE_RES));
+        Assert.assertEquals(CommandStatus.SUCCESS, mHOUtil.startCvd("id").getStatus());
+    }
+
+    @Test
+    public void testStartCvd_CreateHOFailed() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(null)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Assert.assertEquals(CommandStatus.EXCEPTION, mHOUtil.startCvd("id").getStatus());
+    }
+
+    @Test
+    public void testStartCvd_ListCvdFailed() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(mockHttpResponse(500, "server error"));
+        Assert.assertEquals(CommandStatus.EXCEPTION, mHOUtil.startCvd("id").getStatus());
+    }
+
+    @Test
+    public void testStartCvd_EmptyList() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(mockHttpResponse(200, LIST_CVD_EMPTY));
+        Assert.assertNull(mHOUtil.startCvd("id"));
+    }
+
+    @Test
+    public void testSnapshotInstance() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(
+                        mockHttpResponse(200, LIST_CVD_RES),
+                        mockHttpResponse(200, OPERATION_RES),
+                        mockHttpResponse(200, OPERATION_DONE_RES));
+        Assert.assertEquals(CommandStatus.SUCCESS, mHOUtil.snapshotInstance("id").getStatus());
+    }
+
+    @Test
+    public void testSnapshotInstance_CreateHOFailed() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(null)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Assert.assertEquals(CommandStatus.EXCEPTION, mHOUtil.snapshotInstance("id").getStatus());
+    }
+
+    @Test
+    public void testSnapshotInstance_ListCvdFailed() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(mockHttpResponse(500, "server error"));
+        Assert.assertEquals(CommandStatus.EXCEPTION, mHOUtil.snapshotInstance("id").getStatus());
+    }
+
+    @Test
+    public void testSnapshotInstance_EmptyList() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(mockHttpResponse(200, LIST_CVD_EMPTY));
+        Assert.assertNull(mHOUtil.snapshotInstance("id"));
+    }
+
     private static <T> HttpResponse<T> mockHttpResponse(int statusCode, T body) {
         return new HttpResponse<>() {
             @Override

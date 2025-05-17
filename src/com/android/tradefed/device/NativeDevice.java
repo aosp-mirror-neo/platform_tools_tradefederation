@@ -3771,10 +3771,7 @@ public class NativeDevice
 
             if (RebootMode.REBOOT_INTO_FASTBOOTD.equals(mode)
                     && getHostOptions().isFastbootdEnable()) {
-                if (!mStateMonitor.waitForDeviceFastbootd(
-                        getFastbootPath(), mOptions.getFastbootTimeout())) {
-                    recoverDeviceFromFastbootd();
-                }
+                waitForDeviceFastboot();
             } else {
                 waitForDeviceBootloader();
             }
@@ -4449,25 +4446,15 @@ public class NativeDevice
     /** {@inheritDoc} */
     @Override
     public void waitForDeviceBootloader() throws DeviceNotAvailableException {
-        if (mOptions.useUpdatedBootloaderStatus()) {
-            CommandResult commandResult =
-                    simpleFastbootCommand(
-                            mOptions.getFastbootTimeout(),
-                            buildFastbootCommand("getvar", "product"));
-            if (!CommandStatus.SUCCESS.equals(commandResult.getStatus())) {
-                CLog.e(
-                        "Waiting for device in bootloader. Status: %s.\nstdout:%s\nstderr:%s",
-                        commandResult.getStatus(),
-                        commandResult.getStdout(),
-                        commandResult.getStderr());
-                recoverDeviceFromBootloader();
-            } else {
-                setDeviceState(TestDeviceState.FASTBOOT);
-            }
-        } else {
-            if (!mStateMonitor.waitForDeviceBootloader(mOptions.getFastbootTimeout())) {
-                recoverDeviceFromBootloader();
-            }
+        if (!mStateMonitor.waitForDeviceBootloader(mOptions.getFastbootTimeout())) {
+            recoverDeviceFromBootloader();
+        }
+    }
+
+    private void waitForDeviceFastboot() throws DeviceNotAvailableException {
+        if (!mStateMonitor.waitForDeviceFastbootd(
+                getFastbootPath(), mOptions.getFastbootTimeout())) {
+            recoverDeviceFromFastbootd();
         }
     }
 
@@ -4546,6 +4533,7 @@ public class NativeDevice
         mFastbootPath = fastbootPath;
         // ensure the device and its associated recovery use the same fastboot version.
         mRecovery.setFastbootPath(fastbootPath);
+        mStateMonitor.setFastbootPath(fastbootPath);
     }
 
     /**
