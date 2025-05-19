@@ -132,6 +132,11 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
         }
     }
 
+    @Override
+    public void clearTcpFastbootMonitor() {
+        mMgr.removeMonitoringTcpFastbootDevice(getSerialNumber());
+    }
+
     /**
      * {@inheritDoc}
      */

@@ -308,6 +308,10 @@ public interface IDeviceManager {
      */
     public void addMonitoringTcpFastbootDevice(String serial, String fastboot_serial);
 
+    public default void removeMonitoringTcpFastbootDevice(String serial) {
+        // Empty by default.
+    }
+
     /**
      * Returns whether or not we should check in {@link NativeDeviceStateMonitor} the file system is
      * mounted properly.

@@ -3797,10 +3797,7 @@ public class NativeDevice
 
             if (RebootMode.REBOOT_INTO_FASTBOOTD.equals(mode)
                     && getHostOptions().isFastbootdEnable()) {
-                if (!mStateMonitor.waitForDeviceFastbootd(
-                        getFastbootPath(), mOptions.getFastbootTimeout())) {
-                    recoverDeviceFromFastbootd();
-                }
+                waitForDeviceFastbootD();
             } else {
                 waitForDeviceBootloader();
             }
@@ -4475,12 +4472,16 @@ public class NativeDevice
     /** {@inheritDoc} */
     @Override
     public void waitForDeviceBootloader() throws DeviceNotAvailableException {
-        if (mOptions.useUpdatedBootloaderStatus()) {
+        if (mOptions.useUpdatedBootloaderStatus()
+                && !getFastbootSerialNumber().startsWith("tcp:")) {
             CommandResult commandResult =
                     simpleFastbootCommand(
                             mOptions.getFastbootTimeout(),
                             buildFastbootCommand("getvar", "product"));
             if (!CommandStatus.SUCCESS.equals(commandResult.getStatus())) {
+                if (getDeviceState().equals(TestDeviceState.FASTBOOT)) {
+                    return;
+                }
                 CLog.e(
                         "Waiting for device in bootloader. Status: %s.\nstdout:%s\nstderr:%s",
                         commandResult.getStatus(),
@@ -4494,6 +4495,13 @@ public class NativeDevice
             if (!mStateMonitor.waitForDeviceBootloader(mOptions.getFastbootTimeout())) {
                 recoverDeviceFromBootloader();
             }
+        }
+    }
+
+    public void waitForDeviceFastbootD() throws DeviceNotAvailableException {
+        if (!mStateMonitor.waitForDeviceFastbootd(
+                getFastbootPath(), mOptions.getFastbootTimeout())) {
+            recoverDeviceFromFastbootd();
         }
     }
 
@@ -5557,6 +5565,7 @@ public class NativeDevice
         FileUtil.recursiveDelete(mUnpackedAdbDir);
         mUnpackedAdbDir = null;
         getConnection().tearDownConnection();
+        getMonitor().clearTcpFastbootMonitor();
         mConnectionAvd = null;
         mDeviceActionReceivers.clear();
         mFastbootSerialNumber = null;
