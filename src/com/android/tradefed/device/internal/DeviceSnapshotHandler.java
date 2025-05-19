@@ -151,6 +151,9 @@ public class DeviceSnapshotHandler {
             } catch (IOException | RuntimeException e) {
                 CLog.e("Failed to deserialize snapshot error response: %s", e.getMessage());
             }
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.DEVICE_SNAPSHOT_FAILURE_COUNT, 1);
+
             if (o instanceof DeviceNotAvailableException) {
                 throw (DeviceNotAvailableException) o;
             } else if (o instanceof IHarnessException) {
@@ -181,6 +184,10 @@ public class DeviceSnapshotHandler {
         } else {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.DEVICE_SNAPSHOT_FAILURE_COUNT, 1);
+            throw new HarnessRuntimeException(
+                    "Exception while snapshotting the device. Unknown error response: "
+                            + response.getResponse(),
+                    InfraErrorIdentifier.UNDETERMINED);
         }
     }
 
@@ -224,6 +231,9 @@ public class DeviceSnapshotHandler {
             } catch (IOException | RuntimeException e) {
                 CLog.e("Failed to deserialize snapshot error response: %s", e.getMessage());
             }
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.DEVICE_SNAPSHOT_RESTORE_FAILURE_COUNT, 1);
+
             if (o instanceof DeviceNotAvailableException) {
                 throw (DeviceNotAvailableException) o;
             } else if (o instanceof IHarnessException) {
@@ -260,6 +270,10 @@ public class DeviceSnapshotHandler {
         } else {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.DEVICE_SNAPSHOT_RESTORE_FAILURE_COUNT, 1);
+            throw new HarnessRuntimeException(
+                    "Exception while restoring the device. Unknown error response: "
+                            + response.getResponse(),
+                    InfraErrorIdentifier.UNDETERMINED);
         }
     }
 }
