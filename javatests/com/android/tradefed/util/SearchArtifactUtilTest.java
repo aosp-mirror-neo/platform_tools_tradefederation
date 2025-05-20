@@ -332,7 +332,9 @@ public class SearchArtifactUtilTest {
                     .thenReturn(searchDirectories);
             when(SearchArtifactUtil.singleton.findModuleName()).thenReturn("correctModule");
 
-            File f = SearchArtifactUtil.searchFile(correctFile.getName(), false, null, null, null, null, buildInfo, false);
+            File f =
+                    SearchArtifactUtil.searchFile(
+                            correctFile.getName(), false, null, null, null, null, buildInfo, false);
             Truth.assertThat(f).isNotNull();
             Truth.assertThat(f.getAbsolutePath()).isEqualTo(correctFile.getAbsolutePath());
         } finally {
