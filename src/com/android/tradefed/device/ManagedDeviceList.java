@@ -212,8 +212,7 @@ class ManagedDeviceList implements Iterable<IManagedTestDevice> {
             }
             for (IManagedTestDevice d : mList) {
                 String serial = d.getSerialNumber();
-                String fastbootSerial = d.getFastbootSerialNumber();
-                if (serials.contains(serial) || serials.contains(fastbootSerial)) {
+                if (serials.contains(serial)) {
                     d.setDeviceState(state);
                 } else if (state.equals(d.getDeviceState())) {
                     // device was previously on fastboot, assume its gone now
