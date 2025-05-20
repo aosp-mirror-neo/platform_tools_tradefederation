@@ -1642,8 +1642,26 @@ public class DeviceManager implements IDeviceManager {
 
     /** {@inheritDoc} */
     @Override
-    public void addMonitoringTcpFastbootDevice(String serial, String fastboot_serial) {
-        mMonitoringTcpFastbootDevices.put(serial, fastboot_serial);
+    public void addMonitoringTcpFastbootDevice(String serial, String fastbootSerial) {
+        CLog.logAndDisplay(
+                LogLevel.DEBUG,
+                "Monitoring fastboot serial '%s' for device '%s'",
+                fastbootSerial,
+                serial);
+        mMonitoringTcpFastbootDevices.put(serial, fastbootSerial);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void removeMonitoringTcpFastbootDevice(String serial) {
+        String removed = mMonitoringTcpFastbootDevices.remove(serial);
+        if (removed != null) {
+            CLog.logAndDisplay(
+                    LogLevel.DEBUG,
+                    "Remove monitoring fastboot serial '%s' for device '%s'",
+                    removed,
+                    serial);
+        }
     }
 
     /** {@inheritDoc} */

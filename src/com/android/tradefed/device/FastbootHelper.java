@@ -136,7 +136,10 @@ public class FastbootHelper {
         long TIMEOUT = 1500;
 
         for (Entry<String, String> entry : serials.entrySet()) {
-            CLog.v("Run 'fastboot -s %s getvar is-userspace' command", entry.getValue());
+            CLog.logAndDisplay(
+                    LogLevel.DEBUG,
+                    "Run 'fastboot -s %s getvar is-userspace' command",
+                    entry.getValue());
             CommandResult fastbootResult =
                     mRunUtil.runTimedCmdSilently(
                             TIMEOUT,

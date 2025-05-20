@@ -316,6 +316,8 @@ public class NativeDevice
     protected class AdbAction implements DeviceAction {
         /** the output from the command */
         String mOutput = null;
+
+        CommandResult mResult = null;
         private String[] mCmd;
         private long mTimeout;
         private boolean mIsShellCommand;
@@ -343,26 +345,26 @@ public class NativeDevice
             for (String key : mEnvMap.keySet()) {
                 runUtil.setEnvVariable(key, mEnvMap.get(key));
             }
-            CommandResult result = runUtil.runTimedCmd(mTimeout, mCmd);
+            mResult = runUtil.runTimedCmd(mTimeout, mCmd);
             // TODO: how to determine device not present with command failing for other reasons
-            if (result.getStatus() == CommandStatus.EXCEPTION) {
-                logExceptionAndOutput(result);
+            if (mResult.getStatus() == CommandStatus.EXCEPTION) {
+                logExceptionAndOutput(mResult);
                 throw new IOException("CommandStatus was EXCEPTION, details in host log");
-            } else if (result.getStatus() == CommandStatus.TIMED_OUT) {
-                logExceptionAndOutput(result);
+            } else if (mResult.getStatus() == CommandStatus.TIMED_OUT) {
+                logExceptionAndOutput(mResult);
                 throw new TimeoutException("CommandStatus was TIMED_OUT, details in host log");
-            } else if (result.getStatus() == CommandStatus.FAILED) {
+            } else if (mResult.getStatus() == CommandStatus.FAILED) {
 
-                logExceptionAndOutput(result);
+                logExceptionAndOutput(mResult);
                 if (mIsShellCommand) {
                     // Interpret as communication failure for shell commands
                     throw new IOException("CommandStatus was FAILED, details in host log");
                 } else {
-                    mOutput = result.getStdout();
+                    mOutput = mResult.getStdout();
                     return false;
                 }
             }
-            mOutput = result.getStdout();
+            mOutput = mResult.getStdout();
             return true;
         }
     }
@@ -2492,6 +2494,30 @@ public class NativeDevice
         return adbAction.mOutput;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeAdbV2Command(String... cmdArgs) throws DeviceNotAvailableException {
+        return executeAdbV2Command(getCommandTimeout(), cmdArgs);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeAdbV2Command(long timeout, String... cmdArgs)
+            throws DeviceNotAvailableException {
+        return executeAdbV2Command(getCommandTimeout(), new HashMap<>(), cmdArgs);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeAdbV2Command(
+            long timeout, Map<String, String> envMap, String... cmdArgs)
+            throws DeviceNotAvailableException {
+        final String[] fullCmd = buildAdbCommand(cmdArgs);
+        AdbAction adbAction = new AdbAction(timeout, fullCmd, "shell".equals(cmdArgs[0]), envMap);
+        performDeviceAction(String.format("adb %s", cmdArgs[0]), adbAction, MAX_RETRY_ATTEMPTS);
+        return adbAction.mResult;
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -3771,10 +3797,7 @@ public class NativeDevice
 
             if (RebootMode.REBOOT_INTO_FASTBOOTD.equals(mode)
                     && getHostOptions().isFastbootdEnable()) {
-                if (!mStateMonitor.waitForDeviceFastbootd(
-                        getFastbootPath(), mOptions.getFastbootTimeout())) {
-                    recoverDeviceFromFastbootd();
-                }
+                waitForDeviceFastbootD();
             } else {
                 waitForDeviceBootloader();
             }
@@ -4449,12 +4472,16 @@ public class NativeDevice
     /** {@inheritDoc} */
     @Override
     public void waitForDeviceBootloader() throws DeviceNotAvailableException {
-        if (mOptions.useUpdatedBootloaderStatus()) {
+        if (mOptions.useUpdatedBootloaderStatus()
+                && !getFastbootSerialNumber().startsWith("tcp:")) {
             CommandResult commandResult =
                     simpleFastbootCommand(
                             mOptions.getFastbootTimeout(),
                             buildFastbootCommand("getvar", "product"));
             if (!CommandStatus.SUCCESS.equals(commandResult.getStatus())) {
+                if (getDeviceState().equals(TestDeviceState.FASTBOOT)) {
+                    return;
+                }
                 CLog.e(
                         "Waiting for device in bootloader. Status: %s.\nstdout:%s\nstderr:%s",
                         commandResult.getStatus(),
@@ -4468,6 +4495,13 @@ public class NativeDevice
             if (!mStateMonitor.waitForDeviceBootloader(mOptions.getFastbootTimeout())) {
                 recoverDeviceFromBootloader();
             }
+        }
+    }
+
+    public void waitForDeviceFastbootD() throws DeviceNotAvailableException {
+        if (!mStateMonitor.waitForDeviceFastbootd(
+                getFastbootPath(), mOptions.getFastbootTimeout())) {
+            recoverDeviceFromFastbootd();
         }
     }
 
@@ -5531,6 +5565,7 @@ public class NativeDevice
         FileUtil.recursiveDelete(mUnpackedAdbDir);
         mUnpackedAdbDir = null;
         getConnection().tearDownConnection();
+        getMonitor().clearTcpFastbootMonitor();
         mConnectionAvd = null;
         mDeviceActionReceivers.clear();
         mFastbootSerialNumber = null;

@@ -60,6 +60,7 @@ public class CommandRunner {
 
     public static final String EXCEPTION_KEY = "serialized_exception";
     public static final String START_FEATURE_SERVER = "START_FEATURE_SERVER";
+    public static final String DEVICE_DISCOVERY_TIMEOUT = "DEVICE_DISCOVERY_TIMEOUT";
     private static final long CHECK_DEVICE_TIMEOUT = 60000;
 
     public CommandRunner() {}
@@ -103,6 +104,13 @@ public class CommandRunner {
     /** Returns the timeout after which to check for the command. */
     @VisibleForTesting
     long getCheckDeviceTimeout() {
+        if (System.getenv(DEVICE_DISCOVERY_TIMEOUT) != null) {
+            try {
+                return Long.parseLong(System.getenv(DEVICE_DISCOVERY_TIMEOUT));
+            } catch (NumberFormatException e) {
+                // Ignore
+            }
+        }
         return CHECK_DEVICE_TIMEOUT;
     }
 
@@ -129,6 +137,7 @@ public class CommandRunner {
 
             mScheduler = getCommandScheduler();
             mScheduler.setMaxPollTime(getCheckDeviceTimeout() / 10);
+            mScheduler.setPrintSchedulingWarning(true);
             mScheduler.setClearcutClient(client);
             mScheduler.start();
             SignalHandler handler =
