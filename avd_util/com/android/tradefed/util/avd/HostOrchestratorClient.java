@@ -55,18 +55,20 @@ public class HostOrchestratorClient {
     }
 
     public static final class CreateSnapshotRequest {
-        public String snapshotId;
+        // Snapshot request must be as a json like {"snapshot_id" : "string"}.
+        public String snapshot_id;
 
         CreateSnapshotRequest(String id) {
-            snapshotId = id;
+            snapshot_id = id;
         }
     }
 
     public static final class StartCVDRequest {
-        public String snapshotId;
+        // Snapshot request must be as a json like {"snapshot_id" : "string"}.
+        public String snapshot_id;
 
         StartCVDRequest(String id) {
-            snapshotId = id;
+            snapshot_id = id;
         }
     }
 
