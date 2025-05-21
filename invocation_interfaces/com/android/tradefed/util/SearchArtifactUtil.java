@@ -153,8 +153,48 @@ public class SearchArtifactUtil {
             AltDirBehavior altDirBehavior,
             TestInformation testInfo,
             boolean includeDirectory) {
+        return searchFile(
+                fileName,
+                targetFirst,
+                abi,
+                altDirs,
+                altDirBehavior,
+                testInfo,
+                null,
+                includeDirectory);
+    }
+
+    /**
+     * Searches for a test artifact/dependency file from the test directory.
+     *
+     * @param fileName The name of the file to look for.
+     * @param targetFirst Whether we are favoring target-side files vs. host-side files for the
+     *     search.
+     * @param abi The {@link IAbi} to match the file.
+     * @param altDirs Alternative search paths, in addition to the default search paths.
+     * @param altDirBehavior how alternative search paths should be used against default paths: as
+     *     fallback, or as override; if unspecified, fallback will be used
+     * @param testInfo The {@link TestInformation} of the current test when available.
+     * @param buildInfo The {@link IBuildInfo} of the current test when available.
+     * @param includeDirectory whether to include directories in the search result.
+     * @return The found artifact file or null if none.
+     */
+    public static File searchFile(
+            String fileName,
+            boolean targetFirst,
+            IAbi abi,
+            List<File> altDirs,
+            AltDirBehavior altDirBehavior,
+            TestInformation testInfo,
+            IBuildInfo buildInfo,
+            boolean includeDirectory) {
+        if (buildInfo == null) {
+            // if build info not provided, try to get it from current invocation context
+            buildInfo = singleton.getBuildInfo();
+        }
         List<File> searchDirectories =
-                singleton.getSearchDirectories(targetFirst, altDirs, altDirBehavior, testInfo);
+                singleton.getSearchDirectories(
+                        targetFirst, altDirs, altDirBehavior, testInfo, buildInfo);
         CLog.d("Searching for file %s. Search directories: %s", fileName, searchDirectories);
         // Search in the test directories
         for (File dir : searchDirectories) {
@@ -177,7 +217,6 @@ public class SearchArtifactUtil {
         }
 
         // Search in the build info or stage remote file as fallback
-        IBuildInfo buildInfo = singleton.getBuildInfo();
         if (buildInfo != null) {
             File file = buildInfo.getFile(fileName);
             if (fileExists(file)) {
@@ -213,7 +252,8 @@ public class SearchArtifactUtil {
             boolean targetFirst,
             List<File> altDirs,
             AltDirBehavior altDirBehavior,
-            TestInformation testInfo) {
+            TestInformation testInfo,
+            IBuildInfo buildInfo) {
         List<File> dirs = new LinkedList<>();
         // Prioritize the module directory retrieved from the config obj, as this is the ideal place
         // for all test artifacts.
@@ -223,52 +263,59 @@ public class SearchArtifactUtil {
         }
 
         ExecutionFiles executionFiles = singleton.getExecutionFiles(testInfo);
+        // Add host/testcases or target/testcases directory first
+        File testcasesDir = null;
         if (executionFiles != null) {
-            // Add host/testcases or target/testcases directory first
             FilesKey hostOrTarget = FilesKey.HOST_TESTS_DIRECTORY;
             if (targetFirst) {
                 hostOrTarget = FilesKey.TARGET_TESTS_DIRECTORY;
             }
-            File testcasesDir = executionFiles.get(hostOrTarget);
-            if (fileExists(testcasesDir)) {
-                dirs.add(testcasesDir);
+            File dir = executionFiles.get(hostOrTarget);
+            if (fileExists(dir)) {
+                testcasesDir = dir;
             }
-
-            // Add root test directory
-            File rootTestDir = executionFiles.get(FilesKey.TESTS_DIRECTORY);
-            if (fileExists(rootTestDir)) {
-                dirs.add(rootTestDir);
+        }
+        if (testcasesDir == null && buildInfo != null) {
+            // try getting the testcases directory from the build info.
+            BuildInfoFileKey hostOrTarget = BuildInfoFileKey.HOST_LINKED_DIR;
+            if (targetFirst) {
+                hostOrTarget = BuildInfoFileKey.TARGET_LINKED_DIR;
             }
-        } else {
-            // try getting the search directories from the build info.
-            IBuildInfo buildInfo = singleton.getBuildInfo();
-            if (buildInfo != null) {
-
-                // Add host/testcases or target/testcases directory first
-                BuildInfoFileKey hostOrTarget = BuildInfoFileKey.HOST_LINKED_DIR;
-                if (targetFirst) {
-                    hostOrTarget = BuildInfoFileKey.TARGET_LINKED_DIR;
-                }
-                File testcasesDir = buildInfo.getFile(hostOrTarget);
-                if (fileExists(testcasesDir)) {
-                    dirs.add(testcasesDir);
-                }
-
-                // Add root test directory
-                File rootTestDir = null;
-                if (buildInfo instanceof IDeviceBuildInfo) {
-                    rootTestDir = ((IDeviceBuildInfo) buildInfo).getTestsDir();
-                }
-                if (!fileExists(rootTestDir)) {
-                    rootTestDir = buildInfo.getFile(BuildInfoFileKey.TESTDIR_IMAGE);
-                }
-                if (!fileExists(rootTestDir)) {
-                    rootTestDir = buildInfo.getFile(BuildInfoFileKey.ROOT_DIRECTORY);
-                }
-                if (fileExists(rootTestDir)) {
-                    dirs.add(rootTestDir);
-                }
+            File dir = buildInfo.getFile(hostOrTarget);
+            if (fileExists(dir)) {
+                testcasesDir = dir;
             }
+        }
+        if (testcasesDir != null) {
+            dirs.add(testcasesDir);
+        }
+
+        // Add root test directory
+        File rootTestDir = null;
+        if (executionFiles != null) {
+            File dir = executionFiles.get(FilesKey.TESTS_DIRECTORY);
+            if (fileExists(dir)) {
+                rootTestDir = dir;
+            }
+        }
+        if (rootTestDir == null && buildInfo != null) {
+            // try getting the root test directory from the build info.
+            File dir = null;
+            if (buildInfo instanceof IDeviceBuildInfo) {
+                dir = ((IDeviceBuildInfo) buildInfo).getTestsDir();
+            }
+            if (!fileExists(dir)) {
+                dir = buildInfo.getFile(BuildInfoFileKey.TESTDIR_IMAGE);
+            }
+            if (!fileExists(dir)) {
+                dir = buildInfo.getFile(BuildInfoFileKey.ROOT_DIRECTORY);
+            }
+            if (fileExists(dir)) {
+                rootTestDir = dir;
+            }
+        }
+        if (rootTestDir != null) {
+            dirs.add(rootTestDir);
         }
 
         // Add alternative directories based on the alt dir behavior
@@ -439,7 +486,7 @@ public class SearchArtifactUtil {
     public static File findModuleDir(String moduleName, boolean targetFirst) {
         try (CloseableTraceScope ignored = new CloseableTraceScope("findModuleDir")) {
             List<File> searchDirectories =
-                    singleton.getSearchDirectories(targetFirst, null, null, null);
+                    singleton.getSearchDirectories(targetFirst, null, null, null, null);
             for (File searchDirectory : searchDirectories) {
                 try {
                     File moduleDir = FileUtil.findDirectory(moduleName, searchDirectory);

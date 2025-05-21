@@ -19,6 +19,7 @@ import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.IDeviceBuildInfo;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
+import com.android.tradefed.log.LogUtil;
 import com.android.tradefed.targetprep.AltDirBehavior;
 
 import java.io.File;
@@ -50,6 +51,30 @@ public class BuildTestsZipUtils {
     public static File getApkFile(IBuildInfo buildInfo, String apkFileName,
             List<File> altDirs, AltDirBehavior altDirBehavior,
             boolean lookupInResource, String deviceSigningKey) throws IOException {
+        File src = null;
+        try {
+            src =
+                    SearchArtifactUtil.searchFile(
+                            apkFileName,
+                            true,
+                            null,
+                            altDirs,
+                            altDirBehavior,
+                            null,
+                            buildInfo,
+                            false);
+        } catch (Exception e) {
+            // TODO: handle error when migration is complete.
+            LogUtil.CLog.e(e);
+        }
+        if (src != null && src.exists()) {
+            return src;
+        } else {
+            // Silently report not found and fall back to old logic.
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.SEARCH_ARTIFACT_FAILURE_COUNT, 1);
+        }
+
         String apkBase = apkFileName.split("\\.")[0];
 
         List<File> dirs = new ArrayList<>();
@@ -153,6 +178,9 @@ public class BuildTestsZipUtils {
                 return apkFile;
             }
         }
+        // if old logic fails too, do not report search artifact failure
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.SEARCH_ARTIFACT_FAILURE_COUNT, -1);
         return null;
     }
 }
