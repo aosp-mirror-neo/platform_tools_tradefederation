@@ -16,10 +16,11 @@
 
 package com.android.tradefed.testtype;
 
+import com.android.tradefed.config.ConfigurationException;
+import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
-import com.android.tradefed.log.Log;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.TestDescription;
@@ -35,10 +36,15 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 
@@ -74,12 +80,13 @@ import java.util.TreeMap;
  *    }
  *  }
  */
-public class ArtTest implements IRemoteTest {
-    private static final String TAG = "ArtTest";
-    private TestInformation mTestInfo;
-    private File mRunnerDir;
-    private Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
-    private Set<String> mExecutedTestNames = new HashSet<String>();
+public class ArtTest implements IRemoteTest, IShardableTest {
+    protected TestInformation mTestInfo;
+    protected File mRunnerDir;
+    protected Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
+    protected Set<String> mExecutedTestNames = new HashSet<String>();
+    protected int mShardIndex = 0;
+    protected int mShardCount = 1;
 
     @Override
     public void run(TestInformation testInfo, ITestInvocationListener listener)
@@ -123,15 +130,43 @@ public class ArtTest implements IRemoteTest {
     }
 
     TreeMap<String, JSONObject> loadTests() throws IOException, JSONException {
-        TreeMap<String, JSONObject> result = new TreeMap<String, JSONObject>();
+        TreeMap<String, JSONObject> allTests = new TreeMap<String, JSONObject>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
             JSONObject jsonData = new JSONObject(FileUtil.readStringFromFile(jsonFile));
             for (Iterator<String> it = jsonData.keys(); it.hasNext(); ) {
                 String name = it.next();
-                result.put(name, jsonData.getJSONObject(name));
+                allTests.put(name, jsonData.getJSONObject(name));
             }
         }
-        return result;
+
+        TreeMap<String, JSONObject> shardedTests = new TreeMap<String, JSONObject>();
+        Queue<String> dependencyQueue = new ArrayDeque<>();
+
+        // Select tests for this shard based on index modulo shardCount
+        ArrayList<String> sortedTestNames = new ArrayList<>(allTests.keySet());
+        for (int i = 0; i < sortedTestNames.size(); i++) {
+            if (i % mShardCount == mShardIndex) {
+                String testName = sortedTestNames.get(i);
+                shardedTests.put(testName, allTests.get(testName));
+                dependencyQueue.add(testName);
+            }
+        }
+
+        // Include dependencies recursively
+        while (!dependencyQueue.isEmpty()) {
+            String testName = dependencyQueue.remove();
+            JSONObject test = allTests.get(testName);
+            JSONArray dependencies = test.optJSONArray("dependencies");
+            for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
+                String depName = dependencies.getString(i);
+                if (!shardedTests.containsKey(depName)) {
+                    shardedTests.put(depName, allTests.get(depName));
+                    dependencyQueue.add(depName);
+                }
+            }
+        }
+
+        return shardedTests;
     }
 
     void runTest(String name, JSONObject test, ITestInvocationListener listener)
@@ -202,20 +237,50 @@ public class ArtTest implements IRemoteTest {
         JSONArray cmds = test.optJSONArray("adb shell");
         for (int i = 0; cmds != null && i < cmds.length(); i++) {
             JSONArray args = cmds.getJSONArray(i);
-            String cmd = args.getString(0);
-            for (int j = 1; j < args.length(); j++) {
-                cmd += " " + args.getString(j);
+            StringBuilder cmdBuilder = new StringBuilder();
+            for (int j = 0; j < args.length(); j++) {
+                if (j > 0) {
+                    cmdBuilder.append(" ");
+                }
+                cmdBuilder.append(args.getString(j));
             }
-            Log.i(TAG, cmd);
-            ITestDevice device = mTestInfo.getDevice();
-            CommandResult res = device.executeShellV2Command(cmd);
+            String cmd = cmdBuilder.toString();
+            CLog.i("Executing adb shell command: %s", cmd);
+            CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
             if (res.getStatus() != CommandStatus.SUCCESS) {
-                CLog.i("Stdout: %s", res.getStdout());
-                CLog.e("Stderr: %s", res.getStderr());
-                CLog.e("Failed: %s", cmd);
+                CLog.i("Stdout from failed command '%s': %s", cmd, res.getStdout());
+                CLog.e("Stderr from failed command '%s': %s", cmd, res.getStderr());
+                CLog.e("Failed adb shell command: %s", cmd);
                 return res.getStderr();
             }
         }
         return null;
+    }
+
+    @Override
+    public Collection<IRemoteTest> split(int shardCount) {
+        Collection<IRemoteTest> shards = new ArrayList<>(shardCount);
+        for (int i = 0; i < shardCount; i++) {
+            // Clone this class, even if it is derived class (used for testing).
+            ArtTest shard;
+            try {
+                shard = this.getClass().getDeclaredConstructor().newInstance();
+            } catch (InstantiationException
+                    | IllegalAccessException
+                    | InvocationTargetException
+                    | NoSuchMethodException e) {
+                throw new RuntimeException(e);
+            }
+            try {
+                OptionCopier.copyOptions(this, shard);
+            } catch (ConfigurationException e) {
+                CLog.e("failed to copy ART test options: %s", e.getMessage());
+                throw new RuntimeException(e);
+            }
+            shard.mShardIndex = i;
+            shard.mShardCount = shardCount;
+            shards.add(shard);
+        }
+        return shards;
     }
 }
