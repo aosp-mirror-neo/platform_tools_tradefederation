@@ -46,29 +46,45 @@ public class GoogleAccountUtil {
     private static final String UTIL_APK_PATH_FALLBACK =
             "/com/google/android/tradefed/account/GoogleAccountUtil.apk";
 
+    public static boolean installUtil(ITestDevice device) throws DeviceNotAvailableException {
+        return installUtil(device, null);
+    }
+
     /**
      * Install the account utility apk contained in jar if necessary
      *
      * @param device on which to install the utility.
      * @throws DeviceNotAvailableException
      */
-    public static boolean installUtil(ITestDevice device) throws DeviceNotAvailableException {
+    public static boolean installUtil(ITestDevice device, File altApk)
+            throws DeviceNotAvailableException {
         if (isAccountUtilInstalled(device)) {
             return true;
         } else {
             // Attempt to install utility
             File apkTempFile = null;
             try {
-                apkTempFile = FileUtil.createTempFile(UTIL_APK_NAME, ".apk");
-                boolean res =
-                        ResourceUtil.extractResourceWithAltAsFile(
-                                UTIL_APK_PATH, UTIL_APK_PATH_FALLBACK, apkTempFile);
-                if (!res) {
-                    CLog.e("Failed to unpack AccountUtil utility");
-                    return false;
+                File toInstall = null;
+                if (altApk != null) {
+                    if (altApk.exists()) {
+                        toInstall = altApk;
+                    } else {
+                        CLog.e("Failed to find alternative apk for account: %s", altApk);
+                        return false;
+                    }
+                } else {
+                    apkTempFile = FileUtil.createTempFile(UTIL_APK_NAME, ".apk");
+                    boolean res =
+                            ResourceUtil.extractResourceWithAltAsFile(
+                                    UTIL_APK_PATH, UTIL_APK_PATH_FALLBACK, apkTempFile);
+                    if (!res) {
+                        CLog.e("Failed to unpack AccountUtil utility");
+                        return false;
+                    }
+                    toInstall = apkTempFile;
                 }
                 CLog.i("Installing %s on %s", UTIL_APK_NAME, device.getSerialNumber());
-                final String result = device.installPackage(apkTempFile, false);
+                final String result = device.installPackage(toInstall, false);
                 if (result != null) {
                     CLog.e("Unable to install AccountUtil utility: %s", result);
                     return false;

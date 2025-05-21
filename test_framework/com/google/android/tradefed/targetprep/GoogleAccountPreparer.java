@@ -163,6 +163,11 @@ public class GoogleAccountPreparer extends WaitForDeviceDatetimePreparer {
                         + " will override already set options.")
     private File mCredentialFile = null;
 
+    @Option(
+            name = "google-account-apk-file",
+            description = "Alternative GoogleAccountUtil.apk to use.")
+    private File mAccountAltApk = null;
+
     /** {@inheritDoc} */
     @Override
     public void setUp(TestInformation testInfo)
@@ -221,7 +226,7 @@ public class GoogleAccountPreparer extends WaitForDeviceDatetimePreparer {
             super.setUp(testInfo);
         }
 
-        if (!GoogleAccountUtil.installUtil(device)) {
+        if (!GoogleAccountUtil.installUtil(device, mAccountAltApk)) {
             throw new TargetSetupError(
                     String.format(
                             "Failed to install account util on device %s",
@@ -359,7 +364,7 @@ public class GoogleAccountPreparer extends WaitForDeviceDatetimePreparer {
      */
     void removeAccount(ITestDevice device) throws DeviceNotAvailableException {
         if (mRemoveAccounts || mRemoveAccount) {
-            if (!GoogleAccountUtil.installUtil(device)) {
+            if (!GoogleAccountUtil.installUtil(device, mAccountAltApk)) {
                 // cannot remove accounts! Bad things may happen, just remove device from queue for
                 // now
                 throw new DeviceNotAvailableException(
