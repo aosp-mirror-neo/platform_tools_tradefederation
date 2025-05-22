@@ -45,6 +45,7 @@ import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.retry.BaseRetryDecision;
 import com.android.tradefed.targetprep.IDeviceFlasher.UserDataFlashOption;
+import com.android.tradefed.testtype.ITestInformationReceiver;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
@@ -426,6 +427,9 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             boolean tookPermit = false;
             // only surround fastboot related operations with flashing permit restriction
             try {
+                if (flasher instanceof ITestInformationReceiver) {
+                    ((ITestInformationReceiver) flasher).setTestInformation(testInfo);
+                }
                 flasher.overrideDeviceOptions(device);
                 flasher.setUserDataFlashOption(mUserDataFlashOption);
                 flasher.setForceSystemFlash(mForceSystemFlash);
