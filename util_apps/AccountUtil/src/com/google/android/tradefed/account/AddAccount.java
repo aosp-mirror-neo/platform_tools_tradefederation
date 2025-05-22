@@ -15,8 +15,6 @@
  */
 package com.google.android.tradefed.account;
 
-import java.io.IOException;
-
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.AccountManagerCallback;
@@ -35,6 +33,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
+
+import java.io.IOException;
+import java.util.Locale;
 
 /**
  * An instrumentation utility to add accounts and, while so doing, enable or disable automatic sync
@@ -110,7 +111,9 @@ public class AddAccount extends Instrumentation {
                     return;
                 } else {
                     // No sync passed; bail out
-                    String errMsg = String.format("Error: account %s already exists", username);
+                    String errMsg =
+                            String.format(
+                                    Locale.ENGLISH, "Error: account %s already exists", username);
                     Log.e(TAG, errMsg);
                     results.putString("error", errMsg);
                     finish(Activity.RESULT_CANCELED, results);
