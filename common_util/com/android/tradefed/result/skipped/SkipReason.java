@@ -31,7 +31,8 @@ public class SkipReason {
         MANUAL, // Inserted directly via API
         LATENCY, // Test is out of SLO on latency
         ERROR_RATE, // Test is out of SLO on error rate
-        FLAKINESS; // Test is out of SLO on flakiness score
+        FLAKINESS, // Test is out of SLO on flakiness score
+        SMART_TEST_SELECTION; // Test is removed by smart test selection
     }
 
     public SkipReason(String message, String trigger) {
