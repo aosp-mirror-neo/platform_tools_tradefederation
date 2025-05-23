@@ -49,6 +49,9 @@ message TestParameters {
   repeated string excludePaths = 3;
   FilterSpec filter = 4;
   bool dryRun = 5;
+  int32 totalShards = 6;
+  int32 shardIndex = 7;
+
 }
 
 message FilterSpec {

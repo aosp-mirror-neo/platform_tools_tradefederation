@@ -18,7 +18,10 @@ package com.android.tradefed.testtype;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -269,12 +272,14 @@ public class IsolatedHostTestTest {
         FileUtil.deleteFile(mHostTest.getCoverageExecFile());
     }
 
-    private OptionSetter setUpSimpleMockJarTest(String jarName) throws Exception {
+    private OptionSetter setUpSimpleMockJarTest(String... jarNames) throws Exception {
         OptionSetter setter = new OptionSetter(mHostTest);
-        File jar = getJarResource("/" + jarName, mMockTestDir, jarName);
         doReturn(mMockTestDir).when(mMockBuildInfo).getFile(BuildInfoFileKey.HOST_LINKED_DIR);
         doReturn(mMockTestDir).when(mMockBuildInfo).getFile(BuildInfoFileKey.TESTDIR_IMAGE);
-        setter.setOptionValue("jar", jar.getName());
+        for (String jarName : jarNames) {
+            File jar = getJarResource("/" + jarName, mMockTestDir, jarName);
+            setter.setOptionValue("jar", jar.getName());
+        }
         setter.setOptionValue("exclude-paths", "org/junit");
         setter.setOptionValue("exclude-paths", "junit");
         return setter;
@@ -619,5 +624,58 @@ public class IsolatedHostTestTest {
         verify(mListener)
                 .testLog((String) Mockito.any(), Mockito.eq(LogDataType.TEXT), Mockito.any());
         verify(mListener).testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+    }
+
+    @Test
+    public void testSplit() throws Exception {
+        List<IRemoteTest> list = (ArrayList<IRemoteTest>) mHostTest.split(3);
+        assertEquals(3, list.size());
+        assertEquals(
+                "com.android.tradefed.testtype.IsolatedHostTest", list.get(0).getClass().getName());
+        assertEquals(
+                "com.android.tradefed.testtype.IsolatedHostTest", list.get(1).getClass().getName());
+        assertEquals(
+                "com.android.tradefed.testtype.IsolatedHostTest", list.get(2).getClass().getName());
+    }
+
+    @Test
+    public void testOneClass_TwoShards() throws Exception {
+        final String jarName = "SimplePassingTest.jar";
+        setUpSimpleMockJarTest(jarName);
+        TestInformation testInfo = TestInformation.newBuilder().build();
+
+        List<IRemoteTest> shards = (ArrayList<IRemoteTest>) mHostTest.split(2);
+
+        int shardIndex = 0;
+        for (IRemoteTest shard : shards) {
+            mListener = Mockito.mock(ITestInvocationListener.class);
+            shard.run(testInfo, mListener);
+            if (shardIndex == 0) {
+                verify(mListener, times(1)).testRunStarted(anyString(), eq(1));
+            } else {
+                verify(mListener, never()).testRunStarted(anyString(), eq(1));
+            }
+            shardIndex++;
+        }
+        mHostTest.run(testInfo, mListener);
+    }
+
+    @Test
+    public void testTwoClass_TwoShards() throws Exception {
+        final String jarName = "SimplePassingTest.jar";
+        final String jarName2 = "SimpleFailingTest.jar";
+        setUpSimpleMockJarTest(jarName, jarName2);
+
+        TestInformation testInfo = TestInformation.newBuilder().build();
+        List<IRemoteTest> shards = (ArrayList<IRemoteTest>) mHostTest.split(2);
+
+        int shardIndex = 0;
+        for (IRemoteTest shard : shards) {
+            mListener = Mockito.mock(ITestInvocationListener.class);
+            shard.run(testInfo, mListener);
+            verify(mListener, times(1)).testRunStarted(anyString(), eq(1));
+            shardIndex++;
+        }
+        mHostTest.run(testInfo, mListener);
     }
 }

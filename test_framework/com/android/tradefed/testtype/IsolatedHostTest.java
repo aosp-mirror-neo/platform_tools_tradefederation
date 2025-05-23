@@ -20,11 +20,13 @@ import static com.android.tradefed.util.EnvironmentVariableUtil.buildMinimalLdLi
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.cache.ICacheClient;
+import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.Option.Importance;
 import com.android.tradefed.config.OptionClass;
+import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.invoker.TestInformation;
@@ -70,6 +72,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -98,7 +101,8 @@ public class IsolatedHostTest
                 ITestAnnotationFilterReceiver,
                 ITestFilterReceiver,
                 IConfigurationReceiver,
-                ITestCollector {
+                ITestCollector,
+                IShardableTest {
     @Option(
             name = "class",
             description =
@@ -232,6 +236,9 @@ public class IsolatedHostTest
 
     private boolean mCached = false;
 
+    private int mTotalShards = 0;
+    private int mShardIndex = 0;
+
     public void setDebug(boolean debug) {
         this.debug = debug;
     }
@@ -300,7 +307,9 @@ public class IsolatedHostTest
                             .addAllTestClasses(new TreeSet<>(mClasses))
                             .addAllTestJarAbsPaths(testJarAbsPaths)
                             .addAllExcludePaths(new TreeSet<>(mExcludePaths))
-                            .setDryRun(mCollectTestsOnly);
+                            .setDryRun(mCollectTestsOnly)
+                            .setTotalShards(mTotalShards)
+                            .setShardIndex(mShardIndex);
 
             if (!mIncludeFilters.isEmpty()
                     || !mExcludeFilters.isEmpty()
@@ -1032,6 +1041,42 @@ public class IsolatedHostTest
 
     private boolean isCoverageEnabled() {
         return mConfig != null && mConfig.getCoverageOptions().isCoverageEnabled();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Collection<IRemoteTest> split(int shardCount) {
+        if (shardCount < 2) {
+            return null;
+        }
+        CLog.v("The shardCound is: %s", shardCount);
+        Collection<IRemoteTest> shards = new ArrayList<>(shardCount);
+        for (int index = 0; index < shardCount; index++) {
+            shards.add(getTestShard(shardCount, index));
+        }
+        return shards;
+    }
+
+    private IRemoteTest getTestShard(int shardCount, int shardIndex) {
+        IsolatedHostTest shard = new IsolatedHostTest();
+        try {
+            OptionCopier.copyOptions(this, shard);
+        } catch (ConfigurationException e) {
+            CLog.e("Failed to copy IsolatedHostTest options: %s", e.getMessage());
+        }
+        shard.mShardIndex = shardIndex;
+        shard.mTotalShards = shardCount;
+        shard.mIncludeFilters.addAll(mIncludeFilters);
+        shard.mExcludeFilters.addAll(mExcludeFilters);
+        shard.mConfig = mConfig;
+        shard.mBuildInfo = mBuildInfo;
+        shard.mCollectTestsOnly = mCollectTestsOnly;
+        return shard;
+    }
+
+    void setClassName(String className) {
+        mClasses.clear();
+        mClasses.add(className);
     }
 
     /** {@inheritDoc} */
