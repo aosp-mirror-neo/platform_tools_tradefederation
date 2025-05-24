@@ -28,6 +28,7 @@ import android.os.SystemClock;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * A utility for Google account syncing
@@ -356,21 +357,28 @@ public class GoogleAccountSync extends Instrumentation {
             sendStatusMessage(
                     Activity.RESULT_OK,
                     String.format(
-                            "There are active syncs (%d): %s.", activeSyncs.size(), activeSyncs));
+                            Locale.ENGLISH,
+                            "There are active syncs (%d): %s.",
+                            activeSyncs.size(),
+                            activeSyncs));
         }
         if (!initialPendingSyncs.isEmpty()) {
             sendStatusMessage(
                     Activity.RESULT_OK,
                     String.format(
+                            Locale.ENGLISH,
                             "There are pending syncs (%d): %s.",
-                            initialPendingSyncs.size(), initialPendingSyncs));
+                            initialPendingSyncs.size(),
+                            initialPendingSyncs));
         }
         if (!additionalPendingSyncs.isEmpty()) {
             sendStatusMessage(
                     Activity.RESULT_OK,
                     String.format(
+                            Locale.ENGLISH,
                             "There are pending forced syncs (%d): %s.",
-                            additionalPendingSyncs.size(), additionalPendingSyncs));
+                            additionalPendingSyncs.size(),
+                            additionalPendingSyncs));
         }
     }
 

@@ -122,6 +122,13 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             description = "Allows to ignore bootloader version and force it installed.")
     private boolean mSkipBootloaderVersionCheck = false;
 
+    @Option(
+            name = "ignore-fastboot-failed-message",
+            description =
+                    "Allows to ignore any FAILED message in fastboot output. This shouldn't be used"
+                            + " without a good reason.")
+    private boolean mIgnoreFastbootFailedMessage = false;
+
     @Option(name = "wipe-timeout",
             description = "the timeout for the command of wiping user data.", isTimeVal = true)
     private long mWipeTimeout = 4 * 60 * 1000;
@@ -441,6 +448,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 if (flasher instanceof FastbootDeviceFlasher) {
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipBootloaderVersionCheck(mSkipBootloaderVersionCheck);
+                    ((FastbootDeviceFlasher) flasher)
+                            .setSkipFastbootFailedMessage(mIgnoreFastbootFailedMessage);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
                     if (!reEntry) {
                         // Avoid using incremental during re-entry since it will just wipe
