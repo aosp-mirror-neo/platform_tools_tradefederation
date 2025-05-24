@@ -344,4 +344,8 @@ public interface ICommandScheduler {
     public default void setMaxPollTime(long polling) {
         // Empty on purpose
     }
+
+    public default void setPrintSchedulingWarning(boolean print) {
+        // Empty on purpose
+    }
 }

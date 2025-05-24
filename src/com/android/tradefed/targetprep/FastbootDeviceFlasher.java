@@ -103,6 +103,7 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
 
     private boolean mShouldFlashRamdisk = false;
     private boolean mSkipBootloaderVersionCheck = false;
+    private boolean mSkipFastbootFailedMessage = false;
 
     private String mRamdiskPartition = "root";
 
@@ -1008,7 +1009,12 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
             boolean skipBootloaderVersionCheck = false; // Doesn't apply to "getvar"
             String queryOutput =
                     internalHandleFastbootResult(
-                            device, result, skipBootloaderVersionCheck, "getvar", versionQuery);
+                            device,
+                            result,
+                            skipBootloaderVersionCheck,
+                            false,
+                            "getvar",
+                            versionQuery);
             Matcher matcher = versionOutputPattern.matcher(queryOutput);
             if (matcher.find()) {
                 return matcher.group(1);
@@ -1135,7 +1141,11 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         try {
             String res =
                     internalHandleFastbootResult(
-                            device, result, mSkipBootloaderVersionCheck, cmdArgs);
+                            device,
+                            result,
+                            mSkipBootloaderVersionCheck,
+                            mSkipFastbootFailedMessage,
+                            cmdArgs);
             mFbCmdStatus = CommandStatus.SUCCESS;
             return res;
         } catch (TargetSetupError e) {
@@ -1145,6 +1155,14 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     }
 
     public static boolean stderrContainsFailed(String stderr, boolean skipBootloaderVersionCheck) {
+        return stderrContainsFailed(stderr, skipBootloaderVersionCheck, false);
+    }
+
+    public static boolean stderrContainsFailed(
+            String stderr, boolean skipBootloaderVersionCheck, boolean skipFastbootFailedMessage) {
+        if (skipFastbootFailedMessage) {
+            return false;
+        }
         if (skipBootloaderVersionCheck) {
             CLog.d("Ignore bootloader version check failures");
             stderr = BOOTLOADER_VERSION_ERROR.matcher(stderr).replaceAll("");
@@ -1156,6 +1174,7 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
             ITestDevice device,
             CommandResult result,
             boolean skipBootloaderVersionCheck,
+            boolean skipFastbootFailedMessage,
             String... cmdArgs)
             throws TargetSetupError {
         CLog.v("fastboot stdout: " + result.getStdout());
@@ -1177,7 +1196,10 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
             status = CommandStatus.FAILED;
         }
         if (!specialErrorIdentified
-                && stderrContainsFailed(result.getStderr(), skipBootloaderVersionCheck)) {
+                && stderrContainsFailed(
+                        result.getStderr(),
+                        skipBootloaderVersionCheck,
+                        skipFastbootFailedMessage)) {
             // if output contains "FAILED", just override to failure
             status = CommandStatus.FAILED;
         }
@@ -1295,6 +1317,10 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
 
     protected void setSkipBootloaderVersionCheck(boolean skipBootloaderVersionCheck) {
         mSkipBootloaderVersionCheck = skipBootloaderVersionCheck;
+    }
+
+    protected void setSkipFastbootFailedMessage(boolean skipFastbootFailedMessage) {
+        mSkipFastbootFailedMessage = skipFastbootFailedMessage;
     }
 
     public boolean shouldSkipBootloaderVersionCheck() {

@@ -188,9 +188,15 @@ public class TestZipDiscoveryExecutor {
         Set<String> testsZipRegex = new LinkedHashSet<String>();
         // special setup by camera team
         if ("unused".equals(args[0])) {
-            for (String arg : args) {
-                if (arg.contains("liblyric")) {
+            for (int i = 1; i < args.length; i++) {
+                if (args[i].contains("liblyric")) {
                     testsZipRegex.add("camera-hal-tests.zip");
+                }
+                // Some camera configs have specific test zip specified by
+                // --artifact_with_config. Ensure we return it so it doesn't
+                // get optimized.
+                if (args[i].contains("--artifact_with_config")) {
+                    testsZipRegex.add(args[i + 1]);
                 }
             }
             return formatResults(false, testsZipRegex);

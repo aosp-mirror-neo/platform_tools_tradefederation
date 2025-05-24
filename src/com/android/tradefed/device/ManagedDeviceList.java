@@ -20,6 +20,7 @@ import com.android.ddmlib.IDevice;
 import com.android.tradefed.device.DeviceManager.FastbootDevice;
 import com.android.tradefed.device.IDeviceSelection.BaseDeviceType;
 import com.android.tradefed.device.IManagedTestDevice.DeviceEventResponse;
+import com.android.tradefed.log.Log.LogLevel;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.ConditionPriorityBlockingQueue.IMatcher;
 
@@ -216,7 +217,11 @@ class ManagedDeviceList implements Iterable<IManagedTestDevice> {
                 } else if (state.equals(d.getDeviceState())) {
                     // device was previously on fastboot, assume its gone now
                     d.setDeviceState(TestDeviceState.NOT_AVAILABLE);
-                    CLog.d("Device %s was in %s and not found anymore", serial, state);
+                    CLog.logAndDisplay(
+                            LogLevel.DEBUG,
+                            "Device %s was in %s and not found anymore",
+                            serial,
+                            state);
                     toRemove.add(d);
                 }
             }

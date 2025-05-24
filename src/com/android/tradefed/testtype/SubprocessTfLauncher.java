@@ -423,6 +423,7 @@ public abstract class SubprocessTfLauncher
             } else if (protoReceiver != null) {
                 if (!protoReceiver.joinReceiver(EVENT_THREAD_JOIN_TIMEOUT_MS)) {
                     elapsedTime = -1L;
+                    protoReceiver.completeModuleEvents();
                     throw new RuntimeException(
                             String.format(
                                     "Event receiver thread did not complete:" + "\n%s",

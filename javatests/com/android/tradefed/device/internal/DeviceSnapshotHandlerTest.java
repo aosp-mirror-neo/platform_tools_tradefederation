@@ -59,6 +59,8 @@ public class DeviceSnapshotHandlerTest {
     @Test
     public void testSnapshot() throws Exception {
         FeatureResponse.Builder responseBuilder = FeatureResponse.newBuilder();
+        responseBuilder.setResponse(
+                "Attempting snapshot device on device-1.  Snapshot finished in 999 ms.");
         when(mMockClient.triggerFeature(any(), any())).thenReturn(responseBuilder.build());
 
         mHandler.snapshotDevice(mMockDevice, "random_id");
@@ -134,6 +136,8 @@ public class DeviceSnapshotHandlerTest {
     @Test
     public void testRestoreSnapshot() throws Exception {
         FeatureResponse.Builder responseBuilder = FeatureResponse.newBuilder();
+        responseBuilder.setResponse(
+                "Attempting snapshot device on device-1.  Restoring snapshot finished in 999 ms.");
         when(mMockClient.triggerFeature(any(), any())).thenReturn(responseBuilder.build());
 
         mHandler.restoreSnapshotDevice(mMockDevice, "random_id");
@@ -219,9 +223,12 @@ public class DeviceSnapshotHandlerTest {
     @Test
     public void testDeleteSnapshot() throws Exception {
         FeatureResponse.Builder responseBuilder = FeatureResponse.newBuilder();
+        responseBuilder.setResponse(
+                "Attempting snapshot device on device-1.  Snapshot finished in 999 ms.");
         when(mMockClient.triggerFeature(any(), any())).thenReturn(responseBuilder.build());
 
         mHandler.snapshotDevice(mMockDevice, "random_id");
+        mHandler.deleteSnapshot(mMockDevice, "random_id");
     }
 
     @Test

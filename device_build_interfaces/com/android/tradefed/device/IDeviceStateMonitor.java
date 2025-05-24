@@ -220,8 +220,10 @@ public interface IDeviceStateMonitor {
     /** Gets the fastboot mode serial number. */
     public String getFastbootSerialNumber();
 
-    /** Sets the fastboot binary path to use. */
-    public void setFastbootPath(String fastbootPath);
+    /** Clear any state in device manager. */
+    public default void clearTcpFastbootMonitor() {
+        // Empty by default
+    }
 
     /** Attach a final state to abort waitForDeviceState if reached. */
     public default void attachFinalState(TestDeviceState finalState) {

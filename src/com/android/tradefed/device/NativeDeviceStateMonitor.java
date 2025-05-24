@@ -25,9 +25,6 @@ import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
-import com.android.tradefed.util.ArrayUtil;
-import com.android.tradefed.util.CommandResult;
-import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunInterruptedException;
 import com.android.tradefed.util.RunUtil;
@@ -75,8 +72,6 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
 
     /** The fastboot mode serial number */
     private String mFastbootSerialNumber = null;
-
-    private String mFastbootPath = "fastboot";
 
     private List<DeviceStateListener> mStateListeners;
     private IDeviceManager mMgr;
@@ -138,8 +133,8 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
     }
 
     @Override
-    public void setFastbootPath(String fastbootPath) {
-        mFastbootPath = fastbootPath;
+    public void clearTcpFastbootMonitor() {
+        mMgr.removeMonitoringTcpFastbootDevice(getSerialNumber());
     }
 
     /**
@@ -543,6 +538,8 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
         // ensure fastboot state is updated at least once
         waitForDeviceBootloaderStateUpdate();
         long elapsedTime = System.currentTimeMillis() - startTime;
+        IFastbootListener listener = new StubFastbootListener();
+        mMgr.addFastbootListener(listener);
         long waitTime = time - elapsedTime;
         if (waitTime < 0) {
             // wait at least 200ms
@@ -552,40 +549,21 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
         if (fastbootd) {
             mode = TestDeviceState.FASTBOOTD;
         }
+        boolean result = false;
+        // For a tcp connection, break down the wait due to the connection aspect which change the
+        // behavior.
         if (getFastbootSerialNumber().contains("tcp:")) {
-            CommandResult commandResult = null;
             for (int i = 0; i < 4; i++) {
-                commandResult =
-                        getRunUtil()
-                                .runTimedCmd(
-                                        waitTime / 4, buildFastbootCommand("getvar", "product"));
-                if (CommandStatus.SUCCESS.equals(commandResult.getStatus())) {
-                    setState(mode);
-                    return true;
+                result = waitForDeviceState(mode, waitTime / 4);
+                if (result) {
+                    break;
                 }
             }
-            CLog.e(
-                    "Waiting for device in %s. Status: %s.\nstdout:%s\nstderr:%s",
-                    mode,
-                    commandResult.getStatus(),
-                    commandResult.getStdout(),
-                    commandResult.getStderr());
-            return false;
         } else {
-            CommandResult commandResult =
-                    getRunUtil().runTimedCmd(waitTime, buildFastbootCommand("getvar", "product"));
-            if (!CommandStatus.SUCCESS.equals(commandResult.getStatus())) {
-                CLog.e(
-                        "Waiting for device in %s. Status: %s.\nstdout:%s\nstderr:%s",
-                        mode,
-                        commandResult.getStatus(),
-                        commandResult.getStdout(),
-                        commandResult.getStderr());
-                return false;
-            }
-            setState(mode);
-            return true;
+            result = waitForDeviceState(mode, waitTime);
         }
+        mMgr.removeFastbootListener(listener);
+        return result;
     }
 
     @Override
@@ -836,10 +814,5 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
                     getSerialNumber(),
                     DeviceErrorIdentifier.DEVICE_UNAVAILABLE);
         }
-    }
-
-    private String[] buildFastbootCommand(String... commandArgs) {
-        return ArrayUtil.buildArray(
-                new String[] {mFastbootPath, "-s", getFastbootSerialNumber()}, commandArgs);
     }
 }

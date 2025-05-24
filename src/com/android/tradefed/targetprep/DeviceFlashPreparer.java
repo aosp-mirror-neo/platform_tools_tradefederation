@@ -45,6 +45,7 @@ import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.retry.BaseRetryDecision;
 import com.android.tradefed.targetprep.IDeviceFlasher.UserDataFlashOption;
+import com.android.tradefed.testtype.ITestInformationReceiver;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
@@ -120,6 +121,13 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             name = "skip-bootloader-version-check",
             description = "Allows to ignore bootloader version and force it installed.")
     private boolean mSkipBootloaderVersionCheck = false;
+
+    @Option(
+            name = "ignore-fastboot-failed-message",
+            description =
+                    "Allows to ignore any FAILED message in fastboot output. This shouldn't be used"
+                            + " without a good reason.")
+    private boolean mIgnoreFastbootFailedMessage = false;
 
     @Option(name = "wipe-timeout",
             description = "the timeout for the command of wiping user data.", isTimeVal = true)
@@ -426,6 +434,9 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
             boolean tookPermit = false;
             // only surround fastboot related operations with flashing permit restriction
             try {
+                if (flasher instanceof ITestInformationReceiver) {
+                    ((ITestInformationReceiver) flasher).setTestInformation(testInfo);
+                }
                 flasher.overrideDeviceOptions(device);
                 flasher.setUserDataFlashOption(mUserDataFlashOption);
                 flasher.setForceSystemFlash(mForceSystemFlash);
@@ -437,6 +448,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 if (flasher instanceof FastbootDeviceFlasher) {
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipBootloaderVersionCheck(mSkipBootloaderVersionCheck);
+                    ((FastbootDeviceFlasher) flasher)
+                            .setSkipFastbootFailedMessage(mIgnoreFastbootFailedMessage);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
                     if (!reEntry) {
                         // Avoid using incremental during re-entry since it will just wipe
