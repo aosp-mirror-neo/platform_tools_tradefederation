@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.cluster;
 
+import com.android.annotations.VisibleForTesting;
 import com.android.loganalysis.util.ArrayUtil;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
@@ -22,6 +23,7 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
+import com.google.common.base.Strings;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -34,7 +36,16 @@ public class TestResourceDownloader {
     private static final long RETRY_INTERVAL_MS = 10 * 1000;
     private static final int MAX_RETRY_COUNT = 2;
 
+    private final String mCurlLimitRate;
     private IRunUtil mRunUtil = null;
+
+    public TestResourceDownloader(String curlLimitRate) {
+        mCurlLimitRate = curlLimitRate;
+    }
+
+    public TestResourceDownloader() {
+        this(null);
+    }
 
     public void download(String urlString, File dest) throws IOException {
         final URL url = new URL(urlString);
@@ -78,10 +89,21 @@ public class TestResourceDownloader {
         }
         if ("http".equals(protocol) || "https".equals(protocol)) {
             // FIXME: Check whether curl is available on a host.
-            // Add -L option to handle redirect.
-            return ArrayUtil.list("curl", "-o", file.getAbsolutePath(), "-fL", url.toString());
+            return buildCurlCommandArgs(url, file);
         }
         throw new UnsupportedOperationException("protocol " + protocol + " is not supported");
+    }
+
+    @VisibleForTesting
+    List<String> buildCurlCommandArgs(URL url, File file) {
+        // Add -L option to handle redirect.
+        List<String> args =
+                ArrayUtil.list("curl", "-o", file.getAbsolutePath(), "-fL", url.toString());
+        if (!Strings.isNullOrEmpty(mCurlLimitRate)) {
+            args.add("--limit-rate");
+            args.add(mCurlLimitRate);
+        }
+        return args;
     }
 
     IRunUtil getRunUtil() {

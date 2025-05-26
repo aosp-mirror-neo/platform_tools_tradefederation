@@ -50,6 +50,7 @@ import com.android.tradefed.cluster.ClusterLogSaverTest;
 import com.android.tradefed.cluster.SubprocessConfigBuilderTest;
 import com.android.tradefed.cluster.SubprocessReportingHelperTest;
 import com.android.tradefed.cluster.TestOutputUploaderTest;
+import com.android.tradefed.cluster.TestResourceDownloaderTest;
 import com.android.tradefed.command.CommandFileParserTest;
 import com.android.tradefed.command.CommandFileWatcherTest;
 import com.android.tradefed.command.CommandInterrupterTest;
@@ -573,6 +574,7 @@ import org.junit.runners.Suite.SuiteClasses;
     SubprocessConfigBuilderTest.class,
     SubprocessReportingHelperTest.class,
     TestOutputUploaderTest.class,
+    TestResourceDownloaderTest.class,
 
     // command
     CommandFileParserTest.class,
