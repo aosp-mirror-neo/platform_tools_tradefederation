@@ -1530,6 +1530,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                                         getKeyStoreClient(),
                                         ImmutableSet.of(
                                                 Configuration.DEVICE_REQUIREMENTS_TYPE_NAME,
+                                                Configuration.CMD_OPTIONS_TYPE_NAME,
                                                 Configuration.LOGGER_TYPE_NAME,
                                                 Configuration.LOG_SAVER_TYPE_NAME,
                                                 Configuration.RESULT_REPORTER_TYPE_NAME),
