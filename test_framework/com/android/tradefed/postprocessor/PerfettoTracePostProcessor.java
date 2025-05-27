@@ -564,4 +564,14 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     File compressFile(File metricOutputFile) throws IOException {
         return ZipUtil.createZip(metricOutputFile, metricOutputFile.getName());
     }
+
+    /**
+     * Set the metric type to RAW so that metrics will be processed by subsequent post processors.
+     *
+     * <p>This is necessary for MetricFilePostProcessor to write the metrics to the results file.
+     */
+    @Override
+    protected DataType getMetricType() {
+        return DataType.RAW;
+    }
 }

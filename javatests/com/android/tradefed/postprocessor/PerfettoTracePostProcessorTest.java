@@ -17,6 +17,7 @@
 package com.android.tradefed.postprocessor;
 
 import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.metrics.proto.MetricMeasurement.DataType;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogDataType;
@@ -374,5 +375,11 @@ public class PerfettoTracePostProcessorTest {
         Mockito.verify(mProcessor).decompressFile(Mockito.any());
 
         traceProcessorTempFile.delete();
+    }
+
+    /** Test the default metric type is set to RAW. */
+    @Test
+    public void testMetricTypeIsRaw() {
+        Assert.assertTrue(mProcessor.getMetricType().equals(DataType.RAW));
     }
 }
