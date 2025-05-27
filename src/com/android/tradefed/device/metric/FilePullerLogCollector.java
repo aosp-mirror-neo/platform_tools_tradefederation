@@ -88,6 +88,8 @@ public class FilePullerLogCollector extends FilePullerDeviceMetricCollector {
             return LogDataType.BT_SNOOP_LOG;
         } else if (".json".equals(ext)) {
             return LogDataType.JSON;
+        } else if (".bmp".equals(ext)) {
+            return LogDataType.BMP;
         }
         return LogDataType.TEXT;
     }
