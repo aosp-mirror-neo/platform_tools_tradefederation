@@ -54,10 +54,12 @@ import java.util.regex.Pattern;
 @OptionClass(alias = "perfetto-trace-processor")
 public class PerfettoTracePostProcessor extends BasePostProcessor {
 
-    private static final String PROCESSOR_STATUS = "trace_processor_status";
+    private static final String PROCESSOR_STATUS_V1 = "trace_processor_status";
+    private static final String PROCESSOR_STATUS_V2 = "trace_processor_status_v2";
     private static final String STATUS_SUCCESS = "1";
     private static final String STATUS_FAILURE = "0";
-    private static final String PROCESSOR_RUNTIME = "trace_processor_runtime";
+    private static final String PROCESSOR_RUNTIME_V1 = "trace_processor_runtime";
+    private static final String PROCESSOR_RUNTIME_V2 = "trace_processor_runtime_v2";
     private static final String RAW_TRACE_FILE_SIZE = "perfetto_trace_file_size_bytes";
     private static final String METRIC_VERSION_V1 = "v1";
     private static final String METRIC_VERSION_V2 = "v2";
@@ -234,12 +236,14 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
             if (mMetricV1) {
                 metrics.putAll(
                         wrapConvertedMetricFile(
-                                convertToMetricProto(processSrcFile, METRIC_VERSION_V1)));
+                                convertToMetricProto(processSrcFile, METRIC_VERSION_V1),
+                                METRIC_VERSION_V1));
             }
             if (mMetricV2) {
                 metrics.putAll(
                         wrapConvertedMetricFile(
-                                convertToMetricProto(processSrcFile, METRIC_VERSION_V2)));
+                                convertToMetricProto(processSrcFile, METRIC_VERSION_V2),
+                                METRIC_VERSION_V2));
             }
         }
 
@@ -397,9 +401,11 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
      * Wraps the converted metric file into test artifacts.
      *
      * @param result TraceProcessorResult
+     * @param version The version of the metric file.
      * @return metrics for the processor runtime and status.
      */
-    private Map<String, Metric.Builder> wrapConvertedMetricFile(TraceProcessorResult result) {
+    private Map<String, Metric.Builder> wrapConvertedMetricFile(
+            TraceProcessorResult result, String version) {
         Map<String, Metric.Builder> metrics = new HashMap<>();
 
         File convertedMetricFile = result.file;
@@ -411,14 +417,18 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
 
         Metric.Builder processorRuntimeBuilder = Metric.newBuilder();
         processorRuntimeBuilder.getMeasurementsBuilder().setSingleDouble((double) result.runtime);
+        String runtimeKey =
+                version.equals(METRIC_VERSION_V2) ? PROCESSOR_RUNTIME_V2 : PROCESSOR_RUNTIME_V1;
         metrics.put(
-                String.format("%s_%s", mMetricPrefix, PROCESSOR_RUNTIME),
+                String.format("%s_%s", mMetricPrefix, runtimeKey),
                 processorRuntimeBuilder.setType(DataType.RAW));
 
         Metric.Builder processorStatusBuilder = Metric.newBuilder();
         processorStatusBuilder.getMeasurementsBuilder().setSingleString(result.status);
+        String statusKey =
+                version.equals(METRIC_VERSION_V2) ? PROCESSOR_STATUS_V2 : PROCESSOR_STATUS_V1;
         metrics.put(
-                String.format("%s_%s", mMetricPrefix, PROCESSOR_STATUS),
+                String.format("%s_%s", mMetricPrefix, statusKey),
                 processorStatusBuilder.setType(DataType.RAW));
 
         return metrics;
