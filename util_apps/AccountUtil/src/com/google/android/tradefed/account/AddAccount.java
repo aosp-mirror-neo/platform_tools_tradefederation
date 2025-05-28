@@ -183,6 +183,7 @@ public class AddAccount extends Instrumentation {
         // wait for checkin
         if (receiver != null && !receiver.waitForCheckin(CHECKIN_WAIT_TIME_SEC * 1000)) {
             String errMsg = String.format(
+                Locale.ENGLISH,
                     "Error: checkin did not complete within %d seconds after adding account %s",
                     CHECKIN_WAIT_TIME_SEC, username);
             Log.e(TAG, errMsg);
