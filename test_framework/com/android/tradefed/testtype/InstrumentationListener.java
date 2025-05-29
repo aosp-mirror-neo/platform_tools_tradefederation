@@ -63,8 +63,8 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
     private final Collection<TestDescription> mExpectedTests;
     private boolean mDisableDuplicateCheck = false;
     private boolean mReportUnexecutedTests = false;
+    private boolean mUnexecutedTestsReported = false;
     private ProcessInfo mSystemServerProcess = null;
-    private String runLevelError = null;
     private TestDescription mLastTest = null;
     private TestDescription mLastStartedTest = null;
 
@@ -104,7 +104,7 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
 
     @Override
     public void testRunStarted(String runName, int testCount) {
-        runLevelError = null;
+        mUnexecutedTestsReported = false;
         // In case of crash, run will attempt to report with 0
         if (testCount == 0 && mExpectedTests != null && !mExpectedTests.isEmpty()) {
             CLog.e("Run reported 0 tests while we collected %s", mExpectedTests.size());
@@ -203,8 +203,10 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             error.setFailureStatus(FailureStatus.TEST_FAILURE);
             error.setErrorIdentifier(InfraErrorIdentifier.EXPECTED_TESTS_MISMATCH);
         }
-        // Use error before injecting the crashes
-        runLevelError = error.getErrorMessage();
+        String runLevelError =
+                String.format("Run level error reported reason: '%s", error.getErrorMessage());
+        reportUnexecutedTestsIfNeeded(runLevelError);
+        mUnexecutedTestsReported = true;
         super.testRunFailed(error);
     }
 
@@ -222,7 +224,18 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             error.setFailureStatus(FailureStatus.TEST_FAILURE)
                     .setRetriable(false); // Don't retry duplicate tests.
             super.testRunFailed(error);
-        } else if (mReportUnexecutedTests
+        } else {
+            String runLevelError = "Method was expected to run but didn't.";
+            reportUnexecutedTestsIfNeeded(runLevelError);
+            mUnexecutedTestsReported = true;
+        }
+        mClassAssumptionFailure = new HashMap<String, String>();
+        super.testRunEnded(elapsedTime, runMetrics);
+    }
+
+    private void reportUnexecutedTestsIfNeeded(String runLevelError) {
+        if (mReportUnexecutedTests
+                && !mUnexecutedTestsReported
                 && mExpectedTests != null
                 && (mExpectedTests.size() > mTests.size() || !mExpectedTests.isEmpty())) {
             Set<TestDescription> missingTests = new LinkedHashSet<>(mExpectedTests);
@@ -232,12 +245,6 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             String lastExecutedLog = "";
             if (lastTest != null) {
                 lastExecutedLog = "Last executed test was " + lastTest.toString() + ".";
-            }
-            if (runLevelError == null) {
-                runLevelError = "Method was expected to run but didn't.";
-            } else {
-                runLevelError =
-                        String.format("Run level error reported reason: '%s", runLevelError);
             }
             for (TestDescription miss : missingTests) {
                 super.testStarted(miss);
@@ -256,8 +263,5 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
                 super.testEnded(miss, new HashMap<String, Metric>());
             }
         }
-        runLevelError = null;
-        mClassAssumptionFailure = new HashMap<String, String>();
-        super.testRunEnded(elapsedTime, runMetrics);
     }
 }
