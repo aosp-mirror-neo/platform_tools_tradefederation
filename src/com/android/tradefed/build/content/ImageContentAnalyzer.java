@@ -65,6 +65,10 @@ public class ImageContentAnalyzer {
         allDescriptors.removeIf(d -> d.path.startsWith("META/"));
         allDescriptors.removeIf(d -> d.path.startsWith("PREBUILT_IMAGES/"));
         allDescriptors.removeIf(d -> d.path.startsWith("RADIO/"));
+        // Remove compilation paths, they are linked to underlying jars and apps
+        allDescriptors.removeIf(
+            d -> (d.path.startsWith("SYSTEM_OTHER/") || d.path.startsWith("SYSTEM/"))
+                && (d.path.endsWith(".odex") || d.path.endsWith(".vdex") || d.path.endsWith(".art") || d.path.endsWith(".oat")));
 
         if (analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
             boolean removed = false;
