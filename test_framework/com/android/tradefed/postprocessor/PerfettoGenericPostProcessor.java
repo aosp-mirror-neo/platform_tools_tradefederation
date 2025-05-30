@@ -684,26 +684,48 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
      */
     private Map<String, Metric.Builder> convertPerfettoProtoMessageV2(TraceSummary reportMessage) {
         CLog.d("convertPerfettoProtoMessageV2 reportMessage : " + reportMessage);
-        Map<String, Metric.Builder> convertedMetrics = new HashMap<String, Metric.Builder>();
+        Map<String, Metric.Builder> convertedMetrics = new HashMap<>();
+        Map<String, ArrayList<Double>> collectedValuesForKey = new HashMap<>();
+
         for (TraceMetricV2 metric : reportMessage.getMetricList()) {
+            String baseKey = metric.getSpec().getId();
             for (MetricRow row : metric.getRowList()) {
-                String rowKey = metric.getSpec().getId();
-                double rowValue = row.getValue();
+                StringBuilder currentKeyBuilder = new StringBuilder(baseKey);
                 for (Dimension dimension : row.getDimensionList()) {
                     Map<FieldDescriptor, Object> fields = dimension.getAllFields();
-                    for (Entry<FieldDescriptor, Object> entry : fields.entrySet()) {
-                        if (!(entry.getValue() instanceof Message)) {
-                            rowKey = rowKey.concat("-").concat(entry.getValue().toString());
+                    for (Entry<FieldDescriptor, Object> fieldEntry : fields.entrySet()) {
+                        if (!(fieldEntry.getValue() instanceof Message)) {
+                            currentKeyBuilder.append("-").append(fieldEntry.getValue().toString());
                         }
                     }
                 }
+                String finalRowKey = currentKeyBuilder.toString();
+                double rowValue = row.getValue();
+
+                // Store the value in a list associated with its fully constructed key.
+                collectedValuesForKey
+                        .computeIfAbsent(finalRowKey, k -> new ArrayList<>())
+                        .add(rowValue);
+            }
+        }
+
+        for (Entry<String, ArrayList<Double>> entry : collectedValuesForKey.entrySet()) {
+            String key = entry.getKey();
+            ArrayList<Double> values = entry.getValue();
+
+            if (values.size() == 1) {
+                double singleValue = values.get(0);
                 convertedMetrics.put(
-                        rowKey,
-                        TfMetricProtoUtil.stringToMetric(String.format("%f", rowValue))
-                                .toBuilder());
+                        key, TfMetricProtoUtil.doubleToMetric(singleValue).toBuilder());
                 CLog.d(
-                        "Perfetto trace v2 metric: key: %s value: %s",
-                        rowKey, Double.toString(rowValue));
+                        "Perfetto trace v2 metric (single): key: %s, value: %s",
+                        key, Double.toString(singleValue));
+            } else {
+                convertedMetrics.put(
+                        key, TfMetricProtoUtil.doubleArrayToMetric(values).toBuilder());
+                CLog.d(
+                        "Perfetto trace v2 metric (array): key: %s, values: %s",
+                        key, values.toString());
             }
         }
         return convertedMetrics;

@@ -51,7 +51,9 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Unit tests for {@link PerfettoGenericPostProcessor}. */
@@ -127,8 +129,8 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContain(parsedMetrics, "perfetto_android_startup-startup-1-startup_id", 1);
-        assertMetricsContain(
+        assertMetricsContainString(parsedMetrics, "perfetto_android_startup-startup-1-startup_id", 1);
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_startup-startup-1-package_name-com.google."
                         + "android.apps.nexuslauncher-to_first_frame-dur_ns",
@@ -159,8 +161,8 @@ public class PerfettoGenericPostProcessorTest {
 
         assertFalse("Metric key not expected but found",
                 parsedMetrics.containsKey("android_startup-startup-1-startup_id"));
-        assertMetricsContain(parsedMetrics, "perfetto_newprefix-startup_id", 1);
-        assertMetricsContain(
+        assertMetricsContainString(parsedMetrics, "perfetto_newprefix-startup_id", 1);
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_newprefix-package_name-com.google."
                         + "android.apps.nexuslauncher-to_first_frame-dur_ns",
@@ -185,7 +187,7 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
         // Test for non startup metrics exists.
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_mem-process_metrics-process_name-"
                         + ".dataservices-total_counters-anon_rss-min",
@@ -206,7 +208,7 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processTestMetricsAndLogs(
                         new TestDescription("class", "test"), new HashMap<>(), testLogs);
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_mem-process_metrics-process_name-"
                         + ".dataservices-total_counters-anon_rss-min",
@@ -228,7 +230,7 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processTestMetricsAndLogs(
                         new TestDescription("class", "test"), new HashMap<>(), testLogs);
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "custom_all_prefix_android_mem-process_metrics-process_name-"
                         + ".dataservices-total_counters-anon_rss-min",
@@ -248,7 +250,7 @@ public class PerfettoGenericPostProcessorTest {
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_mem-process_metrics-process_name-"
                         + ".dataservices-total_counters-anon_rss-min",
@@ -271,8 +273,8 @@ public class PerfettoGenericPostProcessorTest {
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
-        assertMetricsContain(parsedMetrics, "perfetto_android_startup-startup-startup_id", 2);
-        assertMetricsContain(
+        assertMetricsContainString(parsedMetrics, "perfetto_android_startup-startup-startup_id", 2);
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_startup-startup-package_name-com.google."
                         + "android.apps.nexuslauncher-to_first_frame-dur_ns",
@@ -297,14 +299,14 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContain(parsedMetrics, "perfetto_android_startup-startup-1-startup_id", 1);
-        assertMetricsContain(
+        assertMetricsContainString(parsedMetrics, "perfetto_android_startup-startup-1-startup_id", 1);
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_startup-startup-1-package_name-com.google."
                         + "android.apps.nexuslauncher-to_first_frame-dur_ns",
                 36175473);
-        assertMetricsContain(parsedMetrics, "perfetto_android_startup-startup-2-startup_id", 2);
-        assertMetricsContain(
+        assertMetricsContainString(parsedMetrics, "perfetto_android_startup-startup-2-startup_id", 2);
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_startup-startup-2-package_name-com.google."
                         + "android.apps.nexuslauncher-to_first_frame-dur_ns",
@@ -328,7 +330,7 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics = mProcessor
                 .processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_hwui_metric-process_info-process_name-com.android.systemui-all_mem_min",
                 15120269);
@@ -353,7 +355,7 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics = mProcessor
                 .processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_hwui_metric-process_info-process_name-com.android.systemui-"
                 + "rt_cpu_time_ms-2481-all_mem_min",
@@ -376,7 +378,7 @@ public class PerfettoGenericPostProcessorTest {
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
         Map<String, Metric.Builder> parsedMetrics = mProcessor
                 .processRunMetricsAndLogs(new HashMap<>(), testLogs);
-        assertMetricsContain(parsedMetrics, "perfetto_android_cpu-process_info-name-com.google."
+        assertMetricsContainString(parsedMetrics, "perfetto_android_cpu-process_info-name-com.google."
                 + "android.apps.messaging-threads-name-BG Thread #1-core-id-1-metrics-runtime_ns",
                 14376405);
     }
@@ -395,7 +397,7 @@ public class PerfettoGenericPostProcessorTest {
                 new LogFile(perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.PB));
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_mem-process_metrics-process_name-"
                         + ".dataservices-total_counters-anon_rss-min",
@@ -438,7 +440,7 @@ public class PerfettoGenericPostProcessorTest {
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_mem-process_metrics-process_name-"
                         + ".dataservices-total_counters-anon_rss-min",
@@ -469,7 +471,7 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto.protos.camera_app_metrics-camera_close_latencies-close_ms",
                 388.299723);
@@ -504,12 +506,12 @@ public class PerfettoGenericPostProcessorTest {
         if (DEBUG) {
             printOutputMetricsForDebug(parsedMetrics);
         }
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "android_jank_cuj-cuj-name-com.android.systemui-name-NOTIFICATION_ADD-timeline_"
                 + "metrics-frame_dur_avg",
                 5040562);
-        assertMetricsContain(
+        assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_jank_cuj-cuj-name-NOTIFICATION_ADD-dur",
                 460793302);
@@ -537,18 +539,18 @@ public class PerfettoGenericPostProcessorTest {
         if (DEBUG) {
             printOutputMetricsForDebug(parsedMetrics);
         }
-        assertMetricsContain(parsedMetrics,
+        assertMetricsContainString(parsedMetrics,
                 "perfetto_android_blocking_call-cuj-name-TASKBAR_EXPAND-blocking_calls-name-AIDL"
                         + "::java::ITrustManager::isDeviceSecure::server-total_dur_ms", 1);
 
-        assertMetricsContain(parsedMetrics,
+        assertMetricsContainString(parsedMetrics,
                 "perfetto_android_blocking_call-cuj-name-TASKBAR_EXPAND-blocking_calls-name-AIDL"
                         + "::java::ITrustManager::isDeviceSecure::server-min_dur_ms", 0);
-        assertMetricsContain(parsedMetrics,
+        assertMetricsContainString(parsedMetrics,
                 "perfetto_android_blocking_call-cuj-name-TASKBAR_EXPAND-blocking_calls-name-AIDL"
                         + "::java::ITrustManager::isDeviceSecure::server-max_dur_ms", 1);
 
-        assertMetricsContain(parsedMetrics,
+        assertMetricsContainString(parsedMetrics,
                 "perfetto_android_blocking_call-cuj-name-ACTION_REQUEST_IME_HIDDEN"
                         + "::HIDE_SOFT_INPUT-blocking_calls-name-AIDL::java::ITrustManager"
                         + "::isDeviceSecure::server-total_dur_ms", 1);
@@ -602,33 +604,37 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedV2Metrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContain(
+        assertMetricsContainDouble(
                 parsedV2Metrics,
                 "memory_per_process-avg_rss_and_swap-.ShannonImsService",
-                String.format("%f", 121380864.000000));
-        assertMetricsContain(
+                121380864.000000);
+        assertMetricsContainDouble(
                 parsedV2Metrics,
                 "memory_per_process-avg_rss_and_swap-.adservices",
-                String.format("%f", 123408384.000000));
-        assertMetricsContain(
+                123408384.000000);
+        assertMetricsContainDouble(
                 parsedV2Metrics,
                 "memory_per_process-avg_rss_and_swap-/apex/com.android.adbd/bin/adbd",
-                String.format("%f", 10464441.000000));
+                10464441.000000);
 
-        assertMetricsContain(
+        assertMetricsContainDouble(
                 parsedV2Metrics,
                 "total_runtime_per_thread_for_systemui_process-(Paused)KernelPreparation-Signal"
                         + " Catcher-com.android.systemui",
-                String.format("%f", 260051.000000));
-        assertMetricsContain(
+                260051.000000);
+        assertMetricsContainDouble(
                 parsedV2Metrics,
                 "total_runtime_per_thread_for_systemui_process-(Paused)KernelPreparation-binder:12907_9-com.android.systemui",
-                String.format("%f", 158854.000000));
-        assertMetricsContain(
+                158854.000000);
+        assertMetricsContainDouble(
                 parsedV2Metrics,
                 "total_runtime_per_thread_for_systemui_process-(Paused)MarkingPause-Signal"
                         + " Catcher-com.android.systemui",
-                String.format("%f", 548624.000000));
+                548624.000000);
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics,
+                "batt_power_mw",
+                Arrays.asList(456.0,123.0));
     }
 
     /**
@@ -1041,6 +1047,23 @@ public class PerfettoGenericPostProcessorTest {
                         + "    }\n"
                         + "    value: 548624.000000\n"
                         + "  }\n"
+                        + "}\n"
+                        + "metric {\n"
+                        + "  spec {\n"
+                        + "    id: \"batt_power_mw\"\n"
+                        + "  query {\n"
+                        + "    inner_query {\n"
+                        + "      inner_query_id: \"android_battery\"\n"
+                        + "    }\n"
+                        + "  }\n"
+                        + "  value: \"power_mw\"\n"
+                        + "}\n"
+                        + "  row {\n"
+                        + "    value: 456.000000\n"
+                        + "  }\n"
+                        + "  row {\n"
+                        + "    value: 123.000000\n"
+                        + "  }\n"
                         + "}\n";
 
         FileWriter fileWriter = null;
@@ -1103,8 +1126,8 @@ public class PerfettoGenericPostProcessorTest {
         }
     }
 
-    /** Assert that metrics contain a key and a corresponding value. */
-    private void assertMetricsContain(
+    /** Assert that metrics contain a key and a corresponding string value. */
+    private void assertMetricsContainString(
             Map<String, Metric.Builder> metrics, String key, Object value) {
         assertTrue(
                 String.format(
@@ -1121,6 +1144,43 @@ public class PerfettoGenericPostProcessorTest {
                                                                         .build()
                                                                         .getMeasurements()
                                                                         .getSingleString())));
+    }
+
+    /** Assert that metrics contain a key and a corresponding double value. */
+    private void assertMetricsContainDouble(
+            Map<String, Metric.Builder> metrics, String key, Double value) {
+        assertTrue(
+                String.format(
+                        "Metric with key containing %s and value %s was expected but not found.",
+                        key, value),
+                metrics.entrySet()
+                        .stream()
+                        .anyMatch(
+                                e ->
+                                        e.getKey().contains(key)
+                                                && value.equals(e.getValue()
+                                                                        .build()
+                                                                        .getMeasurements()
+                                                                        .getSingleDouble())));
+    }
+
+    /** Assert that metrics contain a key and row of corresponding values. */
+    private void assertMetricsContainDoubleRow(
+            Map<String, Metric.Builder> metrics, String key, List<Double> values) {
+        assertTrue(
+                String.format(
+                        "Metric with key containing %s and values %s was expected but not found.",
+                        key, values),
+                metrics.entrySet()
+                        .stream()
+                        .anyMatch(
+                                e ->
+                                        e.getKey().contains(key)
+                                                && values.equals(
+                                                                e.getValue()
+                                                                        .build()
+                                                                        .getMeasurements()
+                                                                        .getDoubleValues().getDoubleValueList())));
     }
 }
 
