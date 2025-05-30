@@ -1378,6 +1378,10 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
         return mModuleConfiguration;
     }
 
+    public TestInformation getModuleTestInformation() {
+        return mModuleInfo;
+    }
+
     public void setReportModuleStart(boolean shouldReportModuleStart) {
         mReportModuleStart = shouldReportModuleStart;
     }
