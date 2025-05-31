@@ -62,12 +62,11 @@ import java.util.stream.Collectors;
 public class TestMappingSuiteRunner extends BaseTestSuite {
 
     @Option(
-        name = "test-mapping-test-group",
-        description =
-                "Group of tests to run, e.g., presubmit, postsubmit. The suite runner "
-                        + "shall load the tests defined in all TEST_MAPPING files in the source "
-                        + "code, through build artifact test_mappings.zip."
-    )
+            name = "test-mapping-test-group",
+            description =
+                    "Group of tests to run, e.g., presubmit, postsubmit. The suite runner shall"
+                        + " load the tests defined in all TEST_MAPPING files in the source code,"
+                        + " through build artifact test_mappings.zip.")
     private String mTestGroup = null;
 
     @Option(
@@ -92,29 +91,26 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
     private Set<String> mIgnoreKeywords = new LinkedHashSet<>();
 
     @Option(
-        name = "force-test-mapping-module",
-        description =
-                "Run the specified tests only. The tests loaded from all TEST_MAPPING files in "
-                        + "the source code will be filtered again to force run the specified tests."
-    )
+            name = "force-test-mapping-module",
+            description =
+                    "Run the specified tests only. The tests loaded from all TEST_MAPPING files in"
+                        + " the source code will be filtered again to force run the specified"
+                        + " tests.")
     private Set<String> mTestModulesForced = new HashSet<>();
 
     @Option(
-        name = "test-mapping-path",
-        description = "Run tests according to the test mapping path."
-    )
+            name = "test-mapping-path",
+            description = "Run tests according to the test mapping path.")
     private List<String> mTestMappingPaths = new ArrayList<>();
 
     @Option(
-        name = RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION,
-        description = RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_DESCRIPTION
-    )
+            name = RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION,
+            description = RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_DESCRIPTION)
     private Duration mRemoteTestTimeOut = null;
 
     @Option(
-        name = "use-test-mapping-path",
-        description = "Whether or not to run tests based on the given test mapping path."
-    )
+            name = "use-test-mapping-path",
+            description = "Whether or not to run tests based on the given test mapping path.")
     private boolean mUseTestMappingPath = false;
 
     @Option(
@@ -187,10 +183,12 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
 
     public TestMappingSuiteRunner() {
         setSkipjarLoading(true);
-        // If TestMappingSuiteRunner is in BWYN test discovery mode, do include
-        // test mapping imports.
         if (isBWYN) {
+            // If TestMappingSuiteRunner is in BWYN test discovery mode, do include
+            // test mapping imports.
             mIgnoreTestMappingImports = false;
+            // If TestMappingSuiteRunner is in BWYN test discovery mode, allow empty tests.
+            mAllowEmptyTests = true;
         }
     }
 
@@ -386,9 +384,8 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
     private void addTestSourcesToConfig(
             IConfiguration config, List<IRemoteTest> tests, Set<String> sources) {
         for (IRemoteTest test : tests) {
-            config.getConfigurationDescription().addMetadata(
-                Integer.toString(test.hashCode()), new ArrayList<>(sources)
-            );
+            config.getConfigurationDescription()
+                    .addMetadata(Integer.toString(test.hashCode()), new ArrayList<>(sources));
         }
     }
 
@@ -432,8 +429,7 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
                             String.format("%s %s", testInfo.getName(), option.getValue()));
                     break;
                 default:
-                    String moduleArg =
-                            String.format("%s:%s", testInfo.getName(), option.getName());
+                    String moduleArg = String.format("%s:%s", testInfo.getName(), option.getName());
                     if (option.getValue() != null && !option.getValue().isEmpty()) {
                         moduleArg = String.format("%s:%s", moduleArg, option.getValue());
                     }
@@ -535,8 +531,7 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
      */
     @VisibleForTesting
     Set<TestInfo> getTestInfos(Set<TestInfo> testInfos, String moduleName) {
-        return testInfos
-                .stream()
+        return testInfos.stream()
                 .filter(testInfo -> moduleName.equals(testInfo.getName()))
                 .collect(Collectors.toSet());
     }
@@ -595,7 +590,7 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
                         e);
             } finally {
                 if (deleteFile) {
-                FileUtil.recursiveDelete(testListFile);
+                    FileUtil.recursiveDelete(testListFile);
                 }
             }
         }

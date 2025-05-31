@@ -186,10 +186,7 @@ public class LUCIResultReporter extends CollectingTestListener
         for (TestRunResult runResult : runResults) {
             // Populate run name.
             StringBuilder runNameAndTimestamp = new StringBuilder();
-            if (!runResult.getRunMetrics().isEmpty()) {
-                String reportingUnit = runResult.getName();
-                runNameAndTimestamp.append(String.format("%s%s", reportingUnit, RESULT_SEPARATOR));
-            }
+            runNameAndTimestamp.append(String.format("%s%s", runResult.getName(), RESULT_SEPARATOR));
             // Get test result of test case(s) in the test run.
             Map<TestDescription, TestResult> testResultMap = runResult.getTestResults();
             // Loop over all test cases and populate test result for LUCI.

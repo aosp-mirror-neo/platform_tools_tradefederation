@@ -508,6 +508,67 @@ public class JavaCodeCoverageCollectorTest {
     }
 
     @Test
+    public void testMergeMultipleMeasurementsWithInvalidFiles_logContainsAllData()
+            throws Exception {
+        enableJavaCoverage();
+        mCoverageOptionsSetter.setOptionValue("merge-coverage", "true");
+
+        doReturn("").when(mMockDevice).executeShellCommand(anyString());
+
+        ByteString firstHalfCollector =
+                measurement(firstHalfCovered(JavaCodeCoverageCollector.class));
+        ByteString secondHalfCollector =
+                measurement(secondHalfCovered(JavaCodeCoverageCollector.class));
+        ByteString partialCollectorTest =
+                measurement(partiallyCovered(JavaCodeCoverageCollectorTest.class));
+        ByteString invalidMeasurement =
+                ByteString.copyFromUtf8("This is not a coverage measurement.");
+        File tarGz =
+                createTarGz(
+                        ImmutableMap.of(
+                                "JavaCodeCoverageColletor1.ec",
+                                firstHalfCollector,
+                                "JavaCodeCoverageCollector2.ec",
+                                secondHalfCollector,
+                                "JavaCodeCoverageCollectorTest.ec",
+                                partialCollectorTest,
+                                "InvalidMeasurement.ec",
+                                invalidMeasurement));
+        returnFileContentsOnShellCommand(mMockDevice, tarGz);
+
+        // Simulate a test run.
+        mCodeCoverageCollector.init(mMockContext, mFakeListener);
+        mCodeCoverageCollector.testRunStarted(RUN_NAME, TEST_COUNT);
+        mCodeCoverageCollector.testRunEnded(ELAPSED_TIME, new HashMap<String, Metric>());
+
+        // Validate the logged coverage data.
+        ArgumentCaptor<ByteString> stream = ArgumentCaptor.forClass(ByteString.class);
+        verify(mFakeListener).testLog(anyString(), eq(LogDataType.COVERAGE), stream.capture());
+
+        ExecFileLoader execFileLoader = new ExecFileLoader();
+        execFileLoader.load(stream.getValue().newInput());
+
+        ExecutionDataStore execData = execFileLoader.getExecutionDataStore();
+
+        // Check coverage data for JavaCodeCoverageCollector. All probes should be true if the data
+        // merged successfully.
+        boolean[] fullyCovered = new boolean[PROBE_COUNT];
+        Arrays.fill(fullyCovered, Boolean.TRUE);
+
+        assertThat(execData.contains(vmName(JavaCodeCoverageCollector.class))).isTrue();
+        assertThat(getProbes(JavaCodeCoverageCollector.class, execData)).isEqualTo(fullyCovered);
+
+        // Check coverage data for JavaCodeCoverageCollectorTest. Only the first probe should be
+        // true.
+        boolean[] partiallyCovered = new boolean[PROBE_COUNT];
+        partiallyCovered[0] = true;
+
+        assertThat(execData.contains(vmName(JavaCodeCoverageCollectorTest.class))).isTrue();
+        assertThat(getProbes(JavaCodeCoverageCollectorTest.class, execData))
+                .isEqualTo(partiallyCovered);
+    }
+
+    @Test
     public void javaCodeCoverageCollector_rootAndUnrootDeviceTwice() throws Exception {
         enableJavaCoverage();
         HashMap<String, Metric> runMetrics = createMetricsWithCoverageMeasurement(DEVICE_PATH);

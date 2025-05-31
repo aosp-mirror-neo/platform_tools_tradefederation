@@ -65,6 +65,11 @@ public class ClusterBuildProvider implements IBuildProvider {
     @Option(name = "build-target", description = "Build target name")
     private String mBuildTarget = "stub";
 
+    @Option(
+            name = "curl-limit-rate",
+            description = "Curl limit rate for downloading test resources")
+    private String mCurlLimitRate = null;
+
     @Option(name = "build-attribute", description = "Build attributes to supply")
     private Map<String, String> mBuildAttributes = new HashMap<String, String>();
 
@@ -378,7 +383,7 @@ public class ClusterBuildProvider implements IBuildProvider {
 
     @VisibleForTesting
     TestResourceDownloader createTestResourceDownloader() {
-        return new TestResourceDownloader();
+        return new TestResourceDownloader(mCurlLimitRate);
     }
 
     @VisibleForTesting

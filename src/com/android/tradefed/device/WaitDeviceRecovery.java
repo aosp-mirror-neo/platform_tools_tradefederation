@@ -229,7 +229,7 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
             throws DeviceNotAvailableException {
         if (!mDisableUnresponsiveReboot) {
             CLog.i("Device %s unresponsive. Rebooting...", monitor.getSerialNumber());
-            rebootDevice(device, null);
+            rebootDevice(device, null, monitor);
             IDevice newdevice = monitor.waitForDeviceOnline(mOnlineWaitTime);
             if (newdevice == null) {
                 handleDeviceNotAvailable(monitor, false);
@@ -335,7 +335,7 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
             handleDeviceBootloaderOrFastbootNotAvailable(monitor, "bootloader");
             return;
         }
-        rebootDevice(device, "bootloader");
+        rebootDevice(device, "bootloader", monitor);
         if (!monitor.waitForDeviceBootloader(mBootloaderWaitTime)) {
             throw new DeviceNotAvailableException(
                     String.format(
@@ -354,7 +354,7 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
             handleDeviceBootloaderOrFastbootNotAvailable(monitor, "fastbootd");
             return;
         }
-        rebootDevice(device, "fastboot");
+        rebootDevice(device, "fastboot", monitor);
         if (!monitor.waitForDeviceFastbootd(mFastbootPath, mBootloaderWaitTime)) {
             throw new DeviceNotAvailableException(
                     String.format(
@@ -461,9 +461,13 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
      * @param device the {@link IDevice} to reboot.
      * @param mode The mode into which to reboot the device. null being regular reboot.
      */
-    private void rebootDevice(IDevice device, String mode) throws DeviceNotAvailableException {
+    private void rebootDevice(IDevice device, String mode, IDeviceStateMonitor monitor)
+            throws DeviceNotAvailableException {
         try {
             device.reboot(mode);
+            if (mode == null) {
+                monitor.waitForDeviceNotAvailable(20000L);
+            }
         } catch (IOException e) {
             CLog.w(
                     "%s: failed to reboot %s: %s",
@@ -567,7 +571,7 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
                     rebootDevice(
                             device, null
                             /** regular mode */
-                            );
+                            , monitor);
                     if (waitForDevice(monitor, recoverTillOnline)) {
                         // Success
                         CLog.d("Device recovered from recovery mode and is online.");

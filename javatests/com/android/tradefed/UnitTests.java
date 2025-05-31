@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,6 +50,7 @@ import com.android.tradefed.cluster.ClusterLogSaverTest;
 import com.android.tradefed.cluster.SubprocessConfigBuilderTest;
 import com.android.tradefed.cluster.SubprocessReportingHelperTest;
 import com.android.tradefed.cluster.TestOutputUploaderTest;
+import com.android.tradefed.cluster.TestResourceDownloaderTest;
 import com.android.tradefed.command.CommandFileParserTest;
 import com.android.tradefed.command.CommandFileWatcherTest;
 import com.android.tradefed.command.CommandInterrupterTest;
@@ -191,6 +192,7 @@ import com.android.tradefed.monitoring.collector.ResourceMetricUtilTest;
 import com.android.tradefed.observatory.TestDiscoveryExecutorTest;
 import com.android.tradefed.observatory.TestDiscoveryInvokerTest;
 import com.android.tradefed.observatory.TestMappingDiscoveryAgentTest;
+import com.android.tradefed.observatory.TestZipDiscoveryExecutorTest;
 import com.android.tradefed.postprocessor.AggregatePostProcessorTest;
 import com.android.tradefed.postprocessor.AveragePostProcessorTest;
 import com.android.tradefed.postprocessor.BasePostProcessorTest;
@@ -573,6 +575,7 @@ import org.junit.runners.Suite.SuiteClasses;
     SubprocessConfigBuilderTest.class,
     SubprocessReportingHelperTest.class,
     TestOutputUploaderTest.class,
+    TestResourceDownloaderTest.class,
 
     // command
     CommandFileParserTest.class,
@@ -767,6 +770,7 @@ import org.junit.runners.Suite.SuiteClasses;
     TestDiscoveryExecutorTest.class,
     TestDiscoveryInvokerTest.class,
     TestMappingDiscoveryAgentTest.class,
+    TestZipDiscoveryExecutorTest.class,
 
     // postprocessor
     AggregatePostProcessorTest.class,

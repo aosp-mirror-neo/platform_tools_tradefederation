@@ -603,6 +603,7 @@ public class BaseRetryDecision
         if (module.getId() != null) {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.DEVICE_RESET_MODULES, module.getId());
+            module.getModuleTestInformation().properties().clear();
         }
         // Run all preparers including optionally suite level ones.
         Throwable preparationException =
