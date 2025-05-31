@@ -730,6 +730,13 @@ public class AdbSshConnection extends AdbTcpConnection {
                     DeviceErrorIdentifier.DEVICE_UNAVAILABLE);
         }
         if (getDevice().getOptions().useCvdCF()) {
+            // TODO(b/421052178): Remove the bypass once bug is fixed.
+            if (getDevice().getOptions().useOxygenationDevice()) {
+                CLog.i("deleteSnapshotGce is not implemented in Oxygenation yet. skip.");
+                deleteRes = new CommandResult();
+                deleteRes.setStatus(CommandStatus.SUCCESS);
+                return deleteRes;
+            }
             deleteRes = mHOUtil.deleteSnapshotGce(snapshotId);
         } else {
             // Get the user from options instance-user if user is null.

@@ -47,6 +47,7 @@ import java.util.Map.Entry;
 public class InvocationCacheHelper {
 
     private static final String CACHE_ERROR = "%%%CACHE_ERROR%%%";
+    private static File sCacheDirectory;
 
     /** Describes the cache results. */
     public static class CacheInvocationResultDescriptor {
@@ -104,8 +105,7 @@ public class InvocationCacheHelper {
         try (CloseableTraceScope ignored = new CloseableTraceScope("upload_invocation_results")) {
             String cacheInstance = mainConfig.getCommandOptions().getRemoteCacheInstanceName();
             ICacheClient cacheClient =
-                    CacheClientFactory.createCacheClient(
-                            CurrentInvocation.getWorkFolder(), cacheInstance);
+                    CacheClientFactory.createCacheClient(getCacheDirectory(), cacheInstance);
             invocationTestsDir =
                     FileUtil.createNamedTempDir(CurrentInvocation.getWorkFolder(), "invoc-cache");
             ExecutableAction action =
@@ -158,8 +158,7 @@ public class InvocationCacheHelper {
         try (CloseableTraceScope ignored = new CloseableTraceScope("lookup_invocation_results")) {
             String cacheInstance = mainConfig.getCommandOptions().getRemoteCacheInstanceName();
             ICacheClient cacheClient =
-                    CacheClientFactory.createCacheClient(
-                            CurrentInvocation.getWorkFolder(), cacheInstance);
+                    CacheClientFactory.createCacheClient(getCacheDirectory(), cacheInstance);
             invocationTestsDir =
                     FileUtil.createNamedTempDir(CurrentInvocation.getWorkFolder(), "invoc-cache");
             ExecutableAction action =
@@ -260,5 +259,16 @@ public class InvocationCacheHelper {
             throw new RuntimeException(e);
         }
         return Arrays.asList(commandArray);
+    }
+
+    private static File getCacheDirectory() throws IOException {
+        if (sCacheDirectory == null) {
+            synchronized (InvocationCacheHelper.class) {
+                if (sCacheDirectory == null) {
+                    sCacheDirectory = FileUtil.createTempDir("invocation-cache-dir");
+                }
+            }
+        }
+        return sCacheDirectory;
     }
 }

@@ -20,6 +20,7 @@ import com.android.tradefed.ai.ContentRequest.InlineData;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.RunUtil;
 
 import com.google.gson.Gson;
@@ -27,6 +28,7 @@ import com.google.gson.Gson;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,7 +43,8 @@ public class CurlGenAiClient {
 
     /** List of model available to be used. */
     public enum Model {
-        GEMINI_2_0_FLASH("gemini-2.0-flash");
+        GEMINI_2_0_FLASH("gemini-2.0-flash"),
+        GEMINI_2_5_FLASH("gemini-2.5-flash-preview-05-20");
 
         private final String modelName;
 
@@ -56,9 +59,9 @@ public class CurlGenAiClient {
      * @param apiKey The API_KEY to be used for the query.
      * @param prompt The prompt being used.
      */
-    public void runPrompt(String apiKey, String prompt) {
-        runPrompt(
-                Model.GEMINI_2_0_FLASH, apiKey, prompt, new ArrayList<ContentRequest.InlineData>());
+    public PromptResponse runPrompt(String apiKey, String prompt) {
+        return runPrompt(
+                Model.GEMINI_2_5_FLASH, apiKey, prompt, new ArrayList<ContentRequest.InlineData>());
     }
 
     /**
@@ -68,8 +71,8 @@ public class CurlGenAiClient {
      * @param prompt The prompt being used.
      * @param data The inline file data to be associated with the prompt.
      */
-    public void runPrompt(String apiKey, String prompt, List<InlineData> data) {
-        runPrompt(Model.GEMINI_2_0_FLASH, apiKey, prompt, data);
+    public PromptResponse runPrompt(String apiKey, String prompt, List<InlineData> data) {
+        return runPrompt(Model.GEMINI_2_5_FLASH, apiKey, prompt, data);
     }
 
     /**
@@ -80,43 +83,57 @@ public class CurlGenAiClient {
      * @param prompt The prompt being used.
      * @param data The inline file data to be associated with the prompt.
      */
-    public void runPrompt(Model model, String apiKey, String prompt, List<InlineData> data) {
+    public PromptResponse runPrompt(
+            Model model, String apiKey, String prompt, List<InlineData> data) {
         String query = buildQuery(model, apiKey);
+        try {
+            File request = FileUtil.createTempFile("curl-request", ".json");
+            FileUtil.writeToFile(createJsonQuery(prompt, data), request);
+            File response = FileUtil.createTempFile("curl-response", ".json");
 
-        CommandResult results =
-                RunUtil.getDefault()
-                        .runTimedCmd(
-                                0,
-                                new String[] {
-                                    "curl",
-                                    query,
-                                    "-H",
-                                    "Content-Type: application/json",
-                                    "-X",
-                                    "POST",
-                                    "-d",
-                                    createJsonQuery(prompt, data)
-                                });
-        if (CommandStatus.SUCCESS.equals(results.getStatus())) {
-            String outputJson = results.getStdout();
-            CLog.d("output: %s", outputJson);
-            try {
-                JSONObject jsonObject = new JSONObject(outputJson);
-                if (jsonObject.has("error")) {
-                    CLog.e("error with the query");
-                } else {
-                    Gson gson = new Gson();
-                    ApiResponse rep = gson.fromJson(outputJson, ApiResponse.class);
-                    CLog.d("%s", rep);
+            CommandResult results =
+                    RunUtil.getDefault()
+                            .runTimedCmd(
+                                    0,
+                                    new String[] {
+                                        "curl",
+                                        query,
+                                        "-H",
+                                        "Content-Type: application/json",
+                                        "-X",
+                                        "POST",
+                                        "-d",
+                                        "@" + request.getAbsolutePath(),
+                                        "-o",
+                                        response.getAbsolutePath()
+                                    });
+            // TODO: Throw errors in case of errors
+            if (CommandStatus.SUCCESS.equals(results.getStatus())) {
+                String outputJson = FileUtil.readStringFromFile(response);
+                CLog.d("output: %s", outputJson);
+                try {
+                    JSONObject jsonObject = new JSONObject(outputJson);
+                    if (jsonObject.has("error")) {
+                        CLog.e("error with the query");
+                        return null;
+                    } else {
+                        Gson gson = new Gson();
+                        ApiResponse rep = gson.fromJson(outputJson, ApiResponse.class);
+                        CLog.d("%s", rep);
+                    }
+                } catch (JSONException je) {
+                    CLog.e(je);
                 }
-            } catch (JSONException je) {
-                CLog.e(je);
+                return new PromptResponse(request, response);
+            } else {
+                CLog.e("Issue when running the query:");
+                CLog.e("stdout: %s", results.getStdout());
+                CLog.e("stderr: %s", results.getStderr());
             }
-        } else {
-            CLog.e("Issue when running the query:");
-            CLog.e("stdout: %s", results.getStdout());
-            CLog.e("stderr: %s", results.getStderr());
+        } catch (Exception e) {
+            CLog.e(e);
         }
+        return null;
     }
 
     private String createJsonQuery(String prompt, List<InlineData> inlineData) {

@@ -546,12 +546,12 @@ public class InstrumentationTestTest {
                 .testRunStarted(eq(TEST_PACKAGE_VALUE), eq(2), eq(0), anyLong());
         inOrder.verify(mMockListener).testStarted(eq(TEST1), anyLong());
         inOrder.verify(mMockListener).testEnded(eq(TEST1), anyLong(), eq(EMPTY_STRING_MAP));
-        inOrder.verify(mMockListener)
-                .testRunFailed(
-                        FailureDescription.create(RUN_ERROR_MSG, FailureStatus.TEST_FAILURE));
         inOrder.verify(mMockListener).testStarted(eq(TEST2), anyLong());
         inOrder.verify(mMockListener).testSkipped(eq(TEST2), (SkipReason) any());
         inOrder.verify(mMockListener).testEnded(eq(TEST2), anyLong(), eq(EMPTY_STRING_MAP));
+        inOrder.verify(mMockListener)
+                .testRunFailed(
+                        FailureDescription.create(RUN_ERROR_MSG, FailureStatus.TEST_FAILURE));
         inOrder.verify(mMockListener).testRunEnded(1, EMPTY_STRING_MAP);
         verify(mMockTestDevice).waitForDeviceAvailable();
         verify(mMockTestDevice).pushFile(Mockito.any(), Mockito.any());

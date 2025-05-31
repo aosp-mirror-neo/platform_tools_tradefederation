@@ -1,0 +1,19 @@
+As an Android expert, you are investigating the failure of the following test:
+{TEST_NAME}
+which failed with the following stacktrace quoted:
+"""
+{STACK_TRACE}
+"""
+The attached logcat was captured during the failure on the device, it has been preprocessed
+for higher verbosity and ease the parsing.
+
+LOGCAT:
+"""
+{LOGCAT}
+"""
+
+Could you extract the relevant snippets of logs and analyze possible root cause of the failure ?
+
+Pay attention to the following:
+- When does the failed test method starts in the logcat as reported via TestRunner tags, logs after the failed method starts are usually more relevant.
+- Avoid guessing the original source code and creating example codes that assume the original code.
