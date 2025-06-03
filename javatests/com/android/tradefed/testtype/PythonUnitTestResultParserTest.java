@@ -55,6 +55,7 @@ public class PythonUnitTestResultParserTest {
     public static final String PYTHON_OUTPUT_FILE_2 = "python_output2.txt";
     public static final String PYTHON_OUTPUT_FILE_3 = "python_output3.txt";
     public static final String PYTHON_OUTPUT_FILE_4 = "python_output4.txt";
+    public static final String PYTHON_OUTPUT_FILE_5 = "python_output5.txt";
 
     private PythonUnitTestResultParser mParser;
     @Mock ITestInvocationListener mMockListener;
@@ -455,10 +456,10 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testParseSingleTestFail() throws Exception {
         String[] output = {
-            "b (a) ... ERROR",
+            "test_b (a) ... ERROR",
             "",
             PythonUnitTestResultParser.EQUAL_LINE,
-            "ERROR: b (a)",
+            "ERROR: test_b (a)",
             PythonUnitTestResultParser.DASH_LINE,
             "Traceback (most recent call last):",
             "  File \"test_rangelib.py\", line 129, in test_reallyfail",
@@ -470,7 +471,7 @@ public class PythonUnitTestResultParserTest {
             "",
             "FAILED (errors=1)"
         };
-        TestDescription id = new TestDescription("a", "b");
+        TestDescription id = new TestDescription("a", "test_b");
 
         mParser.processNewLines(output);
 
@@ -486,10 +487,10 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testParseSubtestFailure() throws Exception {
         String[] output = {
-            "b (a) ... d (c) ... ok", // Tests with failed subtests don't output a status.
+            "test_b (a) ... test_d (c) ... ok", // Tests with failed subtests don't output a status.
             "",
             PythonUnitTestResultParser.EQUAL_LINE,
-            "FAIL: b (a) (i=3)",
+            "FAIL: test_b (a) (i=3)",
             PythonUnitTestResultParser.DASH_LINE,
             "Traceback (most recent call last):",
             "  File \"example_test.py\", line 129, in test_with_failing_subtests",
@@ -500,8 +501,8 @@ public class PythonUnitTestResultParserTest {
             "",
             "FAILED (failures=1)"
         };
-        TestDescription id = new TestDescription("a", "b");
-        TestDescription id2 = new TestDescription("c", "d");
+        TestDescription id = new TestDescription("a", "test_b");
+        TestDescription id2 = new TestDescription("c", "test_d");
 
         mParser.processNewLines(output);
 
@@ -520,11 +521,11 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testParseMultiTestFailWithExpectedFailure() throws Exception {
         String[] output = {
-            "b (a) ... expected failure",
-            "d (c) ... ERROR",
+            "test_b (a) ... expected failure",
+            "test_d (c) ... ERROR",
             "",
             PythonUnitTestResultParser.EQUAL_LINE,
-            "ERROR: d (c)",
+            "ERROR: test_d (c)",
             PythonUnitTestResultParser.DASH_LINE,
             "Traceback (most recent call last):",
             "  File \"test_rangelib.py\", line 129, in test_reallyfail",
@@ -536,8 +537,8 @@ public class PythonUnitTestResultParserTest {
             "",
             "FAILED (errors=1)"
         };
-        TestDescription id = new TestDescription("a", "b");
-        TestDescription id2 = new TestDescription("c", "d");
+        TestDescription id = new TestDescription("a", "test_b");
+        TestDescription id2 = new TestDescription("c", "test_d");
 
         mParser.processNewLines(output);
 
@@ -591,14 +592,14 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testParseSingleTestUnexpectedSuccess() throws Exception {
         String[] output = {
-            "b (a) ... unexpected success",
+            "test_b (a) ... unexpected success",
             "",
             PythonUnitTestResultParser.DASH_LINE,
             "Ran 1 test in 1s",
             "",
             "OK (unexpected success=1)",
         };
-        TestDescription id = new TestDescription("a", "b");
+        TestDescription id = new TestDescription("a", "test_b");
 
         mParser.processNewLines(output);
 
@@ -614,14 +615,14 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testParseSingleTestSkipped() throws Exception {
         String[] output = {
-            "b (a) ... skipped 'reason foo'",
+            "test_b (a) ... skipped 'reason foo'",
             "",
             PythonUnitTestResultParser.DASH_LINE,
             "Ran 1 test in 1s",
             "",
             "OK (skipped=1)",
         };
-        TestDescription id = new TestDescription("a", "b");
+        TestDescription id = new TestDescription("a", "test_b");
 
         mParser.processNewLines(output);
 
@@ -660,11 +661,11 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testParseSingleTestFailWithDocString() throws Exception {
         String[] output = {
-            "b (a)",
+            "test_b (a)",
             "doc string foo bar ... ERROR",
             "",
             PythonUnitTestResultParser.EQUAL_LINE,
-            "ERROR: b (a)",
+            "ERROR: test_b (a)",
             "doc string foo bar",
             PythonUnitTestResultParser.DASH_LINE,
             "Traceback (most recent call last):",
@@ -677,7 +678,7 @@ public class PythonUnitTestResultParserTest {
             "",
             "FAILED (errors=1)"
         };
-        TestDescription id = new TestDescription("a", "b");
+        TestDescription id = new TestDescription("a", "test_b");
 
         mParser.processNewLines(output);
 
@@ -778,10 +779,10 @@ public class PythonUnitTestResultParserTest {
     @Test
     public void testCaptureMultilineTraceback() {
         String[] output = {
-            "b (a) ... ERROR",
+            "test_b (a) ... ERROR",
             "",
             PythonUnitTestResultParser.EQUAL_LINE,
-            "ERROR: b (a)",
+            "ERROR: test_b (a)",
             PythonUnitTestResultParser.DASH_LINE,
             "Traceback (most recent call last):",
             "  File \"test_rangelib.py\", line 129, in test_reallyfail",
@@ -1031,6 +1032,22 @@ public class PythonUnitTestResultParserTest {
         String[] contents = readInFile(PYTHON_OUTPUT_FILE_4);
         // Shouldn't throw
         mParser.processNewLines(contents);
+    }
+
+    @Test
+    public void testSetupClassFailureReportedAsRunFailure() {
+        String[] contents = readInFile(PYTHON_OUTPUT_FILE_5);
+
+        mParser.processNewLines(contents);
+        InOrder inOrder = Mockito.inOrder(mMockListener);
+        String errorMsg =
+                "Traceback (most recent call last):\n"
+                        + "  File \"test_binary.py\", line 54, in setUpClass\n"
+                        + "AssertionError";
+
+        inOrder.verify(mMockListener).testRunStarted("test", 0);
+        inOrder.verify(mMockListener).testRunFailed(errorMsg);
+        verify(mMockListener).testRunEnded(0, new HashMap<String, Metric>());
     }
 
     /**
