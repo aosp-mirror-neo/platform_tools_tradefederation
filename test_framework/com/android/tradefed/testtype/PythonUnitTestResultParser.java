@@ -457,7 +457,7 @@ public class PythonUnitTestResultParser extends MultiLineReceiver {
             boolean testRunFailed = false;
             String errorMsg = null;
             for (Entry<TestDescription, String> test : mTestResultCache.entrySet()) {
-                if (test.getValue() != null && !test.getKey().getTestName().startsWith("test_")) {
+                if (test.getValue() != null && !test.getKey().getTestName().startsWith("test")) {
                     // report non-test failures as test run failure
                     testRunFailed = true;
                     errorMsg = test.getValue();
