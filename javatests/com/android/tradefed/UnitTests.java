@@ -20,10 +20,12 @@ import com.android.tradefed.auth.ServiceAccountKeyCredentialFactoryTest;
 import com.android.tradefed.build.AppDeviceBuildInfoTest;
 import com.android.tradefed.build.BootstrapBuildProviderTest;
 import com.android.tradefed.build.BuildInfoTest;
+import com.android.tradefed.build.CasFuseDriverProfileTest;
 import com.android.tradefed.build.DeviceBuildDescriptorTest;
 import com.android.tradefed.build.DeviceBuildInfoTest;
 import com.android.tradefed.build.DeviceFolderBuildInfoTest;
 import com.android.tradefed.build.FileDownloadCacheTest;
+import com.android.tradefed.build.FuseMountManagerTest;
 import com.android.tradefed.build.LocalDeviceBuildProviderTest;
 import com.android.tradefed.build.cache.PartialZipDownloadCacheTest;
 import com.android.tradefed.build.content.ArtifactDetailsTest;
@@ -535,10 +537,12 @@ import org.junit.runners.Suite.SuiteClasses;
     AppDeviceBuildInfoTest.class,
     BootstrapBuildProviderTest.class,
     BuildInfoTest.class,
+    CasFuseDriverProfileTest.class,
     DeviceBuildInfoTest.class,
     DeviceBuildDescriptorTest.class,
     DeviceFolderBuildInfoTest.class,
     FileDownloadCacheTest.class,
+    FuseMountManagerTest.class,
     LocalDeviceBuildProviderTest.class,
 
     // build.cache
