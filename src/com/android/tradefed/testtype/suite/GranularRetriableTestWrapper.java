@@ -507,14 +507,24 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             // module never started. No need to backfill.
             return;
         }
-        if (!mCurrentStartEndCollector.mRunStartReported) {
+        if (mCurrentStartEndCollector.mRunEndedReported) {
+            // previous run events were completed. report a new run for the failure.
             listener.testRunStarted(
                     mModuleId,
                     0,
                     mRetryAttemptForwarder.getCurrentAttempt(),
                     System.currentTimeMillis());
-        }
-        if (!mCurrentStartEndCollector.mRunEndedReported) {
+            listener.testRunFailed(failure);
+            listener.testRunEnded(0, new HashMap<String, Metric>());
+        } else {
+            // either previous run events are not complete or the run has not started yet .
+            if (!mCurrentStartEndCollector.mRunStartReported) {
+                listener.testRunStarted(
+                        mModuleId,
+                        0,
+                        mRetryAttemptForwarder.getCurrentAttempt(),
+                        System.currentTimeMillis());
+            }
             if (mCurrentStartEndCollector.mTestInProgress) {
                 listener.testFailed(mCurrentStartEndCollector.mCurrentTest, failure);
                 listener.testEnded(
