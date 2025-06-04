@@ -400,6 +400,13 @@ public class CommandOptions implements ICommandOptions {
             description = "Whether to skip logcat for parent process.")
     private boolean mSkipParentProcessLogcat = false;
 
+    @Option(
+            name = "keep-post-processor-order",
+            description =
+                    "Whether to apply post processors in the order they are mentioned in the"
+                            + " config.")
+    private boolean mKeepPostProcessorOrder = false;
+
     /**
      * Set the help mode for the config.
      * <p/>
@@ -959,5 +966,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean shouldSkipParentProcessLogcat() {
         return mSkipParentProcessLogcat;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean keepPostProcessorOrder() {
+        return mKeepPostProcessorOrder;
     }
 }

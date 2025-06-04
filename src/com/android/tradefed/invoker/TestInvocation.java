@@ -126,6 +126,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -1174,7 +1175,13 @@ public class TestInvocation implements ITestInvocation {
             if (!config.getPostProcessors().isEmpty()) {
                 ITestInvocationListener forwarder = new ResultAndLogForwarder(allListeners);
                 // Post-processors are the first layer around the final reporters.
-                for (IPostProcessor postProcessor : config.getPostProcessors()) {
+                List<IPostProcessor> postProcessors = config.getPostProcessors();
+                if (config.getCommandOptions().keepPostProcessorOrder()) {
+                    // reverse the post-processor list so that the first post-processor in the list
+                    // becomes the outermost post-processor and the first to receive events.
+                    Collections.reverse(postProcessors);
+                }
+                for (IPostProcessor postProcessor : postProcessors) {
                     if (postProcessor.isDisabled()) {
                         CLog.d("%s has been disabled. skipping.", postProcessor);
                     } else {

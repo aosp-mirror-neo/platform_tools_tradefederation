@@ -326,4 +326,7 @@ public interface ICommandOptions {
 
     /** Whether to skip logcat for parent process. */
     public boolean shouldSkipParentProcessLogcat();
+
+    /** Whether to apply post processors in the order they are mentioned in the config. */
+    public boolean keepPostProcessorOrder();
 }
