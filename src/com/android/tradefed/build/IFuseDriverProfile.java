@@ -31,7 +31,7 @@ public interface IFuseDriverProfile {
      *
      * @return The default timeout in milliseconds.
      */
-    default int getMountTimeoutInMs() {
+    default long getMountTimeoutInMs() {
         return 500;
     }
 

@@ -33,7 +33,7 @@ public class CasFuseDriverProfile implements IFuseDriverProfile {
     private static final String CHUNKS_INDEX_FILENAME = "_chunks_index.json";
     // All device images are expected to have a boot image file.
     private static final String BOOT_IMAGE_FILENAME = "boot.img";
-    private int mMountTimeoutInMs = 500;
+    private long mMountTimeoutInMs = 500;
 
     /**
      * Creates a new CasFuseDriverProfile with the given driver path.
@@ -88,7 +88,7 @@ public class CasFuseDriverProfile implements IFuseDriverProfile {
     }
 
     @Override
-    public int getMountTimeoutInMs() {
+    public long getMountTimeoutInMs() {
         return mMountTimeoutInMs;
     }
 

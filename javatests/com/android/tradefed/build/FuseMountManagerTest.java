@@ -76,6 +76,7 @@ public class FuseMountManagerTest {
         when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
                 .thenReturn(false); // Does not exit
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
         when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(true);
 
         mManager.mount(mSourcePath, mMountPoint);
@@ -87,6 +88,7 @@ public class FuseMountManagerTest {
     public void testMount_alreadyMounted_throwsException() throws Exception {
         when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
         when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(true);
         mManager.mount(mSourcePath, mMountPoint); // First mount succeeds
 
@@ -109,6 +111,7 @@ public class FuseMountManagerTest {
     @Test
     public void testMount_processExitsImmediately_throwsException() throws Exception {
         when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true); // Exited
         when(mMockProcess.exitValue()).thenReturn(1);
 
@@ -123,6 +126,7 @@ public class FuseMountManagerTest {
         when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
                 .thenReturn(false); // Still running
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
         when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(false); // Not ready
 
         assertThrows(
@@ -136,6 +140,8 @@ public class FuseMountManagerTest {
     @Test
     public void testMount_interrupted_throwsExceptionAndCleansUp() throws Exception {
         when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
+        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(false); // Not ready
         doThrow(new InterruptedException())
                 .when(mMockProcess)
                 .waitFor(anyLong(), any(TimeUnit.class));

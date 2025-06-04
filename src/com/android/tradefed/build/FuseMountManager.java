@@ -68,8 +68,14 @@ public class FuseMountManager {
      * @throws IOException If the mount process fails to start.
      */
     public void mount(Path sourceDataPath, Path mountPoint) throws IOException {
+        long startTime = System.currentTimeMillis();
+        CLog.i(
+                "Mount \'%s\' at: %s",
+                sourceDataPath.toAbsolutePath().toString(), mountPoint.toAbsolutePath().toString());
+
         if (activeMounts.containsKey(mountPoint)) {
-            throw new IllegalStateException("A mount already exists at:" + mountPoint);
+            throw new IllegalStateException(
+                    "A mount already exists at:" + mountPoint.toAbsolutePath().toString());
         }
 
         try {
@@ -90,22 +96,31 @@ public class FuseMountManager {
                                 "FUSE process '%s' failed on startup. Output: %s",
                                 command, capturedOutput.toString(StandardCharsets.UTF_8)));
             }
-            // Wait for a short period to see if the process fails and exits immediately.
-            if (process.waitFor(mDriverProfile.getMountTimeoutInMs(), TimeUnit.MILLISECONDS)) {
-                throw new IOException(
-                        String.format(
-                                "FUSE process '%s' failed on startup. Exit Code: %d. Output: %s",
-                                command,
-                                process.exitValue(),
-                                capturedOutput.toString(StandardCharsets.UTF_8)));
-            }
 
-            // Check to ensure the mount point is actually ready.
+            // Loop until the mount point is ready or the deadline is reached.
+            final long pollIntervalMs = 100;
+            final long deadline = System.currentTimeMillis() + mDriverProfile.getMountTimeoutInMs();
+            while (System.currentTimeMillis() < deadline) {
+                if (mDriverProfile.isMountPointReady(mountPoint)) {
+                    break; // The mount point is ready.
+                }
+
+                // Check if the process died prematurely during our wait
+                if (process.waitFor(pollIntervalMs, TimeUnit.MILLISECONDS)) {
+                    String errorOutput = capturedOutput.toString(StandardCharsets.UTF_8);
+                    throw new IOException(
+                            String.format(
+                                    "FUSE process '%s' failed on startup. Exit Code: %d. Output:"
+                                            + " %s",
+                                    command, process.exitValue(), errorOutput));
+                }
+            }
             if (!mDriverProfile.isMountPointReady(mountPoint)) {
                 process.destroyForcibly(); // Kill the now-orphaned process.
                 throw new IOException(
                         String.format(
-                                "Mount process started but mount point is not ready. Output: %s",
+                                "Mount process started but mount point is not ready (timed out)."
+                                        + " Output: %s",
                                 capturedOutput.toString(StandardCharsets.UTF_8)));
             }
         } catch (InterruptedException e) {
@@ -117,7 +132,11 @@ public class FuseMountManager {
         }
 
         activeMounts.put(mountPoint, process);
-        CLog.i("Done mounting \'%s\' at: %s", sourceDataPath, mountPoint);
+        CLog.i(
+                "Done mounting \'%s\' at: %s (took %d ms)",
+                sourceDataPath.toAbsolutePath().toString(),
+                mountPoint.toAbsolutePath().toString(),
+                System.currentTimeMillis() - startTime);
     }
 
     /**
@@ -126,18 +145,18 @@ public class FuseMountManager {
      * @param mountPoint The mount point to unmount.
      */
     public void unmount(Path mountPoint) {
+        CLog.d("Unmount: %s", mountPoint.toAbsolutePath().toString());
+
         Process process = activeMounts.get(mountPoint);
         if (process == null) {
-            CLog.w("No mount found at: %s", mountPoint);
+            CLog.w("No mount found at: %s", mountPoint.toAbsolutePath().toString());
             return;
         }
         if (!process.isAlive()) {
-            CLog.w("Already unmounted: %s", mountPoint);
+            CLog.w("Already unmounted: %s", mountPoint.toAbsolutePath().toString());
             activeMounts.remove(mountPoint); // Atomically remove from map
             return;
         }
-
-        CLog.d("Unmount: %s", mountPoint);
 
         try {
             // Attempt graceful shutdown first (the preferred way)
@@ -164,14 +183,14 @@ public class FuseMountManager {
                 CLog.d(
                         "fusermount did not terminate the process for \'%s\'. Forcibly destroying"
                                 + " it.",
-                        mountPoint);
+                        mountPoint.toAbsolutePath().toString());
                 process.destroyForcibly();
                 // Don't wait for the process to terminate as there isn't much we can do if it
                 // doesn't.
             }
         }
 
-        CLog.d("Done unmounting: " + mountPoint);
+        CLog.d("Done unmounting: %s", mountPoint.toAbsolutePath().toString());
     }
 
     /** Unmounts all tracked filesystems. */
