@@ -1,0 +1,9 @@
+setUpClass (__main__.CustomTestClassName) ... ERROR
+======================================================================
+ERROR: setUpClass (__main__.CustomTestClassName)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test_binary.py", line 54, in setUpClass
+AssertionError
+----------------------------------------------------------------------
+Ran 0 tests in 0.000s
