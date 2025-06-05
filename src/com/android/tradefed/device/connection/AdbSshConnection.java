@@ -1247,11 +1247,6 @@ public class AdbSshConnection extends AdbTcpConnection {
                             && devices.indexOf("localhost:") == -1
                             && devices.indexOf("0.0.0.0:") == -1) {
                         CLog.e("No adb devices found on the host.");
-                        if (inspectionResult == null) {
-                            return new DeviceInspectionResult(
-                                    DeviceErrorIdentifier.DEVICE_UNAVAILABLE,
-                                    "No adb devices found on the host.");
-                        }
                     } else {
                         // Collect bugreport as the device is available with adb
                         try {
