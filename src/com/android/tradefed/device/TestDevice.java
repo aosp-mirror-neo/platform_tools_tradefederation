@@ -629,6 +629,43 @@ public class TestDevice extends NativeDevice {
         return internalInstallPackage(packageFile, reinstall, args);
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public boolean installPackageWithIncrementalMode(
+            File[] apkFiles, String[] extraArgs, String userId) throws DeviceNotAvailableException {
+        List<String> adbCmd = new ArrayList<>();
+        adbCmd.add("install");
+        adbCmd.add("--incremental");
+        boolean runtimePermissionSupported = isRuntimePermissionSupported();
+        if (runtimePermissionSupported) {
+            adbCmd.add("-g");
+        }
+        if (userId != null) {
+            adbCmd.add("--user");
+            adbCmd.add(userId);
+        }
+        if (extraArgs.length > 0) {
+            adbCmd.addAll(Arrays.asList(extraArgs));
+        }
+        if (apkFiles.length > 1) {
+            adbCmd.add("install-multiple");
+        }
+        for (File apk : apkFiles) {
+            adbCmd.add(apk.getAbsolutePath());
+        }
+        CommandResult res = executeAdbV2Command(adbCmd.toArray(new String[0]));
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            CLog.e("Failed to install with incremental mode, output: %s", res);
+            throw new DeviceNotAvailableException(
+                    String.format(
+                            "Failed to install with incremental mode on device %s, output: %s",
+                            getSerialNumber(), res),
+                    getSerialNumber(),
+                    DeviceErrorIdentifier.APK_INSTALLATION_FAILED);
+        }
+        return true;
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -3122,8 +3159,8 @@ public class TestDevice extends NativeDevice {
     }
 
     /**
-     * Establish an adb connection to microdroid by letting Android forward the connection to
-     * microdroid. Wait until the connection is established and microdroid is booted.
+     * Establish an adb connection to microdroid, and wait until the connection is established
+     * and microdroid is booted.
      */
     private void adbConnectToMicrodroid(
             String cid, String microdroidSerial, int vmAdbPort, long adbConnectTimeoutMs) {
@@ -3137,8 +3174,6 @@ public class TestDevice extends NativeDevice {
         final String serial = getSerialNumber();
         final String from = "tcp:" + vmAdbPort;
         final String to = "vsock:" + cid + ":5555";
-        getRunUtil()
-                .runTimedCmd(10000, deviceManager.getAdbPath(), "-s", serial, "forward", from, to);
 
         boolean disconnected = true;
         while (disconnected && timeoutMillis >= 0) {
