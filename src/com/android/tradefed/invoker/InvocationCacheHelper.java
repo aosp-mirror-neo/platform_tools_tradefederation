@@ -174,7 +174,8 @@ public class InvocationCacheHelper {
             if (cachedResults == null) {
                 CLog.d("No cached results for the invocation.");
                 return null;
-            } else if (FileUtil.readStringFromFile(cachedResults.stdErr()).contains(CACHE_ERROR)) {
+            } else if (cachedResults.stdErr() != null &&
+                           FileUtil.readStringFromFile(cachedResults.stdErr()).contains(CACHE_ERROR)) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.INVOCATION_CACHE_HIT_WITH_FAILURE, 1);
                 CLog.d("Cached invocation but with failures.");
