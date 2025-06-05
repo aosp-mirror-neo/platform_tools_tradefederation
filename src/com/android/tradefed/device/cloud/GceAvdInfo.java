@@ -489,6 +489,8 @@ public class GceAvdInfo {
                 gceAvdInfos.add(gceAvdInfo);
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.CF_OXYGENATION_VERSION, oxygenationVersion);
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.CF_OXYGEN_VERSION, oxygenationVersion);
             }
         } else {
             Matcher matcher = OXYGEN_LEASE_RESPONSE_PATTERN.matcher(output);
