@@ -561,6 +561,10 @@ public class NativeDevice
         }
         mStateMonitor.setDefaultOnlineTimeout(options.getOnlineTimeout());
         mStateMonitor.setDefaultAvailableTimeout(options.getAvailableTimeout());
+        if (NativeDeviceStateMonitor.class.isAssignableFrom(mStateMonitor.getClass())) {
+            ((NativeDeviceStateMonitor) mStateMonitor)
+                    .setSkipBootComplete(options.shouldSkipBootComplete());
+        }
     }
 
     /**

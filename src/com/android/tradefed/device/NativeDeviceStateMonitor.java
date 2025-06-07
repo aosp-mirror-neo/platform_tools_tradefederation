@@ -78,6 +78,7 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
     private final boolean mFastbootEnabled;
     private boolean mMountFileSystemCheckEnabled = false;
     private TestDeviceState mFinalState = null;
+    private boolean mSkipBootComplete = false;
 
     protected static final String PERM_DENIED_ERROR_PATTERN = "Permission denied";
 
@@ -319,6 +320,12 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
      */
     @Override
     public boolean waitForBootComplete(final long waitTime) {
+        if (mSkipBootComplete) {
+            CLog.w(
+                    "You have enabled --skip-wait-for-boot-complete the check will be skipped."
+                            + " Proceed at your own risk.");
+            return true;
+        }
         try (CloseableTraceScope ignored = new CloseableTraceScope("waitForBootComplete")) {
             CLog.i("Waiting %d ms for device %s boot complete", waitTime, getSerialNumber());
             long start = System.currentTimeMillis();
@@ -717,6 +724,10 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
     @Override
     public boolean isAdbTcp() {
         return mDevice.getSerialNumber().contains(":");
+    }
+
+    public void setSkipBootComplete(boolean skipBootComplete) {
+        mSkipBootComplete = skipBootComplete;
     }
 
     /**

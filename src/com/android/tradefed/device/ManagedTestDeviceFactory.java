@@ -121,10 +121,7 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
                                         mDeviceManager, idevice, mFastbootEnabled),
                                 mAllocationMonitor);
             } else {
-                Set<String> nativeSerials = new HashSet<>();
-                if (System.getenv(NOTIFY_AS_NATIVE) != null) {
-                    nativeSerials.addAll(Arrays.asList(System.getenv(NOTIFY_AS_NATIVE).split(",")));
-                }
+                Set<String> nativeSerials = getNativeDeviceSerials();
                 if (nativeSerials.contains(idevice.getSerialNumber())) {
                     testDevice =
                             new NativeDevice(
@@ -144,10 +141,22 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
                 }
             }
         } else {
-            // Default to-go device is Android full stack device.
-            testDevice = new TestDevice(idevice,
-                    new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled),
-                    mAllocationMonitor);
+            Set<String> nativeSerials = getNativeDeviceSerials();
+            if (nativeSerials.contains(idevice.getSerialNumber())) {
+                testDevice =
+                        new NativeDevice(
+                                idevice,
+                                new NativeDeviceStateMonitor(
+                                        mDeviceManager, idevice, mFastbootEnabled),
+                                mAllocationMonitor);
+            } else {
+                // Default to-go device is Android full stack device.
+                testDevice =
+                        new TestDevice(
+                                idevice,
+                                new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled),
+                                mAllocationMonitor);
+            }
         }
 
         if (idevice instanceof FastbootDevice) {
@@ -192,6 +201,14 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
     @Override
     public void setFastbootEnabled(boolean enable) {
         mFastbootEnabled = enable;
+    }
+
+    private Set<String> getNativeDeviceSerials() {
+        Set<String> nativeSerials = new HashSet<>();
+        if (System.getenv(NOTIFY_AS_NATIVE) != null) {
+            nativeSerials.addAll(Arrays.asList(System.getenv(NOTIFY_AS_NATIVE).split(",")));
+        }
+        return nativeSerials;
     }
 
     /**
