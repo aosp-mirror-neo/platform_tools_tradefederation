@@ -16,6 +16,8 @@
 
 package com.android.tradefed.build;
 
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
@@ -67,10 +69,10 @@ public class FuseMountManager {
      * @param mountPoint The mount point to mount the source data path at.
      * @throws IOException If the mount process fails to start.
      */
-    public void mount(Path sourceDataPath, Path mountPoint) throws IOException {
-        long startTime = System.currentTimeMillis();
+    public void mount(Path sourceDataPath, Path mountPoint) throws IOException, InterruptedException {
+        final long startTime = System.currentTimeMillis();
         CLog.i(
-                "Mount \'%s\' at: %s",
+                "Mount '%s' at: %s",
                 sourceDataPath.toAbsolutePath().toString(), mountPoint.toAbsolutePath().toString());
 
         if (activeMounts.containsKey(mountPoint)) {
@@ -88,55 +90,70 @@ public class FuseMountManager {
 
         List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
         Process process = null;
+
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             process = mRunUtil.runCmdInBackground(command, capturedOutput);
-            if (process == null) { // This is unlikely to happen.
-                throw new IOException(
-                        String.format(
-                                "FUSE process '%s' failed on startup. Output: %s",
-                                command, capturedOutput.toString(StandardCharsets.UTF_8)));
+            if (process == null) { // Unlikely to happen.
+                throw new IOException("runCmdInBackground returned a null process.");
             }
 
-            // Loop until the mount point is ready or the deadline is reached.
             final long pollIntervalMs = 100;
             final long deadline = System.currentTimeMillis() + mDriverProfile.getMountTimeoutInMs();
             while (System.currentTimeMillis() < deadline) {
                 if (mDriverProfile.isMountPointReady(mountPoint)) {
-                    break; // The mount point is ready.
+                    // SUCCESS: The mount is ready.
+                    long duration = System.currentTimeMillis() - startTime;
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.CAS_MOUNT_SUCCESS_COUNT, 1);
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.CAS_MOUNT_SUCCESS_TIME_MS, duration);
+                    CLog.i(
+                            "Done mounting '%s' at: %s (took %d ms)",
+                            sourceDataPath, mountPoint, duration);
+                    activeMounts.put(mountPoint, process);
+                    return; // Exit the method on success.
                 }
 
-                // Check if the process died prematurely during our wait
                 if (process.waitFor(pollIntervalMs, TimeUnit.MILLISECONDS)) {
-                    String errorOutput = capturedOutput.toString(StandardCharsets.UTF_8);
+                    // FAILURE: Process exited prematurely.
                     throw new IOException(
                             String.format(
                                     "FUSE process '%s' failed on startup. Exit Code: %d. Output:"
                                             + " %s",
-                                    command, process.exitValue(), errorOutput));
+                                    command,
+                                    process.exitValue(),
+                                    capturedOutput.toString(StandardCharsets.UTF_8)));
                 }
             }
-            if (!mDriverProfile.isMountPointReady(mountPoint)) {
-                process.destroyForcibly(); // Kill the now-orphaned process.
-                throw new IOException(
-                        String.format(
-                                "Mount process started but mount point is not ready (timed out)."
-                                        + " Output: %s",
-                                capturedOutput.toString(StandardCharsets.UTF_8)));
-            }
-        } catch (InterruptedException e) {
-            if (process != null) {
-                process.destroyForcibly(); // Clean up on interruption.
-            }
-            Thread.currentThread().interrupt(); // Preserve the interrupted status.
-            throw new IOException("Mount operation was interrupted.", e);
-        }
 
-        activeMounts.put(mountPoint, process);
-        CLog.i(
-                "Done mounting \'%s\' at: %s (took %d ms)",
-                sourceDataPath.toAbsolutePath().toString(),
-                mountPoint.toAbsolutePath().toString(),
-                System.currentTimeMillis() - startTime);
+            // FAILURE: Timed out waiting for the mount point to become ready.
+            process.destroyForcibly();
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
+            throw new IOException(
+                    String.format(
+                            "Mount process started but mount point is not ready (timed out)."
+                                    + " Output: %s",
+                            capturedOutput.toString(StandardCharsets.UTF_8)));
+
+        } catch (IOException | InterruptedException e) {
+            // FAILURE: Handle all exceptions from the try block here.
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+            // Log generic failure metrics for any exception path.
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_MOUNT_FAILURE_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_MOUNT_FAILURE_TIME_MS,
+                    System.currentTimeMillis() - startTime);
+            // Re-throw the exception to the caller.
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Mount operation was interrupted.", e);
+            }
+            throw e; // Not InterruptedException.
+        }
     }
 
     /**
