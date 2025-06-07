@@ -325,6 +325,11 @@ class ManagedDeviceList implements Iterable<IManagedTestDevice> {
                     if (d != null) {
                         d.setTrackingSerial(realSerial);
                     }
+                    CLog.logAndDisplay(
+                            LogLevel.DEBUG,
+                            "Tracking '%s' via it's realSerial '%s'",
+                            serial,
+                            realSerial);
                     serial = realSerial.trim();
                     setTracking = true;
                 }

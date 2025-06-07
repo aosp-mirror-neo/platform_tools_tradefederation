@@ -36,6 +36,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
@@ -123,14 +124,42 @@ public final class IsolationRunner {
         }
     }
 
+    private List<Class<?>> getShardClasses(
+            List<Class<?>> classes, int totalShards, int shardIndex) {
+        if (totalShards < 2) {
+            return classes;
+        }
+        int totalClasses = classes.size();
+        //        int chunkSize = totalClasses / totalShards;
+        int chunkSize = 1;
+        if (totalClasses % totalShards > 0) chunkSize++;
+        List<Class<?>> includedClasses = new ArrayList<>();
+        if (shardIndex >= totalClasses) {
+            return includedClasses;
+        }
+        int startIndex = shardIndex * chunkSize;
+        int endIndex = Math.min((shardIndex + 1) * chunkSize, totalClasses);
+        if (startIndex >= totalClasses) {
+            startIndex = Math.max(0, totalClasses - 1);
+            endIndex = totalClasses;
+        }
+        includedClasses = classes.subList(startIndex, endIndex);
+        return includedClasses;
+    }
+
     private void runTests(OutputStream output, TestParameters params) throws IOException {
         System.out.println("INFO: IsolationRunner: Filters: ");
         System.out.println(params.getFilter());
-
+        System.out.println(
+                "Current Total Shard and Shard Index: "
+                        + params.getTotalShards()
+                        + ", "
+                        + params.getShardIndex());
         List<Class<?>> klasses = this.getClasses(params);
-
+        List<Class<?>> shardKlasses =
+                getShardClasses(klasses, params.getTotalShards(), params.getShardIndex());
         try {
-            for (Class<?> klass : klasses) {
+            for (Class<?> klass : shardKlasses) {
                 IsolationResultForwarder list = new IsolationResultForwarder(output);
                 JUnitCore runnerCore = new JUnitCore();
                 runnerCore.addListener(list);

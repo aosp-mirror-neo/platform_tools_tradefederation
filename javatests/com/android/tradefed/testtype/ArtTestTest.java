@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
+
 package com.android.tradefed.testtype;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
@@ -29,7 +32,9 @@ import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.FileUtil;
 
+import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -39,6 +44,9 @@ import org.mockito.Mock;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 /** Unit tests for {@link ArtTest}. */
 @RunWith(JUnit4.class)
@@ -61,6 +69,8 @@ public class ArtTestTest {
                     "        \"setup#compile-boot-image\"",
                     "      ]",
                     "    },",
+                    "    \"002-Foo#1f5cdb08\": {},",
+                    "    \"003-Bar#1f5cdb09\": {},",
                     "    \"setup#compile-boot-image\": {",
                     "      \"adb push\": [",
                     "        [ \"setup.sh\", \"/data/local/tmp/art/setup.sh\" ]",
@@ -73,21 +83,25 @@ public class ArtTestTest {
                     "}");
 
     private ArtTest mTest;
+
     @Mock ITestInvocationListener mListener;
     @Mock ITestDevice mDevice;
 
+    static class ArtTestForTesting extends ArtTest {
+        @Override
+        File extractTarBall(File dst_dir) throws IOException {
+            File runnerDir = new File(dst_dir, "runner");
+            runnerDir.mkdirs();
+            try (FileWriter fw = new FileWriter(new File(runnerDir, "tests.json"))) {
+                fw.write(INPUT);
+            }
+            return runnerDir;
+        }
+    }
+
     @Before
     public void setUp() throws IOException {
-        mTest =
-                new ArtTest() {
-                    @Override
-                    File extractTarBall(File dst_dir) throws IOException {
-                        try (FileWriter fw = new FileWriter(new File(dst_dir, "tests.json"))) {
-                            fw.write(INPUT);
-                        }
-                        return dst_dir;
-                    }
-                };
+        mTest = new ArtTestForTesting();
         mListener = mock(ITestInvocationListener.class);
         mDevice = mock(ITestDevice.class);
     }
@@ -110,5 +124,42 @@ public class ArtTestTest {
         verify(mDevice).executeShellV2Command("rm -rf /data/local/tmp/art/test");
         verify(mDevice).executeShellV2Command("sh /data/local/tmp/art/setup.sh");
         verify(mDevice).executeShellV2Command("sh /data/local/tmp/art/test/1f5cdb07/run.sh");
+    }
+
+    @Test
+    public void testSharding() throws Exception {
+        ArtTestForTesting mainTest = new ArtTestForTesting();
+
+        Collection<IRemoteTest> shards = mainTest.split(2);
+        assertEquals(2, shards.size());
+
+        File tempDir = null;
+        try {
+            tempDir = FileUtil.createTempDir("art-test-sharding");
+
+            // Shard 0
+            ArtTest shard0 = (ArtTest) ((List<IRemoteTest>) shards).get(0);
+            assertEquals(0, shard0.mShardIndex);
+            assertEquals(2, shard0.mShardCount);
+            shard0.mRunnerDir = shard0.extractTarBall(new File(tempDir, "shard0_basedir"));
+            Map<String, JSONObject> testsShard0 = shard0.loadTests();
+            assertEquals(3, testsShard0.size());
+            assertTrue(testsShard0.containsKey("001-HelloWorld#1f5cdb07"));
+            assertTrue(testsShard0.containsKey("003-Bar#1f5cdb09"));
+            assertTrue(testsShard0.containsKey("setup#compile-boot-image"));
+
+            // Shard 1
+            ArtTest shard1 = (ArtTest) ((List<IRemoteTest>) shards).get(1);
+            assertEquals(1, shard1.mShardIndex);
+            assertEquals(2, shard1.mShardCount);
+            shard1.mRunnerDir = shard1.extractTarBall(new File(tempDir, "shard1_basedir"));
+            Map<String, JSONObject> testsShard1 = shard1.loadTests();
+            assertEquals(2, testsShard1.size());
+            assertTrue(testsShard1.containsKey("002-Foo#1f5cdb08"));
+            assertTrue(testsShard1.containsKey("setup#compile-boot-image"));
+
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
     }
 }

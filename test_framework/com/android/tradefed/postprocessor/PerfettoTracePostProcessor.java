@@ -16,6 +16,7 @@
 
 package com.android.tradefed.postprocessor;
 
+import com.android.annotations.Nullable;
 import com.android.annotations.VisibleForTesting;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
@@ -54,10 +55,12 @@ import java.util.regex.Pattern;
 @OptionClass(alias = "perfetto-trace-processor")
 public class PerfettoTracePostProcessor extends BasePostProcessor {
 
-    private static final String PROCESSOR_STATUS = "trace_processor_status";
+    private static final String PROCESSOR_STATUS_V1 = "trace_processor_status";
+    private static final String PROCESSOR_STATUS_V2 = "trace_processor_status_v2";
     private static final String STATUS_SUCCESS = "1";
     private static final String STATUS_FAILURE = "0";
-    private static final String PROCESSOR_RUNTIME = "trace_processor_runtime";
+    private static final String PROCESSOR_RUNTIME_V1 = "trace_processor_runtime";
+    private static final String PROCESSOR_RUNTIME_V2 = "trace_processor_runtime_v2";
     private static final String RAW_TRACE_FILE_SIZE = "perfetto_trace_file_size_bytes";
     private static final String METRIC_VERSION_V1 = "v1";
     private static final String METRIC_VERSION_V2 = "v2";
@@ -148,6 +151,15 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     private List<File> mSummarySpecFiles = new ArrayList<File>();
 
     @Option(
+            name = "add-sql-packages",
+            description =
+                    "Path to the directory of additional SQL packages to load when running the"
+                        + " trace processor. A path can be either absolute or relative to the test"
+                        + " artifacts. The Files from the directory will be treated as a new SQL"
+                        + " package and can be used for INCLUDE PERFETTO MODULE statements.")
+    private List<File> mAddSqlPackages = new ArrayList<File>();
+
+    @Option(
             name = "summary-spec-file-name",
             description =
                     "Parses the spec at the specified path and makes it available to other"
@@ -168,6 +180,8 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     private String mPerfettoTraceFileRegex = ".*\\.perfetto\\-trace.*";
 
     private Map<String, File> mTestArtifactFilePathMap = new HashMap<>();
+
+    private Map<String, File> mTestArtifactDirectoryMap = new HashMap<>();
 
     @Override
     public Map<String, Metric.Builder> processTestMetricsAndLogs(
@@ -234,12 +248,14 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
             if (mMetricV1) {
                 metrics.putAll(
                         wrapConvertedMetricFile(
-                                convertToMetricProto(processSrcFile, METRIC_VERSION_V1)));
+                                convertToMetricProto(processSrcFile, METRIC_VERSION_V1),
+                                METRIC_VERSION_V1));
             }
             if (mMetricV2) {
                 metrics.putAll(
                         wrapConvertedMetricFile(
-                                convertToMetricProto(processSrcFile, METRIC_VERSION_V2)));
+                                convertToMetricProto(processSrcFile, METRIC_VERSION_V2),
+                                METRIC_VERSION_V2));
             }
         }
 
@@ -292,6 +308,19 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
         FileUtil.chmodGroupRWX(mTraceProcessorBinary);
         List<String> commandArgsList = new ArrayList<String>();
         commandArgsList.add(mTraceProcessorBinary.getAbsolutePath());
+
+        for (File sqlPackage : mAddSqlPackages) {
+            commandArgsList.add("--add-sql-package");
+            // Resolve the SQL package directory from the absolute path or from the test artifacts.
+            File resolvedSqlPackage = maybeResolveTestDir(sqlPackage);
+            if (resolvedSqlPackage == null) {
+                CLog.e(
+                        "Failed to locate the SQL package directory for %s",
+                        sqlPackage.getAbsolutePath());
+                return new TraceProcessorResult(metricOutputFile, runtime, STATUS_FAILURE);
+            }
+            commandArgsList.add(resolvedSqlPackage.getAbsolutePath());
+        }
 
         if (metricVersion.contains(METRIC_VERSION_V1)) {
             metricOutputFilePrefix = "metric_";
@@ -397,9 +426,11 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
      * Wraps the converted metric file into test artifacts.
      *
      * @param result TraceProcessorResult
+     * @param version The version of the metric file.
      * @return metrics for the processor runtime and status.
      */
-    private Map<String, Metric.Builder> wrapConvertedMetricFile(TraceProcessorResult result) {
+    private Map<String, Metric.Builder> wrapConvertedMetricFile(
+            TraceProcessorResult result, String version) {
         Map<String, Metric.Builder> metrics = new HashMap<>();
 
         File convertedMetricFile = result.file;
@@ -411,14 +442,18 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
 
         Metric.Builder processorRuntimeBuilder = Metric.newBuilder();
         processorRuntimeBuilder.getMeasurementsBuilder().setSingleDouble((double) result.runtime);
+        String runtimeKey =
+                version.equals(METRIC_VERSION_V2) ? PROCESSOR_RUNTIME_V2 : PROCESSOR_RUNTIME_V1;
         metrics.put(
-                String.format("%s_%s", mMetricPrefix, PROCESSOR_RUNTIME),
+                String.format("%s_%s", mMetricPrefix, runtimeKey),
                 processorRuntimeBuilder.setType(DataType.RAW));
 
         Metric.Builder processorStatusBuilder = Metric.newBuilder();
         processorStatusBuilder.getMeasurementsBuilder().setSingleString(result.status);
+        String statusKey =
+                version.equals(METRIC_VERSION_V2) ? PROCESSOR_STATUS_V2 : PROCESSOR_STATUS_V1;
         metrics.put(
-                String.format("%s_%s", mMetricPrefix, PROCESSOR_STATUS),
+                String.format("%s_%s", mMetricPrefix, statusKey),
                 processorStatusBuilder.setType(DataType.RAW));
 
         return metrics;
@@ -480,6 +515,43 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
         }
         CLog.i("Successfully decompressed the perfetto trace file.");
         return decompressedFile;
+    }
+
+    /**
+     * Resolve the directory from the absolute path or from the test artifacts.
+     *
+     * @param directory directory to be resolved.
+     * @return resolved directory. Returns null if directory is not found.
+     */
+    @Nullable
+    File maybeResolveTestDir(File directory) {
+        // If the path is absolute, check if the file exists.
+        if (directory.isAbsolute()) {
+            return directory.exists() ? directory : null;
+        }
+        return getDirectoryFromTestArtifacts(directory.getName());
+    }
+
+    @VisibleForTesting
+    @Nullable
+    File getDirectoryFromTestArtifacts(String directoryName) {
+        if (mTestArtifactDirectoryMap.containsKey(directoryName)) {
+            return mTestArtifactDirectoryMap.get(directoryName);
+        }
+        // A relative path is searched from the test artifact dir.
+        File testArtifactDirectory =
+                SearchArtifactUtil.searchFile(
+                        directoryName, false, null, null, null, null, /* includeDirectory= */ true);
+        if (testArtifactDirectory == null || !testArtifactDirectory.exists()) {
+            CLog.e("Failed to retrieve directory %s from test artifacts", directoryName);
+            return null;
+        }
+
+        CLog.i(
+                "Using directory %s from %s",
+                directoryName, testArtifactDirectory.getAbsolutePath());
+        mTestArtifactDirectoryMap.put(directoryName, testArtifactDirectory);
+        return testArtifactDirectory;
     }
 
     /**
@@ -563,5 +635,15 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     @VisibleForTesting
     File compressFile(File metricOutputFile) throws IOException {
         return ZipUtil.createZip(metricOutputFile, metricOutputFile.getName());
+    }
+
+    /**
+     * Set the metric type to RAW so that metrics will be processed by subsequent post processors.
+     *
+     * <p>This is necessary for MetricFilePostProcessor to write the metrics to the results file.
+     */
+    @Override
+    protected DataType getMetricType() {
+        return DataType.RAW;
     }
 }

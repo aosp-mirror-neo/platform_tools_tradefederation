@@ -50,10 +50,10 @@ public class PythonUnitTestRunnerTest {
     };
 
     private static final String[] TEST_FAIL_STDERR = {
-        "b (a) ... ERROR",
+        "test_b (a) ... ERROR",
         "",
         PythonUnitTestResultParser.EQUAL_LINE,
-        "ERROR: b (a)",
+        "ERROR: test_b (a)",
         PythonUnitTestResultParser.DASH_LINE,
         "Traceback (most recent call last):",
         "  File \"test_rangelib.py\", line 129, in test_reallyfail",

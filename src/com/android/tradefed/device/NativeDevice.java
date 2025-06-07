@@ -561,6 +561,10 @@ public class NativeDevice
         }
         mStateMonitor.setDefaultOnlineTimeout(options.getOnlineTimeout());
         mStateMonitor.setDefaultAvailableTimeout(options.getAvailableTimeout());
+        if (NativeDeviceStateMonitor.class.isAssignableFrom(mStateMonitor.getClass())) {
+            ((NativeDeviceStateMonitor) mStateMonitor)
+                    .setSkipBootComplete(options.shouldSkipBootComplete());
+        }
     }
 
     /**
@@ -1454,6 +1458,13 @@ public class NativeDevice
     public String installPackageForUser(File packageFile, boolean reinstall,
             boolean grantPermissions, int userId, String... extraArgs)
                     throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for Package Manager's features");
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean installPackageWithIncrementalMode(
+            File[] apkFiles, String[] extraArgs, String userId) throws DeviceNotAvailableException {
         throw new UnsupportedOperationException("No support for Package Manager's features");
     }
 
@@ -4273,9 +4284,9 @@ public class NativeDevice
 
     /**
      * Override if the device needs some specific actions to be taken after adb root and before the
-     * device is back online.
-     * Default implementation doesn't include any addition actions.
-     * adb root is not guaranteed to be enabled at this stage.
+     * device is back online. Default implementation doesn't include any addition actions. adb root
+     * is not guaranteed to be enabled at this stage.
+     *
      * @throws DeviceNotAvailableException
      */
     public void postAdbRootAction() throws DeviceNotAvailableException {
@@ -4284,30 +4295,26 @@ public class NativeDevice
 
     /**
      * Override if the device needs some specific actions to be taken after adb unroot and before
-     * the device is back online.
-     * Default implementation doesn't include any additional actions.
-     * adb root is not guaranteed to be disabled at this stage.
+     * the device is back online. Default implementation doesn't include any additional actions. adb
+     * root is not guaranteed to be disabled at this stage.
+     *
      * @throws DeviceNotAvailableException
      */
     public void postAdbUnrootAction() throws DeviceNotAvailableException {
         getConnection().reconnect(getSerialNumber());
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public boolean isAdbRoot() throws DeviceNotAvailableException {
         String output = executeShellCommand("id");
         return output.contains("uid=0(root)");
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
-    public boolean unlockDevice() throws DeviceNotAvailableException,
-            UnsupportedOperationException {
+    public boolean unlockDevice()
+            throws DeviceNotAvailableException, UnsupportedOperationException {
         if (!isEncryptionSupported()) {
             throw new UnsupportedOperationException(String.format("Can't unlock device %s: "
                     + "encryption not supported", getSerialNumber()));

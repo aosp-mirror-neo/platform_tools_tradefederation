@@ -181,7 +181,8 @@ public class GoogleApiClientUtilBase {
             CLog.w(
                     "Request to %s failed: %d %s",
                     request.getUrl(), response.getStatusCode(), response.getStatusMessage());
-            if (response.getStatusCode() == 400) {
+            // Bad request and Requested range not satisfiable shouldn't be retried.
+            if (response.getStatusCode() == 400 || response.getStatusCode() == 416) {
                 return false;
             }
             return backOffHandler.handleResponse(request, response, supportsRetry);

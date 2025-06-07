@@ -420,6 +420,13 @@ public abstract class ITestSuite
             description = "Feature flag to remove module buffering.")
     private boolean mRemoveModuleBuffering = true;
 
+    @Option(
+            name = "keep-post-processor-order",
+            description =
+                    "Whether to apply post processors in the order they are mentioned in the"
+                            + " config.")
+    private boolean mKeepPostProcessorOrder = false;
+
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
         FULLY_ISOLATED; // Test received a fresh device.
@@ -1177,6 +1184,11 @@ public abstract class ITestSuite
         List<IPostProcessor> modulePostProcessors = config.getPostProcessors();
         if (modulePostProcessors.size() > 0 && topLevelPostProcessors.size() > 0) {
             CLog.w("Post processors specified at both top level and module level (%s)", module);
+        }
+        if (!modulePostProcessors.isEmpty() && mKeepPostProcessorOrder) {
+            // reverse the post-processor list so that the first post-processor in the list
+            // becomes the outermost post-processor and the first to receive events.
+            Collections.reverse(modulePostProcessors);
         }
         // set log saver for module level post postprocessor manually to allow chained log
         // processing at module level. Do this before init() to avoid passing down the log saver

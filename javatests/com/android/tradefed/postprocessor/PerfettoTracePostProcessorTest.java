@@ -17,12 +17,14 @@
 package com.android.tradefed.postprocessor;
 
 import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.metrics.proto.MetricMeasurement.DataType;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.FileUtil;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,6 +37,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -246,6 +249,14 @@ public class PerfettoTracePostProcessorTest {
         summarySpecTempFile.delete();
     }
 
+    private double getMetricDouble(Map<String, Metric.Builder> metrics, String key) {
+        return metrics.get(key).getMeasurements().getSingleDouble();
+    }
+
+    private String getMetricString(Map<String, Metric.Builder> metrics, String key) {
+        return metrics.get(key).getMeasurements().getSingleString();
+    }
+
     /** Test that the trace processor shell outputs run time and status. */
     @Test
     public void testTraceProcessorRunTimeAndStatus_success() throws Exception {
@@ -260,19 +271,9 @@ public class PerfettoTracePostProcessorTest {
 
         // Check runtime and status metrics are present.
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_runtime"));
-        Assert.assertTrue(
-                newMetrics
-                                .get("perfetto_trace_processor_runtime")
-                                .getMeasurements()
-                                .getSingleDouble()
-                        >= 0);
+        Assert.assertTrue(getMetricDouble(newMetrics, "perfetto_trace_processor_runtime") >= 0);
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_status"));
-        Assert.assertEquals(
-                "1",
-                newMetrics
-                        .get("perfetto_trace_processor_status")
-                        .getMeasurements()
-                        .getSingleString());
+        Assert.assertEquals("1", getMetricString(newMetrics, "perfetto_trace_processor_status"));
 
         traceProcessorTempFile.delete();
     }
@@ -291,19 +292,9 @@ public class PerfettoTracePostProcessorTest {
 
         // Check runtime and status metrics are present.
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_runtime"));
-        Assert.assertTrue(
-                newMetrics
-                                .get("perfetto_trace_processor_runtime")
-                                .getMeasurements()
-                                .getSingleDouble()
-                        >= 0);
+        Assert.assertTrue(getMetricDouble(newMetrics, "perfetto_trace_processor_runtime") >= 0);
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_status"));
-        Assert.assertEquals(
-                "0",
-                newMetrics
-                        .get("perfetto_trace_processor_status")
-                        .getMeasurements()
-                        .getSingleString());
+        Assert.assertEquals("0", getMetricString(newMetrics, "perfetto_trace_processor_status"));
 
         traceProcessorTempFile.delete();
     }
@@ -323,19 +314,45 @@ public class PerfettoTracePostProcessorTest {
 
         // Check runtime and status metrics are present.
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_runtime"));
-        Assert.assertTrue(
-                newMetrics
-                                .get("perfetto_trace_processor_runtime")
-                                .getMeasurements()
-                                .getSingleDouble()
-                        < 0);
+        Assert.assertTrue(getMetricDouble(newMetrics, "perfetto_trace_processor_runtime") < 0);
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_status"));
-        Assert.assertEquals(
-                "0",
-                newMetrics
-                        .get("perfetto_trace_processor_status")
-                        .getMeasurements()
-                        .getSingleString());
+        Assert.assertEquals("0", getMetricString(newMetrics, "perfetto_trace_processor_status"));
+    }
+
+    /**
+     * Test that the trace processor shell outputs separate run time and status metrics for v1 and
+     * v2.
+     */
+    @Test
+    public void testTraceProcessorRunTimeAndStatus_V1AndV2() throws Exception {
+        OptionSetter setter = new OptionSetter(mProcessor);
+        setter.setOptionValue("perfetto-v1-metrics", "true");
+        setter.setOptionValue("perfetto-v2-metrics", "true");
+
+        setUpHostCommandResult(CommandStatus.SUCCESS);
+
+        File traceProcessorTempFile = createTestArtifactsFile("trace_processor_shell");
+        File summarySpecTempFile =
+                createTestArtifactsFile("memory_per_process-avg_rss_and_swap.textproto");
+
+        // Run the post processor.
+        Map<String, Metric.Builder> newMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogs());
+
+        // Check v1 runtime and status metrics are present.
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_runtime"));
+        Assert.assertTrue(getMetricDouble(newMetrics, "perfetto_trace_processor_runtime") >= 0);
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_status"));
+        Assert.assertEquals("1", getMetricString(newMetrics, "perfetto_trace_processor_status"));
+
+        // Check v2 runtime and status metrics are present.
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_runtime_v2"));
+        Assert.assertTrue(getMetricDouble(newMetrics, "perfetto_trace_processor_runtime_v2") >= 0);
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_status_v2"));
+        Assert.assertEquals("1", getMetricString(newMetrics, "perfetto_trace_processor_status_v2"));
+
+        traceProcessorTempFile.delete();
+        summarySpecTempFile.delete();
     }
 
     @Test
@@ -374,5 +391,52 @@ public class PerfettoTracePostProcessorTest {
         Mockito.verify(mProcessor).decompressFile(Mockito.any());
 
         traceProcessorTempFile.delete();
+    }
+
+    /** Test the default metric type is set to RAW. */
+    @Test
+    public void testMetricTypeIsRaw() {
+        Assert.assertTrue(mProcessor.getMetricType().equals(DataType.RAW));
+    }
+
+    /**
+     * Test that trace processor runs with --add-sql-package to load additional SQL packages using
+     * the option "add-sql-packages".
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTraceProcessorAddSqlPackages() throws Exception {
+        OptionSetter setter = new OptionSetter(mProcessor);
+
+        File traceProcessorTempFile = createTestArtifactsFile("trace_processor_shell");
+
+        // add-sql-packages supports multiple values.
+        // The first sql package uses absolute path.
+        File sqlPackage1 = Files.createTempDirectory("sql_package").toFile();
+        setter.setOptionValue("add-sql-packages", sqlPackage1.getAbsolutePath());
+
+        // The second sql package uses relative path.
+        File sqlPackage2 = Files.createTempDirectory("test_artifact_sql_package").toFile();
+        Mockito.when(mProcessor.getDirectoryFromTestArtifacts(sqlPackage2.getName()))
+                .thenReturn(sqlPackage2);
+        setter.setOptionValue("add-sql-packages", sqlPackage2.getName());
+
+        mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogs());
+
+        ArgumentCaptor<String[]> captor = ArgumentCaptor.forClass(String[].class);
+        Mockito.verify(mProcessor)
+                .runHostCommand(Mockito.anyLong(), captor.capture(), Mockito.any(), Mockito.any());
+
+        List<String> args = Arrays.asList(captor.getValue());
+        Assert.assertTrue(args.contains(traceProcessorTempFile.getAbsolutePath()));
+        Assert.assertEquals(
+                args.stream().filter(arg -> arg.equals("--add-sql-package")).count(), 2);
+        Assert.assertTrue(args.contains(sqlPackage1.getAbsolutePath()));
+        Assert.assertTrue(args.contains(sqlPackage2.getAbsolutePath()));
+
+        traceProcessorTempFile.delete();
+        FileUtil.recursiveDelete(sqlPackage1);
+        FileUtil.recursiveDelete(sqlPackage2);
     }
 }

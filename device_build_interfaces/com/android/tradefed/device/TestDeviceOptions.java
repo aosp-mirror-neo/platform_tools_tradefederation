@@ -248,6 +248,12 @@ public class TestDeviceOptions {
             description = "maximum time in ms to wait for a ADB connection.",
             isTimeVal = true)
     protected long mAdbConnectWaitTime = 2 * 60 * 1000;
+
+    @Option(
+            name = "skip-wait-for-boot-complete",
+            description = "Experimental flag for special device bring up.")
+    private boolean mSkipBootComplete = false;
+
     // ====================== Options Related to Virtual Devices ======================
     @Option(
             name = INSTANCE_TYPE_OPTION,
@@ -1090,6 +1096,10 @@ public class TestDeviceOptions {
 
     public boolean useIpV6ForTcpFastboot() {
         return mUseIpV6ForTcpFastboot;
+    }
+
+    public boolean shouldSkipBootComplete() {
+        return mSkipBootComplete;
     }
 }
 

@@ -454,8 +454,17 @@ public class PythonUnitTestResultParser extends MultiLineReceiver {
     private void reportToListeners() {
         for (ITestInvocationListener listener : mListeners) {
             listener.testRunStarted(mRunName, mTotalTestCount);
-
+            boolean testRunFailed = false;
+            String errorMsg = null;
             for (Entry<TestDescription, String> test : mTestResultCache.entrySet()) {
+                if (test.getValue() != null
+                        && !SKIPPED_ENTRY.equals(test.getValue())
+                        && !test.getKey().getTestName().startsWith("test")) {
+                    // report non-test failures as test run failure
+                    testRunFailed = true;
+                    errorMsg = test.getValue();
+                    continue;
+                }
                 listener.testStarted(test.getKey());
                 if (SKIPPED_ENTRY.equals(test.getValue())) {
                     listener.testIgnored(test.getKey());
@@ -463,6 +472,9 @@ public class PythonUnitTestResultParser extends MultiLineReceiver {
                     listener.testFailed(test.getKey(), test.getValue());
                 }
                 listener.testEnded(test.getKey(), new HashMap<String, Metric>());
+            }
+            if (testRunFailed) {
+                listener.testRunFailed(errorMsg);
             }
             listener.testRunEnded(mTotalElapsedTime, new HashMap<String, Metric>());
         }
