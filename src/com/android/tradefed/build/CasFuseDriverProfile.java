@@ -16,12 +16,11 @@
 
 package com.android.tradefed.build;
 
-import com.android.tradefed.build.IFuseDriverProfile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * CasDriverProfile is a specific implementation of IFuseDriverProfile for device images which are
@@ -50,7 +49,7 @@ public class CasFuseDriverProfile implements IFuseDriverProfile {
      * @param driverPath The path to the driver binary.
      * @param mountTimeoutInMs The timeout in milliseconds to wait for the mount point to be ready.
      */
-    public CasFuseDriverProfile(Path driverPath, int mountTimeoutInMs) {
+    public CasFuseDriverProfile(Path driverPath, long mountTimeoutInMs) {
         this.mDriverPath = driverPath;
         this.mMountTimeoutInMs = mountTimeoutInMs;
     }

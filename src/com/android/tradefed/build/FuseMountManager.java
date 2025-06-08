@@ -14,22 +14,27 @@
  * limitations under the License.
  */
 
+// TODO(frankfeng): iterate to support sharing of mount points for same source data paths across
+// multiple clients. The typical use case is a DeviceBuildInfo and its copies (clones).
+
 package com.android.tradefed.build;
 
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
-import com.android.tradefed.util.IRunUtil;
-import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.IRunUtil;
+import com.android.tradefed.util.RunUtil;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -39,59 +44,103 @@ import java.util.concurrent.TimeUnit;
 public class FuseMountManager {
     private final IFuseDriverProfile mDriverProfile;
     private final IRunUtil mRunUtil;
-    // Map to associate a mount point with its running process
-    private final Map<Path, Process> activeMounts = new ConcurrentHashMap<>();
+    // Map to associate a source data path with its corresponding mount information (mount point and
+    // process)
+    private final Map<Path, MountInfo> mActiveMounts = new ConcurrentHashMap<>();
+    private final Path mMountRoot; // The base path for creation of mount points.
+
+    /** MountInfo is a class that holds information about a mounted FUSE filesystem. */
+    private static class MountInfo {
+        Path mMountPoint;
+        Process mProcess;
+
+        MountInfo(Path mountPoint, Process process) {
+            mMountPoint = mountPoint;
+            mProcess = process;
+        }
+    }
 
     /**
-     * Creates a new FuseMountManager with the given driver profile.
+     * Creates a new FuseMountManager with the given driver profile and default run util and mount
+     * root.
      *
      * @param driverProfile The driver profile to use.
      */
     public FuseMountManager(IFuseDriverProfile driverProfile) {
-        this(driverProfile, RunUtil.getDefault());
+        this(driverProfile, RunUtil.getDefault(), Path.of("/tmp/cas_mountpoints/"));
     }
 
     /**
-     * Creates a new FuseMountManager with the given driver profile and run util.
+     * Creates a new FuseMountManager with the given driver profile, run util, and mount root.
      *
      * @param driverProfile The driver profile to use.
      * @param runUtil The run util to use.
+     * @param mountRoot The base path for creation of mount points.
      */
-    public FuseMountManager(IFuseDriverProfile driverProfile, IRunUtil runUtil) {
-        this.mDriverProfile = driverProfile;
-        this.mRunUtil = runUtil;
+    public FuseMountManager(IFuseDriverProfile driverProfile, IRunUtil runUtil, Path mountRoot) {
+        mDriverProfile = driverProfile;
+        mRunUtil = runUtil;
+        mMountRoot = mountRoot;
     }
 
     /**
-     * Mounts the given source data path at the given mount point.
+     * Checks if the given path is a valid source that can be mounted by the current FUSE profile.
+     *
+     * @param sourceDataPath The path to check.
+     * @return {@code true} if the source is valid, {@code false} otherwise.
+     */
+    public boolean isValidSourceData(Path sourceDataPath) {
+        if (sourceDataPath == null) {
+            return false;
+        }
+
+        try {
+            mDriverProfile.validateSourceDataPath(sourceDataPath);
+            return true;
+
+        } catch (IOException e) {
+            // Log for debugging but return false as the source is not valid/usable.
+            CLog.v("Validation failed for source data path: %s", sourceDataPath);
+            return false;
+        }
+    }
+
+    /**
+     * Mounts the given source data path to a uniquely created mount point. This method is
+     * idempotent: if the same source path is already mounted, it returns the existing mount point.
      *
      * @param sourceDataPath The source data path to mount.
-     * @param mountPoint The mount point to mount the source data path at.
-     * @throws IOException If the mount process fails to start.
+     * @return The {@link Path} to the new mount point where the source is available.
+     * @throws IOException If the mount process fails to start or times out.
+     * @throws InterruptedException If the mounting thread is interrupted.
      */
-    public void mount(Path sourceDataPath, Path mountPoint) throws IOException, InterruptedException {
+    public Path mount(Path sourceDataPath) throws IOException, InterruptedException {
         final long startTime = System.currentTimeMillis();
-        CLog.i(
-                "Mount '%s' at: %s",
-                sourceDataPath.toAbsolutePath().toString(), mountPoint.toAbsolutePath().toString());
 
-        if (activeMounts.containsKey(mountPoint)) {
-            throw new IllegalStateException(
-                    "A mount already exists at:" + mountPoint.toAbsolutePath().toString());
+        if (mActiveMounts.containsKey(sourceDataPath)) {
+            return mActiveMounts.get(sourceDataPath).mMountPoint;
         }
 
         try {
             mDriverProfile.validateSourceDataPath(sourceDataPath);
         } catch (IOException e) {
             throw new IllegalArgumentException(
-                    String.format("Invalid source data path: %s", sourceDataPath.toAbsolutePath()),
+                    String.format(
+                            "Validation failed for source data path: %s",
+                            sourceDataPath.toAbsolutePath()),
                     e);
         }
 
-        List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
+        Path mountPoint = null;
         Process process = null;
-
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
+            mountPoint = createUniqueMountPoint();
+            CLog.i(
+                    "Mount '%s' at: %s",
+                    sourceDataPath.toAbsolutePath().toString(),
+                    mountPoint.toAbsolutePath().toString());
+            List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
+
             process = mRunUtil.runCmdInBackground(command, capturedOutput);
             if (process == null) { // Unlikely to happen.
                 throw new IOException("runCmdInBackground returned a null process.");
@@ -110,8 +159,8 @@ public class FuseMountManager {
                     CLog.i(
                             "Done mounting '%s' at: %s (took %d ms)",
                             sourceDataPath, mountPoint, duration);
-                    activeMounts.put(mountPoint, process);
-                    return; // Exit the method on success.
+                    mActiveMounts.put(sourceDataPath, new MountInfo(mountPoint, process));
+                    return mountPoint; // Exit the method on success.
                 }
 
                 if (process.waitFor(pollIntervalMs, TimeUnit.MILLISECONDS)) {
@@ -128,6 +177,7 @@ public class FuseMountManager {
 
             // FAILURE: Timed out waiting for the mount point to become ready.
             process.destroyForcibly();
+            deleteMountPoint(mountPoint);
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
             throw new IOException(
@@ -141,37 +191,45 @@ public class FuseMountManager {
             if (process != null && process.isAlive()) {
                 process.destroyForcibly();
             }
+            deleteMountPoint(mountPoint);
+
             // Log generic failure metrics for any exception path.
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_MOUNT_FAILURE_COUNT, 1);
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_MOUNT_FAILURE_TIME_MS,
                     System.currentTimeMillis() - startTime);
+
             // Re-throw the exception to the caller.
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Mount operation was interrupted.", e);
             }
-            throw e; // Not InterruptedException.
+            throw e;
         }
     }
 
     /**
-     * Unmounts the given mount point.
+     * Unmounts the filesystem associated with the given source data path. This gracefully
+     * terminates the FUSE process and cleans up the mount point directory.
      *
-     * @param mountPoint The mount point to unmount.
+     * @param sourceDataPath The source data path to unmount.
      */
-    public void unmount(Path mountPoint) {
-        CLog.d("Unmount: %s", mountPoint.toAbsolutePath().toString());
-
-        Process process = activeMounts.get(mountPoint);
-        if (process == null) {
-            CLog.w("No mount found at: %s", mountPoint.toAbsolutePath().toString());
+    public void unmount(Path sourceDataPath) {
+        MountInfo mountInfo = mActiveMounts.get(sourceDataPath);
+        if (mountInfo == null) {
+            CLog.w("No mount found for: %s", sourceDataPath.toAbsolutePath().toString());
             return;
         }
+
+        CLog.d("Unmount: %s", sourceDataPath.toAbsolutePath().toString());
+
+        Path mountPoint = mountInfo.mMountPoint;
+        Process process = mountInfo.mProcess;
         if (!process.isAlive()) {
-            CLog.w("Already unmounted: %s", mountPoint.toAbsolutePath().toString());
-            activeMounts.remove(mountPoint); // Atomically remove from map
+            CLog.w("Already unmounted: %s", sourceDataPath.toAbsolutePath().toString());
+            deleteMountPoint(mountPoint);
+            mActiveMounts.remove(sourceDataPath); // Atomically remove from map
             return;
         }
 
@@ -195,7 +253,6 @@ public class FuseMountManager {
                     e.getMessage());
         } finally {
             // Forcibly kill the driver process
-            activeMounts.remove(mountPoint); // Atomically remove from map
             if (process.isAlive()) {
                 CLog.d(
                         "fusermount did not terminate the process for \'%s\'. Forcibly destroying"
@@ -205,16 +262,41 @@ public class FuseMountManager {
                 // Don't wait for the process to terminate as there isn't much we can do if it
                 // doesn't.
             }
+            mActiveMounts.remove(sourceDataPath); // Atomically remove from map
+            deleteMountPoint(mountPoint);
         }
 
-        CLog.d("Done unmounting: %s", mountPoint.toAbsolutePath().toString());
+        CLog.d("Done unmounting: %s", sourceDataPath.toAbsolutePath().toString());
     }
 
     /** Unmounts all tracked filesystems. */
     public void unmountAll() {
-        List<Path> copyOfMountPoints = new ArrayList<>(activeMounts.keySet());
-        for (Path mountPoint : copyOfMountPoints) {
-            unmount(mountPoint);
+        Set<Path> copyOfSourceDataPaths = Set.copyOf(mActiveMounts.keySet());
+        copyOfSourceDataPaths.forEach(this::unmount);
+    }
+
+    private Path createUniqueMountPoint() throws IOException {
+        String uniqueFileName = UUID.randomUUID().toString();
+        Path mountPoint = mMountRoot.resolve(uniqueFileName);
+        if (!Files.exists(mountPoint)) { // Should always be true.
+            Files.createDirectory(mountPoint);
+        }
+        return mountPoint;
+    }
+
+    /**
+     * Deletes the given mount point if it exists. This method logs any exceptions but does not
+     * throw as this is a best-effort cleanup.
+     *
+     * @param mountPoint The mount point to delete.
+     */
+    private void deleteMountPoint(Path mountPoint) {
+        if (mountPoint != null) {
+            try {
+                Files.delete(mountPoint);
+            } catch (IOException e) {
+                CLog.w("Failed to delete mount point %s", mountPoint.toAbsolutePath().toString());
+            }
         }
     }
 }

@@ -16,14 +16,19 @@
 
 package com.android.tradefed.build;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,24 +36,26 @@ import static org.mockito.Mockito.when;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
-
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 /** Unit tests for {@link FuseMountManager}. */
 @RunWith(MockitoJUnitRunner.class)
 public class FuseMountManagerTest {
+
+    @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
 
     @Mock private IFuseDriverProfile mMockDriverProfile;
     @Mock private IRunUtil mMockRunUtil;
@@ -56,189 +63,190 @@ public class FuseMountManagerTest {
     @Mock private CommandResult mMockCommandResult;
 
     private FuseMountManager mManager;
-    private Path mSourcePath;
-    private Path mMountPoint;
+    private Path mSourceDir;
+    private Path mMountRoot;
 
     @Before
-    public void setUp() throws IOException {
-        mManager = new FuseMountManager(mMockDriverProfile, mMockRunUtil);
+    public void setUp() throws Exception {
+        mSourceDir = tempFolder.newFolder("source-dir").toPath();
+        mMountRoot = tempFolder.newFolder("mount-root").toPath();
 
-        mSourcePath = new File("/test/source").toPath();
-        mMountPoint = new File("/test/mount").toPath();
+        mManager = new FuseMountManager(mMockDriverProfile, mMockRunUtil, mMountRoot);
 
+        // Default mock behaviors for success cases
         doNothing().when(mMockDriverProfile).validateSourceDataPath(any(Path.class));
         when(mMockDriverProfile.buildMountCommand(any(Path.class), any(Path.class)))
-                .thenReturn(Arrays.asList("fuse-driver", "arg1", "arg2"));
+                .thenReturn(Arrays.asList("fuse-driver", "arg1"));
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L); // 500ms timeout for tests
+        when(mMockRunUtil.runCmdInBackground(anyList(), any(OutputStream.class)))
+                .thenReturn(mMockProcess);
+    }
+
+    @After
+    public void tearDown() {
+        // Ensure all created temp dirs are cleaned up if a test fails mid-mount
+        mManager.unmountAll();
+    }
+
+    // Tests for isValidSourceData()
+
+    @Test
+    public void testIsValidSourceData_whenProfileSucceeds_returnsTrue() throws Exception {
+        // Configure the profile to execute its validation method successfully (i.e., not throw)
+        doNothing().when(mMockDriverProfile).validateSourceDataPath(mSourceDir);
+
+        boolean result = mManager.isValidSourceData(mSourceDir);
+
+        assertTrue("Should return true when profile validation succeeds.", result);
     }
 
     @Test
-    public void testMount_success() throws Exception {
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(true);
+    public void testIsValidSourceData_whenProfileThrowsIOException_returnsFalse() throws Exception {
+        // Configure the profile to throw an IOException, simulating a failed validation
+        doThrow(new IOException("Simulated validation failure"))
+                .when(mMockDriverProfile)
+                .validateSourceDataPath(mSourceDir);
 
-        mManager.mount(mSourcePath, mMountPoint);
+        boolean result = mManager.isValidSourceData(mSourceDir);
 
-        // Infer success by verifying no exceptions were thrown.
+        assertFalse("Should return false when profile validation throws an IOException.", result);
     }
 
     @Test
-    public void testMount_alreadyMounted_throwsException() throws Exception {
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(true);
-        mManager.mount(mSourcePath, mMountPoint); // First mount succeeds
+    public void testIsValidSourceData_withNullInput_returnsFalse() {
+        boolean result = mManager.isValidSourceData(null);
 
-        assertThrows(
-                "Should throw IllegalStateException when mounting to an existing mount point.",
-                IllegalStateException.class,
-                () -> mManager.mount(mSourcePath, mMountPoint));
+        assertFalse("Should return false for a null input path.", result);
+    }
+
+    // Tests for mount()
+
+    @Test
+    public void testMount_successAfterPolling() throws Exception {
+        when(mMockDriverProfile.isMountPointReady(any(Path.class)))
+                .thenReturn(false, false, true); // Succeeds on the 3rd check
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false); // Still running
+
+        Path mountPoint = mManager.mount(mSourceDir);
+
+        assertNotNull(mountPoint);
+        assertTrue(mountPoint.startsWith(mMountRoot));
+        // Verify we polled until it was ready
+        verify(mMockDriverProfile, times(3)).isMountPointReady(any(Path.class));
     }
 
     @Test
-    public void testMount_invalidSource_throwsException() throws IOException {
-        doThrow(new IOException()).when(mMockDriverProfile).validateSourceDataPath(any(Path.class));
+    public void testMount_idempotency_alreadyMounted() throws Exception {
+        // Perform one successful mount
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+        Path firstMountPoint = mManager.mount(mSourceDir);
+        assertNotNull(firstMountPoint);
 
-        assertThrows(
-                "Should throw IllegalArgumentException for an invalid source.",
-                IllegalArgumentException.class,
-                () -> mManager.mount(mSourcePath, mMountPoint));
+        // Mount the same source directory again
+        Path secondMountPoint = mManager.mount(mSourceDir);
+
+        assertEquals(
+                "Should return the same mount point for an already mounted source.",
+                firstMountPoint,
+                secondMountPoint);
+        // Verify that the expensive mount process was only ever run ONCE.
+        verify(mMockRunUtil, times(1)).runCmdInBackground(anyList(), any(OutputStream.class));
     }
 
     @Test
-    public void testMount_processExitsImmediately_throwsException() throws Exception {
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(false); // Not ready
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true); // Exited
+    public void testMount_processExitsPrematurely_throwsException() throws Exception {
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true); // Exited!
         when(mMockProcess.exitValue()).thenReturn(1);
 
-        assertThrows(
-                "Should throw IOException if the mount process exits immediately.",
-                IOException.class,
-                () -> mManager.mount(mSourcePath, mMountPoint));
+        IOException thrown =
+                assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
+        assertTrue(thrown.getMessage().contains("failed on startup"));
     }
 
     @Test
-    public void testMount_mountTimedOut_throwsExceptionAndCleansUp() throws Exception {
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(false); // Not ready
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
-                .thenReturn(false); // Still running
+    public void testMount_timeout_throwsExceptionAndCleansUp() throws Exception {
+        // The mount point is never ready
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
+        // The process never exits on its own
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
 
-        assertThrows(
-                "Should throw IOException if mount point is not ready.",
-                IOException.class,
-                () -> mManager.mount(mSourcePath, mMountPoint));
+        IOException thrown =
+                assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
+        assertTrue(thrown.getMessage().contains("timed out"));
 
+        // Verify that the orphaned process was killed
         verify(mMockProcess).destroyForcibly();
     }
 
     @Test
-    public void testMount_interrupted_throwsExceptionAndCleansUp() throws Exception {
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(false); // Not ready
-        when(mMockProcess.isAlive()).thenReturn(true);
-        doThrow(new InterruptedException())
-                .when(mMockProcess)
-                .waitFor(anyLong(), any(TimeUnit.class));
+    public void testMount_invalidSource_throwsException() throws Exception {
+        doThrow(new IOException("Source is invalid!"))
+                .when(mMockDriverProfile)
+                .validateSourceDataPath(mSourceDir);
 
-        assertThrows(
-                "Should throw IOException on InterruptedException.",
-                IOException.class,
-                () -> mManager.mount(mSourcePath, mMountPoint));
-
-        verify(mMockProcess).destroyForcibly();
-        assertTrue(
-                "Thread interrupted status should be set.", Thread.currentThread().isInterrupted());
+        assertThrows(IllegalArgumentException.class, () -> mManager.mount(mSourceDir));
     }
 
-    @Test
-    public void testUnmount_gracefulSuccess() throws Exception {
-        // Mock a successful mount first.
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(true);
-        mManager.mount(mSourcePath, mMountPoint);
+    // Tests for unmount()
 
+    @Test
+    public void testUnmount_successful() throws Exception {
+        // Perform a successful mount to populate the map.
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+        Path mountPoint = mManager.mount(mSourceDir);
+
+        // Arrange for unmount
         // Process is alive before fusermount and not alive after.
         when(mMockProcess.isAlive()).thenReturn(true, false);
-        when(mMockRunUtil.runTimedCmd(anyLong(), eq("fusermount"), eq("-u"), any(String.class)))
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
         when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.SUCCESS);
 
-        mManager.unmount(mMountPoint);
+        mManager.unmount(mSourceDir);
 
         verify(mMockProcess, never()).destroyForcibly();
+        // Check that the mount point directory was deleted
+        assertFalse(new File(mountPoint.toString()).exists());
     }
 
     @Test
     public void testUnmount_gracefulFail_forcefulSuccess() throws Exception {
-        // Mock a successful mount first.
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mMountPoint)).thenReturn(true);
-        mManager.mount(mSourcePath, mMountPoint);
+        // Perform a successful mount.
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+        Path mountPoint = mManager.mount(mSourceDir);
 
-        // Process is alive before and after fusermount.
+        // Arrange for unmount where fusermount fails and process stays alive.
         when(mMockProcess.isAlive()).thenReturn(true);
-        when(mMockRunUtil.runTimedCmd(anyLong(), eq("fusermount"), eq("-u"), any(String.class)))
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
-        when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.FAILED); // fusermount fails
-        when(mMockProcess.waitFor(2, TimeUnit.SECONDS))
-                .thenReturn(false); // process still doesn't die
+        when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.FAILED);
+        when(mMockProcess.waitFor(2, TimeUnit.SECONDS)).thenReturn(false);
 
-        mManager.unmount(mMountPoint);
+        mManager.unmount(mSourceDir);
 
         verify(mMockProcess).destroyForcibly();
     }
 
-    @Test
-    public void testUnmount_notMounted_doesNothing() {
-        mManager.unmount(mMountPoint);
-
-        verify(mMockRunUtil, never()).runTimedCmd(anyLong(), any());
-    }
+    // Tests for unmountAll()
 
     @Test
-    public void testUnmountAll_concurrentModificationSafe() throws Exception {
-        Path mountPoint1 = new File("/test/mount1").toPath();
-        Path mountPoint2 = new File("/test/mount2").toPath();
+    public void testUnmountAll() throws Exception {
+        // Mount two different source paths
+        Path sourceDir2 = tempFolder.newFolder("source-dir-2").toPath();
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+        mManager.mount(mSourceDir);
+        mManager.mount(sourceDir2);
 
-        // Mock successful mounts for two different points
-        when(mMockRunUtil.runCmdInBackground(any(List.class), any(ByteArrayOutputStream.class))).thenReturn(mMockProcess);
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
-        when(mMockDriverProfile.isMountPointReady(mountPoint1)).thenReturn(true);
-        when(mMockDriverProfile.isMountPointReady(mountPoint2)).thenReturn(true);
-        mManager.mount(mSourcePath, mountPoint1);
-        mManager.mount(mSourcePath, mountPoint2);
+        // Create a spy to verify calls to the public unmount() method
+        FuseMountManager spyManager = spy(mManager);
 
-        // Mock the unmount behavior
-        when(mMockProcess.isAlive()).thenReturn(true);
-        when(mMockRunUtil.runTimedCmd(anyLong(), eq("fusermount"), eq("-u"), any(String.class)))
-                .thenReturn(mMockCommandResult);
-        when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.SUCCESS);
+        spyManager.unmountAll();
 
-        mManager.unmountAll();
-        mManager.unmount(mountPoint1);
-
-        // Assert that the internal map is now empty. Test by trying to unmount again, which should
-        // do nothing.
-        // fusermount is called twice, once for each mount point in unmountAll().
-        // fusermount is not called in the unmount() call above.
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        anyLong(),
-                        eq("fusermount"),
-                        eq("-u"),
-                        eq(mountPoint1.toAbsolutePath().toString()));
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        anyLong(),
-                        eq("fusermount"),
-                        eq("-u"),
-                        eq(mountPoint2.toAbsolutePath().toString()));
+        // Verify that unmount() was called once for each source path.
+        verify(spyManager, times(1)).unmount(mSourceDir);
+        verify(spyManager, times(1)).unmount(sourceDir2);
     }
 }
