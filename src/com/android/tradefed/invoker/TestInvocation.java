@@ -31,6 +31,7 @@ import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.DynamicRemoteFileResolver;
 import com.android.tradefed.config.GlobalConfiguration;
 import com.android.tradefed.config.IConfiguration;
+import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.IDeviceConfiguration;
 import com.android.tradefed.config.filter.OptionFetcher;
 import com.android.tradefed.config.proxy.AutomatedReporters;
@@ -1186,6 +1187,9 @@ public class TestInvocation implements ITestInvocation {
                         CLog.d("%s has been disabled. skipping.", postProcessor);
                     } else {
                         forwarder = postProcessor.init(forwarder);
+                        if (postProcessor instanceof IConfigurationReceiver) {
+                            ((IConfigurationReceiver) postProcessor).setConfiguration(config);
+                        }
                     }
                 }
                 listener =

@@ -562,6 +562,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                     return;
                 }
                 TfObjectTracker.countWithParents(test.getClass());
+                CurrentInvocation.setCurrentRunner(test.getClass().getCanonicalName());
                 if (test instanceof IBuildReceiver) {
                     ((IBuildReceiver) test).setBuild(mBuild);
                 }
@@ -634,6 +635,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                             getId());
                     throw dnae;
                 } finally {
+                    CurrentInvocation.setCurrentRunner(null);
                     mInternalTestConfiguration.cleanConfigurationData();
                     mInternalTestConfiguration = null;
                     if (mMergeAttempts) {

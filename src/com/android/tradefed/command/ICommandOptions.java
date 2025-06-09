@@ -17,6 +17,7 @@
 package com.android.tradefed.command;
 
 import com.android.tradefed.device.metric.AutoLogCollector;
+import com.android.tradefed.postprocessor.AutoLogProcessor;
 import com.android.tradefed.util.UniqueMultiMap;
 
 import java.io.File;
@@ -186,6 +187,12 @@ public interface ICommandOptions {
     /** Sets the set of auto log collectors that should be added to an invocation. */
     public void setAutoLogCollectors(Set<AutoLogCollector> autoLogCollectors);
 
+    /** Returns the set of auto log processors to be added for an invocation */
+    public Set<AutoLogProcessor> getAutoLogProcessors();
+
+    /** Sets the set of auto log processors that should be added to an invocation. */
+    public void setAutoLogProcessors(Set<AutoLogProcessor> autoLogProcessors);
+
     /** Whether or not to enable experiments through experimental flags. */
     public boolean isExperimentEnabled();
 
@@ -329,4 +336,7 @@ public interface ICommandOptions {
 
     /** Whether to apply post processors in the order they are mentioned in the config. */
     public boolean keepPostProcessorOrder();
+
+    /** The API key to use for Gemini API prompt queries. */
+    public String getGeminiApiKey();
 }

@@ -71,6 +71,7 @@ public class CurrentInvocation {
         public IsolationGrade mIsRunIsolated = IsolationGrade.FULLY_ISOLATED;
         public IInvocationContext mContext;
         public IInvocationContext mModuleContext;
+        public String mCurrentRunner;
     }
 
     /**
@@ -241,6 +242,28 @@ public class CurrentInvocation {
                 return null;
             }
             return mPerGroupInfo.get(group).mModuleContext;
+        }
+    }
+
+    /** Sets the tracking for the current test runner. */
+    public static void setCurrentRunner(String runner) {
+        ThreadGroup group = Thread.currentThread().getThreadGroup();
+        synchronized (mPerGroupInfo) {
+            if (mPerGroupInfo.get(group) == null) {
+                mPerGroupInfo.put(group, new InternalInvocationTracking());
+            }
+            mPerGroupInfo.get(group).mCurrentRunner = runner;
+        }
+    }
+
+    /** Returns the current test runner if known. */
+    public static @Nullable String getCurrentRunner() {
+        ThreadGroup group = Thread.currentThread().getThreadGroup();
+        synchronized (mPerGroupInfo) {
+            if (mPerGroupInfo.get(group) == null) {
+                return null;
+            }
+            return mPerGroupInfo.get(group).mCurrentRunner;
         }
     }
 

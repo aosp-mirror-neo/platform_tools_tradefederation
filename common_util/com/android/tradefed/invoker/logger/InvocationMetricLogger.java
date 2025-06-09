@@ -439,6 +439,10 @@ public class InvocationMetricLogger {
         INVOCATION_CACHE_HIT("invocation_cache_hit", true),
         INVOCATION_CACHE_HIT_WITH_FAILURE("invocation_cache_hit_with_failure", true),
 
+        // AI metrics
+        PROMPT_REQUEST_COUNT("prompt_request_count", true),
+        LOG_ONLY_PROMPT_REQUEST_COUNT("log_only_prompt_request_count", true),
+
         // Oxygenation metrics
         PORTFORWARD_LHP_SUCCESS_COUNT("portfoward_lhp_success_count", true),
         PORTFORWARD_LHP_FAIL_COUNT("portfoward_lhp_fail_count", true),

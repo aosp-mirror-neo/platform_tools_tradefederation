@@ -18,7 +18,9 @@ package com.android.tradefed.postprocessor;
 import com.android.tradefed.ai.ApiResponse;
 import com.android.tradefed.ai.PromptResponse;
 import com.android.tradefed.ai.PromptUtility;
+import com.android.tradefed.ai.PromptUtility.PromptTemplate;
 import com.android.tradefed.config.Option;
+import com.android.tradefed.invoker.logger.CurrentInvocation;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric.Builder;
@@ -41,9 +43,6 @@ import java.util.Map.Entry;
 /** Post processor creating prompt queries for debugging errors. */
 public class GeminiDebuggingPostProcessor extends BasePostProcessor {
 
-    @Option(name = "api-key", description = "The api key to be used for the prompt API query.")
-    private String mApiKey = null;
-
     @Option(
             name = "log-prompt-only",
             description = "Whether to only log the prompt without executing it.")
@@ -65,6 +64,10 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
         if (stackTrace == null) {
             return new HashMap<String, Builder>();
         }
+        PromptTemplate templatePrompt = getPromptTemplateForTestType();
+        if (PromptTemplate.UNSUPPORTED.equals(templatePrompt)) {
+            return new HashMap<String, Builder>();
+        }
         PromptResponse promptResponse = null;
         // Only process failures
         try {
@@ -72,8 +75,8 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
             Map<String, File> logMap = mapLogsToPlaceholder(testLogs);
             promptResponse =
                     PromptUtility.runPromptTemplate(
-                            mApiKey,
-                            getPromptTemplateForTestType(),
+                            getConfiguration().getCommandOptions().getGeminiApiKey(),
+                            templatePrompt,
                             mLogOnlyPrompt,
                             testDescription,
                             stackTrace,
@@ -121,6 +124,14 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
     }
 
     private PromptUtility.PromptTemplate getPromptTemplateForTestType() {
-        return PromptUtility.PromptTemplate.ON_DEVICE;
+        switch (CurrentInvocation.getCurrentRunner()) {
+            case "com.android.tradefed.testtype.AndroidJUnitTest":
+                return PromptUtility.PromptTemplate.ON_DEVICE;
+            case "com.android.tradefed.testtype.JarHostTest":
+            case "com.android.tradefed.testtype.HostTest":
+                return PromptUtility.PromptTemplate.HOST_DRIVEN;
+            default:
+                return PromptUtility.PromptTemplate.UNSUPPORTED;
+        }
     }
 }

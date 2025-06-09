@@ -45,13 +45,15 @@ public class OptionFetcher implements AutoCloseable {
                     "avd-in-parent",
                     "enable-tracing",
                     "auto-collect",
+                    "auto-processor",
                     "skip-retry-in-presubmit",
                     "skip-retrying-list",
                     "remote-dynamic-sharding",
                     "remote-cache-instance-name",
                     "upload-cached-module-results",
                     "report-cache-results",
-                    "report-cache-results-presubmit");
+                    "report-cache-results-presubmit",
+                    "gemini-api-key");
 
     private TradefedFeatureClient mClient;
 

@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.postprocessor;
 
+import com.android.tradefed.config.IConfiguration;
+import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.logger.CurrentInvocation;
@@ -54,12 +56,13 @@ import java.util.Set;
  * The base {@link IPostProcessor} that every implementation should extend. Ensure that the post
  * processing methods are called before the final result reporters.
  */
-public abstract class BasePostProcessor implements IPostProcessor {
+public abstract class BasePostProcessor implements IPostProcessor, IConfigurationReceiver {
 
     @Option(name = "disable", description = "disables the post processor.")
     private boolean mDisable = false;
 
     private ITestInvocationListener mForwarder;
+    private IConfiguration mConfiguration;
     private ArrayListMultimap<String, Metric> storedTestMetrics = ArrayListMultimap.create();
     private Map<TestDescription, Map<String, LogFile>> mTestLogs = new LinkedHashMap<>();
     private Map<String, LogFile> mRunLogs = new HashMap<>();
@@ -492,6 +495,15 @@ public abstract class BasePostProcessor implements IPostProcessor {
             FileUtil.deleteFile(new File(f.getPath()));
         }
         mToDelete.clear();
+    }
+
+    @Override
+    public void setConfiguration(IConfiguration configuration) {
+        mConfiguration = configuration;
+    }
+
+    public IConfiguration getConfiguration() {
+        return mConfiguration;
     }
 
     private LogFile copyLogFile(LogFile original) {

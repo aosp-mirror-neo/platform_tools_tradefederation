@@ -17,6 +17,8 @@
 package com.android.tradefed.ai;
 
 import com.android.tradefed.ai.ContentRequest.InlineData;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
@@ -97,17 +99,21 @@ public class CurlGenAiClient {
             boolean logPromptOnly,
             String prompt,
             List<InlineData> data) {
-        String query = buildQuery(model, apiKey);
         try {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PROMPT_REQUEST_COUNT, 1);
             File request = FileUtil.createTempFile("curl-request", ".json");
             FileUtil.writeToFile(createJsonQuery(prompt, data), request);
+            if (logPromptOnly) {
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.LOG_ONLY_PROMPT_REQUEST_COUNT, 1);
+                return new PromptResponse(request, null);
+            }
             if (apiKey == null) {
                 CLog.d("No API key specified.");
                 return new PromptResponse(request, null);
             }
-            if (logPromptOnly) {
-                return new PromptResponse(request, null);
-            }
+            String query = buildQuery(model, apiKey);
             File response = FileUtil.createTempFile("curl-response", ".json");
             CommandResult results =
                     RunUtil.getDefault()

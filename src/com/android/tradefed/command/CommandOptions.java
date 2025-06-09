@@ -21,6 +21,7 @@ import com.android.tradefed.config.Option.Importance;
 import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.postprocessor.AutoLogProcessor;
 import com.android.tradefed.util.UniqueMultiMap;
 
 import java.io.File;
@@ -247,6 +248,18 @@ public class CommandOptions implements ICommandOptions {
                         + "to collect logs."
     )
     private Set<AutoLogCollector> mAutoCollectors = new LinkedHashSet<>();
+
+    @Option(
+            name = "auto-processor",
+            description =
+                    "Specify a set of processors that will be automatically managed by the harness "
+                            + "to process logs.")
+    private Set<AutoLogProcessor> mAutoProcessors = new LinkedHashSet<>();
+
+    @Option(
+            name = "gemini-api-key",
+            description = "The api key to use for gemini prompt query if enabled.")
+    private String mGeminiApiKey = null;
 
     @Option(
             name = "experiment-enabled",
@@ -702,6 +715,18 @@ public class CommandOptions implements ICommandOptions {
 
     /** {@inheritDoc} */
     @Override
+    public Set<AutoLogProcessor> getAutoLogProcessors() {
+        return mAutoProcessors;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void setAutoLogProcessors(Set<AutoLogProcessor> autoLogProcessors) {
+        mAutoProcessors = autoLogProcessors;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public boolean isExperimentEnabled() {
         return mExperimentEnabled;
     }
@@ -972,5 +997,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean keepPostProcessorOrder() {
         return mKeepPostProcessorOrder;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String getGeminiApiKey() {
+        return mGeminiApiKey;
     }
 }
