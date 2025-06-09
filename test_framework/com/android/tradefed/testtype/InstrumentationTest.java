@@ -109,6 +109,7 @@ public class InstrumentationTest
     public static final String RUN_TESTS_AS_USER_KEY = "RUN_TESTS_AS_USER";
     public static final String RUN_TESTS_ON_SDK_SANDBOX = "RUN_TESTS_ON_SDK_SANDBOX";
     private static final String SKIP_TESTS_REASON_KEY = "skip-tests-reason";
+    private static final String SAFE_PUNCTUATION = "@%-_+:,./";
 
     @Option(
             name = "package",
@@ -902,7 +903,29 @@ public class InstrumentationTest
             runner.setRunName(mRunName);
         }
         for (Map.Entry<String, String> argEntry : mInstrArgMap.entrySet()) {
-            runner.addInstrumentationArg(argEntry.getKey(), argEntry.getValue());
+            runner.addInstrumentationArg(argEntry.getKey(), parseShellSyntax(argEntry.getValue()));
+        }
+    }
+
+    /** Helper method parse the shell syntax */
+    private String parseShellSyntax(String value) {
+        if (value == null || value.isBlank()) {
+            return "''";
+        }
+        boolean needsQuoting =
+                value.chars()
+                        .anyMatch(
+                                c ->
+                                        !Character.isLetterOrDigit(c)
+                                                && SAFE_PUNCTUATION.indexOf(c) == -1);
+
+        if (needsQuoting) {
+            // If the value needs quoting, we escape any single quotes within it.
+            final String escapedValue = value.replace("'", "'\\''");
+            return "'" + escapedValue + "'";
+        } else {
+            // If the value contains no shell syntax, simply return it unquoted.
+            return value;
         }
     }
 
