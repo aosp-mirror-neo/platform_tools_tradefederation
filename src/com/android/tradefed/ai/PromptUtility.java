@@ -15,7 +15,6 @@
  */
 package com.android.tradefed.ai;
 
-import com.android.tradefed.ai.ContentRequest.InlineData;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.FileUtil;
@@ -23,8 +22,6 @@ import com.android.tradefed.util.ResourceUtil;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /** A utility to craft prompts from context. */
@@ -32,6 +29,8 @@ public class PromptUtility {
 
     /** Reference to prompt template stored in resources */
     public enum PromptTemplate {
+        UNSUPPORTED(""),
+
         ON_DEVICE("/prompts/on_device.txt"), // TEST_NAME, STACK_TRACE, LOGCAT
         HOST_DRIVEN("/prompts/host_driven.txt");
 
@@ -58,9 +57,13 @@ public class PromptUtility {
     public static PromptResponse runPromptTemplate(
             String apiKey,
             PromptTemplate template,
+            boolean logPromptOnly,
             TestDescription description,
             String stacktrace,
             Map<String, File> contextFiles) {
+        if (PromptTemplate.UNSUPPORTED.equals(template)) {
+            return null;
+        }
         CurlGenAiClient client = new CurlGenAiClient();
         File templatePrompt = null;
         try {
@@ -73,18 +76,24 @@ public class PromptUtility {
             templatePromptString =
                     templatePromptString.replace("{TEST_NAME}", description.toString());
             templatePromptString = templatePromptString.replace("{STACK_TRACE}", stacktrace);
-            List<InlineData> data = new ArrayList<ContentRequest.InlineData>();
+            // TODO: Do replacement without having to load everything in memory.
             if (contextFiles.containsKey("LOGCAT")) {
                 File logcat = contextFiles.get("LOGCAT");
-                // InlineData id = new InlineData("text/plain", encodeFileToBase64(logcat));
-                // data.add(id);
                 templatePromptString =
                         templatePromptString.replace(
                                 "{LOGCAT}", FileUtil.readStringFromFile(logcat));
             }
+            if (contextFiles.containsKey("HOST_LOG")) {
+                File hostLog = contextFiles.get("HOST_LOG");
+                templatePromptString =
+                        templatePromptString.replace(
+                                "{HOST_LOG}", FileUtil.readStringFromFile(hostLog));
+            }
             // Execute
-            PromptResponse response = client.runPrompt(apiKey, templatePromptString, data);
-            CLog.d("Prompt response: %s", response.getResponse());
+            PromptResponse response = client.runPrompt(apiKey, logPromptOnly, templatePromptString);
+            if (response != null) {
+                CLog.d("Prompt response: %s", response.getResponse());
+            }
             return response;
         } catch (IOException e) {
             CLog.e(e);

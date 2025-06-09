@@ -63,6 +63,8 @@ public enum LogDataType {
     BUGREPORTZ("zip", "application/zip", true, false),
     HOST_LOG("txt", "text/plain", true, true),
     LOGCAT("txt", "text/plain", true, true),
+    GEMINI_PROMPT("txt", "text/plain", true, true),
+    GEMINI_RESPONSE("txt", "text/plain", true, true),
     KERNEL_LOG("txt", "text/plain", true, true),
     MONKEY_LOG("txt", "text/plain", false, true),
     MUGSHOT_LOG("txt", "text/plain", false, true),

@@ -70,6 +70,7 @@ public abstract class BasePostProcessor implements IPostProcessor {
     // Keeps track of the current test; takes null value when the post processor is not in the scope
     // of any test (i.e. before the first test, in-between tests and after the last test).
     private TestDescription mCurrentTest = null;
+    private String mStackTrace = null;
 
     private ILogSaver mLogSaver = null;
 
@@ -284,11 +285,13 @@ public abstract class BasePostProcessor implements IPostProcessor {
     @Override
     public final void testFailed(TestDescription test, String trace) {
         mForwarder.testFailed(test, trace);
+        mStackTrace = trace;
     }
 
     @Override
     public final void testFailed(TestDescription test, FailureDescription failure) {
         mForwarder.testFailed(test, failure);
+        mStackTrace = failure.getErrorMessage();
     }
 
     @Override
@@ -350,6 +353,7 @@ public abstract class BasePostProcessor implements IPostProcessor {
         }
         mIsPostProcessing = false;
         mCurrentTest = null;
+        mStackTrace = null;
         mForwarder.testEnded(test, endTime, testMetrics);
     }
 
@@ -476,6 +480,10 @@ public abstract class BasePostProcessor implements IPostProcessor {
      */
     protected String getRunName() {
         return mRunName;
+    }
+
+    protected final String getStackTrace() {
+        return mStackTrace;
     }
 
     protected void cleanUp() {
