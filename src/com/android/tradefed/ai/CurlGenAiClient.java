@@ -17,6 +17,8 @@
 package com.android.tradefed.ai;
 
 import com.android.tradefed.ai.ContentRequest.InlineData;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
@@ -57,22 +59,29 @@ public class CurlGenAiClient {
      * Request a prompt to execute.
      *
      * @param apiKey The API_KEY to be used for the query.
+     * @param logPromptOnly returns the prompt only without executing it.
      * @param prompt The prompt being used.
      */
-    public PromptResponse runPrompt(String apiKey, String prompt) {
+    public PromptResponse runPrompt(String apiKey, boolean logPromptOnly, String prompt) {
         return runPrompt(
-                Model.GEMINI_2_5_FLASH, apiKey, prompt, new ArrayList<ContentRequest.InlineData>());
+                Model.GEMINI_2_5_FLASH,
+                apiKey,
+                logPromptOnly,
+                prompt,
+                new ArrayList<ContentRequest.InlineData>());
     }
 
     /**
      * Request a prompt to execute.
      *
      * @param apiKey The API_KEY to be used for the query.
+     * @param logPromptOnly returns the prompt only without executing it.
      * @param prompt The prompt being used.
      * @param data The inline file data to be associated with the prompt.
      */
-    public PromptResponse runPrompt(String apiKey, String prompt, List<InlineData> data) {
-        return runPrompt(Model.GEMINI_2_5_FLASH, apiKey, prompt, data);
+    public PromptResponse runPrompt(
+            String apiKey, boolean logPromptOnly, String prompt, List<InlineData> data) {
+        return runPrompt(Model.GEMINI_2_5_FLASH, apiKey, logPromptOnly, prompt, data);
     }
 
     /**
@@ -80,17 +89,32 @@ public class CurlGenAiClient {
      *
      * @param model The model to be used.
      * @param apiKey The API_KEY to be used for the query.
+     * @param logPromptOnly returns the prompt only without executing it.
      * @param prompt The prompt being used.
      * @param data The inline file data to be associated with the prompt.
      */
     public PromptResponse runPrompt(
-            Model model, String apiKey, String prompt, List<InlineData> data) {
-        String query = buildQuery(model, apiKey);
+            Model model,
+            String apiKey,
+            boolean logPromptOnly,
+            String prompt,
+            List<InlineData> data) {
         try {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PROMPT_REQUEST_COUNT, 1);
             File request = FileUtil.createTempFile("curl-request", ".json");
             FileUtil.writeToFile(createJsonQuery(prompt, data), request);
+            if (logPromptOnly) {
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.LOG_ONLY_PROMPT_REQUEST_COUNT, 1);
+                return new PromptResponse(request, null);
+            }
+            if (apiKey == null) {
+                CLog.d("No API key specified.");
+                return new PromptResponse(request, null);
+            }
+            String query = buildQuery(model, apiKey);
             File response = FileUtil.createTempFile("curl-response", ".json");
-
             CommandResult results =
                     RunUtil.getDefault()
                             .runTimedCmd(
@@ -120,11 +144,11 @@ public class CurlGenAiClient {
                         Gson gson = new Gson();
                         ApiResponse rep = gson.fromJson(outputJson, ApiResponse.class);
                         CLog.d("%s", rep);
+                        return new PromptResponse(request, response);
                     }
                 } catch (JSONException je) {
                     CLog.e(je);
                 }
-                return new PromptResponse(request, response);
             } else {
                 CLog.e("Issue when running the query:");
                 CLog.e("stdout: %s", results.getStdout());

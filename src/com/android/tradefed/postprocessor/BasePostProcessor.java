@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.postprocessor;
 
+import com.android.tradefed.config.IConfiguration;
+import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.logger.CurrentInvocation;
@@ -54,12 +56,13 @@ import java.util.Set;
  * The base {@link IPostProcessor} that every implementation should extend. Ensure that the post
  * processing methods are called before the final result reporters.
  */
-public abstract class BasePostProcessor implements IPostProcessor {
+public abstract class BasePostProcessor implements IPostProcessor, IConfigurationReceiver {
 
     @Option(name = "disable", description = "disables the post processor.")
     private boolean mDisable = false;
 
     private ITestInvocationListener mForwarder;
+    private IConfiguration mConfiguration;
     private ArrayListMultimap<String, Metric> storedTestMetrics = ArrayListMultimap.create();
     private Map<TestDescription, Map<String, LogFile>> mTestLogs = new LinkedHashMap<>();
     private Map<String, LogFile> mRunLogs = new HashMap<>();
@@ -70,6 +73,7 @@ public abstract class BasePostProcessor implements IPostProcessor {
     // Keeps track of the current test; takes null value when the post processor is not in the scope
     // of any test (i.e. before the first test, in-between tests and after the last test).
     private TestDescription mCurrentTest = null;
+    private String mStackTrace = null;
 
     private ILogSaver mLogSaver = null;
 
@@ -284,11 +288,13 @@ public abstract class BasePostProcessor implements IPostProcessor {
     @Override
     public final void testFailed(TestDescription test, String trace) {
         mForwarder.testFailed(test, trace);
+        mStackTrace = trace;
     }
 
     @Override
     public final void testFailed(TestDescription test, FailureDescription failure) {
         mForwarder.testFailed(test, failure);
+        mStackTrace = failure.getErrorMessage();
     }
 
     @Override
@@ -350,6 +356,7 @@ public abstract class BasePostProcessor implements IPostProcessor {
         }
         mIsPostProcessing = false;
         mCurrentTest = null;
+        mStackTrace = null;
         mForwarder.testEnded(test, endTime, testMetrics);
     }
 
@@ -478,12 +485,25 @@ public abstract class BasePostProcessor implements IPostProcessor {
         return mRunName;
     }
 
+    protected final String getStackTrace() {
+        return mStackTrace;
+    }
+
     protected void cleanUp() {
         // Delete all the copies
         for (LogFile f : mToDelete) {
             FileUtil.deleteFile(new File(f.getPath()));
         }
         mToDelete.clear();
+    }
+
+    @Override
+    public void setConfiguration(IConfiguration configuration) {
+        mConfiguration = configuration;
+    }
+
+    public IConfiguration getConfiguration() {
+        return mConfiguration;
     }
 
     private LogFile copyLogFile(LogFile original) {

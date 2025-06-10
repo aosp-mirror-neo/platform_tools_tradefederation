@@ -25,6 +25,7 @@ import com.android.tradefed.build.DeviceBuildDescriptorTest;
 import com.android.tradefed.build.DeviceBuildInfoTest;
 import com.android.tradefed.build.DeviceFolderBuildInfoTest;
 import com.android.tradefed.build.FileDownloadCacheTest;
+import com.android.tradefed.build.FuseMountManagerFactoryIntegrationTest;
 import com.android.tradefed.build.FuseMountManagerTest;
 import com.android.tradefed.build.LocalDeviceBuildProviderTest;
 import com.android.tradefed.build.cache.PartialZipDownloadCacheTest;
@@ -517,7 +518,6 @@ import com.android.tradefed.util.testmapping.TestInfoTest;
 import com.android.tradefed.util.testmapping.TestMappingTest;
 import com.android.tradefed.util.zip.CentralDirectoryInfoTest;
 import com.android.tradefed.util.zip.MergedZipEntryCollectionTest;
-
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
@@ -542,6 +542,7 @@ import org.junit.runners.Suite.SuiteClasses;
     DeviceBuildDescriptorTest.class,
     DeviceFolderBuildInfoTest.class,
     FileDownloadCacheTest.class,
+    FuseMountManagerFactoryIntegrationTest.class,
     FuseMountManagerTest.class,
     LocalDeviceBuildProviderTest.class,
 

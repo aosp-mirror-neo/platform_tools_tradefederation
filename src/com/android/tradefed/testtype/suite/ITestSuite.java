@@ -1195,6 +1195,10 @@ public abstract class ITestSuite
         // to invocation level listeners/reporters.
         for (IPostProcessor postProcessor : modulePostProcessors) {
             postProcessor.setLogSaver(mMainConfiguration.getLogSaver());
+            if (postProcessor instanceof IConfigurationReceiver) {
+                ((IConfigurationReceiver) postProcessor)
+                        .setConfiguration(module.getModuleConfiguration());
+            }
         }
         for (IPostProcessor postProcessor : modulePostProcessors) {
             try {
