@@ -36,7 +36,9 @@ public class ATestFileSystemLogSaver extends FileSystemLogSaver {
      * @return The directory created in the path that option atest-log-file-path specify.
      */
     @Override
-    protected File generateLogReportDir(IBuildInfo buildInfo, File reportDir) throws IOException {
+    protected File generateLogReportDir(IBuildInfo buildInfo, File reportDir, String moduleName)
+            throws IOException {
+        // TODO(b/424302356): Add subdirectories per module for their logs.
         return FileUtil.createTempDir("invocation_", mAtestRootReportDir);
     }
 }
