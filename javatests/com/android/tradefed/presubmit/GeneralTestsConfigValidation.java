@@ -329,7 +329,6 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             "PtsCoreGetclientTestCases.config",
                             "PtsKmsGetfbTestCases.config",
                             "PtsKmsFlipTestCases.config",
-                            "PtsFingerprintLatencyTestCases.config",
                             "s2-geometry-library-java-tests.config",
                             // TODO(b/404996613): Confirm that this test should be in
                             //  general-tests and exempted for validation.
