@@ -287,6 +287,7 @@ public class InvocationMetricLogger {
         CAS_DOWNLOAD_DIR_PREPARE_TIME("cas_download_dir_prepare_time_ms", true),
         CAS_DOWNLOAD_FILE_DOWNLOAD_TIME("cas_download_file_download_time_ms", true),
         CAS_DOWNLOAD_CHUNK_RESTORE_TIME("cas_download_chunk_restore_time_ms", true),
+        CAS_DOWNLOAD_E2E_TIME("cas_download_e2e_time_ms", true),
         // Records CAS mount metrics
         CAS_MOUNT_TIMEOUT_COUNT("cas_mount_timeout_count", true),
         CAS_MOUNT_SUCCESS_COUNT("cas_mount_success_count", true),
