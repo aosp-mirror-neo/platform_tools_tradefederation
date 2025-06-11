@@ -889,13 +889,13 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
         // put metrics from the preparation
         metricsProto.put(
                 PREPARATION_TIME,
-                TfMetricProtoUtil.numericToMetric(mElapsedPreparation, "milliseconds"));
+                TfMetricProtoUtil.createSingleValue(mElapsedPreparation, "milliseconds"));
         metricsProto.put(
                 TEAR_DOWN_TIME,
-                TfMetricProtoUtil.numericToMetric(mElapsedTearDown, "milliseconds"));
+                TfMetricProtoUtil.createSingleValue(mElapsedTearDown, "milliseconds"));
         metricsProto.put(
-                TEST_TIME, TfMetricProtoUtil.numericToMetric(elapsedTime, "milliseconds"));
-        metricsProto.put(MODULE_TEST_COUNT, TfMetricProtoUtil.numericToMetric(numResults, "int"));
+                TEST_TIME, TfMetricProtoUtil.createSingleValue(elapsedTime, "milliseconds"));
+        metricsProto.put(MODULE_TEST_COUNT, TfMetricProtoUtil.createSingleValue(numResults, "int"));
         // Report all the retry informations
         if (!mRetryStats.isEmpty()) {
             if (attempt != null) {
@@ -903,19 +903,19 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                 if (cost != 0L) {
                     metricsProto.put(
                             ISOLATION_COST,
-                            TfMetricProtoUtil.numericToMetric(cost, "milliseconds"));
+                            TfMetricProtoUtil.createSingleValue(cost, "milliseconds"));
                 }
             } else {
                 RetryStatistics agg = RetryStatistics.aggregateStatistics(mRetryStats);
                 metricsProto.put(
                         RETRY_TIME,
-                        TfMetricProtoUtil.numericToMetric(agg.mRetryTime, "milliseconds"));
+                        TfMetricProtoUtil.createSingleValue(agg.mRetryTime, "milliseconds"));
                 metricsProto.put(
                         RETRY_SUCCESS_COUNT,
-                        TfMetricProtoUtil.numericToMetric(agg.mRetrySuccess, ""));
+                        TfMetricProtoUtil.createSingleValue(agg.mRetrySuccess, ""));
                 metricsProto.put(
                         RETRY_FAIL_COUNT,
-                        TfMetricProtoUtil.numericToMetric(agg.mRetryFailure, ""));
+                        TfMetricProtoUtil.createSingleValue(agg.mRetryFailure, ""));
             }
         }
 
@@ -1619,7 +1619,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
         failureDescription.setCause(setupException);
         invocListener.testRunFailed(failureDescription);
         HashMap<String, Metric> metricsProto = new HashMap<>();
-        metricsProto.put(TEST_TIME, TfMetricProtoUtil.numericToMetric(0L, "milliseconds"));
+        metricsProto.put(TEST_TIME, TfMetricProtoUtil.createSingleValue(0L, "milliseconds"));
         invocListener.testRunEnded(0, metricsProto);
         // If it was a not available exception rethrow it to signal the new device state.
         if (setupException instanceof DeviceNotAvailableException) {
