@@ -70,6 +70,10 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
         }
         PromptResponse promptResponse = null;
         // Only process failures
+        boolean logOnly = mLogOnlyPrompt;
+        if (!getConfiguration().getCommandOptions().isGeminiLogOnlyMode()) {
+            logOnly = false;
+        }
         try {
             // Extract logs
             Map<String, File> logMap = mapLogsToPlaceholder(testLogs);
@@ -77,7 +81,7 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
                     PromptUtility.runPromptTemplate(
                             getConfiguration().getCommandOptions().getGeminiApiKey(),
                             templatePrompt,
-                            mLogOnlyPrompt,
+                            logOnly,
                             testDescription,
                             stackTrace,
                             logMap);

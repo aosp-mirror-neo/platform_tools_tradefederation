@@ -76,7 +76,7 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
                         new SnapshotInputStreamSource("host-log-failure", stream)) {
                     super.testLog(
                             String.format(NAME_FORMAT, test.toString()),
-                            LogDataType.TEXT,
+                            LogDataType.HOST_LOG,
                             logSource);
                 }
             }
