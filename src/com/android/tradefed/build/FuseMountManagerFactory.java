@@ -30,7 +30,8 @@ import java.nio.file.Path;
 /** Factory for creating and configuring {@link FuseMountManager} instances. */
 public class FuseMountManagerFactory {
 
-    private final Path mMountRoot;
+    private static Path mMountRoot;
+
     private final IRunUtil mRunUtil;
     private final String mTradefedJarDir;
     private static final long MOUNT_TIMEOUT_IN_MS = 10_000; // Allow 10 seconds for mounting.
@@ -39,11 +40,19 @@ public class FuseMountManagerFactory {
 
     // Private constructor for singleton pattern or controlled instantiation.
     private FuseMountManagerFactory() throws IOException {
-        this.mMountRoot = FileUtil.createTempDir("tf-cas-fuse-mount-root-").toPath();
+        initMountRoot();
         this.mRunUtil = RunUtil.getDefault();
         this.mTradefedJarDir = System.getProperty("TF_JAR_DIR");
         if (Strings.isNullOrEmpty(this.mTradefedJarDir)) {
             throw new IOException("TF_JAR_DIR system property is not set.");
+        }
+    }
+
+    private static void initMountRoot() throws IOException {
+        if (mMountRoot == null) {
+            Path rootDir = Path.of("/tmp", "tf-cas-fuse-mount-root");
+            Files.createDirectories(rootDir);
+            mMountRoot = rootDir;
         }
     }
 
@@ -113,14 +122,6 @@ public class FuseMountManagerFactory {
         } else {
             CLog.d("%s, version: unknown", clientName);
         }
-    }
-
-    /**
-     * Returns the base path used for creating mount points.
-     * <p>Package-private for testing purposes.</p>
-     */
-    Path getMountRoot() {
-        return mMountRoot;
     }
 
 }
