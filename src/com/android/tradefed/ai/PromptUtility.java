@@ -32,7 +32,7 @@ public class PromptUtility {
         UNSUPPORTED(""),
 
         ON_DEVICE("/prompts/on_device.txt"), // TEST_NAME, STACK_TRACE, LOGCAT
-        HOST_DRIVEN("/prompts/host_driven.txt");
+        HOST_DRIVEN("/prompts/host_driven.txt"); // TEST_NAME, STACK_TRACE, LOGCAT, HOST_LOG
 
         private final String templateResource;
 
@@ -72,7 +72,6 @@ public class PromptUtility {
             ResourceUtil.extractResourceToFile(template.getTemplateResource(), templatePrompt);
             String templatePromptString = FileUtil.readStringFromFile(templatePrompt);
             // Replace template
-            // TODO: Avoid doing this in-memory
             templatePromptString =
                     templatePromptString.replace("{TEST_NAME}", description.toString());
             templatePromptString = templatePromptString.replace("{STACK_TRACE}", stacktrace);

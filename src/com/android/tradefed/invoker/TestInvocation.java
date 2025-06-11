@@ -77,6 +77,7 @@ import com.android.tradefed.log.ITestLogger;
 import com.android.tradefed.log.LogRegistry;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.log.StdoutLogger;
+import com.android.tradefed.postprocessor.AutoLogProcessor;
 import com.android.tradefed.postprocessor.IPostProcessor;
 import com.android.tradefed.result.ActionInProgress;
 import com.android.tradefed.result.ByteArrayInputStreamSource;
@@ -1173,10 +1174,14 @@ public class TestInvocation implements ITestInvocation {
                 }
             }
 
-            if (!config.getPostProcessors().isEmpty()) {
+            List<IPostProcessor> postProcessors = config.getPostProcessors();
+            // Add automated processors
+            for (AutoLogProcessor auto : config.getCommandOptions().getAutoLogProcessors()) {
+                postProcessors.add(auto.getInstanceForValue());
+            }
+            if (!postProcessors.isEmpty()) {
                 ITestInvocationListener forwarder = new ResultAndLogForwarder(allListeners);
                 // Post-processors are the first layer around the final reporters.
-                List<IPostProcessor> postProcessors = config.getPostProcessors();
                 if (config.getCommandOptions().keepPostProcessorOrder()) {
                     // reverse the post-processor list so that the first post-processor in the list
                     // becomes the outermost post-processor and the first to receive events.

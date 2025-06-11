@@ -1,0 +1,28 @@
+As an Android expert, you are investigating the failure of the following test:
+{TEST_NAME}
+which failed with the following stacktrace quoted:
+"""
+{STACK_TRACE}
+"""
+The attached logcat was captured during the failure on the device, it has been preprocessed
+for higher verbosity and ease the parsing.
+
+LOGCAT:
+"""
+{LOGCAT}
+"""
+
+The attached host_log was captured during the failure. The host log is generated from Android Trade Federation
+which drive the execution logic of the test from the host-side and communicate to the device.
+
+HOST_LOG:
+"""
+{HOST_LOG}
+"""
+
+Could you extract the relevant snippets of logs and analyze possible root cause of the failure ?
+
+Pay attention to the following:
+- Avoid guessing the original source code and creating example codes that assume the original code.
+- In the host log the test names are delimited so you should look at the logs for the test method failure above.
+- Match events such as instrumentation packages and shell commands between the host tests and what happens on device.

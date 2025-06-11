@@ -407,6 +407,36 @@ public class ResultDBReporterTest {
                                 .build());
     }
 
+    @Test
+    public void testUploadEarlyArtifacts() {
+        LogFile earlyLog1 =
+                new LogFile("/tmp/early1.log", getLogUrl("early1.log"), LogDataType.TEXT);
+        LogFile earlyLog2 =
+                new LogFile("/tmp/early2.log", getLogUrl("early2.log"), LogDataType.PNG);
+
+        // Call logAssociation before invocationStarted
+        mReporter.logAssociation("early_log_1", earlyLog1);
+        mReporter.logAssociation("early_log_2", earlyLog2);
+
+        // Simulate invocation start and end
+        mSimulator
+                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .simulateInvocation(mReporter);
+
+        // Verify that the early logs were uploaded
+        assertThat(mReporter.mRecorder.getArtifacts())
+                .containsExactly(
+                        Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/early1.log_9000.dat")
+                                .setContentType("text/plain")
+                                .build(),
+                        Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/early2.log_9000.dat")
+                                .setContentType("image/png")
+                                .build());
+    }
+
     private String getLogUrl(String log) {
         try {
             return String.format(

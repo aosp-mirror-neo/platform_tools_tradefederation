@@ -3,7 +3,8 @@ git_files = glob(
 )
 
 dest_files = glob(
-  include = ["proto/resultdb/*"]
+  include = ["proto/resultdb/*"],
+  exclude = ["proto/resultdb/OWNERS"]
 )
 
 # Generate a CL that copy ResultDB proto to the current codebase under proto/resultdb/*.

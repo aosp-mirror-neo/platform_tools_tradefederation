@@ -474,6 +474,7 @@ public class InvocationMetricLogger {
     /** Grouping allows to log several groups under a same key. */
     public enum InvocationGroupMetricKey {
         TEST_TYPE_COUNT("test-type-count", true),
+        TEST_TYPE_FAILURE_COUNT("test-type-failure-count", true),
         TARGET_PREPARER_SETUP_LATENCY("target-preparer-setup-latency", true),
         TARGET_PREPARER_TEARDOWN_LATENCY("target-preparer-teardown-latency", true),
         LAB_PREPARER_SETUP_LATENCY("lab-preparer-setup-latency", true),

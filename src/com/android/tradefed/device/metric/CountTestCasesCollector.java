@@ -19,6 +19,8 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationGroupMetricKey;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.device.DeviceNotAvailableException;
+import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.testtype.IRemoteTest;
 
 import java.util.Map;
@@ -27,6 +29,7 @@ import java.util.Map;
 public class CountTestCasesCollector extends BaseDeviceMetricCollector {
 
     private long mTestCount = 0L;
+    private long mTestFailureCount = 0L;
     private String mTestType = null;
 
     public CountTestCasesCollector() {}
@@ -49,6 +52,15 @@ public class CountTestCasesCollector extends BaseDeviceMetricCollector {
     }
 
     @Override
+    public void onTestFail(DeviceMetricData testData, TestDescription test)
+            throws DeviceNotAvailableException {
+        if (mTestType == null) {
+            return;
+        }
+        mTestFailureCount++;
+    }
+
+    @Override
     public void onTestRunEnd(DeviceMetricData runData, Map<String, Metric> currentRunMetrics) {
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.TOTAL_TEST_COUNT, mTestCount);
@@ -57,6 +69,9 @@ public class CountTestCasesCollector extends BaseDeviceMetricCollector {
         }
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationGroupMetricKey.TEST_TYPE_COUNT, mTestType, mTestCount);
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationGroupMetricKey.TEST_TYPE_FAILURE_COUNT, mTestType, mTestFailureCount);
         mTestCount = 0L;
+        mTestFailureCount = 0L;
     }
 }

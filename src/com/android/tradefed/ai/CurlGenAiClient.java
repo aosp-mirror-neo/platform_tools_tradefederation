@@ -99,19 +99,22 @@ public class CurlGenAiClient {
             boolean logPromptOnly,
             String prompt,
             List<InlineData> data) {
+        File jsonRequest = null;
         try {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.PROMPT_REQUEST_COUNT, 1);
-            File request = FileUtil.createTempFile("curl-request", ".json");
-            FileUtil.writeToFile(createJsonQuery(prompt, data), request);
+            File humandReadableRequest = FileUtil.createTempFile("request", ".txt");
+            FileUtil.writeToFile(prompt, humandReadableRequest);
+            jsonRequest = FileUtil.createTempFile("curl-request", ".json");
+            FileUtil.writeToFile(createJsonQuery(prompt, data), jsonRequest);
             if (logPromptOnly) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.LOG_ONLY_PROMPT_REQUEST_COUNT, 1);
-                return new PromptResponse(request, null);
+                return new PromptResponse(humandReadableRequest, null);
             }
             if (apiKey == null) {
                 CLog.d("No API key specified.");
-                return new PromptResponse(request, null);
+                return new PromptResponse(humandReadableRequest, null);
             }
             String query = buildQuery(model, apiKey);
             File response = FileUtil.createTempFile("curl-response", ".json");
@@ -127,7 +130,7 @@ public class CurlGenAiClient {
                                         "-X",
                                         "POST",
                                         "-d",
-                                        "@" + request.getAbsolutePath(),
+                                        "@" + jsonRequest.getAbsolutePath(),
                                         "-o",
                                         response.getAbsolutePath()
                                     });
@@ -144,7 +147,7 @@ public class CurlGenAiClient {
                         Gson gson = new Gson();
                         ApiResponse rep = gson.fromJson(outputJson, ApiResponse.class);
                         CLog.d("%s", rep);
-                        return new PromptResponse(request, response);
+                        return new PromptResponse(humandReadableRequest, response);
                     }
                 } catch (JSONException je) {
                     CLog.e(je);
@@ -156,6 +159,8 @@ public class CurlGenAiClient {
             }
         } catch (Exception e) {
             CLog.e(e);
+        } finally {
+            FileUtil.deleteFile(jsonRequest);
         }
         return null;
     }
