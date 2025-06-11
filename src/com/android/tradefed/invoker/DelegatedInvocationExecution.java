@@ -186,6 +186,7 @@ public class DelegatedInvocationExecution extends InvocationExecution {
             boolean failedStatus = false;
             String stderrText;
             try {
+                mStderr.flush();
                 stderrText = FileUtil.readStringFromFile(mStderrFile);
             } catch (IOException e) {
                 stderrText = "Could not read the stderr output from process.";
