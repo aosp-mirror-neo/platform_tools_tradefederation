@@ -16,6 +16,8 @@
 
 package com.android.tradefed.command;
 
+import com.android.tradefed.build.FuseMountManager;
+import com.android.tradefed.build.FuseMountManagerFactory;
 import com.android.tradefed.clearcut.ClearcutClient;
 import com.android.tradefed.clearcut.TerminateClearcutClient;
 import com.android.tradefed.command.CommandRunner.ExitCode;
@@ -77,6 +79,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
@@ -1362,6 +1365,8 @@ public class Console extends Thread {
      */
     public static void startConsole(Console console, String[] args)
             throws InterruptedException, ConfigurationException {
+        registerShutdownHook();
+
         ClearcutClient client =
                 new ClearcutClient(
                         TestSuiteInfo.getInstance().didLoadFromProperties()
@@ -1442,5 +1447,31 @@ public class Console extends Thread {
                             new TerminateGRPCServers(
                                     server, invocationManagementServer, deviceManagementServer));
         }
+    }
+
+    /** Registers a shutdown hook to unmount any orphaned FUSE mounts. */
+    private static void registerShutdownHook() {
+        Runtime.getRuntime()
+                .addShutdownHook(
+                        new Thread(
+                                () -> {
+                                    // DeviceBuildInfo unmounts device images it owns on shutdown.
+                                    // This is a best effort attempt to unmount any orphaned mounts.
+                                    CLog.i("Shutdown hook is running.");
+                                    try {
+                                        Optional<FuseMountManager> optionalFuseMountManager =
+                                                Optional.of(
+                                                        FuseMountManagerFactory.getInstance()
+                                                                .createCasFuseMountManager());
+                                        optionalFuseMountManager.ifPresent(
+                                                manager -> manager.unmountAll());
+                                    } catch (IOException e) {
+                                        CLog.w(
+                                                "Failed to unmount FUSE mounts. Error: %s",
+                                                e.getMessage());
+                                    }
+                                    CLog.i("Shutdown hook completed.");
+                                }));
+        CLog.i("Registered shutdown hook for unmounting FUSE mounts.");
     }
 }
