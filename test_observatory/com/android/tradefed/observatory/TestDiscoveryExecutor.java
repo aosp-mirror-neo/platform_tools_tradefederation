@@ -223,7 +223,9 @@ public class TestDiscoveryExecutor {
                             null,
                             DiscoveryExitCode.HAS_NON_SUITE_BASED_TEST_RUNNER_ERROR);
                 }
+                boolean isTestMapping = false;
                 if (test instanceof TestMappingSuiteRunner) {
+                    isTestMapping = true;
                     ((TestMappingSuiteRunner) test).loadTestInfos();
                 }
                 Set<String> suiteIncludeFilters = ((BaseTestSuite) test).getIncludeFilter();
@@ -313,7 +315,11 @@ public class TestDiscoveryExecutor {
                                 DiscoveryExitCode.COMPONENT_METADATA);
                     }
                 } else {
-                    discoveredLogic = false;
+                    // Test Mapping is allowed to be empty
+                    if (!isTestMapping
+                            || System.getenv(TestMappingSuiteRunner.IS_BWYN_ENV_VAR_KEY) == null) {
+                        discoveredLogic = false;
+                    }
                 }
             }
             if (!discoveredLogic) {
