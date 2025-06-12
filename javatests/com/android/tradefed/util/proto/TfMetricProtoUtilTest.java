@@ -34,10 +34,7 @@ import java.util.Map;
 @RunWith(JUnit4.class)
 public class TfMetricProtoUtilTest {
 
-    /**
-     * Test that the downgrade conversion to the old map converts the simple value in String. but
-     * complex values are lost since there are no good way to convert them.
-     */
+    /** Test that the downgrade conversion to the old map converts values to String. */
     @Test
     public void testCompatibleConvert() {
         Map<String, Metric> metrics = new HashMap<>();
@@ -56,14 +53,22 @@ public class TfMetricProtoUtilTest {
         // List of floats
         Measurements m4 =
                 Measurements.newBuilder()
-                        .setDoubleValues(DoubleValues.newBuilder().addDoubleValue(5.5f).build())
+                        .setDoubleValues(
+                                DoubleValues.newBuilder()
+                                        .addDoubleValue(5.5f)
+                                        .addDoubleValue(10f)
+                                        .build())
                         .build();
         metrics.put("key4", createMetric(m4));
 
         // List of strings
         Measurements m5 =
                 Measurements.newBuilder()
-                        .setStringValues(StringValues.newBuilder().addStringValue("value").build())
+                        .setStringValues(
+                                StringValues.newBuilder()
+                                        .addStringValue("value")
+                                        .addStringValue("value2")
+                                        .build())
                         .build();
         metrics.put("key5", createMetric(m5));
 
@@ -72,11 +77,13 @@ public class TfMetricProtoUtilTest {
         metrics.put("key6", createMetric(m6));
 
         Map<String, String> results = TfMetricProtoUtil.compatibleConvert(metrics);
-        // Only the single values are converted.
+
         assertEquals("5.5", results.get("key1"));
         assertEquals("10", results.get("key2"));
         assertEquals("value", results.get("key3"));
-        assertEquals(3, results.size());
+        assertEquals("5.5,10.0", results.get("key4"));
+        assertEquals("value,value2", results.get("key5"));
+        assertEquals(5, results.size());
     }
 
     /** Test the utility that create a single string measurement from a String. */
