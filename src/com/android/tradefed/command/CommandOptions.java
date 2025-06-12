@@ -262,6 +262,11 @@ public class CommandOptions implements ICommandOptions {
     private String mGeminiApiKey = null;
 
     @Option(
+            name = "gemini-log-prompt-only",
+            description = "Whether to only log the prompt without executing it.")
+    private boolean mLogOnlyPrompt = true;
+
+    @Option(
             name = "experiment-enabled",
             description = "A feature flag used to enable experimental flags.")
     private boolean mExperimentEnabled = false;
@@ -1003,5 +1008,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public String getGeminiApiKey() {
         return mGeminiApiKey;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isGeminiLogOnlyMode() {
+        return mLogOnlyPrompt;
     }
 }

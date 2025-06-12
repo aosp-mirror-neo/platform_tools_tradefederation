@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 // FuseMountManager is a class that manages mounting and unmounting FUSE filesystems.
@@ -269,10 +271,53 @@ public class FuseMountManager {
         CLog.d("Done unmounting: %s", sourceDataPath.toAbsolutePath().toString());
     }
 
-    /** Unmounts all tracked filesystems. */
+    /** Unmounts all tracked filesystems in parallel.
+     *
+     * <p>This method unmounts all tracked filesystems in parallel using a thread pool. It is
+     * intended to be used when all filesystems need to be unmounted, such as when shutting down
+     * the FuseMountManager.
+     */
     public void unmountAll() {
+        if (mActiveMounts.keySet().isEmpty()) {
+            return;
+        }
+
+        // This can be the typical case - just unmount the one mount point.
+        if (mActiveMounts.keySet().size() == 1) {
+            unmount(mActiveMounts.keySet().iterator().next());
+            return;
+        }
+
         Set<Path> copyOfSourceDataPaths = Set.copyOf(mActiveMounts.keySet());
-        copyOfSourceDataPaths.forEach(this::unmount);
+
+        // Choose ExecutorService over parallelStream() as this is IO bound.
+
+        // Let's not use more than 10 threads, even if there are many mounts.
+        int numThreads = Math.min(copyOfSourceDataPaths.size(), 10);
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        CLog.i(
+                "Unmounting %d filesystems in parallel with %d threads...",
+                copyOfSourceDataPaths.size(), numThreads);
+
+        // Submit each unmount task to the thread pool.
+        copyOfSourceDataPaths.forEach(path -> executor.submit(() -> unmount(path)));
+
+        // Shut down the executor and wait for tasks to complete.
+        try {
+            executor.shutdown(); // Stop accepting new tasks.
+            if (!executor.awaitTermination(15, TimeUnit.SECONDS)) {
+                CLog.e(
+                        "UnmountAll timed out after 15 seconds. Some FUSE processes may be"
+                            + " orphaned.");
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            CLog.e("UnmountAll was interrupted.");
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        CLog.i("Finished unmountAll.");
     }
 
     private Path createUniqueMountPoint() throws IOException {

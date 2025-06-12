@@ -22,18 +22,17 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
 
 /** Unit tests for {@link CasFuseDriverProfile}. */
 @RunWith(JUnit4.class)
@@ -51,8 +50,20 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testValidSourceDataPath_success() throws IOException {
+    public void testValidSourceDataPath_indexFileInChunksDir_success() throws IOException {
         File sourceDir = tempFolder.newFolder("valid_source");
+        tempFolder.newFolder("valid_source/_chunks");
+        tempFolder.newFile("valid_source/_chunks/_chunks_index.json");
+
+        mProfile.validateSourceDataPath(sourceDir.toPath());
+
+        // No exception thrown
+    }
+
+    @Test
+    public void testValidSourceDataPath_indexFileAsSiblingOfChunksDir_success() throws IOException {
+        File sourceDir = tempFolder.newFolder("valid_source");
+        tempFolder.newFolder("valid_source/_chunks");
         tempFolder.newFile("valid_source/_chunks_index.json");
 
         mProfile.validateSourceDataPath(sourceDir.toPath());
@@ -61,7 +72,7 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testValidSourceDataPath_directoryDoesNotExist() {
+    public void testValidSourceDataPath_doesNotExist() {
         File nonExistentDir = new File(tempFolder.getRoot(), "non_existent");
 
         assertThrows(
@@ -81,9 +92,23 @@ public class CasFuseDriverProfileTest {
                 () -> mProfile.validateSourceDataPath(sourceFile.toPath()));
     }
 
+
     @Test
-    public void testValidSourceDataPath_directoryMissingIndexFile() throws IOException {
+    public void testValidSourceDataPath_missingChunksDir() throws IOException {
+        File sourceDir = tempFolder.newFolder("source_missing_chunks_dir");
+        tempFolder.newFile("source_missing_chunks_dir/_chunks_index.json");
+
+        assertThrows(
+                "Should throw IOException when the source directory is missing the chunks"
+                    + " directory.",
+                IOException.class,
+                () -> mProfile.validateSourceDataPath(sourceDir.toPath()));
+    }
+
+    @Test
+    public void testValidSourceDataPath_missingIndexFile() throws IOException {
         File sourceDir = tempFolder.newFolder("source_missing_index");
+        tempFolder.newFolder("source_missing_index/_chunks");
 
         assertThrows(
                 "Should throw IOException when the source directory is missing the chunks"
@@ -128,7 +153,7 @@ public class CasFuseDriverProfileTest {
                 Arrays.asList(
                         mDriverFile.getAbsolutePath(),
                         "--chunks",
-                        sourceDir.toAbsolutePath().toString(),
+                        sourceDir.resolve("_chunks").toAbsolutePath().toString(),
                         "--mount",
                         mountPoint.toAbsolutePath().toString());
 

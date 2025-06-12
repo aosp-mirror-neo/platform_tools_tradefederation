@@ -46,7 +46,7 @@ public class CurlGenAiClient {
     /** List of model available to be used. */
     public enum Model {
         GEMINI_2_0_FLASH("gemini-2.0-flash"),
-        GEMINI_2_5_FLASH("gemini-2.5-flash-preview-05-20");
+        GEMINI_2_5_FLASH("gemini-2.5-pro-preview-06-05");
 
         private final String modelName;
 

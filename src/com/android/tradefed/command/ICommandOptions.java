@@ -339,4 +339,7 @@ public interface ICommandOptions {
 
     /** The API key to use for Gemini API prompt queries. */
     public String getGeminiApiKey();
+
+    /** Whether to silence the prompt execution of models. */
+    public boolean isGeminiLogOnlyMode();
 }

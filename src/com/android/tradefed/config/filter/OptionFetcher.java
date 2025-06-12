@@ -53,7 +53,8 @@ public class OptionFetcher implements AutoCloseable {
                     "upload-cached-module-results",
                     "report-cache-results",
                     "report-cache-results-presubmit",
-                    "gemini-api-key");
+                    "gemini-api-key",
+                    "gemini-log-prompt-only");
 
     private TradefedFeatureClient mClient;
 
