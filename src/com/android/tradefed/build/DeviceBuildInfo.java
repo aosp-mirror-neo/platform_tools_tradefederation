@@ -17,8 +17,11 @@
 package com.android.tradefed.build;
 
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
-
+import com.android.tradefed.log.LogUtil.CLog;
+import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
+import java.io.IOException;
+import java.util.Optional;
 
 /**
  * A {@link IBuildInfo} that represents a complete Android device build and (optionally) its tests.
@@ -27,6 +30,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
 
     private static final long serialVersionUID = BuildSerializedVersion.VERSION;
     private String mDeviceBuildFlavor = null;
+    private transient Optional<FuseMountManager> mOptionalFuseMountManager = null;
 
     public DeviceBuildInfo() {
         super();
@@ -38,6 +42,25 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
 
     public DeviceBuildInfo(BuildInfo buildInfo) {
         super(buildInfo);
+    }
+
+    @VisibleForTesting
+    Optional<FuseMountManager> getFuseMountManager() {
+        // Lazy-initialize the manager by calling the factory.
+        if (mOptionalFuseMountManager == null) {
+            try {
+                mOptionalFuseMountManager =
+                        Optional.of(
+                                FuseMountManagerFactory.getInstance().createCasFuseMountManager());
+            } catch (IOException e) {
+                CLog.w(
+                        "Failed to get FUSE mount manager, FUSE mounting will be disabled. Error:"
+                            + " %s",
+                        e);
+                mOptionalFuseMountManager = Optional.empty();
+            }
+        }
+        return mOptionalFuseMountManager;
     }
 
     /**
@@ -69,11 +92,48 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     }
 
     /**
-     * {@inheritDoc}
+     * Get the local device image zip file. The return value can be a directory which is the device
+     * image zip file uncompressed. Note that in the case of a directory, it can be a mounted
+     * read-only virtual filesystem which limits the operations that can be applied to the directory
+     * or its contents.
      */
     @Override
     public File getDeviceImageFile() {
-        return getFile(BuildInfoFileKey.DEVICE_IMAGE);
+        File deviceImage = getFile(BuildInfoFileKey.DEVICE_IMAGE);
+        if (deviceImage == null) {
+            return null;
+        }
+
+        return getFuseMountManager()
+                .map(manager -> mountIfPossible(manager, deviceImage))
+                .orElse(deviceImage);
+    }
+
+    /**
+     * Mount the device image if it is a chunked uncompressed device image.
+     *
+     * <p>IMPORTANT: No attempt is made to mount a compressed device image.
+     *
+     * @param manager the fuse mount manager to use
+     * @param deviceImage the device image file to mount
+     * @return the mounted file or the original file if it is not a CAS file or mounting fails
+     */
+    private File mountIfPossible(FuseMountManager manager, File deviceImage) {
+        // TODO(frankfeng): If source data is valid but mounting fails, it is critical to convert
+        // the chunks back to device image files when only chunks are available. Otherwise, it would
+        // be an infra error.
+        if (manager.isValidSourceData(deviceImage.toPath())) {
+            try {
+                return manager.mount(deviceImage.toPath()).toFile();
+
+            } catch (IOException | InterruptedException e) {
+                CLog.i("Failed to mount %s", deviceImage);
+                CLog.e(e);
+                // No re-throw as this is infra implementation detail and should be transparent to
+                // getDeviceImageFile() callers.
+            }
+        }
+        return deviceImage;
     }
 
     /**
@@ -259,4 +319,15 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     public void setRamdiskFile(File ramdisk, String version) {
         setFile(BuildInfoFileKey.RAMDISK_IMAGE, ramdisk, version);
     }
+
+    /** {@inheritDoc} */
+    @Override
+    public void cleanUp() {
+        File deviceImage = getFile(BuildInfoFileKey.DEVICE_IMAGE);
+        if (deviceImage != null) {
+            getFuseMountManager().ifPresent(manager -> manager.unmount(deviceImage.toPath()));
+        }
+        super.cleanUp();
+    }
+
 }

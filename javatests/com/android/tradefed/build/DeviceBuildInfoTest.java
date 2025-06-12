@@ -20,23 +20,38 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.build.IBuildInfo.BuildInfoProperties;
 import com.android.tradefed.build.proto.BuildInformation;
 import com.android.tradefed.util.FileUtil;
-
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Optional;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
-
-import java.io.File;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 /** Unit tests for {@link DeviceBuildInfo}. */
-@RunWith(JUnit4.class)
+@RunWith(MockitoJUnitRunner.class)
 public class DeviceBuildInfoTest {
+
+    @Rule public TemporaryFolder mTempFolder = new TemporaryFolder();
+
+    @Mock private FuseMountManager mMockFuseManager;
 
     private static final String VERSION = "1";
     private DeviceBuildInfo mBuildInfo;
@@ -47,20 +62,17 @@ public class DeviceBuildInfoTest {
     @Before
     public void setUp() throws Exception {
         mBuildInfo = new DeviceBuildInfo("2", "target");
-        mImageFile = FileUtil.createTempFile("image", "tmp");
+        mImageFile = mTempFolder.newFile("image.zip");
         FileUtil.writeToFile("filedata", mImageFile);
         mBuildInfo.setBasebandImage(mImageFile, VERSION);
-        mTestsDir = FileUtil.createTempDir("device-info-tests-dir");
+        mTestsDir = mTempFolder.newFolder("device-info-tests-dir");
         mBuildInfo.setTestsDir(mTestsDir, VERSION);
-        mHostLinkedDir = FileUtil.createTempDir("host-linked-dir");
+        mHostLinkedDir = mTempFolder.newFolder("host-linked-dir");
     }
 
     @After
     public void tearDown() throws Exception {
-        FileUtil.deleteFile(mImageFile);
-        FileUtil.recursiveDelete(mTestsDir);
         mBuildInfo.cleanUp();
-        FileUtil.recursiveDelete(mHostLinkedDir);
     }
 
     /** Test method for {@link DeviceBuildInfo#clone()}. */
@@ -156,5 +168,161 @@ public class DeviceBuildInfoTest {
         mBuildInfo.setDeviceBuildFlavor("device-build-flavor");
         assertEquals("device-build-flavor", mBuildInfo.getDeviceBuildFlavor());
         assertEquals("build-flavor", mBuildInfo.getBuildFlavor());
+    }
+
+    // FuseMountManager specific tests
+
+    @Test
+    public void getDeviceImageFile_mountContainsUncompressedImage_returnsMountPointDir()
+            throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        File mountPointDir = mTempFolder.newFolder("mount-point");
+        // Create multiple files inside to simulate an uncompressed image
+        new File(mountPointDir, "boot.img").createNewFile();
+        new File(mountPointDir, "system.img").createNewFile();
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+        when(mMockFuseManager.isValidSourceData(sourceDir.toPath())).thenReturn(true);
+        when(mMockFuseManager.mount(sourceDir.toPath())).thenReturn(mountPointDir.toPath());
+
+        File result = buildInfoSpy.getDeviceImageFile();
+
+        assertEquals(
+                "Should have returned the mount point directory itself.", mountPointDir, result);
+        verify(mMockFuseManager).mount(sourceDir.toPath());
+    }
+
+    @Test
+    public void getDeviceImageFile_mountContainsSingleZip_returnsOriginalDir() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir-for-zip");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        File mountPointDir = mTempFolder.newFolder("mount-point-with-zip");
+        // Create a single compressed file with a matching name inside the mount point
+        File imageZipInMountPoint = new File(mountPointDir, "device-img-12345.zip");
+        imageZipInMountPoint.createNewFile();
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+        when(mMockFuseManager.isValidSourceData(sourceDir.toPath())).thenReturn(true);
+        when(mMockFuseManager.mount(sourceDir.toPath())).thenReturn(mountPointDir.toPath());
+
+        File result = buildInfoSpy.getDeviceImageFile();
+
+        assertEquals(
+                "Should return the original source directory, not the single compressed zip file.",
+                mountPointDir,
+                result);
+        verify(mMockFuseManager).mount(sourceDir.toPath());
+    }
+
+    @Test
+    public void getDeviceImageFile_mountFails_returnsOriginalDir() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir-fail");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+        when(mMockFuseManager.isValidSourceData(sourceDir.toPath())).thenReturn(true);
+        // Simulate mount() throwing an exception
+        doThrow(new IOException("FUSE mount failed!"))
+                .when(mMockFuseManager)
+                .mount(sourceDir.toPath());
+
+        File result = buildInfoSpy.getDeviceImageFile();
+
+        assertEquals(
+                "Should fall back to the original source directory on mount failure.",
+                sourceDir,
+                result);
+    }
+
+    @Test
+    public void getDeviceImageFile_sourceNotValid_returnsOriginalDir() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir-invalid");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+        // Simulate the source being invalid for FUSE mounting
+        when(mMockFuseManager.isValidSourceData(sourceDir.toPath())).thenReturn(false);
+
+        File result = buildInfoSpy.getDeviceImageFile();
+
+        assertEquals(
+                "Should return the original source directory if it's not a valid FUSE source.",
+                sourceDir,
+                result);
+        // Verify that mount() was never even attempted.
+        verify(mMockFuseManager, never()).mount(any(Path.class));
+    }
+
+    @Test
+    public void getDeviceImageFile_noFuseManager_returnsOriginalDir() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        // Simulate the factory failing to create a manager
+        doReturn(Optional.empty()).when(buildInfoSpy).getFuseMountManager();
+
+        File result = buildInfoSpy.getDeviceImageFile();
+
+        assertEquals(
+                "Should return the original source directory if the FUSE manager is not available.",
+                sourceDir,
+                result);
+    }
+
+    @Test
+    public void getDeviceImageFile_noImageSet_returnsNull() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+
+        // No device image is set on the build info object.
+        File result = buildInfoSpy.getDeviceImageFile();
+
+        assertNull("Should return null if no device image file was ever set.", result);
+    }
+
+    @Test
+    public void cleanUp_unmountsImageIfManagerExists() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+
+        buildInfoSpy.cleanUp();
+
+        // Verify that unmount was called with the correct source path
+        verify(mMockFuseManager).unmount(sourceDir.toPath());
+    }
+
+    @Test
+    public void cleanUp_doesNothingIfNoManager() {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+
+        doReturn(Optional.empty()).when(buildInfoSpy).getFuseMountManager();
+
+        buildInfoSpy.cleanUp();
+
+        // Verify that unmount was never called
+        verify(mMockFuseManager, never()).unmount(any(Path.class));
+    }
+
+    @Test
+    public void cleanUp_doesNothingIfNoImageSet() {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+
+        // No device image is set.
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+
+        buildInfoSpy.cleanUp();
+
+        // Verify unmount is not called since the file is null
+        verify(mMockFuseManager, never()).unmount(any(Path.class));
     }
 }
