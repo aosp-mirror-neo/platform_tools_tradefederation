@@ -22,7 +22,6 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetr
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.skipped.AnalysisHeuristic;
-import com.android.tradefed.testtype.suite.SuiteResultCacheUtil;
 
 import build.bazel.remote.execution.v2.Digest;
 
@@ -67,8 +66,12 @@ public class ImageContentAnalyzer {
         allDescriptors.removeIf(d -> d.path.startsWith("RADIO/"));
         // Remove compilation paths, they are linked to underlying jars and apps
         allDescriptors.removeIf(
-            d -> (d.path.startsWith("SYSTEM_OTHER/") || d.path.startsWith("SYSTEM/"))
-                && (d.path.endsWith(".odex") || d.path.endsWith(".vdex") || d.path.endsWith(".art") || d.path.endsWith(".oat")));
+                d ->
+                        (d.path.startsWith("SYSTEM_OTHER/") || d.path.startsWith("SYSTEM/"))
+                                && (d.path.endsWith(".odex")
+                                        || d.path.endsWith(".vdex")
+                                        || d.path.endsWith(".art")
+                                        || d.path.endsWith(".oat")));
 
         if (analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
             boolean removed = false;
@@ -137,14 +140,21 @@ public class ImageContentAnalyzer {
                             CLog.d("device image '%s' has changed.", context.contentEntry());
                             results.addDeviceImageChanges(changeCount);
                         }
-                        Digest imageDigest =
-                                DeviceMerkleTree.buildFromContext(context, mAnalysisLevel);
-                        if (imageDigest != null) {
-                            InvocationMetricLogger.addInvocationMetrics(
-                                    InvocationMetricKey.DEVICE_IMAGE_HASH, imageDigest.getHash());
+                        // Computes device image digests for all partitions.
+                        for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
+                            Digest imagePartitionDigest =
+                                    DeviceMerkleTree.buildFromContext(
+                                            context,
+                                            mAnalysisLevel,
+                                            imagePartition.getIsWithinPartition());
+                            if (imagePartitionDigest != null) {
+                                InvocationMetricLogger.addInvocationMetrics(
+                                        imagePartition.getInvocationMetricKey(),
+                                        imagePartitionDigest.getHash());
+                            }
+                            results.addImageDigestMapping(
+                                    imagePartition.getCacheKeyName(), imagePartitionDigest);
                         }
-                        results.addImageDigestMapping(
-                                SuiteResultCacheUtil.DEVICE_IMAGE_KEY, imageDigest);
                         break;
                     default:
                         break;

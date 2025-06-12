@@ -57,8 +57,6 @@ import java.util.jar.JarFile;
 
 /** Utility to upload and download cache results for a test module. */
 public class SuiteResultCacheUtil {
-
-    public static final String DEVICE_IMAGE_KEY = "device_image";
     public static final String MODULE_CONFIG_KEY = "module_config";
     public static final String TRADEFED_JAR_VERSION_KEY = "tradefed.jar_version";
 
@@ -109,7 +107,7 @@ public class SuiteResultCacheUtil {
             return;
         }
         if (!(testInfo.getDevice().getIDevice() instanceof NullDevice)
-                && !skipContext.getImageToDigest().containsKey(DEVICE_IMAGE_KEY)) {
+                && !skipContext.hasDeviceDigest()) {
             CLog.d("We have device but no device digest.");
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.MODULE_RESULTS_CACHE_DEVICE_MISMATCH, 1);

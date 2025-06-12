@@ -20,6 +20,7 @@ import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.content.ContentAnalysisContext;
 import com.android.tradefed.build.content.ContentAnalysisContext.AnalysisMethod;
 import com.android.tradefed.build.content.ContentAnalysisResults;
+import com.android.tradefed.build.content.DeviceImagePartition;
 import com.android.tradefed.build.content.ImageContentAnalyzer;
 import com.android.tradefed.build.content.TestContentAnalyzer;
 import com.android.tradefed.config.IConfiguration;
@@ -31,7 +32,6 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
-import com.android.tradefed.testtype.suite.SuiteResultCacheUtil;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.SystemUtil;
 
@@ -171,7 +171,9 @@ public class ArtifactsAnalyzer {
                 ContentAnalysisResults res = analyze.evaluate();
                 if (res == null) {
                     deviceImageChanged = true;
-                    imageToDigest.put(SuiteResultCacheUtil.DEVICE_IMAGE_KEY, null);
+                    for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
+                        imageToDigest.put(imagePartition.getCacheKeyName(), null);
+                    }
                 } else {
                     imageToDigest.putAll(res.getImageToDigest());
                     if (hasOneDeviceAnalysis) {

@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
 
 /** Compute a MerkleTree from the device content information. */
 public class DeviceMerkleTree {
@@ -35,6 +36,13 @@ public class DeviceMerkleTree {
     /** Builds a merkle tree and returns the root digest from the device content information */
     public static Digest buildFromContext(
             ContentAnalysisContext context, AnalysisHeuristic analysisLevel) {
+        return DeviceMerkleTree.buildFromContext(context, analysisLevel, descriptor -> true);
+    }
+
+    public static Digest buildFromContext(
+            ContentAnalysisContext context,
+            AnalysisHeuristic analysisLevel,
+            Predicate<ArtifactFileDescriptor> isWithinPartition) {
         try {
             if (context.abortAnalysis()) {
                 CLog.d("Device digest computation isn't supported.");
@@ -57,13 +65,15 @@ public class DeviceMerkleTree {
                         }
                     });
             for (ArtifactFileDescriptor afd : currentContent.details) {
-                Digest digest =
-                        Digest.newBuilder().setHash(afd.digest).setSizeBytes(afd.size).build();
-                rootBuilder.addFiles(
-                        FileNode.newBuilder()
-                                .setDigest(digest)
-                                .setName(afd.path)
-                                .setIsExecutable(false));
+                if (isWithinPartition.test(afd)) {
+                    Digest digest =
+                            Digest.newBuilder().setHash(afd.digest).setSizeBytes(afd.size).build();
+                    rootBuilder.addFiles(
+                            FileNode.newBuilder()
+                                    .setDigest(digest)
+                                    .setName(afd.path)
+                                    .setIsExecutable(false));
+                }
             }
             Directory root = rootBuilder.build();
             Digest d = DigestCalculator.compute(root);
