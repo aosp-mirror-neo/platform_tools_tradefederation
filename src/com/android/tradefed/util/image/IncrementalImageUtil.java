@@ -851,22 +851,21 @@ public class IncrementalImageUtil {
                     };
             try (CloseableTraceScope ignored = new CloseableTraceScope("unzip_device_images")) {
                 mSrcDirectory = mDeviceOriginMerkleTree;
-                mTargetDirectory = FileUtil.createTempDir("incremental_target");
                 Future<Boolean> futureTargetDir =
                         CompletableFuture.supplyAsync(
                                 () -> {
                                     if (mSetupTargetImage.isDirectory()) {
-                                        try (CloseableTraceScope unzipTarget =
-                                                new CloseableTraceScope("hardlink_target")) {
-                                            FileUtil.recursiveHardlink(
-                                                    mSetupTargetImage, mTargetDirectory);
-                                            return true;
-                                        } catch (IOException ioe) {
-                                            throw new RuntimeException(ioe);
-                                        }
+                                        CLog.d(
+                                                "Using setup target image (uncompressed) as target"
+                                                    + " image: %s",
+                                                mSetupTargetImage);
+                                        mTargetDirectory = mSetupTargetImage;
+                                        return true;
                                     }
                                     try (CloseableTraceScope unzipTarget =
                                             new CloseableTraceScope("unzip_target")) {
+                                        mTargetDirectory =
+                                                FileUtil.createTempDir("incremental_target");
                                         ZipUtil2.extractZip(mSetupTargetImage, mTargetDirectory);
                                         return true;
                                     } catch (IOException ioe) {
@@ -875,11 +874,13 @@ public class IncrementalImageUtil {
                                 },
                                 TracePropagatingExecutorService.create(
                                         Executors.newFixedThreadPool(1, factory)));
-                // Join the unzipping
+                // Join the unzipping task
                 futureTargetDir.get();
-            } catch (InterruptedException | IOException | ExecutionException e) {
+            } catch (InterruptedException | ExecutionException e) {
                 FileUtil.recursiveDelete(mSrcDirectory);
-                FileUtil.recursiveDelete(mTargetDirectory);
+                if (mTargetDirectory != null && !mTargetDirectory.equals(mSetupTargetImage)) {
+                    FileUtil.recursiveDelete(mTargetDirectory);
+                }
                 mSrcDirectory = null;
                 mTargetDirectory = null;
                 mError =
@@ -958,7 +959,9 @@ public class IncrementalImageUtil {
 
         public void cleanUpFiles() {
             FileUtil.recursiveDelete(mSrcDirectory);
-            FileUtil.recursiveDelete(mTargetDirectory);
+            if (mTargetDirectory != null && !mTargetDirectory.equals(mSetupTargetImage)) {
+                FileUtil.recursiveDelete(mTargetDirectory);
+            }
             FileUtil.recursiveDelete(mWorkDir);
         }
     }
