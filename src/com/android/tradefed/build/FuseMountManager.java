@@ -331,7 +331,7 @@ public class FuseMountManager {
      * @throws IOException If the mount point cannot be created.
      */
     private Path createUniqueMountPoint(Path sourceDataPath) throws IOException {
-        String uniqueFileName = getImageName(sourceDataPath) + UUID.randomUUID().toString();
+        String uniqueFileName = getImageName(sourceDataPath) + "_" + UUID.randomUUID().toString();
         Path mountPoint = mMountRoot.resolve(uniqueFileName);
         if (!Files.exists(mountPoint)) { // Should always be true.
             Files.createDirectory(mountPoint);
