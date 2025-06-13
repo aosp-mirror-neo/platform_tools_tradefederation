@@ -34,6 +34,9 @@ public class ResourceUtil {
     /** Extracts a given resource to an output file. */
     public static void extractResourceToFile(String resource, File output) throws IOException {
         try (InputStream resStream = ResourceUtil.class.getResourceAsStream(resource)) {
+            if (resStream == null) {
+                throw new IOException(String.format("resource: %s wasn't found.", resource));
+            }
             FileUtil.writeToFile(resStream, output);
         }
     }
