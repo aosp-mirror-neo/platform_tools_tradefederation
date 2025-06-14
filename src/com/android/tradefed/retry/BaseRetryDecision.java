@@ -22,6 +22,7 @@ import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.NativeDevice;
 import com.android.tradefed.device.StubDevice;
+import com.android.tradefed.device.connection.DefaultConnection;
 import com.android.tradefed.device.internal.DeviceResetHandler;
 import com.android.tradefed.device.internal.DeviceSnapshotHandler;
 import com.android.tradefed.invoker.IInvocationContext;
@@ -33,6 +34,8 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.InputStreamSource;
+import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.TestRunResult;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.testtype.IRemoteTest;
@@ -589,6 +592,17 @@ public class BaseRetryDecision
             }
         } else {
             for (ITestDevice device : devices) {
+                // Collect logcat before snapshot wipe out the device.
+                if (device.getConnection() instanceof DefaultConnection) {
+                    try (InputStreamSource logcat = device.getLogcat()) {
+                        CLog.d("Collect logcat from device %s before snapshot restore.", device);
+                        ((DefaultConnection) device.getConnection())
+                                .getLogger()
+                                .testLog("logcat", LogDataType.LOGCAT, logcat);
+                    } catch (Exception e) {
+                        CLog.e("Failed to get logcat before reset device: %s", e);
+                    }
+                }
                 new DeviceSnapshotHandler()
                         .restoreSnapshotDevice(device, mContext.getInvocationId());
             }

@@ -54,6 +54,8 @@ public class FileSystemLogSaver implements ILogSaver {
 
     private File mLogReportDir = null;
     private LogFileSaver mFileSaver = null;
+    private File mLogReportDirWithModule = null;
+    private LogFileSaver mBaseFileSaver = null;
 
     /**
      * A counter to control access to methods which modify this class's directories. Acting as a
@@ -75,8 +77,9 @@ public class FileSystemLogSaver implements ILogSaver {
         IBuildInfo info = context.getBuildInfos().get(0);
         synchronized (this) {
             if (mShardingLock == 0) {
-                mLogReportDir = createLogReportDir(info, mRootReportDir, mLogRetentionDays);
+                mLogReportDir = createLogReportDir(info, mRootReportDir, mLogRetentionDays, null);
                 mFileSaver = new LogFileSaver(mLogReportDir);
+                mBaseFileSaver = mFileSaver;
             }
             mShardingLock++;
         }
@@ -138,26 +141,43 @@ public class FileSystemLogSaver implements ILogSaver {
         return new LogFile(mLogReportDir.getAbsolutePath(), getUrl(mLogReportDir), LogDataType.DIR);
     }
 
+    @Override
+    public void testModuleStarted(IInvocationContext moduleContext) {
+        String moduleName = moduleContext.getConfigurationDescriptor().getModuleName();
+        if (moduleName == null) {
+            return;
+        }
+        mLogReportDirWithModule =
+                createLogReportDir(null, mLogReportDir, mLogRetentionDays, moduleName);
+        mFileSaver = new LogFileSaver(mLogReportDirWithModule);
+    }
+
+    @Override
+    public void testModuleEnded() {
+        mLogReportDirWithModule = null;
+        mFileSaver = mBaseFileSaver;
+    }
+
     /**
      * A helper method to create an invocation directory unique for saving logs.
-     * <p>
-     * Create a unique file system directory with the structure
-     * {@code report-dir/[branch/]build-id/test-tag/unique_dir} for saving logs.  If the creation
-     * of the directory fails, will write logs to a temporary directory on the local file system.
-     * </p>
+     *
+     * <p>Create a unique file system directory with the structure {@code
+     * report-dir/[branch/]build-id/test-tag/unique_dir} for saving logs. If the creation of the
+     * directory fails, will write logs to a temporary directory on the local file system.
      *
      * @param buildInfo the {@link IBuildInfo}
      * @param reportDir the {@link File} for the report directory.
      * @param logRetentionDays how many days logs should be kept for. If {@code null}, then no log
-     * retention file is writen.
+     *     retention file is written.
+     * @param moduleName the name for the test module
      * @return The directory created.
      */
-    private File createLogReportDir(IBuildInfo buildInfo, File reportDir,
-            Integer logRetentionDays) {
+    private File createLogReportDir(
+            IBuildInfo buildInfo, File reportDir, Integer logRetentionDays, String moduleName) {
         File logReportDir;
         // now create unique directory within the buildDir
         try {
-            logReportDir = generateLogReportDir(buildInfo, reportDir);
+            logReportDir = generateLogReportDir(buildInfo, reportDir, moduleName);
         } catch (IOException e) {
             CLog.e("Unable to create unique directory in %s. Attempting to use tmp dir instead",
                     reportDir.getAbsolutePath());
@@ -183,33 +203,41 @@ public class FileSystemLogSaver implements ILogSaver {
      *
      * @param buildInfo the {@link IBuildInfo}
      * @param reportDir the {@link File} for the report directory.
+     * @param moduleName the name for the test module
      * @return The directory created.
      */
-    protected File generateLogReportDir(IBuildInfo buildInfo, File reportDir) throws IOException {
-        File buildDir = createBuildDir(buildInfo, reportDir);
+    protected File generateLogReportDir(IBuildInfo buildInfo, File reportDir, String moduleName)
+            throws IOException {
+        File buildDir = createBuildDir(buildInfo, reportDir, moduleName);
         return FileUtil.createTempDir("inv_", buildDir);
     }
 
     /**
      * A helper method to get or create a build directory based on the build info of the invocation.
-     * <p>
-     * Create a unique file system directory with the structure
-     * {@code report-dir/[branch/]build-id/test-tag} for saving logs.
-     * </p>
+     *
+     * <p>Create a unique file system directory with the structure {@code
+     * report-dir/[branch/]build-id/test-tag} for saving logs.
      *
      * @param buildInfo the {@link IBuildInfo}
      * @param reportDir the {@link File} for the report directory.
+     * @param moduleName the name for the test module
      * @return The directory where invocations for the same build should be saved.
      * @throws IOException if the directory could not be created because a file with the same name
-     * exists or there are no permissions to write to it.
+     *     exists or there are no permissions to write to it.
      */
-    private File createBuildDir(IBuildInfo buildInfo, File reportDir) throws IOException {
+    private File createBuildDir(IBuildInfo buildInfo, File reportDir, String moduleName)
+            throws IOException {
         List<String> pathSegments = new ArrayList<String>();
-        if (buildInfo.getBuildBranch() != null) {
-            pathSegments.add(buildInfo.getBuildBranch());
+        if (buildInfo != null) {
+            if (buildInfo.getBuildBranch() != null) {
+                pathSegments.add(buildInfo.getBuildBranch());
+            }
+            pathSegments.add(buildInfo.getBuildId());
+            pathSegments.add(buildInfo.getTestTag());
         }
-        pathSegments.add(buildInfo.getBuildId());
-        pathSegments.add(buildInfo.getTestTag());
+        if (moduleName != null) {
+            pathSegments.add(moduleName);
+        }
         File buildReportDir = FileUtil.getFileForPath(reportDir,
                 pathSegments.toArray(new String[] {}));
 

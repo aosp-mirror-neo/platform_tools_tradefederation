@@ -20,12 +20,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.android.tradefed.util.FileUtil;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -47,7 +48,9 @@ public class FuseMountManagerFactoryIntegrationTest {
     private String mOriginalTfJarDir;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
+        resetFactorySingleton();
+
         // Save the original system property so we can restore it later
         mOriginalTfJarDir = System.getProperty("TF_JAR_DIR");
     }
@@ -61,15 +64,6 @@ public class FuseMountManagerFactoryIntegrationTest {
             System.setProperty("TF_JAR_DIR", mOriginalTfJarDir);
         }
 
-        // FuseMountManagerFactory creats a parent directory for all mount points. We need to clean
-        // it up to avoid leaving artifacts behind.
-        FuseMountManagerFactory factoryInstance = FuseMountManagerFactory.getInstance();
-        if (factoryInstance != null) {
-            // Delete the mount root directory created by the factory.
-            Path mountRoot = factoryInstance.getMountRoot();
-            FileUtil.recursiveDelete(mountRoot.toFile());
-        }
-
         // Reset the singleton instance in the factory to ensure test isolation
         resetFactorySingleton();
     }
@@ -81,6 +75,7 @@ public class FuseMountManagerFactoryIntegrationTest {
 
         // 2. Explicitly make the file NOT executable to simulate the problem scenario.
         casClientFile.setExecutable(false, false);
+        String oldPerms = getFilePermissions(casClientFile);
         assertFalse(
                 "Pre-condition failed: casviewer file should not be executable yet.",
                 Files.isExecutable(casClientFile.toPath()));
@@ -94,9 +89,22 @@ public class FuseMountManagerFactoryIntegrationTest {
         FuseMountManager manager = factory.createCasFuseMountManager();
 
         assertNotNull(manager);
-        assertTrue(
-                "getCasClientPath should make the casviewer client executable.",
-                Files.isExecutable(casClientFile.toPath()));
+        String newPerms = getFilePermissions(casClientFile);
+        String message =
+                String.format(
+                        "casviewer file should be executable after getCasClientPath (old perms: %s,"
+                                + " new perms: %s).",
+                        oldPerms, newPerms);
+        assertTrue(message, Files.isExecutable(casClientFile.toPath()));
+    }
+
+    private String getFilePermissions(File file) {
+        try {
+            Set<PosixFilePermission> perms = Files.getPosixFilePermissions(file.toPath());
+            return PosixFilePermissions.toString(perms);
+        } catch (IOException e) {
+            return String.format("<%s>", e.getMessage());
+        }
     }
 
     /**

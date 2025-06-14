@@ -241,4 +241,28 @@ public class LogSaverResultForwarder extends ResultForwarder implements ILogSave
             }
         }
     }
+
+    /** {@inheritDoc} */
+    @Override
+    public void testModuleStarted(IInvocationContext moduleContext) {
+        try {
+            mLogSaver.testModuleStarted(moduleContext);
+        } catch (RuntimeException e) {
+            CLog.e("Caught runtime exception from log saver: %s", mLogSaver.getClass().getName());
+            CLog.e(e);
+        }
+        super.testModuleStarted(moduleContext);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void testModuleEnded() {
+        try {
+            mLogSaver.testModuleEnded();
+        } catch (RuntimeException e) {
+            CLog.e("Caught runtime exception from log saver: %s", mLogSaver.getClass().getName());
+            CLog.e(e);
+        }
+        super.testModuleEnded();
+    }
 }

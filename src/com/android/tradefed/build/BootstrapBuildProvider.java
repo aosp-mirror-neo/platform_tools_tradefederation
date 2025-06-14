@@ -35,6 +35,7 @@ import com.android.tradefed.util.SystemUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -103,7 +104,7 @@ public class BootstrapBuildProvider implements IDeviceBuildProvider {
     public void cleanUp(IBuildInfo info) {
         if (mCreatedTestDir) {
             FileUtil.recursiveDelete(mTestsDir);
-            info.cleanUp();
+            info.cleanUp(new ArrayList<>(mExtraFiles.values()));
         }
     }
 

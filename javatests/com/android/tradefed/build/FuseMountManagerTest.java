@@ -122,6 +122,41 @@ public class FuseMountManagerTest {
     // Tests for mount()
 
     @Test
+    public void testMount_successBeforePolling() throws Exception {
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+
+        Path mountPoint = mManager.mount(mSourceDir);
+
+        assertNotNull(mountPoint);
+        assertTrue(mountPoint.startsWith(mMountRoot));
+        // Verify we never wait for the process to exit.
+        verify(mMockProcess, never()).waitFor(anyLong(), any(TimeUnit.class));
+    }
+
+    @Test
+    public void testMount_success_whenTimeoutIsZero() throws Exception {
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(0L); // Override to 0ms.
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+
+        Path mountPoint = mManager.mount(mSourceDir);
+
+        assertNotNull(mountPoint);
+        assertTrue(mountPoint.startsWith(mMountRoot));
+    }
+
+    @Test
+    public void testMount_mountPointHasDeviceNameAsPrefix() throws Exception {
+        Path sourceDir = tempFolder.newFolder("husky-img-12345678.zip").toPath();
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+
+        Path mountPoint = mManager.mount(sourceDir);
+
+        assertNotNull(mountPoint);
+        assertTrue(mountPoint.startsWith(mMountRoot));
+        assertTrue(mountPoint.getFileName().toString().startsWith("husky-img-12345678"));
+    }
+
+    @Test
     public void testMount_successAfterPolling() throws Exception {
         when(mMockDriverProfile.isMountPointReady(any(Path.class)))
                 .thenReturn(false, false, true); // Succeeds on the 3rd check

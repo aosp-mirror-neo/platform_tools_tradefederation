@@ -131,4 +131,14 @@ public interface ILogSaver {
      * @return The {@link LogFile}.
      */
     public LogFile getLogReportDir();
+
+    /**
+     * Reports the start of the test module.
+     *
+     * @param context information about the module.
+     */
+    public default void testModuleStarted(IInvocationContext context) {}
+
+    /** Reports that the test module has terminated. */
+    public default void testModuleEnded() {}
 }

@@ -136,7 +136,7 @@ public class FuseMountManager {
         Path mountPoint = null;
         Process process = null;
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
-            mountPoint = createUniqueMountPoint();
+            mountPoint = createUniqueMountPoint(sourceDataPath);
             CLog.i(
                     "Mount '%s' at: %s",
                     sourceDataPath.toAbsolutePath().toString(),
@@ -150,7 +150,7 @@ public class FuseMountManager {
 
             final long pollIntervalMs = 100;
             final long deadline = System.currentTimeMillis() + mDriverProfile.getMountTimeoutInMs();
-            while (System.currentTimeMillis() < deadline) {
+            do {
                 if (mDriverProfile.isMountPointReady(mountPoint)) {
                     // SUCCESS: The mount is ready.
                     long duration = System.currentTimeMillis() - startTime;
@@ -175,7 +175,7 @@ public class FuseMountManager {
                                     process.exitValue(),
                                     capturedOutput.toString(StandardCharsets.UTF_8)));
                 }
-            }
+            } while (System.currentTimeMillis() < deadline);
 
             // FAILURE: Timed out waiting for the mount point to become ready.
             process.destroyForcibly();
@@ -320,13 +320,35 @@ public class FuseMountManager {
         CLog.i("Finished unmountAll.");
     }
 
-    private Path createUniqueMountPoint() throws IOException {
-        String uniqueFileName = UUID.randomUUID().toString();
+    /**
+     * Creates a unique mount point for the given source data path.
+     *
+     * <p>This method creates a unique mount point for the given source data path by combining the
+     * device image name and a random UUID. The mount point is created as a directory.
+     *
+     * @param sourceDataPath The source data path to create a mount point for.
+     * @return The {@link Path} to the new mount point.
+     * @throws IOException If the mount point cannot be created.
+     */
+    private Path createUniqueMountPoint(Path sourceDataPath) throws IOException {
+        String uniqueFileName = getImageName(sourceDataPath) + UUID.randomUUID().toString();
         Path mountPoint = mMountRoot.resolve(uniqueFileName);
         if (!Files.exists(mountPoint)) { // Should always be true.
             Files.createDirectory(mountPoint);
         }
         return mountPoint;
+    }
+
+    /** Returns the image name from the given path. */
+    private static String getImageName(Path path) {
+        String fileName = path.getFileName().toString();
+
+        int dotIndex = fileName.indexOf('.');
+        if (dotIndex == -1) {
+            return fileName;
+        }
+
+        return fileName.substring(0, dotIndex);
     }
 
     /**
