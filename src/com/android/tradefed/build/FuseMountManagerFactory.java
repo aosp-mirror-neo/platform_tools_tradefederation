@@ -26,6 +26,11 @@ import com.google.common.base.Strings;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /** Factory for creating and configuring {@link FuseMountManager} instances. */
 public class FuseMountManagerFactory {
@@ -35,6 +40,8 @@ public class FuseMountManagerFactory {
     private final IRunUtil mRunUtil;
     private final String mTradefedJarDir;
     private static final long MOUNT_TIMEOUT_IN_MS = 10_000; // Allow 10 seconds for mounting.
+    private static final List<WeakReference<FuseMountManager>> mManagers =
+            Collections.synchronizedList(new ArrayList<>());
 
     private static FuseMountManagerFactory sInstance;
 
@@ -74,7 +81,9 @@ public class FuseMountManagerFactory {
         Path casDriverPath = getCasClientPath("casviewer");
         logCasClientVersion(casDriverPath); // Log the version of casviewer.
         CasFuseDriverProfile profile = new CasFuseDriverProfile(casDriverPath, MOUNT_TIMEOUT_IN_MS);
-        return new FuseMountManager(profile, mRunUtil, mMountRoot);
+        FuseMountManager manager = new FuseMountManager(profile, mRunUtil, mMountRoot);
+        mManagers.add(new WeakReference<>(manager));
+        return manager;
     }
 
     /**
@@ -124,4 +133,11 @@ public class FuseMountManagerFactory {
         }
     }
 
+    public static List<FuseMountManager> getLiveManagers() {
+        // Purge any weak references that have been cleared by the GC
+        mManagers.removeIf(ref -> ref.get() == null);
+
+        // Return a list of strong references from the remaining weak ones.
+        return mManagers.stream().map(WeakReference::get).collect(Collectors.toList());
+    }
 }
