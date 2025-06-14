@@ -130,9 +130,7 @@ public final class IsolationRunner {
             return classes;
         }
         int totalClasses = classes.size();
-        //        int chunkSize = totalClasses / totalShards;
-        int chunkSize = 1;
-        if (totalClasses % totalShards > 0) chunkSize++;
+        int chunkSize = (totalClasses + totalShards - 1) / totalShards;
         List<Class<?>> includedClasses = new ArrayList<>();
         if (shardIndex >= totalClasses) {
             return includedClasses;

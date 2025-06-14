@@ -16,6 +16,7 @@
 package com.android.tradefed.postprocessor;
 
 import com.android.tradefed.ai.ApiResponse;
+import com.android.tradefed.ai.LogPreprocessor;
 import com.android.tradefed.ai.PromptResponse;
 import com.android.tradefed.ai.PromptUtility;
 import com.android.tradefed.ai.PromptUtility.PromptTemplate;
@@ -118,7 +119,9 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
         for (Entry<String, LogFile> log : testLogs.entrySet()) {
             LogFile logFileValue = log.getValue();
             if (logFileValue.getType().equals(LogDataType.LOGCAT)) {
-                logMap.put("LOGCAT", new File(logFileValue.getPath()));
+                logMap.put(
+                        "LOGCAT",
+                        LogPreprocessor.preprocessLogcat(new File(logFileValue.getPath())));
             }
             if (logFileValue.getType().equals(LogDataType.HOST_LOG)) {
                 logMap.put("HOST_LOG", new File(logFileValue.getPath()));
