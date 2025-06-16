@@ -323,10 +323,9 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     /** {@inheritDoc} */
     @Override
     public void cleanUp() {
-        File deviceImage = getFile(BuildInfoFileKey.DEVICE_IMAGE);
-        if (deviceImage != null) {
-            getFuseMountManager().ifPresent(manager -> manager.unmount(deviceImage.toPath()));
-        }
+        // It is not adequate to call manager.unMount(getDeviceImageFile()) as setDeviceImageFile()
+        // could have been called multiple times with different image files.
+        getFuseMountManager().ifPresent(manager -> manager.unmountAll());
         super.cleanUp();
     }
 

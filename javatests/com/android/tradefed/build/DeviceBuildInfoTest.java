@@ -288,7 +288,7 @@ public class DeviceBuildInfoTest {
     }
 
     @Test
-    public void cleanUp_unmountsImageIfManagerExists() throws Exception {
+    public void cleanUp_unmountsAllIfManagerExists() throws Exception {
         DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
         File sourceDir = mTempFolder.newFolder("source-dir");
         buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
@@ -297,8 +297,8 @@ public class DeviceBuildInfoTest {
 
         buildInfoSpy.cleanUp();
 
-        // Verify that unmount was called with the correct source path
-        verify(mMockFuseManager).unmount(sourceDir.toPath());
+        // Verify that unmountAll was called.
+        verify(mMockFuseManager).unmountAll();
     }
 
     @Test
@@ -309,20 +309,8 @@ public class DeviceBuildInfoTest {
 
         buildInfoSpy.cleanUp();
 
-        // Verify that unmount was never called
-        verify(mMockFuseManager, never()).unmount(any(Path.class));
+        // Verify that unmountAll was never called.
+        verify(mMockFuseManager, never()).unmountAll();
     }
 
-    @Test
-    public void cleanUp_doesNothingIfNoImageSet() {
-        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
-
-        // No device image is set.
-        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
-
-        buildInfoSpy.cleanUp();
-
-        // Verify unmount is not called since the file is null
-        verify(mMockFuseManager, never()).unmount(any(Path.class));
-    }
 }
