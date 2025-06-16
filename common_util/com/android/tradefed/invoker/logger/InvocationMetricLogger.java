@@ -443,6 +443,8 @@ public class InvocationMetricLogger {
         // AI metrics
         PROMPT_REQUEST_COUNT("prompt_request_count", true),
         LOG_ONLY_PROMPT_REQUEST_COUNT("log_only_prompt_request_count", true),
+        LOG_REQUIREMENT_MISSING_COUNT("log_requirement_missing_count", true),
+        PROMPT_UNSUPPORTED_TEST_TYPE_COUNT("prompt_unsupported_test_type_count", true),
 
         // Oxygenation metrics
         PORTFORWARD_LHP_SUCCESS_COUNT("portfoward_lhp_success_count", true),
