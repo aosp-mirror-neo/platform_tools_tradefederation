@@ -101,8 +101,7 @@ public class FuseMountManager {
             return true;
 
         } catch (IOException e) {
-            // Log for debugging but return false as the source is not valid/usable.
-            CLog.v("Validation failed for source data path: %s", sourceDataPath);
+            // This is normal. Suppress logging to avoid confusion.
             return false;
         }
     }
