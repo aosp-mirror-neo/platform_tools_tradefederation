@@ -78,6 +78,7 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
                             String.format(NAME_FORMAT, test.toString()),
                             LogDataType.HOST_LOG,
                             logSource);
+                    mCurrentCount++;
                 }
             }
         } catch (IOException e) {

@@ -1070,11 +1070,16 @@ public class AdbSshConnection extends AdbTcpConnection {
      * @return {@link DeviceInspectionResult}
      */
     public DeviceInspectionResult debugDeviceNotAvailable() {
-
         if (!getDevice().getOptions().useOxygen()
                 && !getDevice().getOptions().useOxygenationDevice()) {
             // TODO(dshi): support acloud and ARM setup
             CLog.d("Acloud setup is not supported yet, skipping device inspection.");
+            return null;
+        }
+
+        if (mGceAvd.hostAndPort() == null
+                || Strings.isNullOrEmpty(mGceAvd.hostAndPort().getHost())) {
+            CLog.d("Device is not leased properly, skipping device inspection.");
             return null;
         }
 

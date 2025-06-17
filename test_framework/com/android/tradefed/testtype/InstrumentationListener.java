@@ -204,7 +204,7 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             error.setErrorIdentifier(InfraErrorIdentifier.EXPECTED_TESTS_MISMATCH);
         }
         String runLevelError =
-                String.format("Run level error reported reason: '%s", error.getErrorMessage());
+                String.format("Run level error reported reason: '%s'", error.getErrorMessage());
         reportUnexecutedTestsIfNeeded(runLevelError);
         mUnexecutedTestsReported = true;
         super.testRunFailed(error);

@@ -22,6 +22,8 @@ import com.android.tradefed.ai.PromptUtility;
 import com.android.tradefed.ai.PromptUtility.PromptTemplate;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.invoker.logger.CurrentInvocation;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric.Builder;
@@ -62,15 +64,26 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
             HashMap<String, Metric> testMetrics,
             Map<String, LogFile> testLogs) {
         String stackTrace = getStackTrace();
+        // Only process failures
         if (stackTrace == null) {
             return new HashMap<String, Builder>();
         }
         PromptTemplate templatePrompt = getPromptTemplateForTestType();
         if (PromptTemplate.UNSUPPORTED.equals(templatePrompt)) {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PROMPT_UNSUPPORTED_TEST_TYPE_COUNT, 1);
             return new HashMap<String, Builder>();
         }
+        processTestCaseFailure(testDescription, stackTrace, templatePrompt, testLogs);
+        return new HashMap<String, Builder>();
+    }
+
+    private void processTestCaseFailure(
+            TestDescription testDescription,
+            String stackTrace,
+            PromptTemplate templatePrompt,
+            Map<String, LogFile> testLogs) {
         PromptResponse promptResponse = null;
-        // Only process failures
         boolean logOnly = mLogOnlyPrompt;
         if (!getConfiguration().getCommandOptions().isGeminiLogOnlyMode()) {
             logOnly = false;
@@ -88,7 +101,7 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
                             logMap);
             if (promptResponse == null) {
                 CLog.e("No prompt response.");
-                return new HashMap<String, Builder>();
+                return;
             }
             try (InputStreamSource geminiRequest =
                     new FileInputStreamSource(promptResponse.getRequest())) {
@@ -111,7 +124,6 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
                 promptResponse.clean();
             }
         }
-        return new HashMap<String, Builder>();
     }
 
     private Map<String, File> mapLogsToPlaceholder(Map<String, LogFile> testLogs) {

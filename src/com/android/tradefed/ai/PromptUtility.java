@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.ai;
 
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.TestDescription;
@@ -115,6 +117,8 @@ public class PromptUtility {
         if (!requiredMet.isEmpty()) {
             // Missing some logs
             CLog.w("We do not have a logs for the following placeholder: %s", requiredMet);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.LOG_REQUIREMENT_MISSING_COUNT, 1);
             return null;
         }
         try (CloseableTraceScope ignored = new CloseableTraceScope("run_prompt")) {
