@@ -343,6 +343,13 @@ public class InstrumentationTest
     protected boolean mInstrumentSdkSandbox = false;
 
     @Option(
+            name = "fail-on-empty-instrumentation",
+            description =
+                    "If set to true, The instrumentation will fail if no test has been found. "
+                            + "(This is an experimental option!)")
+    private boolean mFailOnEmptyInstrumentation = false;
+
+    @Option(
             name = "instrument-sdk-in-sandbox",
             description =
                     "If set to true, will exclusively run the test as an SDK in an SDK sandbox with"
@@ -585,6 +592,11 @@ public class InstrumentationTest
         // no-op
     }
 
+    @VisibleForTesting
+    void setFailOnEmptyInstrumentation(boolean failOnEmptyInstrumentation) {
+        mFailOnEmptyInstrumentation = failOnEmptyInstrumentation;
+    }
+
     /**
      * Add an argument to provide when running the instrumentation tests.
      *
@@ -815,7 +827,8 @@ public class InstrumentationTest
         }
     }
 
-    private void installOrchestratorHelperApks(TestInformation testInfo) {
+    @VisibleForTesting
+    void installOrchestratorHelperApks(TestInformation testInfo) {
         try {
             mOrchestratorSetup = installApk("test-orchestrator-normalized.apk", testInfo);
             mTestServicesSetup = installApk("test-services-normalized.apk", testInfo);
@@ -878,9 +891,15 @@ public class InstrumentationTest
             mDevice.uninstallPackage(mPackageName);
         }
         if (mOrchestrator) {
-            mOrchestratorSetup.tearDown(testInfo, null);
-            mTestServicesSetup.tearDown(testInfo, null);
+            cleanUpOrchestratorHelperApks(testInfo);
         }
+    }
+
+    @VisibleForTesting
+    void cleanUpOrchestratorHelperApks(TestInformation testInfo)
+            throws DeviceNotAvailableException {
+        mOrchestratorSetup.tearDown(testInfo, null);
+        mTestServicesSetup.tearDown(testInfo, null);
     }
 
     protected void setRunnerArgs(IRemoteAndroidTestRunner runner) {
@@ -1053,9 +1072,9 @@ public class InstrumentationTest
         if (!mExtraDeviceListener.isEmpty()) {
             mRunner.addInstrumentationArg("listener", ArrayUtil.join(",", mExtraDeviceListener));
         }
-
         InstrumentationListener instrumentationListener =
-                new InstrumentationListener(getDevice(), testsToRun, listener);
+                new InstrumentationListener(
+                        getDevice(), testsToRun, mFailOnEmptyInstrumentation, listener);
         instrumentationListener.setPackageName(mPackageName);
         instrumentationListener.setDisableDuplicateCheck(mDisableDuplicateCheck);
         if (mEnableSoftRestartCheck) {

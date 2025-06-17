@@ -69,6 +69,7 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
     private TestDescription mLastStartedTest = null;
 
     private CloseableTraceScope mMethodScope = null;
+    private boolean mFailOnEmptyInstrumentation;
 
     /**
      * @param device
@@ -77,9 +78,11 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
     public InstrumentationListener(
             ITestDevice device,
             Collection<TestDescription> expectedTests,
+            boolean failOnEmptyInstrumentation,
             ITestInvocationListener... listeners) {
         super(device, listeners);
         mExpectedTests = expectedTests;
+        mFailOnEmptyInstrumentation = failOnEmptyInstrumentation;
     }
 
     public void addListener(ITestInvocationListener listener) {
@@ -223,6 +226,15 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
                                     mDuplicateTests));
             error.setFailureStatus(FailureStatus.TEST_FAILURE)
                     .setRetriable(false); // Don't retry duplicate tests.
+            super.testRunFailed(error);
+        } else if (mFailOnEmptyInstrumentation
+                && mTests.isEmpty()
+                && (mExpectedTests == null || mExpectedTests.isEmpty())) {
+            FailureDescription error =
+                    FailureDescription.create("The test runner did not find any tests at all.");
+            error.setFailureStatus(FailureStatus.NOT_EXECUTED)
+                    // Don't retry as the test-suite would just exhibit the same behaviour.
+                    .setRetriable(false);
             super.testRunFailed(error);
         } else {
             String runLevelError = "Method was expected to run but didn't.";

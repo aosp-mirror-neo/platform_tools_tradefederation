@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -329,6 +330,39 @@ public class InstrumentationTestTest {
         mInstrumentationTest.setCollectTestsOnly(true);
         mInstrumentationTest.run(mTestInfo, mMockListener);
         assertThat(mInstrumentationTest.isOrchestrator()).isFalse();
+    }
+
+    /** Ensure test-suites fail when no tests are run in orchestrator mode */
+    @Test
+    public void testRun_runShouldFailIfNoTestExecutedInOrchestrator() throws Exception {
+        mInstrumentationTest.setOrchestrator(true);
+        mInstrumentationTest.setRerunMode(true);
+        mInstrumentationTest.setFailOnEmptyInstrumentation(true);
+        // The orchestrator natively supports collecting tests, hence why the test collection
+        // callbacks are skipped.
+        RunInstrumentationTestsAnswer testRun =
+                (runner, listener) -> {
+                    // perform call back on listener to imitate zero tests cases run.
+                    listener.testRunStarted(TEST_PACKAGE_VALUE, 0);
+                    listener.testRunEnded(0, EMPTY_STRING_MAP);
+                    return true;
+                };
+        doAnswer(testRun)
+                .when(mMockTestDevice)
+                .runInstrumentationTests(
+                        any(IRemoteAndroidTestRunner.class), any(ITestLifeCycleReceiver.class));
+        doNothing()
+                .when(mInstrumentationTest)
+                .installOrchestratorHelperApks(any(TestInformation.class));
+        doNothing()
+                .when(mInstrumentationTest)
+                .cleanUpOrchestratorHelperApks(any(TestInformation.class));
+
+        mInstrumentationTest.run(mTestInfo, mMockListener);
+        verify(mMockListener, atLeastOnce()).testRunFailed(any(FailureDescription.class));
+        // The value of runCapture is not needed. It's just used there to avoid Mockito being
+        // confused between the two variant of `testRunEnded(Long, Map | HashMap)`.
+        verify(mMockListener, atLeastOnce()).testRunEnded(anyLong(), runCapture.capture());
     }
 
     /** Ensure runOptions are comma-delimited to be compatible with the orchestrator */
