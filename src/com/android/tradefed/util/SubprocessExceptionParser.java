@@ -56,6 +56,7 @@ public class SubprocessExceptionParser {
                 CLog.w("'%s' doesn't match pattern '%s'", line, patternString);
             }
         }
+        CLog.w("No serialized exception found in stderr: %s", stderr);
         return null;
     }
 
