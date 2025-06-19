@@ -21,6 +21,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -329,4 +330,12 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         super.cleanUp();
     }
 
+ @Override
+    public void cleanUp(List<File> doNotClean) {
+        File deviceImage = getFile(BuildInfoFileKey.DEVICE_IMAGE);
+        if (deviceImage != null && doNotClean != null && !doNotClean.contains(deviceImage)) {
+            getFuseMountManager().ifPresent(manager -> manager.unmount(deviceImage.toPath()));
+        }
+        super.cleanUp(doNotClean);
+    }
 }
