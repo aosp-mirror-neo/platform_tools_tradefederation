@@ -35,6 +35,8 @@ import com.android.tradefed.util.FileUtil;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import org.junit.After;
 import org.junit.Before;
@@ -313,4 +315,63 @@ public class DeviceBuildInfoTest {
         verify(mMockFuseManager, never()).unmountAll();
     }
 
+    @Test
+    public void cleanUp_deviceImageNotUnmountedIfInDoNotCleanList() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+
+        List<File> doNotClean = Arrays.asList(sourceDir);
+        buildInfoSpy.cleanUp(doNotClean);
+
+        // Verify that the device image was not unmounted.
+        verify(mMockFuseManager, never()).unmount(sourceDir.toPath());
+        verify(mMockFuseManager, never()).unmountAll();
+    }
+
+    @Test
+    public void cleanUp_deviceImageUnmountedIfNotInDoNotCleanList() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+
+        List<File> doNotClean = Arrays.asList(new File("some-other-file"));
+        buildInfoSpy.cleanUp(doNotClean);
+
+        // Verify that unmount was never called on the device image.
+        verify(mMockFuseManager).unmount(sourceDir.toPath());
+    }
+
+    @Test
+    public void cleanUp_unmountAllIsCalledForEmptyDoNotCleanList() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+
+        List<File> doNotClean = Arrays.asList();
+        buildInfoSpy.cleanUp(doNotClean);
+
+        // Verify that unmount was called on the device image.
+        verify(mMockFuseManager).unmount(sourceDir.toPath());
+    }
+
+    @Test
+    public void cleanUp_unmountAllIsCalledForNullDoNotCleanList() throws Exception {
+        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
+        File sourceDir = mTempFolder.newFolder("source-dir");
+        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
+
+        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
+
+        buildInfoSpy.cleanUp(null);
+
+        // Verify that unmountAll was called.
+        verify(mMockFuseManager).unmountAll();
+    }
 }
