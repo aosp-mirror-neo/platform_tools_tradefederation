@@ -601,7 +601,7 @@ public class ProtoResultParser {
                         String.format(
                                 "Received unexpected test status %s.", testcaseProto.getStatus()));
         }
-        handleLogs(testcaseProto);
+        handleLogs(testcaseProto, true);
         HashMap<String, Metric> metrics = new HashMap<>(testcaseProto.getMetricsMap());
         log("Test case ended proto: %s", description.toString());
         mListener.testEnded(description, timeStampToMillis(testcaseProto.getEndTime()), metrics);
@@ -612,6 +612,10 @@ public class ProtoResultParser {
     }
 
     private void handleLogs(TestRecord proto) {
+        handleLogs(proto, false);
+    }
+
+    private void handleLogs(TestRecord proto, boolean methodLevel) {
         if (!(mListener instanceof ILogSaverListener)) {
             return;
         }
@@ -636,6 +640,10 @@ public class ProtoResultParser {
                     CLog.e("Log '%s' was registered but without a path.", entry.getKey());
                     continue;
                 }
+                String prefix = mFilePrefix;
+                if (methodLevel) {
+                    prefix = "";
+                }
                 File path = new File(file.getPath());
                 if (Strings.isNullOrEmpty(file.getUrl()) && path.exists()) {
                     LogDataType type = file.getType();
@@ -644,7 +652,7 @@ public class ProtoResultParser {
                             log(
                                     "Logging %s [type: %s]from subprocess: %s ",
                                     entry.getKey(), type, file.getPath());
-                            logger.testLog(mFilePrefix + entry.getKey(), type, source);
+                            logger.testLog(prefix + entry.getKey(), type, source);
                         }
                     }
                     if (entry.getKey().startsWith(ActiveTrace.TRACE_KEY)
@@ -669,7 +677,7 @@ public class ProtoResultParser {
                                 file.getUrl(),
                                 file.getPath(),
                                 path.exists());
-                        logger.logAssociation(mFilePrefix + entry.getKey(), file);
+                        logger.logAssociation(prefix + entry.getKey(), file);
                     }
                 }
             } catch (InvalidProtocolBufferException e) {
