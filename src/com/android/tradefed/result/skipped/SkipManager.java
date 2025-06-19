@@ -18,6 +18,7 @@ package com.android.tradefed.result.skipped;
 import com.android.tradefed.build.content.ContentAnalysisContext;
 import com.android.tradefed.build.content.ContentAnalysisContext.AnalysisMethod;
 import com.android.tradefed.build.content.ContentModuleLister;
+import com.android.tradefed.build.content.DeviceImagePartition;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
@@ -36,6 +37,7 @@ import com.android.tradefed.util.MultiMap;
 
 import build.bazel.remote.execution.v2.Digest;
 
+import com.google.common.collect.ImmutableSet;
 import com.proto.tradefed.feature.FeatureResponse;
 import com.proto.tradefed.feature.PartResponse;
 
@@ -95,6 +97,41 @@ public class SkipManager implements IDisableable {
                             + " skipped.")
     private boolean mReportInvocationModuleSkipped = true;
 
+    @Option(
+            name = "image-granularity-strategy",
+            description =
+                    "An option to set the image granularity strategy for analysis and caching.")
+    private ImageGranularityStrategy mImageGranularityStrategy =
+            ImageGranularityStrategy.FULL_IMAGE;
+
+    private enum ImageGranularityStrategy {
+        // Caching key is computed using digests from all partitions.
+        FULL_IMAGE,
+        // Caching key is computed using digests from system and vendor partitions.
+        SYSTEM_VENDOR,
+        // Caching key is computed using digests from the vendor partition only.
+        VENDOR_ONLY
+    }
+
+    // Device image partitions to take into account based on image granularity strategy.
+    private static final Map<ImageGranularityStrategy, Set<DeviceImagePartition>>
+            STRATEGY_TO_IMAGE_PARTITIONS =
+                    new LinkedHashMap<ImageGranularityStrategy, Set<DeviceImagePartition>>();
+
+    static {
+        STRATEGY_TO_IMAGE_PARTITIONS.put(
+                ImageGranularityStrategy.FULL_IMAGE,
+                ImmutableSet.of(
+                        DeviceImagePartition.SYSTEM,
+                        DeviceImagePartition.VENDOR,
+                        DeviceImagePartition.OTHER));
+        STRATEGY_TO_IMAGE_PARTITIONS.put(
+                ImageGranularityStrategy.SYSTEM_VENDOR,
+                ImmutableSet.of(DeviceImagePartition.SYSTEM, DeviceImagePartition.VENDOR));
+        STRATEGY_TO_IMAGE_PARTITIONS.put(
+                ImageGranularityStrategy.VENDOR_ONLY, ImmutableSet.of(DeviceImagePartition.VENDOR));
+    }
+
     // Contains the filter and reason for demotion
     private final Map<String, SkipReason> mDemotionFilters = new LinkedHashMap<>();
 
@@ -137,6 +174,17 @@ public class SkipManager implements IDisableable {
     }
 
     public Map<String, Digest> getImageToDigest() {
+        Set<DeviceImagePartition> deviceImagePartitions =
+                STRATEGY_TO_IMAGE_PARTITIONS.get(mImageGranularityStrategy);
+        if (deviceImagePartitions != null) {
+            for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
+                // Filters out the partition digests we're not interested in.
+                if (!deviceImagePartitions.contains(imagePartition)) {
+                    mImageFileToDigest.remove(imagePartition.getCacheKeyName());
+                }
+            }
+        }
+        CLog.d("Final device digests are: %s", mImageFileToDigest);
         return mImageFileToDigest;
     }
 

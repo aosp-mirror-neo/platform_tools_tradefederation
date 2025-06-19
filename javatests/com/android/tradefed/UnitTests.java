@@ -31,6 +31,7 @@ import com.android.tradefed.build.LocalDeviceBuildProviderTest;
 import com.android.tradefed.build.cache.PartialZipDownloadCacheTest;
 import com.android.tradefed.build.content.ArtifactDetailsTest;
 import com.android.tradefed.build.content.ContentAnalysisResultsTest;
+import com.android.tradefed.build.content.DeviceImagePartitionTest;
 import com.android.tradefed.build.content.DeviceMerkleTreeTest;
 import com.android.tradefed.build.content.TestContentAnalyzerTest;
 import com.android.tradefed.cache.MerkleTreeTest;
@@ -518,6 +519,7 @@ import com.android.tradefed.util.testmapping.TestInfoTest;
 import com.android.tradefed.util.testmapping.TestMappingTest;
 import com.android.tradefed.util.zip.CentralDirectoryInfoTest;
 import com.android.tradefed.util.zip.MergedZipEntryCollectionTest;
+
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
@@ -552,6 +554,7 @@ import org.junit.runners.Suite.SuiteClasses;
     // build.content
     ArtifactDetailsTest.class,
     ContentAnalysisResultsTest.class,
+    DeviceImagePartitionTest.class,
     DeviceMerkleTreeTest.class,
     TestContentAnalyzerTest.class,
 

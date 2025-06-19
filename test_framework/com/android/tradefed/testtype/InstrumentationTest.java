@@ -109,6 +109,8 @@ public class InstrumentationTest
     public static final String RUN_TESTS_AS_USER_KEY = "RUN_TESTS_AS_USER";
     public static final String RUN_TESTS_ON_SDK_SANDBOX = "RUN_TESTS_ON_SDK_SANDBOX";
     private static final String SKIP_TESTS_REASON_KEY = "skip-tests-reason";
+    private static final String SAFE_PUNCTUATION = "@%-_+:,./";
+    private static final String[] SAFE_PUNCTUATION_STRING = {" --"};
 
     @Option(
             name = "package",
@@ -339,6 +341,13 @@ public class InstrumentationTest
             name = "instrument-sdk-sandbox",
             description = "If set to true, the test will run exclusively in an SDK sandbox.")
     protected boolean mInstrumentSdkSandbox = false;
+
+    @Option(
+            name = "fail-on-empty-instrumentation",
+            description =
+                    "If set to true, The instrumentation will fail if no test has been found. "
+                            + "(This is an experimental option!)")
+    private boolean mFailOnEmptyInstrumentation = false;
 
     @Option(
             name = "instrument-sdk-in-sandbox",
@@ -583,6 +592,11 @@ public class InstrumentationTest
         // no-op
     }
 
+    @VisibleForTesting
+    void setFailOnEmptyInstrumentation(boolean failOnEmptyInstrumentation) {
+        mFailOnEmptyInstrumentation = failOnEmptyInstrumentation;
+    }
+
     /**
      * Add an argument to provide when running the instrumentation tests.
      *
@@ -813,7 +827,8 @@ public class InstrumentationTest
         }
     }
 
-    private void installOrchestratorHelperApks(TestInformation testInfo) {
+    @VisibleForTesting
+    void installOrchestratorHelperApks(TestInformation testInfo) {
         try {
             mOrchestratorSetup = installApk("test-orchestrator-normalized.apk", testInfo);
             mTestServicesSetup = installApk("test-services-normalized.apk", testInfo);
@@ -876,9 +891,15 @@ public class InstrumentationTest
             mDevice.uninstallPackage(mPackageName);
         }
         if (mOrchestrator) {
-            mOrchestratorSetup.tearDown(testInfo, null);
-            mTestServicesSetup.tearDown(testInfo, null);
+            cleanUpOrchestratorHelperApks(testInfo);
         }
+    }
+
+    @VisibleForTesting
+    void cleanUpOrchestratorHelperApks(TestInformation testInfo)
+            throws DeviceNotAvailableException {
+        mOrchestratorSetup.tearDown(testInfo, null);
+        mTestServicesSetup.tearDown(testInfo, null);
     }
 
     protected void setRunnerArgs(IRemoteAndroidTestRunner runner) {
@@ -902,7 +923,35 @@ public class InstrumentationTest
             runner.setRunName(mRunName);
         }
         for (Map.Entry<String, String> argEntry : mInstrArgMap.entrySet()) {
-            runner.addInstrumentationArg(argEntry.getKey(), argEntry.getValue());
+            runner.addInstrumentationArg(argEntry.getKey(), parseShellSyntax(argEntry.getValue()));
+        }
+    }
+
+    /** Helper method parse the shell syntax */
+    private String parseShellSyntax(String value) {
+        if (value == null || value.isBlank()) {
+            return "''";
+        }
+        // For case where we have `-e x --v` we don't need to add the quote.
+        for (String subString : SAFE_PUNCTUATION_STRING) {
+            if (value.contains(subString)) {
+                return value;
+            }
+        }
+        boolean needsQuoting =
+                value.chars()
+                        .anyMatch(
+                                c ->
+                                        !Character.isLetterOrDigit(c)
+                                                && SAFE_PUNCTUATION.indexOf(c) == -1);
+
+        if (needsQuoting) {
+            // If the value needs quoting, we escape any single quotes within it.
+            final String escapedValue = value.replace("'", "'\\''");
+            return "'" + escapedValue + "'";
+        } else {
+            // If the value contains no shell syntax, simply return it unquoted.
+            return value;
         }
     }
 
@@ -1023,9 +1072,9 @@ public class InstrumentationTest
         if (!mExtraDeviceListener.isEmpty()) {
             mRunner.addInstrumentationArg("listener", ArrayUtil.join(",", mExtraDeviceListener));
         }
-
         InstrumentationListener instrumentationListener =
-                new InstrumentationListener(getDevice(), testsToRun, listener);
+                new InstrumentationListener(
+                        getDevice(), testsToRun, mFailOnEmptyInstrumentation, listener);
         instrumentationListener.setPackageName(mPackageName);
         instrumentationListener.setDisableDuplicateCheck(mDisableDuplicateCheck);
         if (mEnableSoftRestartCheck) {

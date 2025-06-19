@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.result.skipped;
 
+import com.android.tradefed.build.content.DeviceImagePartition;
+
 import build.bazel.remote.execution.v2.Digest;
 
 import java.util.Map;
@@ -54,5 +56,14 @@ public class SkipContext {
 
     public Map<String, Digest> getImageToDigest() {
         return imageToDigest;
+    }
+
+    public boolean hasDeviceDigest() {
+        for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
+            if (imageToDigest.containsKey(imagePartition.getCacheKeyName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -105,7 +105,10 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
             }
             try (InputStreamSource geminiRequest =
                     new FileInputStreamSource(promptResponse.getRequest())) {
-                testLog("gemini-debugging-request", LogDataType.GEMINI_PROMPT, geminiRequest);
+                testLog(
+                        "[put_me_in_AIStudio]gemini-debugging-request",
+                        LogDataType.GEMINI_PROMPT,
+                        geminiRequest);
             }
             if (promptResponse.getResponse() != null) {
                 // Extract response

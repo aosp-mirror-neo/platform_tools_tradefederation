@@ -40,28 +40,36 @@ public class DeviceMerkleTreeTest {
         File currentJson = ArtifactDetailsTest.generateCurrentContent();
 
         try {
-            ContentInformation infoBase = new ContentInformation(null, null, baseJson, "8888");
+            ContentInformation baseInfo = new ContentInformation(null, null, baseJson, "8888");
             ContentAnalysisContext contextBase =
                     new ContentAnalysisContext(
-                            "mysuite.zip", infoBase, AnalysisMethod.DEVICE_IMAGE);
+                            "target_files-8888.zip", baseInfo, AnalysisMethod.DEVICE_IMAGE);
             Digest baseDigest =
                     DeviceMerkleTree.buildFromContext(
                             contextBase, AnalysisHeuristic.REMOVE_EXEMPTION);
 
-            ContentInformation currentBase =
+            ContentInformation currentInfo =
                     new ContentInformation(null, null, currentJson, "8888");
             ContentAnalysisContext contextCurrent =
                     new ContentAnalysisContext(
-                            "mysuite.zip", currentBase, AnalysisMethod.DEVICE_IMAGE);
+                            "target_files-P9999.zip", currentInfo, AnalysisMethod.DEVICE_IMAGE);
             Digest currentDigest =
                     DeviceMerkleTree.buildFromContext(
                             contextCurrent, AnalysisHeuristic.REMOVE_EXEMPTION);
+            Digest currentVendorDigest =
+                    DeviceMerkleTree.buildFromContext(
+                            contextCurrent,
+                            AnalysisHeuristic.REMOVE_EXEMPTION,
+                            DeviceImagePartition.VENDOR.getIsWithinPartition());
 
             Truth.assertThat(baseDigest.getHash()).isNotEqualTo(currentDigest.getHash());
+            Truth.assertThat(currentDigest.getHash()).isNotEqualTo(currentVendorDigest.getHash());
             Truth.assertThat(baseDigest.getHash())
-                    .isEqualTo("a4246469911c553cae9d8ce1b6e40cacb2131d6e07aabe5c28b1c180b4e7114f");
+                    .isEqualTo("f7c379fdff3a2a1fe0579f4d8c8a805ce2d2a79cc626776c86be480cfdb0d2b1");
             Truth.assertThat(currentDigest.getHash())
-                    .isEqualTo("d4f7d421e22f24bbf0a5d3bfad906a475e390b2aa0f69215d587a65ba1c3a484");
+                    .isEqualTo("0d8af894a413a8dfd034c0a5ff1f8149313b78ea06290c3c0f115f619aff76c7");
+            Truth.assertThat(currentVendorDigest.getHash())
+                    .isEqualTo("1561f82db8b5fa6b37d849c30fab7e084bff4ad4b8152fa2c9fb0e27ec901918");
         } finally {
             FileUtil.deleteFile(baseJson);
             FileUtil.deleteFile(currentJson);
