@@ -20,10 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.FailureReason;
+import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.TestIdentifierBase;
 import com.android.resultdb.proto.TestResult;
-import com.android.resultdb.proto.TestStatus;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.BuildInfo;
 import com.android.tradefed.config.Configuration;
@@ -133,8 +133,7 @@ public class ResultDBReporterTest {
                 .setResultId("1234abcd-00001")
                 .setStartTime(Timestamps.fromSeconds(1536333825L))
                 .setDuration(Durations.fromMillis(100))
-                .setStatus(TestStatus.PASS)
-                .setExpected(true);
+                .setStatusV2(TestResult.Status.PASSED);
     }
 
     @Before
@@ -242,44 +241,49 @@ public class ResultDBReporterTest {
                 .containsExactly(
                         newTestResult("testMethodPassed")
                                 .setResultId("1234abcd-00001")
-                                .setStatus(TestStatus.PASS)
-                                .setExpected(true)
+                                .setStatusV2(TestResult.Status.PASSED)
                                 .build(),
                         newTestResult("testMethodFailed")
                                 .setResultId("1234abcd-00002")
-                                .setStatus(TestStatus.FAIL)
+                                .setStatusV2(TestResult.Status.FAILED)
                                 .setStartTime(Timestamps.fromMillis(1536333825200L))
-                                .setExpected(false)
                                 .setFailureReason(
                                         FailureReason.newBuilder()
-                                                .setPrimaryErrorMessage("Fail Trace"))
+                                                .setKind(FailureReason.Kind.ORDINARY)
+                                                .addErrors(
+                                                        FailureReason.Error.newBuilder()
+                                                                .setMessage("Fail Trace")))
                                 .build(),
                         newTestResult("testMethodAssumption")
                                 .setResultId("1234abcd-00003")
-                                .setStatus(TestStatus.SKIP)
+                                .setStatusV2(TestResult.Status.SKIPPED)
                                 .setStartTime(Timestamps.fromMillis(1536333825400L))
-                                .setSummaryHtml("Assumption Fail Trace")
-                                .setExpected(true)
+                                .setSkippedReason(
+                                        SkippedReason.newBuilder()
+                                                .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
+                                                .setReasonMessage("Assumption Fail Trace"))
                                 .build(),
                         newTestResult("testMethodIgnored")
                                 .setResultId("1234abcd-00004")
-                                .setStatus(TestStatus.SKIP)
+                                .setStatusV2(TestResult.Status.SKIPPED)
+                                .setSkippedReason(
+                                        SkippedReason.newBuilder()
+                                                .setKind(
+                                                        SkippedReason.Kind.DISABLED_AT_DECLARATION))
                                 .setStartTime(Timestamps.fromMillis(1536333825600L))
-                                .setExpected(true)
                                 .build(),
                         newTestResult("testMethodSkip")
                                 .setResultId("1234abcd-00005")
-                                .setStatus(TestStatus.SKIP)
+                                .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
                                 .setStartTime(Timestamps.fromMillis(1536333825800L))
                                 .setSummaryHtml(
                                         "bug_id: bugId<br>trigger: skip trigger<br>reason: skip"
                                                 + " reason message<br>")
-                                .setExpected(true)
                                 .build());
     }
 
     @Test
-    public void testWithFailureDescription() {
+    public void testWithFailureDescription_failureStatus_testFailure() {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
@@ -293,36 +297,69 @@ public class ResultDBReporterTest {
         assertThat(mReporter.mRecorder.getTestResults())
                 .containsExactly(
                         newTestResult("testMethodFailed")
-                                .setStatus(TestStatus.FAIL)
-                                .setExpected(false)
+                                .setStatusV2(TestResult.Status.FAILED)
+                                .setResultId("1234abcd-00001")
                                 .setFailureReason(
                                         FailureReason.newBuilder()
-                                                .setPrimaryErrorMessage("Failure Message"))
+                                                .setKind(FailureReason.Kind.ORDINARY)
+                                                .addErrors(
+                                                        FailureReason.Error.newBuilder()
+                                                                .setMessage("Failure Message")))
                                 .setSummaryHtml("TF error type: TEST_FAILURE")
                                 .build());
     }
 
+
     @Test
-    public void testWithFailureDescription_crashFailureStatus() {
+    public void testWithFailureDescription_failureStatus_crashed() {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
                 .withTestFailure(
                         "com.google.ExampleClass",
-                        "testMethodFailed",
+                        "testMethodCrashed",
                         FailureDescription.create(
                                 "Failure Message\n java.lang.RuntimeException: Failure Message",
-                                TestRecordProto.FailureStatus.TIMED_OUT))
+                                TestRecordProto.FailureStatus.SYSTEM_UNDER_TEST_CRASHED))
                 .simulateInvocation(mReporter);
 
         assertThat(mReporter.mRecorder.getTestResults())
                 .containsExactly(
-                        newTestResult("testMethodFailed")
-                                .setStatus(TestStatus.CRASH)
-                                .setExpected(false)
+                        newTestResult("testMethodCrashed")
+                                .setStatusV2(TestResult.Status.FAILED)
                                 .setFailureReason(
                                         FailureReason.newBuilder()
-                                                .setPrimaryErrorMessage("Failure Message"))
+                                                .setKind(FailureReason.Kind.CRASH)
+                                                .addErrors(
+                                                        FailureReason.Error.newBuilder()
+                                                                .setMessage("Failure Message")))
+                                .setSummaryHtml("TF error type: SYSTEM_UNDER_TEST_CRASHED")
+                                .build());
+    }
+
+
+    @Test
+    public void testWithFailureDescription_failureStatus_timeout() {
+        mSimulator
+                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withTestFailure(
+                        "com.google.ExampleClass",
+                        "testMethodTimedOut",
+                        FailureDescription.create(
+                                "Failure Message", TestRecordProto.FailureStatus.TIMED_OUT))
+                .simulateInvocation(mReporter);
+
+        assertThat(mReporter.mRecorder.getTestResults())
+                .containsExactly(
+                        newTestResult("testMethodTimedOut")
+                                .setStatusV2(TestResult.Status.FAILED)
+                                .setFailureReason(
+                                        FailureReason.newBuilder()
+                                                .setKind(FailureReason.Kind.TIMEOUT)
+                                                .addErrors(
+                                                        FailureReason.Error.newBuilder()
+                                                                .setMessage("Failure Message")))
                                 .setSummaryHtml("TF error type: TIMED_OUT")
                                 .build());
     }
@@ -357,11 +394,12 @@ public class ResultDBReporterTest {
                                                 .build())
                                 .setResultId("1234abcd-00001")
                                 .setStartTime(Timestamps.fromSeconds(1000000L))
-                                .setStatus(TestStatus.SKIP)
-                                .setExpected(true)
-                                .setSummaryHtml(
-                                        "trigger: UNKNOWN_TRIGGER<br>skip_reason_type:"
-                                                + " Demotion<br>reason: test-skip-reason<br>")
+                                .setStatusV2(TestResult.Status.SKIPPED)
+                                .setSkippedReason(
+                                        SkippedReason.newBuilder()
+                                                .setKind(SkippedReason.Kind.DEMOTED)
+                                                .setReasonMessage("test-skip-reason"))
+                                .setSummaryHtml("trigger: UNKNOWN_TRIGGER<br>")
                                 .build());
     }
 
@@ -395,7 +433,6 @@ public class ResultDBReporterTest {
                                                 .setCaseName("testExampleMethod")
                                                 .build())
                                 .setResultId("1234abcd-00001")
-                                .setTestStatus(TestStatus.PASS)
                                 .build(),
                         Artifact.newBuilder()
                                 .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")

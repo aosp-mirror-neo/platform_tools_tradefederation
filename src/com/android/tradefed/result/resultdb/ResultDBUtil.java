@@ -98,11 +98,12 @@ public final class ResultDBUtil {
     }
 
     /**
-     * Converts a test skip reason to a summary HTML string. ResultDB does not yet have a skip
-     * reason field, we put them in the summary HTML field and test artifact for now. The return
-     * string can be longer than the summary HTML field limit, caller should truncate it if needed.
+     * Serializes a {@link SkipReason} into a summary HTML string.
+     *
+     * <p><b>Note:</b> The caller is responsible for truncating the returned string to comply with
+     * any field size limits (e.g., for the summary HTML field).
      */
-    public static String testSkipReasonToSummaryHtml(SkipReason reason, String skipReasonType) {
+    public static String testSkipReasonToSummaryHtml(SkipReason reason, boolean includeReason) {
         StringBuilder summaryHtml = new StringBuilder();
         if (!Strings.isNullOrEmpty(reason.getBugId())) {
             summaryHtml.append("bug_id: ").append(reason.getBugId()).append("<br>");
@@ -110,10 +111,7 @@ public final class ResultDBUtil {
         if (!Strings.isNullOrEmpty(reason.getTrigger())) {
             summaryHtml.append("trigger: ").append(reason.getTrigger()).append("<br>");
         }
-        if (!Strings.isNullOrEmpty(skipReasonType)) {
-            summaryHtml.append("skip_reason_type: ").append(skipReasonType).append("<br>");
-        }
-        if (!Strings.isNullOrEmpty(reason.getReason())) {
+        if (!Strings.isNullOrEmpty(reason.getReason()) && includeReason) {
             summaryHtml.append("reason: ").append(reason.getReason()).append("<br>");
         }
         return summaryHtml.toString();
