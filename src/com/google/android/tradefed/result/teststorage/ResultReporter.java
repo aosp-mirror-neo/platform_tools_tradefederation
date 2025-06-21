@@ -201,6 +201,9 @@ public class ResultReporter
                     ModuleDefinition.ISOLATION_COST,
                     ModuleDefinition.MODULE_TEST_COUNT);
 
+    private static final ImmutableSet<String> TEST_PROPERTIES_MIGRATION =
+            ImmutableSet.of("board", "model", "sku", "account_id");
+
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
 
@@ -308,6 +311,9 @@ public class ResultReporter
             description = "Enable the reporting of workunits that are skipped.")
     private boolean mEnableSkipWorkUnitReporting = true;
 
+    @Option(name = "enable-test-properties-migration")
+    private boolean mEnablePropertyMigration = true;
+
     private TestResult mCurrentTestResult;
     private String mSummaryUrl;
     private DebugInfo mFailureInfo; // Contains invocation failure message.
@@ -342,6 +348,8 @@ public class ResultReporter
     private List<Property> mModuleProperties = Collections.emptyList();
     // Filtered module properties to use in the test identifier (module-abi & module-param)
     private List<Property> mModuleParameters = Collections.emptyList();
+
+    private List<Property> mMigrationTestProperties = new ArrayList<Property>();
 
     // A map to keep track which test generated which log.
     private Multimap<String, LogAssociation> mLogAssociations =
@@ -415,6 +423,14 @@ public class ResultReporter
             String invocationId = context.getAttribute("invocation_id");
             String workUnitId = context.getAttribute("work_unit_id");
             String testResultId = context.getAttribute(TEST_RESULT_ID);
+            if (mEnablePropertyMigration) {
+                for (String key : TEST_PROPERTIES_MIGRATION) {
+                    String value = context.getAttribute(key);
+                    if (!Strings.isNullOrEmpty(value)) {
+                        mMigrationTestProperties.add(newProperty(key, value));
+                    }
+                }
+            }
             try {
                 mLegacyResultId = Long.parseLong(testResultId);
             } catch (NumberFormatException e) {
@@ -1286,6 +1302,7 @@ public class ResultReporter
             for (String testMappingSource : testMappingSources) {
                 propertyBuilder.add(newProperty(TEST_MAPPING_PROPERTY, testMappingSource));
             }
+            propertyBuilder.addAll(mMigrationTestProperties);
             mCurrentTestResult.setProperties(propertyBuilder.build());
         }
         mClient.uploadResult(mCurrentTestResult);

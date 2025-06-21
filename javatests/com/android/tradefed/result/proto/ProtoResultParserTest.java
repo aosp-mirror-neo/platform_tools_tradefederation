@@ -222,7 +222,7 @@ public class ProtoResultParserTest {
         inOrder.verify(mMockListener).testStarted(test2, 11L);
         inOrder.verify(mMockListener).testFailed(test2, FailureDescription.create("I failed"));
         inOrder.verify(mMockListener)
-                .logAssociation(Mockito.eq("subprocess-log1"), capture.capture());
+                .logAssociation(Mockito.eq("log1"), capture.capture());
         inOrder.verify(mMockListener).testEnded(test2, 60L, metrics);
         inOrder.verify(mMockListener)
                 .logAssociation(Mockito.eq("subprocess-run_log1"), Mockito.any());
@@ -424,7 +424,7 @@ public class ProtoResultParserTest {
         inOrder.verify(mMockListener).testEnded(test1, 10L, new HashMap<String, Metric>());
         inOrder.verify(mMockListener).testStarted(test2, 11L);
         inOrder.verify(mMockListener).testFailed(test2, FailureDescription.create("I failed"));
-        inOrder.verify(mMockListener).logAssociation(Mockito.eq("subprocess-log1"), Mockito.any());
+        inOrder.verify(mMockListener).logAssociation(Mockito.eq("log1"), Mockito.any());
         inOrder.verify(mMockListener).testEnded(test2, 60L, metrics);
         inOrder.verify(mMockListener)
                 .logAssociation(Mockito.eq("subprocess-run_log1"), Mockito.any());
@@ -625,7 +625,7 @@ public class ProtoResultParserTest {
             inOrder.verify(mMockListener).testStarted(test2, 11L);
             inOrder.verify(mMockListener).testFailed(test2, FailureDescription.create("I failed"));
             inOrder.verify(mMockListener)
-                    .logAssociation(Mockito.eq("subprocess-log1"), capture.capture());
+                    .logAssociation(Mockito.eq("log1"), capture.capture());
             inOrder.verify(mMockListener).testEnded(test2, 60L, metrics);
             inOrder.verify(mMockListener)
                     .logAssociation(Mockito.eq("subprocess-run_log1"), Mockito.any());
@@ -717,7 +717,7 @@ public class ProtoResultParserTest {
         inOrder.verify(mMockListener).testEnded(test1, 10L, new HashMap<String, Metric>());
         inOrder.verify(mMockListener).testStarted(test2, 11L);
         inOrder.verify(mMockListener).testFailed(test2, FailureDescription.create("I failed"));
-        inOrder.verify(mMockListener).logAssociation(Mockito.eq("subprocess-log1"), Mockito.any());
+        inOrder.verify(mMockListener).logAssociation(Mockito.eq("log1"), Mockito.any());
         inOrder.verify(mMockListener).testEnded(test2, 60L, metrics);
         inOrder.verify(mMockListener)
                 .logAssociation(Mockito.eq("subprocess-run_log1"), Mockito.any());
