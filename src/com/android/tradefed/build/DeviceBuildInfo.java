@@ -125,7 +125,12 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         // be an infra error.
         if (manager.isValidSourceData(deviceImage.toPath())) {
             try {
-                return manager.mount(deviceImage.toPath()).toFile();
+                // For rollout phase 1, collect metrics for mounting without returning the mounted
+                // path to avoid breaking.
+                manager.mount(deviceImage.toPath());
+                manager.unmount(deviceImage.toPath());
+                // TODO(frankfeng): Return the mounted path after rollout phase 1.
+                return deviceImage;
 
             } catch (IOException | InterruptedException e) {
                 CLog.i("Failed to mount %s", deviceImage);
