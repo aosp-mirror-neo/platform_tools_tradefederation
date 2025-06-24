@@ -42,6 +42,8 @@ import com.android.tradefed.testtype.suite.params.multiuser.RunOnWorkProfilePara
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -49,23 +51,39 @@ import java.util.Set;
 public final class ModuleParametersHelper {
 
     private static final Map<ModuleParameters, IModuleParameterHandler> sHandlerMap =
-            Map.of(
-                    INSTANT_APP, new InstantAppHandler(),
-                    NOT_INSTANT_APP, new NegativeHandler(),
-                    // line separator
-                    MULTI_ABI, new NegativeHandler(),
-                    NOT_MULTI_ABI, new NotMultiAbiHandler(),
-                    // line separator
-                    RUN_ON_WORK_PROFILE, new RunOnWorkProfileParameterHandler(),
-                    RUN_ON_SECONDARY_USER, new RunOnSecondaryUserParameterHandler(),
-                    // line separator
-                    NO_FOLDABLE_STATES, new NegativeHandler(),
-                    ALL_FOLDABLE_STATES, new FoldableExpandingHandler(),
-                    RUN_ON_CLONE_PROFILE, new RunOnCloneProfileParameterHandler(),
-                    RUN_ON_PRIVATE_PROFILE, new RunOnPrivateProfileParameterHandler());
+            new LinkedHashMap<>();
+
+    static {
+        sHandlerMap.put(INSTANT_APP, new InstantAppHandler());
+        sHandlerMap.put(NOT_INSTANT_APP, new NegativeHandler());
+
+        sHandlerMap.put(MULTI_ABI, new NegativeHandler());
+        sHandlerMap.put(NOT_MULTI_ABI, new NotMultiAbiHandler());
+
+        sHandlerMap.put(RUN_ON_WORK_PROFILE, new RunOnWorkProfileParameterHandler());
+        sHandlerMap.put(RUN_ON_SECONDARY_USER, new RunOnSecondaryUserParameterHandler());
+
+        sHandlerMap.put(NO_FOLDABLE_STATES, new NegativeHandler());
+        sHandlerMap.put(ALL_FOLDABLE_STATES, new FoldableExpandingHandler());
+        sHandlerMap.put(RUN_ON_CLONE_PROFILE, new RunOnCloneProfileParameterHandler());
+        sHandlerMap.put(RUN_ON_PRIVATE_PROFILE, new RunOnPrivateProfileParameterHandler());
+    }
+
+    private static final Set<ModuleParameters> PROFILE_PARAMETERS = new LinkedHashSet<>();
+
+    static {
+        PROFILE_PARAMETERS.add(RUN_ON_WORK_PROFILE);
+        PROFILE_PARAMETERS.add(RUN_ON_SECONDARY_USER);
+        PROFILE_PARAMETERS.add(RUN_ON_CLONE_PROFILE);
+        PROFILE_PARAMETERS.add(RUN_ON_PRIVATE_PROFILE);
+    }
 
     private static final Map<ModuleParameters, Set<ModuleParameters>> sGroupMap =
-            Map.of(MULTIUSER, Set.of(RUN_ON_WORK_PROFILE, RUN_ON_SECONDARY_USER, RUN_ON_CLONE_PROFILE, RUN_ON_PRIVATE_PROFILE));
+            new LinkedHashMap<>();
+
+    static {
+        sGroupMap.put(MULTIUSER, PROFILE_PARAMETERS);
+    }
 
     /**
      * Optional parameters are params that will not automatically be created when the module
@@ -74,23 +92,20 @@ public final class ModuleParametersHelper {
      * main parameters in the future by moving them above.
      */
     private static final Map<ModuleParameters, IModuleParameterHandler> sOptionalHandlerMap =
-            Map.of(
-                    SECONDARY_USER,
-                    new SecondaryUserHandler(),
-                    NOT_SECONDARY_USER,
-                    new NegativeHandler(),
-                    SECONDARY_USER_ON_SECONDARY_DISPLAY,
-                    new SecondaryUserOnSecondaryDisplayHandler(),
-                    NOT_SECONDARY_USER_ON_SECONDARY_DISPLAY,
-                    new NegativeHandler(),
-                    SECONDARY_USER_ON_DEFAULT_DISPLAY,
-                    new SecondaryUserOnDefaultDisplayHandler(),
-                    NOT_SECONDARY_USER_ON_DEFAULT_DISPLAY,
-                    new NegativeHandler(),
-                    RUN_ON_SDK_SANDBOX,
-                    new RunOnSdkSandboxHandler(),
-                    NOT_RUN_ON_SDK_SANDBOX,
-                    new NegativeHandler());
+            new LinkedHashMap<>();
+
+    static {
+        sOptionalHandlerMap.put(SECONDARY_USER, new SecondaryUserHandler());
+        sOptionalHandlerMap.put(NOT_SECONDARY_USER, new NegativeHandler());
+        sOptionalHandlerMap.put(
+                SECONDARY_USER_ON_SECONDARY_DISPLAY, new SecondaryUserOnSecondaryDisplayHandler());
+        sOptionalHandlerMap.put(NOT_SECONDARY_USER_ON_SECONDARY_DISPLAY, new NegativeHandler());
+        sOptionalHandlerMap.put(
+                SECONDARY_USER_ON_DEFAULT_DISPLAY, new SecondaryUserOnDefaultDisplayHandler());
+        sOptionalHandlerMap.put(NOT_SECONDARY_USER_ON_DEFAULT_DISPLAY, new NegativeHandler());
+        sOptionalHandlerMap.put(RUN_ON_SDK_SANDBOX, new RunOnSdkSandboxHandler());
+        sOptionalHandlerMap.put(NOT_RUN_ON_SDK_SANDBOX, new NegativeHandler());
+    }
 
     // NOTE: sOptionalGroupMap is currently empty, but used on resolveParam(), so don't remove it
     private static Map<ModuleParameters, Set<ModuleParameters>> sOptionalGroupMap =
@@ -121,10 +136,12 @@ public final class ModuleParametersHelper {
                 // param.
                 return new HashMap<>();
             }
-            return Map.of(param, getParameterHandler(param, withOptional));
+            Map<ModuleParameters, IModuleParameterHandler> returnMap = new LinkedHashMap<>();
+            returnMap.put(param, getParameterHandler(param, withOptional));
+            return returnMap;
         }
         // If the parameter is a group, expand it.
-        Map<ModuleParameters, IModuleParameterHandler> resolvedParams = new HashMap<>();
+        Map<ModuleParameters, IModuleParameterHandler> resolvedParams = new LinkedHashMap<>();
         for (ModuleParameters moduleParameters : mappedParams) {
             resolvedParams.put(moduleParameters, sHandlerMap.get(moduleParameters));
         }
