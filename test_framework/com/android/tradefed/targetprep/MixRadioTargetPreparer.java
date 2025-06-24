@@ -26,27 +26,13 @@ import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.FileUtil;
-
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 /** A {@link ITargetPreparer} that allows to mix a radio image with the device image. */
 @OptionClass(alias = "mix-radio-target-preparer")
@@ -54,8 +40,6 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer implements ILabPr
 
     @Option(name = "radio-file-key", description = "The key of the downloaded radio image file.")
     private String radioFileKey = "radio.img.gz";
-
-    private static final String ANDROID_INFO_FILE_NAME = "android-info.txt";
 
     @Override
     public void setUp(TestInformation testInfo)
@@ -107,77 +91,6 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer implements ILabPr
     }
 
     /**
-     * Functional interface to update a zip entry. The update method should return true if the name
-     * passed to it is a file you want to scan.
-     */
-    @FunctionalInterface
-    interface PatchEntryFn {
-        boolean update(String name, InputStream in, OutputStream out) throws IOException;
-    }
-
-    /**
-     * Copy zip entries from src to dst with a PatchEntryFn.
-     *
-     * <p>Entries in the zip are processed by patchFn. If the patchFn returns false, this function
-     * will copy the entry by transferTo(), otherwise do nothing.
-     *
-     * @param src the source file
-     * @param dst the destination file
-     * @param patchFn the PatchEntryFn to be applied on each entry
-     */
-    private static void copyZipEntries(File src, File dst, PatchEntryFn patchFn)
-            throws IOException {
-        // Fallbacks to ZipOutputStream to update the zip entry; the latest jdk.zipfs has an
-        // issue that the jdk.zipfs doesn't write a valid UNX_IFMT in "external file attributes"
-        // for the entries it's updating (see 'writeCEN()' for details), so some zip tools
-        // (e.g.: fuse-zip) couldn't handle such entries well. Replaces the updating procedure
-        // with ZipOutputStream to workaround it.
-
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(src));
-                ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(dst))) {
-            ZipEntry sourceFile;
-
-            while ((sourceFile = zis.getNextEntry()) != null) {
-                zos.putNextEntry(new ZipEntry(sourceFile.getName()));
-                if (!patchFn.update(sourceFile.getName(), zis, zos)) {
-                    zis.transferTo(zos);
-                }
-                zos.closeEntry();
-            }
-        }
-    }
-
-    private static void uncheckedWrite(OutputStream out, String data) {
-        try {
-            out.write(data.getBytes());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static boolean isAndroidInfo(String name) {
-        return name.equals(ANDROID_INFO_FILE_NAME);
-    }
-
-    private static void processAndroidInfo(InputStream in, OutputStream out) throws IOException {
-        InputStreamReader inr = new InputStreamReader(in, StandardCharsets.UTF_8);
-        try (Stream<String> lines = new BufferedReader(inr).lines()) {
-            lines.filter(line -> !line.startsWith("require version-baseband="))
-                    .forEach(line -> uncheckedWrite(out, line + "\n"));
-        }
-    }
-
-    private static boolean patchAndroidInfoFn(String name, InputStream in, OutputStream out)
-            throws IOException {
-        if (!isAndroidInfo(name)) {
-            return false;
-        }
-
-        processAndroidInfo(in, out);
-        return true;
-    }
-
-    /**
      * Create new device image by mixing new radio image to device image.
      *
      * @param device the test device
@@ -187,51 +100,7 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer implements ILabPr
     private void mixRadio(
             ITestDevice device, IDeviceBuildInfo deviceBuildInfo, File downloadedRadioImage)
             throws TargetSetupError, BuildError, DeviceNotAvailableException {
-        File newDeviceImage = null;
-
         try {
-            File deviceImage = deviceBuildInfo.getDeviceImageFile();
-            int linkCount =
-                    ((Integer) Files.getAttribute(deviceImage.toPath(), "unix:nlink")).intValue();
-            CLog.d(
-                    "The link count is %s for device image: %s",
-                    linkCount, deviceImage.getAbsolutePath());
-            if (deviceImage.isDirectory()) {
-                CLog.i("deviceImage is a directory");
-                Path androidInfoPath = deviceImage.toPath().resolve(ANDROID_INFO_FILE_NAME);
-                if (!Files.exists(androidInfoPath)) {
-                    throw new TargetSetupError(
-                            "Failed to find " + ANDROID_INFO_FILE_NAME,
-                            device.getDeviceDescriptor());
-                }
-                File newAndroidInfoFile = FileUtil.createTempFile("android-info", ".txt");
-                try (FileInputStream fis = new FileInputStream(androidInfoPath.toFile());
-                        FileOutputStream fos = new FileOutputStream(newAndroidInfoFile)) {
-                    processAndroidInfo(fis, fos);
-                }
-                androidInfoPath.toFile().delete();
-                FileUtil.hardlinkFile(newAndroidInfoFile, androidInfoPath.toFile());
-            } else {
-                CLog.i("deviceImage is a file");
-                newDeviceImage = FileUtil.createTempFile("device-img", ".zip");
-
-                // Clone deviceImage to newDeviceImage, and remove lines
-                // /^require version-baseband=/ within 'android-info.txt' of newDeviceImage.
-                copyZipEntries(
-                        deviceImage,
-                        newDeviceImage,
-                        (name, in, out) -> patchAndroidInfoFn(name, in, out));
-
-                // The deviceBuildInfo ImageFiles are files hardlink'd to cached Android build
-                // files. Replace them for this device and without polluting the cached files,
-                // delete() the hardlink file first, then copy the new file to original hardlink
-                // file path.
-                // Replace device image of deviceBuildInfo w/ the android-info.txt-patched one.
-                String deviceImagePath = deviceImage.getAbsolutePath();
-                deviceImage.delete();
-                FileUtil.hardlinkFile(newDeviceImage, new File(deviceImagePath));
-            }
-
             // Clean up radio image.
             String radioImageFilePath = deviceBuildInfo.getBasebandImageFile().getAbsolutePath();
             File radioImageFile = deviceBuildInfo.getBasebandImageFile();
@@ -258,14 +127,11 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer implements ILabPr
             deviceBuildInfo.setBasebandImage(
                     testRadioImageFile, versionMatcher.replaceAll(versionReplacement));
             CLog.i(
-                    "Successfully generated new device image %s out of device %s and radio image"
-                            + " %s",
-                    newDeviceImage, deviceBuildInfo, basebandVersion);
+                    "Successfully mixed device %s and radio image %s",
+                    deviceBuildInfo, basebandVersion);
         } catch (IOException e) {
             throw new TargetSetupError(
                     "Could not mix device and radio images", e, device.getDeviceDescriptor());
-        } finally {
-            FileUtil.deleteFile(newDeviceImage);
         }
     }
 }

@@ -19,11 +19,11 @@ import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.Invocation;
+import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.TestIdentifierBase;
 import com.android.resultdb.proto.TestResult;
-import com.android.resultdb.proto.TestStatus;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.IConfiguration;
@@ -43,7 +43,6 @@ import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
-import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
@@ -63,7 +62,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -86,7 +84,8 @@ public class ResultDBReporter
 
     private static final int MAX_SUMMARY_HTML_BYTES = 4096;
 
-    private static final int MAX_PRIMARY_ERROR_MESSAGE_BYTES = 1024;
+    private static final int MAX_ERROR_MESSAGE_BYTES = 1024;
+    private static final int MAX_SKIP_REASON_MESSAGE_BYTES = 1024;
 
     // Link to redirect to the result page.
     private static final String RESULT_LINK = "https://ci.chromium.org/ui/inv/invocations/%s";
@@ -188,8 +187,7 @@ public class ResultDBReporter
                                     .setCoarseName(testId.getCoarseName())
                                     .setFineName(testId.getFineName())
                                     .setCaseName(testId.getCaseName()))
-                    .setResultId(mCurrentTestResult.getResultId())
-                    .setTestStatus(mCurrentTestResult.getStatus());
+                    .setResultId(mCurrentTestResult.getResultId());
         }
         mRecorder.uploadArtifact(artifactBuilder.build());
     }
@@ -447,10 +445,22 @@ public class ResultDBReporter
                 continue;
             }
             TestDescription test = TestDescription.fromString(filter.getTest());
-            SkipReason skippedReason = entry.getValue();
+            // String skipReasonString = ResultDBUtil.testSkipReasonToString(entry.getValue(),
+            // "\n");
+            SkippedReason skippedReason =
+                    SkippedReason.newBuilder()
+                            .setKind(SkippedReason.Kind.DEMOTED)
+                            .setReasonMessage(
+                                    ResultDBUtil.truncateString(
+                                            entry.getValue().getReason(),
+                                            MAX_SKIP_REASON_MESSAGE_BYTES))
+                            .build();
+            // Some skip reason field doesn't have a dedicated field in ResultDB, put them in the
+            // summary HTML field for now.
             String summaryHtml =
-                    ResultDBUtil.testSkipReasonToSummaryHtml(skippedReason, "Demotion");
-
+                    ResultDBUtil.truncateString(
+                            ResultDBUtil.testSkipReasonToSummaryHtml(entry.getValue(), false),
+                            MAX_SUMMARY_HTML_BYTES);
             TestResult currentTest =
                     TestResult.newBuilder()
                             .setTestIdStructured(
@@ -461,11 +471,9 @@ public class ResultDBReporter
                                             "%s-%05d",
                                             mResultIdBase, mResultCounter.incrementAndGet()))
                             .setStartTime(Timestamps.fromMillis(currentTimestamp()))
-                            .setStatus(TestStatus.SKIP)
-                            .setExpected(true)
-                            .setSummaryHtml(
-                                    ResultDBUtil.truncateString(
-                                            summaryHtml, MAX_SUMMARY_HTML_BYTES))
+                            .setStatusV2(TestResult.Status.SKIPPED)
+                            .setSkippedReason(skippedReason)
+                            .setSummaryHtml(summaryHtml)
                             .build();
             mRecorder.uploadTestResult(currentTest);
             CLog.d("Backfilled %s SKIPPED", currentTest);
@@ -539,8 +547,7 @@ public class ResultDBReporter
                                 String.format(
                                         "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
                         .setStartTime(Timestamps.fromMillis(startTime))
-                        .setStatus(TestStatus.PASS)
-                        .setExpected(true)
+                        .setStatusV2(TestResult.Status.PASSED)
                         .build();
     }
 
@@ -559,17 +566,17 @@ public class ResultDBReporter
             return;
         }
 
+        SkippedReason skippedReason =
+                SkippedReason.newBuilder()
+                        .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
+                        .setReasonMessage(
+                                extractAndTruncateFirstLine(
+                                        failure.getErrorMessage(), MAX_SKIP_REASON_MESSAGE_BYTES))
+                        .build();
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
-                        .setStatus(TestStatus.SKIP)
-                        .setExpected(true)
-                        // This is not set in the test result failure reason field, because
-                        // test assumption failure is treated as a ResultDB skip status
-                        // (instead of fail). We will likely re-visit this once we have more
-                        // information on how this is used by downstream.
-                        .setSummaryHtml(
-                                extractFailureReason(
-                                        failure.getErrorMessage(), MAX_SUMMARY_HTML_BYTES))
+                        .setStatusV2(TestResult.Status.SKIPPED)
+                        .setSkippedReason(skippedReason)
                         .build();
         // TODO: Full error message is too long to fit in any test result field.
         // Upload it as test artifact.
@@ -581,19 +588,23 @@ public class ResultDBReporter
             return;
         }
         if (mCurrentTestResult == null) {
-            CLog.e("Received #testIgnored(%s) without a valid testStart before.", test);
+            CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
             return;
         }
 
-        String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, null);
+        String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, true);
 
         // TODO: Skip reason can be too long to fit in any test result field.
         // Upload it as test artifact.
 
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
-                        .setStatus(TestStatus.SKIP)
-                        .setExpected(true)
+                        // Execution errored is used for tests that did not run to completion,
+                        // because an infrastructure error precluded it from doing so.
+                        .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
+                        // Put the skip reason in the summary HTML field, because the SkippedReason
+                        // field and FailureReason failure can only be set when the status is
+                        // SKIPPED or FAILED, respectively.
                         .setSummaryHtml(
                                 ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES))
                         .build();
@@ -608,13 +619,19 @@ public class ResultDBReporter
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
         }
-        String failureReason = extractFailureReason(trace, MAX_PRIMARY_ERROR_MESSAGE_BYTES);
+        FailureReason.Error error =
+                FailureReason.Error.newBuilder()
+                        .setMessage(extractAndTruncateFirstLine(trace, MAX_ERROR_MESSAGE_BYTES))
+                        .build();
+        FailureReason failureReason =
+                FailureReason.newBuilder()
+                        .addErrors(error)
+                        .setKind(FailureReason.Kind.ORDINARY)
+                        .build();
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
-                        .setFailureReason(
-                                FailureReason.newBuilder().setPrimaryErrorMessage(failureReason))
-                        .setStatus(TestStatus.FAIL)
-                        .setExpected(false)
+                        .setFailureReason(failureReason)
+                        .setStatusV2(TestResult.Status.FAILED)
                         .build();
         // TODO: extract local instruction from test description and set in ResultDB test result.
         // TODO: trace is too long to fit in any test result field. Upload it as test artifact.
@@ -629,35 +646,43 @@ public class ResultDBReporter
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
         }
-        TestStatus status = TestStatus.FAIL;
-        Set<FailureStatus> crashStatus =
-                new HashSet<>(
-                        Arrays.asList(
-                                FailureStatus.TIMED_OUT,
-                                FailureStatus.CANCELLED,
-                                FailureStatus.INFRA_FAILURE,
-                                FailureStatus.SYSTEM_UNDER_TEST_CRASHED));
-        if (crashStatus.contains(failure.getFailureStatus())) {
-            status = TestStatus.CRASH;
-        }
-        String failureReason =
-                extractFailureReason(failure.getErrorMessage(), MAX_PRIMARY_ERROR_MESSAGE_BYTES);
 
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        .setFailureReason(
-                                FailureReason.newBuilder().setPrimaryErrorMessage(failureReason))
-                        .setStatus(status)
-                        .setExpected(false)
+        FailureReason.Kind kind;
+        switch (failure.getFailureStatus()) {
+            case TIMED_OUT:
+                kind = FailureReason.Kind.TIMEOUT;
+                break;
+            case CANCELLED:
+            case INFRA_FAILURE:
+            case SYSTEM_UNDER_TEST_CRASHED:
+                kind = FailureReason.Kind.CRASH;
+                break;
+            default:
+                kind = FailureReason.Kind.ORDINARY;
+                break;
+        }
+        String truncatedFailureReason =
+                extractAndTruncateFirstLine(failure.getErrorMessage(), MAX_ERROR_MESSAGE_BYTES);
+
+        FailureReason failureReason =
+                FailureReason.newBuilder()
+                        .addErrors(
+                                FailureReason.Error.newBuilder()
+                                        .setMessage(truncatedFailureReason)
+                                        .build())
+                        .setKind(kind)
                         .build();
+
+        TestResult.Builder testResultBuilder =
+                mCurrentTestResult.toBuilder()
+                        .setFailureReason(failureReason)
+                        .setStatusV2(TestResult.Status.FAILED);
 
         // Set the TF error type in the summary HTML.
         if (failure.getFailureStatus() != null) {
-            mCurrentTestResult =
-                    mCurrentTestResult.toBuilder()
-                            .setSummaryHtml("TF error type: " + failure.getFailureStatus())
-                            .build();
+            testResultBuilder.setSummaryHtml("TF error type: " + failure.getFailureStatus());
         }
+        mCurrentTestResult = testResultBuilder.build();
         // TODO: extract local instruction from test description and set in ResultDB test result.
         // TODO: trace is too long to fit in any test result field. Upload it as test artifact.
     }
@@ -672,7 +697,12 @@ public class ResultDBReporter
             return;
         }
         mCurrentTestResult =
-                mCurrentTestResult.toBuilder().setStatus(TestStatus.SKIP).setExpected(true).build();
+                mCurrentTestResult.toBuilder()
+                        .setStatusV2(TestResult.Status.SKIPPED)
+                        .setSkippedReason(
+                                SkippedReason.newBuilder()
+                                        .setKind(SkippedReason.Kind.DISABLED_AT_DECLARATION))
+                        .build();
     }
 
     @Override
@@ -731,7 +761,7 @@ public class ResultDBReporter
      *
      * <p>In most cases, this ends up being the exception + error message.
      */
-    String extractFailureReason(String trace, int maxBytes) {
+    String extractAndTruncateFirstLine(String trace, int maxBytes) {
         String firstLine = trace.split("[\\r\\n]+", 2)[0];
         if (!firstLine.trim().isEmpty()) {
             return ResultDBUtil.truncateString(firstLine, maxBytes);

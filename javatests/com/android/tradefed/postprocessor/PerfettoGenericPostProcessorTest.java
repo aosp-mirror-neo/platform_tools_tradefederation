@@ -18,6 +18,7 @@ package com.android.tradefed.postprocessor;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.MockitoAnnotations.initMocks;
 
 import com.android.tradefed.config.ConfigurationException;
@@ -149,18 +150,19 @@ public class PerfettoGenericPostProcessorTest {
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
         mOptionSetter.setOptionValue(INDEX_OPTION, "perfetto.protos.AndroidStartupMetric.startup");
         mOptionSetter.setOptionValue(REGEX_OPTION_VALUE, "android_startup-startup-1.*");
-        mOptionSetter.setOptionValue(REPLACE_REGEX_OPTION, "android_startup-startup-1",
-                "newprefix");
+        mOptionSetter.setOptionValue(
+                REPLACE_REGEX_OPTION, "android_startup-startup-1", "newprefix");
 
         Map<String, LogFile> testLogs = new HashMap<>();
         testLogs.put(
                 PREFIX_OPTION_VALUE,
                 new LogFile(
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
-        Map<String, Metric.Builder> parsedMetrics = mProcessor
-                .processRunMetricsAndLogs(new HashMap<>(), testLogs);
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertFalse("Metric key not expected but found",
+        assertFalse(
+                "Metric key not expected but found",
                 parsedMetrics.containsKey("android_startup-startup-1-startup_id"));
         assertMetricsContainString(parsedMetrics, "perfetto_newprefix-startup_id", 1);
         assertMetricsContainString(
@@ -322,16 +324,16 @@ public class PerfettoGenericPostProcessorTest {
             throws ConfigurationException, IOException {
         setupPerfettoMetricFile(METRIC_FILE_FORMAT.text, true, true);
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
-        mOptionSetter.setOptionValue(KEY_PREFIX_OPTION,
-                "perfetto.protos.ProcessRenderInfo.process_name");
+        mOptionSetter.setOptionValue(
+                KEY_PREFIX_OPTION, "perfetto.protos.ProcessRenderInfo.process_name");
         mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
         Map<String, LogFile> testLogs = new HashMap<>();
         testLogs.put(
                 PREFIX_OPTION_VALUE,
                 new LogFile(
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
-        Map<String, Metric.Builder> parsedMetrics = mProcessor
-                .processRunMetricsAndLogs(new HashMap<>(), testLogs);
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
         assertMetricsContainString(
                 parsedMetrics,
@@ -345,18 +347,18 @@ public class PerfettoGenericPostProcessorTest {
             throws ConfigurationException, IOException {
         setupPerfettoMetricFile(METRIC_FILE_FORMAT.text, true, true);
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
-        mOptionSetter.setOptionValue(KEY_PREFIX_OPTION,
-                "perfetto.protos.ProcessRenderInfo.process_name");
-        mOptionSetter.setOptionValue(KEY_PREFIX_OPTION,
-                "perfetto.protos.ProcessRenderInfo.rt_cpu_time_ms");
+        mOptionSetter.setOptionValue(
+                KEY_PREFIX_OPTION, "perfetto.protos.ProcessRenderInfo.process_name");
+        mOptionSetter.setOptionValue(
+                KEY_PREFIX_OPTION, "perfetto.protos.ProcessRenderInfo.rt_cpu_time_ms");
         mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
         Map<String, LogFile> testLogs = new HashMap<>();
         testLogs.put(
                 PREFIX_OPTION_VALUE,
                 new LogFile(
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
-        Map<String, Metric.Builder> parsedMetrics = mProcessor
-                .processRunMetricsAndLogs(new HashMap<>(), testLogs);
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
         assertMetricsContainString(
                 parsedMetrics,
@@ -379,8 +381,8 @@ public class PerfettoGenericPostProcessorTest {
                 PREFIX_OPTION_VALUE,
                 new LogFile(
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
-        Map<String, Metric.Builder> parsedMetrics = mProcessor
-                .processRunMetricsAndLogs(new HashMap<>(), testLogs);
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
         assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_cpu-process_info-name-com.google.android.apps.messaging-threads-name-BG"
@@ -495,9 +497,10 @@ public class PerfettoGenericPostProcessorTest {
             throws ConfigurationException, IOException {
         setupPerfettoMetricFile(METRIC_FILE_FORMAT.text, true, true);
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
-        mOptionSetter.setOptionValue(KEY_PREFIX_OPTION,
-                "perfetto.protos.AndroidJankCujMetric.Cuj.name");
-        mOptionSetter.setOptionValue("perfetto-prefix-inner-message-key-field",
+        mOptionSetter.setOptionValue(
+                KEY_PREFIX_OPTION, "perfetto.protos.AndroidJankCujMetric.Cuj.name");
+        mOptionSetter.setOptionValue(
+                "perfetto-prefix-inner-message-key-field",
                 "perfetto.protos.AndroidProcessMetadata.name");
         mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
         Map<String, LogFile> testLogs = new HashMap<>();
@@ -505,8 +508,8 @@ public class PerfettoGenericPostProcessorTest {
                 PREFIX_OPTION_VALUE,
                 new LogFile(
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
-        Map<String, Metric.Builder> parsedMetrics = mProcessor
-                .processRunMetricsAndLogs(new HashMap<>(), testLogs);
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
         if (DEBUG) {
             printOutputMetricsForDebug(parsedMetrics);
@@ -528,18 +531,20 @@ public class PerfettoGenericPostProcessorTest {
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
         mOptionSetter.setOptionValue(KEY_PREFIX_OPTION, "perfetto.protos.AndroidBlockingCall.name");
 
-        mOptionSetter.setOptionValue(REPLACE_REGEX_OPTION, "android_blocking_calls_cuj_metric",
-                "android_blocking_call");
-        mOptionSetter.setOptionValue(REGEX_OPTION_VALUE,
+        mOptionSetter.setOptionValue(
+                REPLACE_REGEX_OPTION, "android_blocking_calls_cuj_metric", "android_blocking_call");
+        mOptionSetter.setOptionValue(
+                REGEX_OPTION_VALUE,
                 "android_blocking_calls_cuj_metric.*calls-name-.*"
                         + "(min_dur_ms|max_dur|total_dur|cnt).*");
 
         Map<String, LogFile> testLogs = new HashMap<>();
-        testLogs.put(PREFIX_OPTION_VALUE,
-                new LogFile(perfettoMetricProtoFile.getAbsolutePath(), "some.url",
-                        LogDataType.TEXTPB));
-        Map<String, Metric.Builder> parsedMetrics = mProcessor.processRunMetricsAndLogs(
-                new HashMap<>(), testLogs);
+        testLogs.put(
+                PREFIX_OPTION_VALUE,
+                new LogFile(
+                        perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
         if (DEBUG) {
             printOutputMetricsForDebug(parsedMetrics);
@@ -592,9 +597,7 @@ public class PerfettoGenericPostProcessorTest {
         assertTrue(parsedMetrics.containsKey(PerfettoGenericPostProcessor.RUNTIME_METRIC_KEY));
     }
 
-    /**
-     * Test the default metric type is set to RAW.
-     */
+    /** Test the default metric type is set to RAW. */
     @Test
     public void testMetricTypeIsRaw() {
         assertTrue(mProcessor.getMetricType().equals(DataType.RAW));
@@ -617,35 +620,22 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedV2Metrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContainDouble(
-                parsedV2Metrics,
-                "memory_per_process-avg_rss_and_swap-.ShannonImsService",
-                121380864.000000);
-        assertMetricsContainDouble(
-                parsedV2Metrics,
-                "memory_per_process-avg_rss_and_swap-.adservices",
-                123408384.000000);
-        assertMetricsContainDouble(
-                parsedV2Metrics,
-                "memory_per_process-avg_rss_and_swap-/apex/com.android.adbd/bin/adbd",
-                10464441.000000);
-
-        assertMetricsContainDouble(
-                parsedV2Metrics,
-                "total_runtime_per_thread_for_systemui_process-(Paused)KernelPreparation-Signal"
-                        + " Catcher-com.android.systemui",
-                260051.000000);
-        assertMetricsContainDouble(
-                parsedV2Metrics,
-                "total_runtime_per_thread_for_systemui_process-(Paused)KernelPreparation-binder:12907_9-com.android.systemui",
-                158854.000000);
-        assertMetricsContainDouble(
-                parsedV2Metrics,
-                "total_runtime_per_thread_for_systemui_process-(Paused)MarkingPause-Signal"
-                        + " Catcher-com.android.systemui",
-                548624.000000);
+        if (DEBUG) {
+            printOutputMetricsForDebug(parsedV2Metrics);
+        }
+        // 6 test metrics + 1 perfetto_post_processor_runtime metric.
+        assertEquals("count of metrics is 6", parsedV2Metrics.size(), 7);
         assertMetricsContainDoubleRow(
-                parsedV2Metrics, "batt_power_mw", Arrays.asList(456.0, 123.0));
+                parsedV2Metrics, "foo_bar-.ShannonImsService", Arrays.asList(123.0, 456.0));
+        assertMetricsContainDouble(parsedV2Metrics, "foo_bar-null", 10464441.0);
+        assertMetricsContainDouble(
+                parsedV2Metrics, "baza-(Paused)KernelPreparation-1234567890-123", 260051.0);
+        assertMetricsContainDouble(
+                parsedV2Metrics, "baza-(Paused)KernelPreparation-12907-456", 158854.0);
+        assertMetricsContainDouble(
+                parsedV2Metrics, "biz-(Paused)KernelPreparation-12907-456", 345.0);
+        assertMetricsContainDouble(
+                parsedV2Metrics, "biz-(Paused)MarkingPause-1234567890-234", 321.0);
     }
 
     /**
@@ -954,72 +944,57 @@ public class PerfettoGenericPostProcessorTest {
     private File setupPerfettoV2MetricFile(METRIC_FILE_FORMAT format, boolean isCompressed)
             throws IOException {
         String perfettoTextContent =
-                "metric {\n"
-                        + "  spec {\n"
-                        + "    id: \"memory_per_process-avg_rss_and_swap\"\n"
-                        + "    dimensions: \"process_name\"\n"
-                        + "    value: \"avg_rss_and_swap\"\n"
-                        + "    query {\n"
-                        + "      table {\n"
-                        + "        table_name: \"memory_rss_and_swap_per_process\"\n"
-                        + "        module_name: \"linux.memory.process\"\n"
-                        + "      }\n"
-                        + "      filters {\n"
-                        + "        column_name: \"process_name\"\n"
-                        + "        op: GLOB\n"
-                        + "        string_rhs: \"*\"\n"
-                        + "      }\n"
-                        + "      group_by {\n"
-                        + "        column_names: \"process_name\"\n"
-                        + "        aggregates {\n"
-                        + "          column_name: \"rss_and_swap\"\n"
-                        + "          op: DURATION_WEIGHTED_MEAN\n"
-                        + "          result_column_name: \"avg_rss_and_swap\"\n"
-                        + "        }\n"
-                        + "      }\n"
+                "metric_bundles {\n"
+                        + "  specs {\n"
+                        + "    id: \"foo_bar\"\n"
+                        + "  }\n"
+                        + "  row {\n"
+                        + "    dimension {\n"
+                        + "      string_value: \".ShannonImsService\"\n"
+                        + "    }\n"
+                        + "    values {\n"
+                        + "      double_value: 123.0\n"
                         + "    }\n"
                         + "  }\n"
                         + "  row {\n"
                         + "    dimension {\n"
                         + "      string_value: \".ShannonImsService\"\n"
                         + "    }\n"
-                        + "    value: 121380864.000000\n"
+                        + "    values {\n"
+                        + "      double_value: 456.0\n"
+                        + "    }\n"
                         + "  }\n"
                         + "  row {\n"
                         + "    dimension {\n"
-                        + "      string_value: \".adservices\"\n"
+                        + "      null_value {}\n"
                         + "    }\n"
-                        + "    value: 123408384.000000\n"
-                        + "  }\n"
-                        + "  row {\n"
-                        + "    dimension {\n"
-                        + "      string_value: \"/apex/com.android.adbd/bin/adbd\"\n"
+                        + "    values {\n"
+                        + "      double_value: 10464441.0\n"
                         + "    }\n"
-                        + "    value: 10464441.000000\n"
                         + "  }\n"
                         + "}\n"
-                        + "metric {\n"
-                        + "  spec {\n"
-                        + "    id: \"total_runtime_per_thread_for_systemui_process\"\n"
-                        + "    dimensions: \"slice_name\"\n"
-                        + "    dimensions: \"thread_name\"\n"
-                        + "    dimensions: \"process_name\"\n"
-                        + "    value: \"total_runtime\"\n"
-                        + "    query {\n"
-                        + "      id: \"group_by_simple_slices_source\"\n"
-                        + "      simple_slices {\n"
-                        + "        process_name_glob: \"com.android.systemui\"\n"
-                        + "      }\n"
-                        + "      group_by {\n"
-                        + "        column_names: \"slice_name\"\n"
-                        + "        column_names: \"thread_name\"\n"
-                        + "        column_names: \"process_name\"\n"
-                        + "        aggregates {\n"
-                        + "          column_name: \"dur\"\n"
-                        + "          op: SUM\n"
-                        + "          result_column_name: \"total_time\"\n"
-                        + "        }\n"
-                        + "      }\n"
+                        + "metric_bundles {\n"
+                        + "  specs {\n"
+                        + "    id: \"baza\"\n"
+                        + "  }\n"
+                        + "  specs {\n"
+                        + "    id: \"biz\"\n"
+                        + "  }\n"
+                        + "  row {\n"
+                        + "    dimension {\n"
+                        + "      string_value: \"(Paused)KernelPreparation\"\n"
+                        + "    }\n"
+                        + "    dimension {\n"
+                        + "      int64_value: 1234567890\n"
+                        + "    }\n"
+                        + "    dimension {\n"
+                        + "      double_value: 123.0\n"
+                        + "    }\n"
+                        + "    values {\n"
+                        + "      double_value: 260051.0\n"
+                        + "    }\n"
+                        + "    values {\n"
+                        + "      null_value {}\n"
                         + "    }\n"
                         + "  }\n"
                         + "  row {\n"
@@ -1027,53 +1002,34 @@ public class PerfettoGenericPostProcessorTest {
                         + "      string_value: \"(Paused)KernelPreparation\"\n"
                         + "    }\n"
                         + "    dimension {\n"
-                        + "      string_value: \"Signal Catcher\"\n"
+                        + "      int64_value: 12907\n"
                         + "    }\n"
                         + "    dimension {\n"
-                        + "      string_value: \"com.android.systemui\"\n"
+                        + "      double_value: 456.0\n"
                         + "    }\n"
-                        + "    value: 260051.000000\n"
-                        + "  }\n"
-                        + "  row {\n"
-                        + "    dimension {\n"
-                        + "      string_value: \"(Paused)KernelPreparation\"\n"
+                        + "    values {\n"
+                        + "      double_value: 158854.0\n"
                         + "    }\n"
-                        + "    dimension {\n"
-                        + "      string_value: \"binder:12907_9\"\n"
+                        + "    values {\n"
+                        + "      double_value: 345.0\n"
                         + "    }\n"
-                        + "    dimension {\n"
-                        + "      string_value: \"com.android.systemui\"\n"
-                        + "    }\n"
-                        + "    value: 158854.000000\n"
                         + "  }\n"
                         + "  row {\n"
                         + "    dimension {\n"
                         + "      string_value: \"(Paused)MarkingPause\"\n"
                         + "    }\n"
                         + "    dimension {\n"
-                        + "      string_value: \"Signal Catcher\"\n"
+                        + "      int64_value: 1234567890\n"
                         + "    }\n"
                         + "    dimension {\n"
-                        + "      string_value: \"com.android.systemui\"\n"
+                        + "      double_value: 234.0\n"
                         + "    }\n"
-                        + "    value: 548624.000000\n"
-                        + "  }\n"
-                        + "}\n"
-                        + "metric {\n"
-                        + "  spec {\n"
-                        + "    id: \"batt_power_mw\"\n"
-                        + "  query {\n"
-                        + "    inner_query {\n"
-                        + "      inner_query_id: \"android_battery\"\n"
+                        + "    values {\n"
+                        + "      null_value {}\n"
                         + "    }\n"
-                        + "  }\n"
-                        + "  value: \"power_mw\"\n"
-                        + "}\n"
-                        + "  row {\n"
-                        + "    value: 456.000000\n"
-                        + "  }\n"
-                        + "  row {\n"
-                        + "    value: 123.000000\n"
+                        + "    values {\n"
+                        + "      double_value: 321.0\n"
+                        + "    }\n"
                         + "  }\n"
                         + "}\n";
 
@@ -1144,8 +1100,7 @@ public class PerfettoGenericPostProcessorTest {
                 String.format(
                         "Metric with key containing %s and value %s was expected but not found.",
                         key, value),
-                metrics.entrySet()
-                        .stream()
+                metrics.entrySet().stream()
                         .anyMatch(
                                 e ->
                                         e.getKey().contains(key)
@@ -1194,4 +1149,3 @@ public class PerfettoGenericPostProcessorTest {
                                                                 .getDoubleValueList())));
     }
 }
-

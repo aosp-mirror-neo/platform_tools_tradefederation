@@ -43,6 +43,8 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 import perfetto.protos.File.TraceSummary;
 import perfetto.protos.PerfettoMergedMetrics.TraceMetrics;
 import perfetto.protos.V2Metric.TraceMetricV2;
+import perfetto.protos.V2Metric.TraceMetricV2Bundle;
+import perfetto.protos.V2Metric.TraceMetricV2Bundle.Row;
 import perfetto.protos.V2Metric.TraceMetricV2.MetricRow;
 import perfetto.protos.V2Metric.TraceMetricV2.MetricRow.Dimension;
 
@@ -162,8 +164,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
             name = "perfetto-metric-replace-prefix",
             description =
                     "Replace the prefix in metricsfrom the metric proto file. Key is the prefix to"
-                        + " look for in the metrickeys parsed and value is be the replacement"
-                        + " string.")
+                            + " look for in the metrickeys parsed and value is be the replacement"
+                            + " string.")
     private Map<String, String> mReplacePrefixMap = new LinkedHashMap<String, String>();
 
     @Option(
@@ -684,7 +686,6 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
      */
     private Map<String, Metric.Builder> convertPerfettoProtoMessageV2(TraceSummary reportMessage) {
         CLog.d("convertPerfettoProtoMessageV2 reportMessage : " + reportMessage);
-        Map<String, Metric.Builder> convertedMetrics = new HashMap<>();
         Map<String, ArrayList<Double>> collectedValuesForKey = new HashMap<>();
 
         for (TraceMetricV2 metric : reportMessage.getMetricList()) {
@@ -709,6 +710,44 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
             }
         }
 
+        for (TraceMetricV2Bundle bundle : reportMessage.getMetricBundlesList()) {
+            for (Row row : bundle.getRowList()) {
+                StringBuilder dimensionBuilder = new StringBuilder();
+                for (Row.Dimension dimension : row.getDimensionList()) {
+                    switch (dimension.getValueOneofCase()) {
+                        case STRING_VALUE:
+                            dimensionBuilder.append("-").append(dimension.getStringValue());
+                            break;
+                        case INT64_VALUE:
+                            dimensionBuilder.append("-").append(dimension.getInt64Value());
+                            break;
+                        case DOUBLE_VALUE:
+                            dimensionBuilder.append("-").append(dimension.getDoubleValue());
+                            break;
+                        case NULL_VALUE:
+                            dimensionBuilder.append("-").append("null");
+                            break;
+                        default:
+                            dimensionBuilder.append("-").append("unknown");
+                            break;
+                    }
+                }
+                String dimensionsKey = dimensionBuilder.toString();
+                for (int i = 0; i < row.getValuesCount(); i++) {
+                    Row.Value rowValue = row.getValues(i);
+                    if (rowValue.hasNullValue()) {
+                        continue;
+                    }
+                    // Store the value in a list associated with its fully constructed key.
+                    String finalRowKey = bundle.getSpecs(i).getId() + dimensionsKey;
+                    collectedValuesForKey
+                            .computeIfAbsent(finalRowKey, k -> new ArrayList<>())
+                            .add(rowValue.getDoubleValue());
+                }
+            }
+        }
+
+        Map<String, Metric.Builder> convertedMetrics = new HashMap<>();
         for (Entry<String, ArrayList<Double>> entry : collectedValuesForKey.entrySet()) {
             String key = entry.getKey();
             ArrayList<Double> values = entry.getValue();

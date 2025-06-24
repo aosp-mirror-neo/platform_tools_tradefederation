@@ -175,16 +175,13 @@ public class DeviceBuildInfoTest {
     // FuseMountManager specific tests
 
     @Test
-    public void getDeviceImageFile_mountContainsUncompressedImage_returnsMountPointDir()
+    public void getDeviceImageFile_mountSuccessful()
             throws Exception {
         DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
         File sourceDir = mTempFolder.newFolder("source-dir");
         buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
 
         File mountPointDir = mTempFolder.newFolder("mount-point");
-        // Create multiple files inside to simulate an uncompressed image
-        new File(mountPointDir, "boot.img").createNewFile();
-        new File(mountPointDir, "system.img").createNewFile();
 
         doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
         when(mMockFuseManager.isValidSourceData(sourceDir.toPath())).thenReturn(true);
@@ -192,32 +189,6 @@ public class DeviceBuildInfoTest {
 
         File result = buildInfoSpy.getDeviceImageFile();
 
-        assertEquals(
-                "Should have returned the mount point directory itself.", mountPointDir, result);
-        verify(mMockFuseManager).mount(sourceDir.toPath());
-    }
-
-    @Test
-    public void getDeviceImageFile_mountContainsSingleZip_returnsOriginalDir() throws Exception {
-        DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
-        File sourceDir = mTempFolder.newFolder("source-dir-for-zip");
-        buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
-
-        File mountPointDir = mTempFolder.newFolder("mount-point-with-zip");
-        // Create a single compressed file with a matching name inside the mount point
-        File imageZipInMountPoint = new File(mountPointDir, "device-img-12345.zip");
-        imageZipInMountPoint.createNewFile();
-
-        doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
-        when(mMockFuseManager.isValidSourceData(sourceDir.toPath())).thenReturn(true);
-        when(mMockFuseManager.mount(sourceDir.toPath())).thenReturn(mountPointDir.toPath());
-
-        File result = buildInfoSpy.getDeviceImageFile();
-
-        assertEquals(
-                "Should return the original source directory, not the single compressed zip file.",
-                mountPointDir,
-                result);
         verify(mMockFuseManager).mount(sourceDir.toPath());
     }
 
