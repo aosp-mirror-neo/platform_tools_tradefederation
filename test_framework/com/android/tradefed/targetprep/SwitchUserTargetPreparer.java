@@ -96,7 +96,8 @@ public class SwitchUserTargetPreparer extends BaseTargetPreparer {
     private void setUserToSwitchTo(ITestDevice device) throws DeviceNotAvailableException {
         try {
             if (UserInfo.UserType.SYSTEM.equals(mUserToSwitchTo)
-                    && device.isHeadlessSystemUserMode()) {
+                    && device.isHeadlessSystemUserMode()
+                    && !device.canSwitchToHeadlessSystemUser()) {
                 mUserToSwitchTo = UserInfo.UserType.FULL;
                 CLog.i("SwitchUserTargetPreparer is configured to switch to a FULL user.");
             }
