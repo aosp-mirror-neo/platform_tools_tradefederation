@@ -16,6 +16,8 @@
 
 package com.android.tradefed.build;
 
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
@@ -31,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Factory for creating and configuring {@link FuseMountManager} instances. */
 public class FuseMountManagerFactory {
@@ -60,6 +63,14 @@ public class FuseMountManagerFactory {
             Path rootDir = Path.of("/tmp", "tf-cas-fuse-mount-root");
             Files.createDirectories(rootDir);
             mMountRoot = rootDir;
+        }
+        // Record the number of active mount points. This should be close to the maximum concurrent
+        // TF tests on a host. A high number indicates a leak of mount points.
+        try (Stream<Path> files = Files.list(mMountRoot)) {
+            long count = files.count();
+            CLog.d("Found %d active mount points in %s", count, mMountRoot);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
         }
     }
 
