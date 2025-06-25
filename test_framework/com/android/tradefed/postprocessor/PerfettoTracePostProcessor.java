@@ -227,20 +227,10 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
 
         // The trace file from the test logs, either raw or compressed.
         File traceFile = new File(logFile.getPath());
-        boolean isCompressed = logFile.getType().isCompressed();
 
-        // If the trace is compressed, decompress it before processing.
-        File processSrcFile = traceFile;
-        if (isCompressed) {
-            processSrcFile = decompressFile(traceFile);
-        }
-
-        // Update the file size metrics.
-        if (processSrcFile != null && mCollectPerfettoFileSize) {
-            double perfettoFileSizeInBytes = processSrcFile.length();
-            Metric.Builder metricDurationBuilder = Metric.newBuilder();
-            metricDurationBuilder.getMeasurementsBuilder().setSingleDouble(perfettoFileSizeInBytes);
-            metrics.put(RAW_TRACE_FILE_SIZE, metricDurationBuilder.setType(DataType.RAW));
+        // Add a metric for the uncompressed trace file size.
+        if (mCollectPerfettoFileSize) {
+            metrics.putAll(getFileSizeMetric(traceFile, logFile.isCompressed()));
         }
 
         // Convert to perfetto metric format.
@@ -248,20 +238,15 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
             if (mMetricV1) {
                 metrics.putAll(
                         wrapConvertedMetricFile(
-                                convertToMetricProto(processSrcFile, METRIC_VERSION_V1),
+                                convertToMetricProto(traceFile, METRIC_VERSION_V1),
                                 METRIC_VERSION_V1));
             }
             if (mMetricV2) {
                 metrics.putAll(
                         wrapConvertedMetricFile(
-                                convertToMetricProto(processSrcFile, METRIC_VERSION_V2),
+                                convertToMetricProto(traceFile, METRIC_VERSION_V2),
                                 METRIC_VERSION_V2));
             }
-        }
-
-        // Clean up the temporary decompressed file if needed.
-        if (isCompressed && processSrcFile != null) {
-            processSrcFile.delete();
         }
 
         return metrics;
@@ -455,6 +440,37 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
         metrics.put(
                 String.format("%s_%s", mMetricPrefix, statusKey),
                 processorStatusBuilder.setType(DataType.RAW));
+
+        return metrics;
+    }
+
+    /**
+     * Return a metric for the uncompressed trace file size.
+     *
+     * @param traceFile the trace file, either raw or compressed.
+     * @param isCompressed whether the trace file is compressed.
+     * @return metrics for the uncompressed trace file size.
+     */
+    private Map<String, Metric.Builder> getFileSizeMetric(File traceFile, boolean isCompressed) {
+        Map<String, Metric.Builder> metrics = new HashMap<>();
+        long traceFileSizeBytes = -1;
+
+        if (!isCompressed) {
+            traceFileSizeBytes = traceFile.length();
+        } else {
+            CLog.i("Decompress trace file to get file size metric.");
+            File decompressedFile = decompressFile(traceFile);
+            if (decompressedFile == null) {
+                CLog.e("Failed to decompress trace file to get file size metric.");
+                return metrics;
+            }
+            traceFileSizeBytes = decompressedFile.length();
+            decompressedFile.delete();
+        }
+
+        Metric.Builder metricBuilder = Metric.newBuilder();
+        metricBuilder.getMeasurementsBuilder().setSingleDouble(traceFileSizeBytes);
+        metrics.put(RAW_TRACE_FILE_SIZE, metricBuilder.setType(DataType.RAW));
 
         return metrics;
     }

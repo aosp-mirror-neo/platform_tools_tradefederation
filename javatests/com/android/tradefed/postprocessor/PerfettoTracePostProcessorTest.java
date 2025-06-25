@@ -369,6 +369,9 @@ public class PerfettoTracePostProcessorTest {
         Map<String, Metric.Builder> newMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogs());
 
+        // Check the trace file was not decompressed before processing.
+        Mockito.verify(mProcessor, Mockito.times(0)).decompressFile(Mockito.any());
+
         // Check the file size metric is correct.
         Assert.assertTrue(newMetrics.containsKey("perfetto_trace_file_size_bytes"));
         Assert.assertTrue(
@@ -379,16 +382,27 @@ public class PerfettoTracePostProcessorTest {
     }
 
     @Test
-    public void testTraceProcessorCompressedTrace() throws Exception {
+    public void testTraceProcessorFileSizeMetricCompressed() throws Exception {
+        // Enable the option to collect the file size metric.
+        OptionSetter setter = new OptionSetter(mProcessor);
+        setter.setOptionValue("collect-perfetto-file-size", "true");
+
         setUpHostCommandResult(CommandStatus.SUCCESS);
 
         File traceProcessorTempFile = createTestArtifactsFile("trace_processor_shell");
 
         // Run the post processor with logs containing a compressed trace file.
-        mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogsCompressed());
+        Map<String, Metric.Builder> newMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogsCompressed());
 
         // Check the trace file was decompressed before processing.
         Mockito.verify(mProcessor).decompressFile(Mockito.any());
+
+        // Check the file size metric is correct.
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_file_size_bytes"));
+        Assert.assertTrue(
+                newMetrics.get("perfetto_trace_file_size_bytes").getMeasurements().getSingleDouble()
+                        >= 0);
 
         traceProcessorTempFile.delete();
     }
