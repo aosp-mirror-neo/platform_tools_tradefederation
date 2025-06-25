@@ -2485,19 +2485,29 @@ public class NativeDeviceTest {
     @Test
     public void testPushFile() throws Exception {
         final String fakeRemotePath = "/test/";
-        SyncService s = Mockito.mock(SyncService.class);
-        when(mMockIDevice.getSyncService()).thenReturn(s);
-
         File tmpFile = FileUtil.createTempFile("push", ".test");
+        CommandResult commandRes = new CommandResult();
+        commandRes.setStatus(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("push"),
+                        Mockito.anyString(),
+                        Mockito.eq("/test/")))
+                .thenReturn(commandRes);
         try {
             boolean res = mTestDevice.pushFile(tmpFile, fakeRemotePath);
-
-            Mockito.verify(s)
-                    .pushFile(
-                            Mockito.eq(tmpFile.getAbsolutePath()),
-                            Mockito.eq(fakeRemotePath),
-                            Mockito.any(ISyncProgressMonitor.class));
-            Mockito.verify(s).close();
+            verify(mMockRunUtil, times(1))
+                    .runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq("serial"),
+                            Mockito.eq("push"),
+                            Mockito.anyString(),
+                            Mockito.eq("/test/"));
             assertTrue(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
@@ -2511,25 +2521,29 @@ public class NativeDeviceTest {
     @Test
     public void testPushFile_fails() throws Exception {
         final String fakeRemotePath = "/test/";
-        SyncService s = Mockito.mock(SyncService.class);
-        when(mMockIDevice.getSyncService()).thenReturn(s);
-
         File tmpFile = FileUtil.createTempFile("push", ".test");
-        doThrow(new SyncException(SyncError.CANCELED))
-                .when(s)
-                .pushFile(
-                        Mockito.eq(tmpFile.getAbsolutePath()),
-                        Mockito.eq(fakeRemotePath),
-                        Mockito.any(ISyncProgressMonitor.class));
+        CommandResult commandRes = new CommandResult();
+        commandRes.setStatus(CommandStatus.FAILED);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("push"),
+                        Mockito.anyString(),
+                        Mockito.eq("/test/")))
+                .thenReturn(commandRes);
         try {
             boolean res = mTestDevice.pushFile(tmpFile, fakeRemotePath);
-
-            Mockito.verify(s)
-                    .pushFile(
-                            Mockito.eq(tmpFile.getAbsolutePath()),
-                            Mockito.eq(fakeRemotePath),
-                            Mockito.any(ISyncProgressMonitor.class));
-            Mockito.verify(s).close();
+            verify(mMockRunUtil, times(1))
+                    .runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq("serial"),
+                            Mockito.eq("push"),
+                            Mockito.anyString(),
+                            Mockito.eq("/test/"));
             assertFalse(res);
         } finally {
             FileUtil.deleteFile(tmpFile);

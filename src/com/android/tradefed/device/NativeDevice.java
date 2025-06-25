@@ -1635,7 +1635,7 @@ public class NativeDevice
     @Override
     public boolean pushFile(final File localFile, final String remoteFilePath, int userId)
             throws DeviceNotAvailableException {
-        return pushFileInternal(localFile, remoteFilePath, false, userId);
+        return pushFileWithAdbCommand(localFile, remoteFilePath, false, userId);
     }
 
     @Override
@@ -1654,7 +1654,7 @@ public class NativeDevice
         if (evaluateContentProviderNeeded) {
             skipContentProvider = userId == 0;
         }
-        return pushFileInternal(localFile, remoteFilePath, skipContentProvider, userId);
+        return pushFileWithAdbCommand(localFile, remoteFilePath, skipContentProvider, userId);
     }
 
     @VisibleForTesting
@@ -1729,6 +1729,37 @@ public class NativeDevice
                     String.format("push %s to %s", localFile.getAbsolutePath(), remoteFilePath),
                     pushAction,
                     MAX_RETRY_ATTEMPTS);
+        } finally {
+            long totalTime = System.currentTimeMillis() - startTime;
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PUSH_FILE_TIME, totalTime);
+        }
+    }
+
+    boolean pushFileWithAdbCommand(
+            final File localFile,
+            final String remoteFilePath,
+            boolean skipContentProvider,
+            int userId)
+            throws DeviceNotAvailableException {
+        long startTime = System.currentTimeMillis();
+        InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.PUSH_FILE_COUNT, 1);
+        try {
+            if (!skipContentProvider) {
+                // Skip Content provider for user 0
+                if (isSdcardOrEmulated(remoteFilePath) && userId != 0) {
+                    ContentProviderHandler handler = getContentProvider(userId);
+                    if (handler != null) {
+                        return handler.pushFile(localFile, remoteFilePath);
+                    }
+                }
+            }
+            List<String> adbPushFileCmd = new ArrayList<>();
+            adbPushFileCmd.add("push");
+            adbPushFileCmd.add(localFile.getAbsolutePath());
+            adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
+            CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
+            return CommandStatus.SUCCESS.equals(res.getStatus());
         } finally {
             long totalTime = System.currentTimeMillis() - startTime;
             InvocationMetricLogger.addInvocationMetrics(
