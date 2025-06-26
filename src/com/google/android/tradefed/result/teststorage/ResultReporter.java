@@ -1285,7 +1285,7 @@ public class ResultReporter
             Metrics metrics = MetricUtils.toMetrics(testMetrics);
             mCurrentTestResult.setMetrics(metrics);
         }
-
+        ListBuilder<Property> propertyBuilder = new ListBuilder<>(Collections.emptyList());
         if (testMetrics.get(TEST_MAPPING_PROPERTY) != null) {
             // Get Test Mapping sources from string formatting with list such as "[path1, path2]".
             // Note: Some test mapping sources may not be recorded. This is because a test module
@@ -1298,11 +1298,12 @@ public class ResultReporter
                             .getSingleString()
                             .replaceAll("^\\[| |\\]$", "");
             List<String> testMappingSources = Arrays.asList(testMappingMeasurement.split(","));
-            ListBuilder<Property> propertyBuilder = new ListBuilder<>(Collections.emptyList());
             for (String testMappingSource : testMappingSources) {
                 propertyBuilder.add(newProperty(TEST_MAPPING_PROPERTY, testMappingSource));
             }
-            propertyBuilder.addAll(mMigrationTestProperties);
+        }
+        propertyBuilder.addAll(mMigrationTestProperties);
+        if (!propertyBuilder.isEmpty()) {
             mCurrentTestResult.setProperties(propertyBuilder.build());
         }
         mClient.uploadResult(mCurrentTestResult);
@@ -2070,6 +2071,10 @@ public class ResultReporter
 
         public boolean contains(T e) {
             return entries.contains(e);
+        }
+
+        public boolean isEmpty() {
+            return entries.isEmpty();
         }
     }
 
