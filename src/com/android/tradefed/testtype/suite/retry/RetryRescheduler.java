@@ -173,6 +173,7 @@ public final class RetryRescheduler implements IRemoteTest, IConfigurationReceiv
                     "RetryScheduler only works for BaseTestSuite implementations");
         }
         BaseTestSuite suite = (BaseTestSuite) test;
+        suite.setInLocalRetry(true);
         ResultsPlayer replayer = new ResultsPlayer();
         updateRunner(suite, collectedTests, replayer);
         collectedTests = null;

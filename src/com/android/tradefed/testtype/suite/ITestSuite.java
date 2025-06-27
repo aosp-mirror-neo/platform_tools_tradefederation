@@ -460,6 +460,8 @@ public abstract class ITestSuite
     private ITestLogger mCurrentLogger = null;
     // Whether or not we are currently in split
     private boolean mIsSplitting = false;
+    // Whether we are running under RetryRescheduler (local retry)
+    private boolean mInLocalRetry = false;
 
     private boolean mDisableAutoRetryTimeReporting = false;
 
@@ -1052,8 +1054,12 @@ public abstract class ITestSuite
                         // TODO(b/372243975): report logs even while applying caching
                         try (InputStreamSource source =
                                 new FileInputStreamSource(moduleConfig, deleteRightAway)) {
-                            allListenersWithLogSaver.testLog(
-                                    "module-configuration", LogDataType.HARNESS_CONFIG, source);
+                            if (mInLocalRetry) {
+                                CLog.v("Skip module-configuration logging in local retry.");
+                            } else {
+                                allListenersWithLogSaver.testLog(
+                                        "module-configuration", LogDataType.HARNESS_CONFIG, source);
+                            }
                         }
                     }
                     TestInformation moduleInfo =
@@ -1602,6 +1608,7 @@ public abstract class ITestSuite
             for (ModuleDefinition m : splitModules) {
                 ITestSuite suite = createInstance();
                 OptionCopier.copyOptionsNoThrow(this, suite);
+                suite.mInLocalRetry = mInLocalRetry;
                 suite.mIsSharded = true;
                 suite.mDirectModule = m;
                 suite.setSkipContext(skipContext);
@@ -2092,5 +2099,9 @@ public abstract class ITestSuite
 
     public boolean isRemoveModuleBuffering() {
         return mRemoveModuleBuffering;
+    }
+
+    public void setInLocalRetry(boolean inLocalRetry) {
+        mInLocalRetry = inLocalRetry;
     }
 }
