@@ -1497,7 +1497,7 @@ public class NativeDevice
                     return handler.pullFile(remoteFilePath, localFile);
                 }
             }
-            return pullFileInternal(remoteFilePath, localFile);
+            return pullFileWithAdbCommand(remoteFilePath, localFile);
         } finally {
             long totalTime = System.currentTimeMillis() - startTime;
             InvocationMetricLogger.addInvocationMetrics(
@@ -1607,6 +1607,16 @@ public class NativeDevice
                 String.format("pull %s to %s", remoteFilePath, localFile.getAbsolutePath()),
                 pullAction,
                 MAX_RETRY_ATTEMPTS);
+    }
+
+    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+            throws DeviceNotAvailableException {
+        List<String> adbPushFileCmd = new ArrayList<>();
+        adbPushFileCmd.add("pull");
+        adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
+        adbPushFileCmd.add(localFile.getAbsolutePath());
+        CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
+        return CommandStatus.SUCCESS.equals(res.getStatus());
     }
 
     /**
@@ -2303,7 +2313,7 @@ public class NativeDevice
                 // handle regular file
                 File localFile = new File(localDir, item.getName());
                 String fullPath = item.getFullPath();
-                if (!pullFileInternal(fullPath, localFile)) {
+                if (!pullFileWithAdbCommand(fullPath, localFile)) {
                     CLog.w("Failed to pull file %s from device, aborting", fullPath);
                     return false;
                 }

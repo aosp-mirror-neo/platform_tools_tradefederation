@@ -23,7 +23,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -34,8 +33,6 @@ import com.android.ddmlib.FileListingService.FileEntry;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IShellOutputReceiver;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
-import com.android.ddmlib.SyncException;
-import com.android.ddmlib.SyncException.SyncError;
 import com.android.ddmlib.TimeoutException;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.command.remote.DeviceDescriptor;
@@ -44,8 +41,6 @@ import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.IWifiHelper.WifiConnectionResult;
 import com.android.tradefed.device.NativeDevice.RebootMode;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
-import com.android.tradefed.device.server.SyncService;
-import com.android.tradefed.device.server.SyncService.ISyncProgressMonitor;
 import com.android.tradefed.host.HostOptions;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.log.LogUtil.CLog;
@@ -530,7 +525,7 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected boolean pullFileInternal(String remoteFilePath, File localFile)
+                    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
                             throws DeviceNotAvailableException {
                         try {
                             // Just touch the file to make it appear.
@@ -608,7 +603,7 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected boolean pullFileInternal(String remoteFilePath, File localFile)
+                    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
                             throws DeviceNotAvailableException {
                         if (mFirstPull) {
                             mFirstPull = false;
@@ -2306,19 +2301,29 @@ public class NativeDeviceTest {
     @Test
     public void testPullFile() throws Exception {
         final String fakeRemotePath = "/test/";
-        SyncService s = Mockito.mock(SyncService.class);
-        when(mMockIDevice.getSyncService()).thenReturn(s);
-
         File tmpFile = FileUtil.createTempFile("pull", ".test");
+        CommandResult commandRes = new CommandResult();
+        commandRes.setStatus(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("pull"),
+                        Mockito.eq("/test/"),
+                        Mockito.anyString()))
+                .thenReturn(commandRes);
         try {
             boolean res = mTestDevice.pullFile(fakeRemotePath, tmpFile);
-
-            Mockito.verify(s)
-                    .pullFile(
-                            Mockito.eq(fakeRemotePath),
-                            Mockito.eq(tmpFile.getAbsolutePath()),
-                            Mockito.any(ISyncProgressMonitor.class));
-            Mockito.verify(s).close();
+            verify(mMockRunUtil, times(1))
+                    .runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq("serial"),
+                            Mockito.eq("pull"),
+                            Mockito.eq("/test/"),
+                            Mockito.anyString());
             assertTrue(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
@@ -2332,25 +2337,30 @@ public class NativeDeviceTest {
     @Test
     public void testPullFile_fails() throws Exception {
         final String fakeRemotePath = "/test/";
-        SyncService s = Mockito.mock(SyncService.class);
-        when(mMockIDevice.getSyncService()).thenReturn(s);
-
         File tmpFile = FileUtil.createTempFile("pull", ".test");
-        doThrow(new SyncException(SyncError.CANCELED))
-                .when(s)
-                .pullFile(
-                        Mockito.eq(fakeRemotePath),
-                        Mockito.eq(tmpFile.getAbsolutePath()),
-                        Mockito.any(ISyncProgressMonitor.class));
+
+        CommandResult commandRes = new CommandResult();
+        commandRes.setStatus(CommandStatus.FAILED);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("pull"),
+                        Mockito.eq("/test/"),
+                        Mockito.anyString()))
+                .thenReturn(commandRes);
         try {
             boolean res = mTestDevice.pullFile(fakeRemotePath, tmpFile);
-
-            Mockito.verify(s)
-                    .pullFile(
-                            Mockito.eq(fakeRemotePath),
-                            Mockito.eq(tmpFile.getAbsolutePath()),
-                            Mockito.any(ISyncProgressMonitor.class));
-            Mockito.verify(s).close();
+            verify(mMockRunUtil, times(1))
+                    .runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq("serial"),
+                            Mockito.eq("pull"),
+                            Mockito.eq("/test/"),
+                            Mockito.anyString());
             assertFalse(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
