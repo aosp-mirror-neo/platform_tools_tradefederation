@@ -128,7 +128,6 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                 // For rollout phase 1, collect metrics for mounting without returning the mounted
                 // path to avoid breaking.
                 manager.mount(deviceImage.toPath());
-                manager.unmount(deviceImage.toPath());
                 // TODO(frankfeng): Return the mounted path after rollout phase 1.
                 return deviceImage;
 
@@ -335,7 +334,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         super.cleanUp();
     }
 
- @Override
+    @Override
     public void cleanUp(List<File> doNotClean) {
         File deviceImage = getFile(BuildInfoFileKey.DEVICE_IMAGE);
         if (deviceImage != null && doNotClean != null && !doNotClean.contains(deviceImage)) {
