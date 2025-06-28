@@ -193,6 +193,9 @@ public interface ICommandOptions {
     /** Sets the set of auto log processors that should be added to an invocation. */
     public void setAutoLogProcessors(Set<AutoLogProcessor> autoLogProcessors);
 
+    /** Whether to auto deploy some post processors. */
+    public boolean enableDefaultLogProcessors();
+
     /** Whether or not to enable experiments through experimental flags. */
     public boolean isExperimentEnabled();
 
