@@ -56,7 +56,6 @@ public class TestMappingTest {
     private static final String TEST_DATA_DIR = "testdata";
     private static final String TEST_MAPPING = "TEST_MAPPING";
     private static final String TEST_MAPPINGS_ZIP = "test_mappings.zip";
-    private static final String DISABLED_PRESUBMIT_TESTS = "disabled-presubmit-tests";
     private static final Set<String> NO_MATCHED_PATTERNS = new HashSet<>();
     private static final boolean IGNORE_IMPORTS = true;
     private TestMapping mTestMapping;
@@ -87,7 +86,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     NO_MATCHED_PATTERNS),
                             "presubmit",
-                            null,
                             true,
                             null,
                             new HashSet<String>());
@@ -105,7 +103,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     NO_MATCHED_PATTERNS),
                             "presubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -123,7 +120,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     NO_MATCHED_PATTERNS),
                             "postsubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -149,7 +145,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     NO_MATCHED_PATTERNS),
                             "othertype",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -185,7 +180,6 @@ public class TestMappingTest {
                             Paths.get(tempDir.getAbsolutePath()),
                             NO_MATCHED_PATTERNS),
                     "presubmit",
-                    null,
                     false,
                     null,
                     new HashSet<String>());
@@ -210,11 +204,7 @@ public class TestMappingTest {
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -224,7 +214,7 @@ public class TestMappingTest {
             Set<TestInfo> tests =
                     mTestMapping.getTests(
                             mockBuildInfo, "presubmit", false, null, new HashSet<String>());
-            assertEquals(0, tests.size());
+            assertEquals(2, tests.size());
 
             tests =
                     mTestMapping.getTests(
@@ -266,11 +256,7 @@ public class TestMappingTest {
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -602,9 +588,6 @@ public class TestMappingTest {
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
             Map<String, Set<TestInfo>> allTests = mTestMapping.getAllTests(tempDir);
             Set<TestInfo> tests = allTests.get("presubmit");
             assertEquals(6, tests.size());
@@ -635,11 +618,7 @@ public class TestMappingTest {
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -675,18 +654,7 @@ public class TestMappingTest {
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
             Path tempDirPath = Paths.get(tempDir.getAbsolutePath());
-            Set<String> disabledTests = mTestMapping.getDisabledTests(tempDirPath, "presubmit");
-            assertEquals(2, disabledTests.size());
-
-            disabledTests = mTestMapping.getDisabledTests(tempDirPath, "postsubmit");
-            assertEquals(0, disabledTests.size());
-
-            disabledTests = mTestMapping.getDisabledTests(tempDirPath, "othertype");
-            assertEquals(0, disabledTests.size());
         } finally {
             FileUtil.recursiveDelete(tempDir);
         }
@@ -747,11 +715,7 @@ public class TestMappingTest {
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, path3, TEST_MAPPING);
 
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(path1, path2, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(path1, path2);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -766,7 +730,6 @@ public class TestMappingTest {
                                     tempDir.toPath(),
                                     NO_MATCHED_PATTERNS),
                             "presubmit",
-                            null,
                             true,
                             null,
                             new HashSet<String>());
@@ -790,7 +753,6 @@ public class TestMappingTest {
                                     tempDir.toPath(),
                                     NO_MATCHED_PATTERNS),
                             "presubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -845,11 +807,7 @@ public class TestMappingTest {
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, path3, TEST_MAPPING);
 
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(path1, path2, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(path1, path2);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -863,7 +821,6 @@ public class TestMappingTest {
                                     tempDir.toPath(),
                                     NO_MATCHED_PATTERNS),
                             "presubmit",
-                            null,
                             true,
                             null,
                             new HashSet<String>());
@@ -913,11 +870,7 @@ public class TestMappingTest {
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, subDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir, subDir);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -965,10 +918,6 @@ public class TestMappingTest {
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-
             Set<String> sources = mTestMapping.getTestMappingSources(tempDir);
             assertEquals(3, sources.size());
             assertTrue(sources.contains("src1/TEST_MAPPING"));
@@ -998,9 +947,7 @@ public class TestMappingTest {
             tempDir = FileUtil.createTempDir("test_mapping");
             File srcDir = FileUtil.createNamedTempDir(tempDir, "src1");
             createTestMapping(srcDir, "test_mapping_kernel1");
-            createTestMapping(tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1047,9 +994,7 @@ public class TestMappingTest {
             tempDir = FileUtil.createTempDir("test_mapping");
             File srcDir = FileUtil.createNamedTempDir(tempDir, "src1");
             createTestMapping(srcDir, "test_mapping_kernel1");
-            createTestMapping(tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1073,13 +1018,11 @@ public class TestMappingTest {
     @Test
     public void testGetTestsWithAdditionalTestMappingZips() throws Exception {
         // Test directory1 structure:
-        // ├── disabled-presubmit-tests
         // ├── src1
         // │   └── TEST_MAPPING
         // └── test_mappings.zip
         //
         // Test directory2 structure:
-        // ├── disabled-presubmit-tests
         // ├── src2
         // │   └── TEST_MAPPING
         // └── test_mappings.zip
@@ -1091,9 +1034,7 @@ public class TestMappingTest {
             tempDir = FileUtil.createTempDir("test_mapping");
             File srcDir = FileUtil.createNamedTempDir(tempDir, "src1");
             createTestMapping(srcDir, "test_mapping_kernel1");
-            createTestMapping(tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1101,9 +1042,7 @@ public class TestMappingTest {
             tempDir2 = FileUtil.createTempDir("test_mapping");
             File srcDir2 = FileUtil.createNamedTempDir(tempDir2, "src2");
             createTestMapping(srcDir2, "test_mapping_kernel2");
-            createTestMapping(tempDir2, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip2 =
-                    Arrays.asList(srcDir2, new File(tempDir2, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip2 = Arrays.asList(srcDir2);
             File zipFile2 = Paths.get(tempDir2.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip2, zipFile2);
 
@@ -1138,13 +1077,11 @@ public class TestMappingTest {
     @Test
     public void testGetTestsWithAdditionalTestMappingDir() throws Exception {
         // Test directory1 structure:
-        // ├── disabled-presubmit-tests
         // ├── src1
         // │   └── TEST_MAPPING
         // └── test_mappings.zip
         //
         // Test directory2 structure:
-        // ├── disabled-presubmit-tests
         // ├── src2
         // │   └── TEST_MAPPING
         File tempDir = null;
@@ -1155,9 +1092,7 @@ public class TestMappingTest {
             tempDir = FileUtil.createTempDir("test_mapping");
             File srcDir = FileUtil.createNamedTempDir(tempDir, "src1");
             createTestMapping(srcDir, "test_mapping_kernel1");
-            createTestMapping(tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1226,7 +1161,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     matchedPatternPaths),
                             "presubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -1246,7 +1180,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     matchedPatternPaths),
                             "presubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -1262,7 +1195,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     matchedPatternPaths),
                             "presubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
@@ -1277,7 +1209,6 @@ public class TestMappingTest {
                                     Paths.get(tempDir.getAbsolutePath()),
                                     matchedPatternPaths),
                             "presubmit",
-                            null,
                             false,
                             null,
                             new HashSet<String>());
