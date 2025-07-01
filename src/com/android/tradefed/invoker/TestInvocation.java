@@ -1174,11 +1174,8 @@ public class TestInvocation implements ITestInvocation {
                 }
             }
 
-            List<IPostProcessor> postProcessors = new ArrayList<>(config.getPostProcessors());
+            List<IPostProcessor> postProcessors = config.getPostProcessors();
             // Add automated processors
-            if (config.getCommandOptions().enableDefaultLogProcessors()) {
-                postProcessors.add(AutoLogProcessor.GEMINI_AI_DEBUGGING.getInstanceForValue());
-            }
             for (AutoLogProcessor auto : config.getCommandOptions().getAutoLogProcessors()) {
                 postProcessors.add(auto.getInstanceForValue());
             }
