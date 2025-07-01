@@ -86,7 +86,6 @@ public class TestMappingSuiteRunnerTest {
 
     private static final String ABI_1 = "arm64-v8a";
     private static final String ABI_2 = "armeabi-v7a";
-    private static final String DISABLED_PRESUBMIT_TESTS = "disabled-presubmit-tests";
     private static final String EMPTY_CONFIG = "empty";
     private static final String TEST_CONFIG_NAME = "test";
     private static final String TEST_DATA_DIR = "testdata";
@@ -220,21 +219,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -314,21 +307,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -379,21 +366,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -446,21 +427,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -492,21 +467,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -668,21 +637,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -717,21 +680,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1046,11 +1003,7 @@ public class TestMappingSuiteRunnerTest {
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, path3, TEST_MAPPING);
 
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, tempDir, DISABLED_PRESUBMIT_TESTS);
-            List<File> filesToZip =
-                    Arrays.asList(path1, path2, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(path1, path2);
 
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
@@ -1152,21 +1105,15 @@ public class TestMappingSuiteRunnerTest {
             tempDir = FileUtil.createTempDir("test_mapping");
 
             File srcDir = FileUtil.createTempDir("src", tempDir);
-            String srcFile =
-                    File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+            String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
             InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-            FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-            srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-            resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
             File subDir = FileUtil.createTempDir("sub_dir", srcDir);
             srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
             resourceStream = this.getClass().getResourceAsStream(srcFile);
             FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-            List<File> filesToZip =
-                    Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+            List<File> filesToZip = Arrays.asList(srcDir);
             File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
             ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1458,19 +1405,16 @@ public class TestMappingSuiteRunnerTest {
     /** Helper to create test_mappings.zip for Mainline. */
     private File createMainlineTestMappingZip(File tempDir) throws IOException {
         File srcDir = FileUtil.createTempDir("src", tempDir);
-        String srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+        String srcFile =
+                File.separator + TEST_DATA_DIR + File.separator + "test_mapping_with_mainline";
         InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-        FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-        srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_with_mainline";
-        resourceStream = this.getClass().getResourceAsStream(srcFile);
         FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
         File subDir = FileUtil.createTempDir("sub_dir", srcDir);
         srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
         resourceStream = this.getClass().getResourceAsStream(srcFile);
         FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-        List<File> filesToZip = Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+        List<File> filesToZip = Arrays.asList(srcDir);
         File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
         ZipUtil.createZip(filesToZip, zipFile);
 
@@ -1480,19 +1424,15 @@ public class TestMappingSuiteRunnerTest {
     /** Helper to create test_mappings.zip. */
     private File createTestMappingZip(File tempDir) throws IOException {
         File srcDir = FileUtil.createTempDir("src", tempDir);
-        String srcFile = File.separator + TEST_DATA_DIR + File.separator + DISABLED_PRESUBMIT_TESTS;
+        String srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
         InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
-        FileUtil.saveResourceFile(resourceStream, srcDir, DISABLED_PRESUBMIT_TESTS);
-
-        srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_1";
-        resourceStream = this.getClass().getResourceAsStream(srcFile);
         FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
         File subDir = FileUtil.createTempDir("sub_dir", srcDir);
         srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
         resourceStream = this.getClass().getResourceAsStream(srcFile);
         FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
 
-        List<File> filesToZip = Arrays.asList(srcDir, new File(tempDir, DISABLED_PRESUBMIT_TESTS));
+        List<File> filesToZip = Arrays.asList(srcDir);
         File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
         ZipUtil.createZip(filesToZip, zipFile);
 

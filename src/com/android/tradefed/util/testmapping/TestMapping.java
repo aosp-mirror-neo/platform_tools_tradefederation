@@ -76,8 +76,6 @@ public class TestMapping {
     private static final String KEY_OPTIONS = "options";
     private static final String TEST_MAPPING = "TEST_MAPPING";
     public static final String TEST_MAPPINGS_ZIP = "test_mappings.zip";
-    // A file containing module names that are disabled in presubmit test runs.
-    private static final String DISABLED_PRESUBMIT_TESTS_FILE = "disabled-presubmit-tests";
     // Pattern used to identify comments start with "//" or "#" in TEST_MAPPING.
     private static final Pattern COMMENTS_REGEX = Pattern.compile(
             "(?m)[\\s\\t]*(//|#).*|(\".*?\")");
@@ -398,7 +396,6 @@ public class TestMapping {
      *
      * @param testCollection A {@link Map} of the test collection.
      * @param testGroup A {@link String} of the test group.
-     * @param disabledTests A set of {@link String} for the name of the disabled tests.
      * @param hostOnly true if only tests running on host and don't require device should be
      *     returned. false to return tests that require device to run.
      * @param keywords A set of {@link String} to be matched when filtering tests to run in a Test
@@ -410,15 +407,11 @@ public class TestMapping {
     Set<TestInfo> getTests(
             Map<String, Set<TestInfo>> testCollection,
             String testGroup,
-            Set<String> disabledTests,
             boolean hostOnly,
             Set<String> keywords,
             Set<String> ignoreKeywords) {
         Set<TestInfo> tests = new LinkedHashSet<TestInfo>();
         for (TestInfo test : testCollection.getOrDefault(testGroup, new HashSet<>())) {
-            if (disabledTests != null && disabledTests.contains(test.getName())) {
-                continue;
-            }
             if (test.getHostOnly() != hostOnly) {
                 continue;
             }
@@ -523,7 +516,6 @@ public class TestMapping {
                         ? Files.walk(testMappingsRootPath, FileVisitOption.FOLLOW_LINKS)
                         : getAllTestMappingPaths(testMappingsRootPath).stream()) {
             mergeTestMappingZips(buildInfo, extraZipNames, zipFile, testMappingsDir);
-            Set<String> disabledTests = getDisabledTests(testMappingsRootPath, testGroup);
             stream.filter(path -> path.getFileName().toString().equals(TEST_MAPPING))
                     .forEach(
                             path ->
@@ -534,7 +526,6 @@ public class TestMapping {
                                                             testMappingsRootPath,
                                                             matchedPatternPaths),
                                                     testGroup,
-                                                    disabledTests,
                                                     hostOnly,
                                                     keywords,
                                                     ignoreKeywords)));
@@ -662,36 +653,6 @@ public class TestMapping {
     }
 
     /**
-     * Get disabled tests from test mapping artifact.
-     *
-     * @param testMappingsRootPath The {@link Path} to a test mappings zip path.
-     * @param testGroup a {@link String} of the test group.
-     * @return a {@link Set<String>} containing all the disabled presubmit tests. No test is
-     *     returned if the testGroup is not PRESUBMIT.
-     */
-    @VisibleForTesting
-    Set<String> getDisabledTests(Path testMappingsRootPath, String testGroup) {
-        Set<String> disabledTests = new HashSet<>();
-        File disabledPresubmitTestsFile =
-                new File(testMappingsRootPath.toString(), DISABLED_PRESUBMIT_TESTS_FILE);
-        if (!(testGroup.equals(PRESUBMIT) && disabledPresubmitTestsFile.exists())) {
-            return disabledTests;
-        }
-        try {
-            disabledTests.addAll(
-                    Arrays.asList(
-                            FileUtil.readStringFromFile(disabledPresubmitTestsFile)
-                                    .split("\\r?\\n")));
-        } catch (IOException e) {
-            throw new RuntimeException(
-                    String.format(
-                            "IO exception (%s) when reading disabled tests from file (%s)",
-                            e.getMessage(), disabledPresubmitTestsFile.getAbsolutePath()), e);
-        }
-        return disabledTests;
-    }
-
-    /**
      * Helper to get the matcher for parameterized mainline tests.
      *
      * @param {@code Set<TestInfo>} of tests set in the build artifact, test_mappings.zip.
@@ -809,10 +770,7 @@ public class TestMapping {
             }
             while (entries.hasMoreElements()) {
                 ZipArchiveEntry entry = entries.nextElement();
-                // TODO: Temporarily exclude disabled-presubmit-test file. We'll need to revisit if
-                // that file is used on the older branch/target, if no, remove that file.
-                if (!entry.isDirectory()
-                        && !entry.getName().equals(DISABLED_PRESUBMIT_TESTS_FILE)) {
+                if (!entry.isDirectory()) {
                     fileNames.add(entry.getName());
                 }
             }
