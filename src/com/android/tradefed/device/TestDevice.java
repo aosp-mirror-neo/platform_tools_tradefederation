@@ -672,7 +672,7 @@ public class TestDevice extends NativeDevice {
     @Override
     public String uninstallPackage(final String packageName) throws DeviceNotAvailableException {
         // use array to store response, so it can be returned to caller
-        return uninstallPackage(packageName, /* extraArgs= */ null);
+        return adbUninstallPackage(packageName);
     }
 
     private String uninstallPackage(String packageName, @Nullable String extraArgs)
@@ -697,11 +697,23 @@ public class TestDevice extends NativeDevice {
         return response[0];
     }
 
+    private String adbUninstallPackage(String packageName, String... extraArgs)
+            throws DeviceNotAvailableException {
+        List<String> adbCmd = new ArrayList<>();
+        adbCmd.add("uninstall");
+        if (extraArgs != null) {
+            adbCmd.addAll(Arrays.asList(extraArgs));
+        }
+        adbCmd.add(packageName);
+        CommandResult res = executeAdbV2Command(adbCmd.toArray(new String[0]));
+        return res.getStdout();
+    }
+
     /** {@inheritDoc} */
     @Override
     public String uninstallPackageForUser(final String packageName, int userId)
             throws DeviceNotAvailableException {
-        return uninstallPackage(packageName, "--user " + userId);
+        return adbUninstallPackage(packageName, "--user ", String.valueOf(userId));
     }
 
     /**
