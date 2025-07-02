@@ -224,7 +224,8 @@ public class TestMappingsValidation implements IBuildReceiver {
                     "CellBroadcastReceiverComplianceTests",
                     "InputMethodStressTest",
                     "SystemUIClocksTests",
-                    "GtsStagedInstallHostTestCases");
+                    "GtsStagedInstallHostTestCases",
+                    "binderRpcTestNoLegacy");
 
     private static final Set<String> REMOUNT_MODULES =
             ImmutableSet.of(
