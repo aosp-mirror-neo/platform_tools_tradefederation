@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.result.skipped;
 
+import com.android.tradefed.build.content.DeviceImagePartition;
+import com.android.tradefed.cache.DigestCalculator;
 import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.OptionSetter;
@@ -23,12 +25,18 @@ import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.result.skipped.SkipReason.DemotionTrigger;
 
+import build.bazel.remote.execution.v2.Digest;
+import build.bazel.remote.execution.v2.Directory;
+
 import com.google.common.truth.Truth;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /** Unit tests for {@link SkipManager}. */
 @RunWith(JUnit4.class)
@@ -43,6 +51,13 @@ public class SkipManagerTest {
     public void setup() {
         mManager = new SkipManager();
         mManager.setSkipDecision(true);
+        Directory defaultDirectory = Directory.getDefaultInstance();
+        Digest defaultDigest = DigestCalculator.compute(defaultDirectory);
+        Map<String, Digest> imageFileToDigest = new HashMap<>();
+        for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
+            imageFileToDigest.put(imagePartition.getCacheKeyName(), defaultDigest);
+        }
+        mManager.setImageToDigest(imageFileToDigest);
         mContext = new InvocationContext();
         mConfiguration = new Configuration("test", "name");
         mTestInformation = TestInformation.newBuilder().setInvocationContext(mContext).build();
@@ -70,5 +85,80 @@ public class SkipManagerTest {
                 new SkipReason("message", DemotionTrigger.ERROR_RATE).toString());
         mManager.setup(mConfiguration, mContext);
         Truth.assertThat(mManager.getDemotedTests().size()).isEqualTo(1);
+    }
+
+    @Test
+    public void testImageToDigest_vendorOnlyStrategy() throws Exception {
+        OptionSetter setter = new OptionSetter(mManager);
+        setter.setOptionValue("enable-image-granularity-strategy", "true");
+        mConfiguration.setCommandLine(
+                new String[] {
+                    "google/cts/google-cts-launcher-for-aosp",
+                    "--config-name",
+                    "vts",
+                    "--cts-package-name",
+                    "android-vts.zip"
+                });
+        mManager.setup(mConfiguration, mContext);
+
+        Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(1);
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                DeviceImagePartition.VENDOR.getCacheKeyName()))
+                .isTrue();
+    }
+
+    @Test
+    public void testImageToDigest_systemVendorStrategy() throws Exception {
+        OptionSetter setter = new OptionSetter(mManager);
+        setter.setOptionValue("enable-image-granularity-strategy", "true");
+        mConfiguration.setCommandLine(
+                new String[] {
+                    "google/cts/google-cts-launcher-for-aosp",
+                    "--config-name",
+                    "cts-automated",
+                    "--cts-package-name",
+                    "android-cts.zip"
+                });
+        mManager.setup(mConfiguration, mContext);
+
+        Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(2);
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                DeviceImagePartition.VENDOR.getCacheKeyName()))
+                .isTrue();
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                DeviceImagePartition.SYSTEM.getCacheKeyName()))
+                .isTrue();
+    }
+
+    @Test
+    public void testImageToDigest_fullImageStrategy() throws Exception {
+        mConfiguration.setCommandLine(
+                new String[] {
+                    "google/cts/google-cts-launcher-for-aosp",
+                    "--config-name",
+                    "gts-automated",
+                    "--cts-package-name",
+                    "android-gts.zip"
+                });
+        mManager.setup(mConfiguration, mContext);
+
+        Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(3);
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                DeviceImagePartition.VENDOR.getCacheKeyName()))
+                .isTrue();
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                DeviceImagePartition.SYSTEM.getCacheKeyName()))
+                .isTrue();
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(DeviceImagePartition.OTHER.getCacheKeyName()))
+                .isTrue();
     }
 }
