@@ -257,6 +257,11 @@ public class CommandOptions implements ICommandOptions {
     private Set<AutoLogProcessor> mAutoProcessors = new LinkedHashSet<>();
 
     @Option(
+            name = "enable-default-auto-processor",
+            description = "Deploy the default post processors for analysis.")
+    private boolean mDefaultPostProcessor = true;
+
+    @Option(
             name = "gemini-api-key",
             description = "The api key to use for gemini prompt query if enabled.")
     private String mGeminiApiKey = null;
@@ -728,6 +733,12 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public void setAutoLogProcessors(Set<AutoLogProcessor> autoLogProcessors) {
         mAutoProcessors = autoLogProcessors;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean enableDefaultLogProcessors() {
+        return mDefaultPostProcessor;
     }
 
     /** {@inheritDoc} */
