@@ -1194,7 +1194,9 @@ public abstract class ITestSuite
         if (!modulePostProcessors.isEmpty() && mKeepPostProcessorOrder) {
             // reverse the post-processor list so that the first post-processor in the list
             // becomes the outermost post-processor and the first to receive events.
-            Collections.reverse(modulePostProcessors);
+            List<IPostProcessor> tmpList = new ArrayList<>(modulePostProcessors);
+            Collections.reverse(tmpList);
+            modulePostProcessors = tmpList;
         }
         // set log saver for module level post postprocessor manually to allow chained log
         // processing at module level. Do this before init() to avoid passing down the log saver
