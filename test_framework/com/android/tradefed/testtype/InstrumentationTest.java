@@ -1061,6 +1061,7 @@ public class InstrumentationTest
                                             .setInstrumentationPkgName(mPackageName);
                                 }
                                 listener = collector.init(testInfo.getContext(), listener);
+                                collector.onTestRunStartBlocking();
                             }
                         }
                     }

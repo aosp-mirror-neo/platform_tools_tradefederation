@@ -85,6 +85,16 @@ public interface IMetricCollector extends ILogSaverListener, IDisableable {
     }
 
     /**
+     * Explicit callback to start a collector manually if it supports it. This allows to ensure we
+     * are out of some test lifecycle which are asynchronous.
+     *
+     * @throws DeviceNotAvailableException
+     */
+    public default void onTestRunStartBlocking() throws DeviceNotAvailableException {
+        // Do nothing
+    }
+
+    /**
      * Callback when a test run is ended. This should be the time for clean up.
      *
      * @param runData the {@link DeviceMetricData} holding the data for the run. Will be the same
