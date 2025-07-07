@@ -81,6 +81,8 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
     // forwarding behavior.
     private boolean mIsPostProcessing = false;
 
+    private boolean mIsRunInProgress = false;
+
     private String mRunName;
 
     /** {@inheritDoc} */
@@ -212,6 +214,7 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
     public final void testRunStarted(
             String runName, int testCount, int attemptNumber, long startTime) {
         mRunName = runName;
+        mIsRunInProgress = true;
         mForwarder.testRunStarted(runName, testCount, attemptNumber, startTime);
     }
 
@@ -265,6 +268,7 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
                     InvocationMetricKey.COLLECTOR_TIME, System.currentTimeMillis() - start);
         }
         mIsPostProcessing = false;
+        mIsRunInProgress = false;
         mForwarder.testRunEnded(elapsedTime, runMetrics);
     }
 
@@ -276,6 +280,7 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
 
     @Override
     public final void testStarted(TestDescription test, long startTime) {
+        mIsRunInProgress = true;
         mCurrentTest = test;
         if (mTestLogs.containsKey(test)) {
             mTestLogs.get(test).clear();
@@ -398,7 +403,7 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
     @Override
     public final void testLogSaved(
             String dataName, LogDataType dataType, InputStreamSource dataStream, LogFile logFile) {
-        if (!mIsPostProcessing) {
+        if (!mIsPostProcessing && mIsRunInProgress) {
             mCopiedLogs.put(dataName, copyLogFile(logFile));
         }
         if (mForwarder instanceof ILogSaverListener) {
