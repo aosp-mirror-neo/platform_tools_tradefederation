@@ -53,11 +53,12 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                 mOptionalFuseMountManager =
                         Optional.of(
                                 FuseMountManagerFactory.getInstance().createCasFuseMountManager());
-            } catch (IOException e) {
+            } catch (IOException | ExceptionInInitializerError | NoClassDefFoundError e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
                         "Failed to get FUSE mount manager, FUSE mounting will be disabled. Error:"
-                            + " %s",
-                        e);
+                                + " %s",
+                        cause.getMessage());
                 mOptionalFuseMountManager = Optional.empty();
             }
         }

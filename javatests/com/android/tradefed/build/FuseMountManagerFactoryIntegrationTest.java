@@ -26,6 +26,7 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.List;
 import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
@@ -47,8 +48,25 @@ public class FuseMountManagerFactoryIntegrationTest {
 
     private String mOriginalTfJarDir;
 
+    /**
+     * A test-specific subclass of the factory that overrides environmental checks to allow for
+     * isolated testing.
+     */
+    public static class TestableFuseMountManagerFactory extends FuseMountManagerFactory {
+        public TestableFuseMountManagerFactory() throws IOException {
+            super();
+        }
+
+        @Override
+        protected boolean isFuseAvailable() {
+            // For this test, always pretend the FUSE kernel module is available.
+            return true;
+        }
+    }
+
     @Before
     public void setUp() throws Exception {
+        // Reset the singleton from any previous test runs to ensure a clean slate.
         resetFactorySingleton();
 
         // Save the original system property so we can restore it later
@@ -69,11 +87,11 @@ public class FuseMountManagerFactoryIntegrationTest {
     }
 
     @Test
-    public void testCreateCasManager_makesClientExecutable() throws IOException {
+    public void testCreateCasManager_makesClientExecutable() throws Exception {
         // 1. Create a fake casviewer file in our temporary directory.
         File casClientFile = tempFolder.newFile("casviewer");
 
-        // 2. Explicitly make the file NOT executable to simulate the problem scenario.
+        // 2. Explicitly make the file NOT executable.
         casClientFile.setExecutable(false, false);
         String oldPerms = getFilePermissions(casClientFile);
         assertFalse(
@@ -83,9 +101,8 @@ public class FuseMountManagerFactoryIntegrationTest {
         // 3. Point the system property to our temporary directory.
         System.setProperty("TF_JAR_DIR", tempFolder.getRoot().getAbsolutePath());
 
-        // Get an instance of the factory, which will read the system property.
-        // Then call the creation method, which will trigger getCasClientPath().
-        FuseMountManagerFactory factory = FuseMountManagerFactory.getInstance();
+        // 4. Instantiate our TESTABLE subclass, which bypasses the /dev/fuse check.
+        FuseMountManagerFactory factory = new TestableFuseMountManagerFactory();
         FuseMountManager manager = factory.createCasFuseMountManager();
 
         assertNotNull(manager);
@@ -108,12 +125,17 @@ public class FuseMountManagerFactoryIntegrationTest {
     }
 
     /**
-     * Uses reflection to reset the private static singleton instance in the factory. This is
-     * crucial for ensuring tests are isolated when dealing with singletons.
+     * Uses reflection to reset the private static state in the factory. This is crucial for
+     * ensuring tests are isolated.
      */
     private void resetFactorySingleton() throws Exception {
-        Field instanceField = FuseMountManagerFactory.class.getDeclaredField("sInstance");
-        instanceField.setAccessible(true);
-        instanceField.set(null, null);
+        Field rootField = FuseMountManagerFactory.class.getDeclaredField("mMountRoot");
+        rootField.setAccessible(true);
+        rootField.set(null, null); // Sets the static field to null
+
+        Field managersField = FuseMountManagerFactory.class.getDeclaredField("mManagers");
+        managersField.setAccessible(true);
+        List<?> managersList = (List<?>) managersField.get(null);
+        managersList.clear(); // Clear the contents of the list
     }
 }

@@ -147,7 +147,7 @@ public class FuseMountManager {
                 throw new IOException("runCmdInBackground returned a null process.");
             }
 
-            final long pollIntervalMs = 100;
+            final long pollIntervalMs = 50;
             final long deadline = System.currentTimeMillis() + mDriverProfile.getMountTimeoutInMs();
             do {
                 if (mDriverProfile.isMountPointReady(mountPoint)) {
@@ -217,18 +217,21 @@ public class FuseMountManager {
      * @param sourceDataPath The source data path to unmount.
      */
     public void unmount(Path sourceDataPath) {
+        final long startTime = System.currentTimeMillis();
+
+        String sourceDataPathString = sourceDataPath.toAbsolutePath().toString();
         MountInfo mountInfo = mActiveMounts.get(sourceDataPath);
         if (mountInfo == null) {
-            CLog.w("No mount found for: %s", sourceDataPath.toAbsolutePath().toString());
+            CLog.w("No mount found for: %s", sourceDataPathString);
             return;
         }
 
-        CLog.d("Unmount: %s", sourceDataPath.toAbsolutePath().toString());
+        CLog.d("Unmount: %s", sourceDataPathString);
 
         Path mountPoint = mountInfo.mMountPoint;
         Process process = mountInfo.mProcess;
         if (!process.isAlive()) {
-            CLog.w("Already unmounted: %s", sourceDataPath.toAbsolutePath().toString());
+            CLog.w("Already unmounted: %s", sourceDataPathString);
             deleteMountPoint(mountPoint);
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
             return;
@@ -243,31 +246,34 @@ public class FuseMountManager {
                 CLog.w(
                         "Graceful shutdown with 'fusermount -u' failed. Stderr: "
                                 + result.getStderr());
-                // Wait for up to 2 seconds to see if the process terminated despite the error
-                process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
+            }
+
+            // Allow the process a brief moment to exit on its own after fusermount.
+            // This returns immediately if the process is already dead.
+            if (process.waitFor(200, TimeUnit.MILLISECONDS)) {
+                return;
             }
 
         } catch (InterruptedException e) {
             CLog.e(
-                    "fusermount command failed or timed out. Will attempt to kill the process"
-                            + " directly. Error: %s",
+                    "Interrupted while waiting for FUSE process to terminate. Error: %s",
                     e.getMessage());
+            Thread.currentThread().interrupt();
         } finally {
-            // Forcibly kill the driver process
             if (process.isAlive()) {
-                CLog.d(
-                        "fusermount did not terminate the process for \'%s\'. Forcibly destroying"
-                                + " it.",
-                        mountPoint.toAbsolutePath().toString());
+                CLog.w(
+                        "FUSE process for %s did not terminate gracefully. Forcibly destroying it.",
+                        sourceDataPathString);
                 process.destroyForcibly();
-                // Don't wait for the process to terminate as there isn't much we can do if it
-                // doesn't.
             }
+
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
             deleteMountPoint(mountPoint);
-        }
 
-        CLog.d("Done unmounting: %s", sourceDataPath.toAbsolutePath().toString());
+            CLog.d(
+                    "Done unmounting: %s (took %d ms)",
+                    sourceDataPathString, System.currentTimeMillis() - startTime);
+        }
     }
 
     /** Unmounts all tracked filesystems in parallel.
@@ -361,7 +367,9 @@ public class FuseMountManager {
             try {
                 Files.delete(mountPoint);
             } catch (IOException e) {
-                CLog.w("Failed to delete mount point %s", mountPoint.toAbsolutePath().toString());
+                CLog.w(
+                        "Failed to delete mount point '%s'. Error: %s",
+                        mountPoint.toAbsolutePath().toString(), e.getMessage());
             }
         }
     }

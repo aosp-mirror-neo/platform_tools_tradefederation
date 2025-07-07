@@ -134,9 +134,13 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
         for (Entry<String, LogFile> log : testLogs.entrySet()) {
             LogFile logFileValue = log.getValue();
             if (logFileValue.getType().equals(LogDataType.LOGCAT)) {
-                logMap.put(
-                        "LOGCAT",
-                        LogPreprocessor.preprocessLogcat(new File(logFileValue.getPath())));
+                File processedLogcat =
+                        LogPreprocessor.preprocessLogcat(new File(logFileValue.getPath()));
+                if (processedLogcat.length() > 15L) {
+                    logMap.put("LOGCAT", processedLogcat);
+                } else {
+                    CLog.d("Logcat too small to be used.");
+                }
             }
             if (logFileValue.getType().equals(LogDataType.HOST_LOG)) {
                 logMap.put("HOST_LOG", new File(logFileValue.getPath()));

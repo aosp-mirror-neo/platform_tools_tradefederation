@@ -24,7 +24,9 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,21 +43,52 @@ public class FuseMountManagerFactory {
     private static Path mMountRoot;
 
     private final IRunUtil mRunUtil;
-    private final String mTradefedJarDir;
+    private static final String CAS_CLIENT_NAME = "casviewer";
     private static final long MOUNT_TIMEOUT_IN_MS = 10_000; // Allow 10 seconds for mounting.
+    private final CasFuseDriverProfile mCasFuseDriverProfile;
     private static final List<WeakReference<FuseMountManager>> mManagers =
             Collections.synchronizedList(new ArrayList<>());
 
-    private static FuseMountManagerFactory sInstance;
+    private static class LazyHolder {
+        private static final FuseMountManagerFactory INSTANCE = new FuseMountManagerFactory();
+    }
 
-    // Private constructor for singleton pattern or controlled instantiation.
-    private FuseMountManagerFactory() throws IOException {
-        initMountRoot();
+    @VisibleForTesting
+    protected FuseMountManagerFactory() {
         this.mRunUtil = RunUtil.getDefault();
-        this.mTradefedJarDir = System.getProperty("TF_JAR_DIR");
-        if (Strings.isNullOrEmpty(this.mTradefedJarDir)) {
-            throw new IOException("TF_JAR_DIR system property is not set.");
+
+        try {
+            initMountRoot();
+            logMountPointCount();
+        } catch (IOException e) {
+            logAndThrow(String.format("Failed to initialize mount root: %s", e.getMessage()));
         }
+
+        if (!isFuseAvailable()) {
+            logAndThrow("FUSE kernel module is not available.");
+        }
+
+        String jarDir = System.getProperty("TF_JAR_DIR");
+        if (Strings.isNullOrEmpty(jarDir)) {
+            logAndThrow("TF_JAR_DIR system property is not set.");
+        }
+
+        Path casViewerPath = Path.of(jarDir).resolve(CAS_CLIENT_NAME);
+        if (!Files.exists(casViewerPath)) {
+            logAndThrow(String.format("Could not find '%s' in '%s'.", CAS_CLIENT_NAME, jarDir));
+        }
+
+        // Ensure casviewer is executable. It can be distributed without the execute bit set.
+        FileUtil.ensureGroupRWX(casViewerPath.toFile());
+        logCasClientVersion(casViewerPath);
+        this.mCasFuseDriverProfile = new CasFuseDriverProfile(casViewerPath, MOUNT_TIMEOUT_IN_MS);
+    }
+
+    private void logAndThrow(String message) {
+        CLog.e(message);
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_MOUNT_UNAVAILABLE_COUNT, 1);
+        throw new IllegalStateException(message);
     }
 
     private static void initMountRoot() throws IOException {
@@ -64,6 +97,9 @@ public class FuseMountManagerFactory {
             Files.createDirectories(rootDir);
             mMountRoot = rootDir;
         }
+    }
+
+    private static void logMountPointCount() throws IOException {
         // Record the number of active mount points. This should be close to the maximum concurrent
         // TF tests on a host. A high number indicates a leak of mount points.
         try (Stream<Path> files = Files.list(mMountRoot)) {
@@ -74,12 +110,20 @@ public class FuseMountManagerFactory {
         }
     }
 
+    /**
+     * Checks if the FUSE kernel module appears to be loaded and ready.
+     *
+     * @return {@code true} if /dev/fuse exists, {@code false} otherwise.
+     */
+    @VisibleForTesting
+    protected boolean isFuseAvailable() {
+        File fuseDevice = new File("/dev/fuse");
+        return fuseDevice.exists();
+    }
+
     /** Gets the singleton instance of the factory. */
-    public static synchronized FuseMountManagerFactory getInstance() throws IOException {
-        if (sInstance == null) {
-            sInstance = new FuseMountManagerFactory();
-        }
-        return sInstance;
+    public static synchronized FuseMountManagerFactory getInstance() {
+        return LazyHolder.INSTANCE;
     }
 
     /**
@@ -89,32 +133,10 @@ public class FuseMountManagerFactory {
      * @throws IOException if the CAS driver cannot be found or configured.
      */
     public FuseMountManager createCasFuseMountManager() throws IOException {
-        Path casDriverPath = getCasClientPath("casviewer");
-        logCasClientVersion(casDriverPath); // Log the version of casviewer.
-        CasFuseDriverProfile profile = new CasFuseDriverProfile(casDriverPath, MOUNT_TIMEOUT_IN_MS);
-        FuseMountManager manager = new FuseMountManager(profile, mRunUtil, mMountRoot);
+        FuseMountManager manager =
+                new FuseMountManager(mCasFuseDriverProfile, mRunUtil, mMountRoot);
         mManagers.add(new WeakReference<>(manager));
         return manager;
-    }
-
-    /**
-     * Resolves and validates the path to a CAS client executable within the Tradefed runfiles. The
-     * returned path is guaranteed to be executable. A cas client like casviewer can be distributed
-     * without the executable bit in its file mode.
-     *
-     * @param clientName The name of the client executable (e.g., "casviewer").
-     * @return The absolute {@link Path} to the client executable.
-     * @throws IOException if the TF_JAR_DIR is not set or the client is not found.
-     */
-    private Path getCasClientPath(String clientName) throws IOException {
-        Path casClientDir = Path.of(mTradefedJarDir);
-        Path client = casClientDir.resolve(clientName);
-        if (!Files.exists(client)) {
-            throw new IOException(
-                    String.format("Could not find CAS client: %s in %s", clientName, casClientDir));
-        }
-        FileUtil.ensureGroupRWX(client.toFile()); // Ensure casviewer is executable.
-        return client;
     }
 
     /**
