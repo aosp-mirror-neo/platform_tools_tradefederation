@@ -238,6 +238,7 @@ public class FuseMountManagerTest {
                         anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
         when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.SUCCESS);
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true);
 
         mManager.unmount(mSourceDir);
 
@@ -258,7 +259,7 @@ public class FuseMountManagerTest {
                         anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
         when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.FAILED);
-        when(mMockProcess.waitFor(2, TimeUnit.SECONDS)).thenReturn(false);
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
 
         mManager.unmount(mSourceDir);
 
