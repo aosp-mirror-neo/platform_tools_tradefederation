@@ -118,6 +118,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -967,28 +968,33 @@ public abstract class ITestSuite
                                     false);
                     // Only the module callback will be called here.
                     listenerWithCollectors = allListenersWithLogSaver;
+                    List<IMetricCollector> allCollectors = new LinkedList<>();
                     if (mMetricCollectors != null) {
-                        for (IMetricCollector collector :
-                                CollectorHelper.cloneCollectors(mMetricCollectors)) {
-                            if (collector.isDisabled()) {
-                                CLog.d("%s has been disabled. Skipping.", collector);
-                            } else if (!collector.captureModuleLevel()) {
-                                CLog.d("%s isn't applicable at module level. Skipping.", collector);
-                            } else {
-                                if (collector instanceof IConfigurationReceiver) {
-                                    ((IConfigurationReceiver) collector)
-                                            .setConfiguration(module.getModuleConfiguration());
-                                }
-                                try (CloseableTraceScope ignored =
-                                        new CloseableTraceScope(
-                                                "init_for_module_"
-                                                        + collector.getClass().getSimpleName())) {
-                                    listenerWithCollectors =
-                                            collector.init(
-                                                    module.getModuleInvocationContext(),
-                                                    listenerWithCollectors);
-                                    TfObjectTracker.countWithParents(collector.getClass());
-                                }
+                        allCollectors.addAll(mMetricCollectors);
+                    }
+                    if (module.getModuleConfiguration().getMetricCollectors() != null) {
+                        allCollectors.addAll(module.getModuleConfiguration().getMetricCollectors());
+                    }
+                    for (IMetricCollector collector :
+                            CollectorHelper.cloneCollectors(allCollectors)) {
+                        if (collector.isDisabled()) {
+                            CLog.d("%s has been disabled. Skipping.", collector);
+                        } else if (!collector.captureModuleLevel()) {
+                            CLog.d("%s isn't applicable at module level. Skipping.", collector);
+                        } else {
+                            if (collector instanceof IConfigurationReceiver) {
+                                ((IConfigurationReceiver) collector)
+                                        .setConfiguration(module.getModuleConfiguration());
+                            }
+                            try (CloseableTraceScope ignored =
+                                    new CloseableTraceScope(
+                                            "init_for_module_"
+                                                    + collector.getClass().getSimpleName())) {
+                                listenerWithCollectors =
+                                        collector.init(
+                                                module.getModuleInvocationContext(),
+                                                listenerWithCollectors);
+                                TfObjectTracker.countWithParents(collector.getClass());
                             }
                         }
                     }
