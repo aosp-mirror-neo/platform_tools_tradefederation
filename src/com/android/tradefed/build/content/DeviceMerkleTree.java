@@ -28,7 +28,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.function.Predicate;
 
 /** Compute a MerkleTree from the device content information. */
 public class DeviceMerkleTree {
@@ -36,13 +35,13 @@ public class DeviceMerkleTree {
     /** Builds a merkle tree and returns the root digest from the device content information */
     public static Digest buildFromContext(
             ContentAnalysisContext context, AnalysisHeuristic analysisLevel) {
-        return DeviceMerkleTree.buildFromContext(context, analysisLevel, descriptor -> true);
+        return DeviceMerkleTree.buildFromContext(context, analysisLevel, null);
     }
 
     public static Digest buildFromContext(
             ContentAnalysisContext context,
             AnalysisHeuristic analysisLevel,
-            Predicate<ArtifactFileDescriptor> isWithinPartition) {
+            DeviceImagePartition deviceImagePartition) {
         try {
             if (context.abortAnalysis()) {
                 CLog.d("Device digest computation isn't supported.");
@@ -65,7 +64,8 @@ public class DeviceMerkleTree {
                         }
                     });
             for (ArtifactFileDescriptor afd : currentContent.details) {
-                if (isWithinPartition.test(afd)) {
+                if (deviceImagePartition == null
+                        || deviceImagePartition.getIsWithinPartition().test(afd)) {
                     Digest digest =
                             Digest.newBuilder().setHash(afd.digest).setSizeBytes(afd.size).build();
                     rootBuilder.addFiles(
@@ -77,7 +77,7 @@ public class DeviceMerkleTree {
             }
             Directory root = rootBuilder.build();
             Digest d = DigestCalculator.compute(root);
-            CLog.d("Digest for '%s' is '%s'", context.contentEntry(), d);
+            CLog.d("Digest for '%s:%s' is '%s'", context.contentEntry(), deviceImagePartition, d);
             return d;
         } catch (IOException | RuntimeException e) {
             CLog.e(e);

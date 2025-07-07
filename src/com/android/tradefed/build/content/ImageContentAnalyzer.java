@@ -144,9 +144,7 @@ public class ImageContentAnalyzer {
                         for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
                             Digest imagePartitionDigest =
                                     DeviceMerkleTree.buildFromContext(
-                                            context,
-                                            mAnalysisLevel,
-                                            imagePartition.getIsWithinPartition());
+                                            context, mAnalysisLevel, imagePartition);
                             if (imagePartitionDigest != null) {
                                 InvocationMetricLogger.addInvocationMetrics(
                                         imagePartition.getInvocationMetricKey(),
