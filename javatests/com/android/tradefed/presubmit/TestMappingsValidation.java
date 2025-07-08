@@ -672,6 +672,10 @@ public class TestMappingsValidation implements IBuildReceiver {
     }
 
     private void mergeModuleInfo(File file) throws IOException {
+        if (!file.exists()) {
+            CLog.w("%s file doesn't exist. Ignore checking...", file);
+            return;
+        }
         JsonObject json = new Gson().fromJson(FileUtil.readStringFromFile(file), JsonObject.class);
         json.entrySet()
                 .forEach(
