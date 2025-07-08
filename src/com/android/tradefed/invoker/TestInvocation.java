@@ -528,7 +528,20 @@ public class TestInvocation implements ITestInvocation {
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope(InvocationMetricKey.test_cleanup.name())) {
                 // Clean up host.
-                invocationPath.doCleanUp(context, config, exception);
+                try {
+                    invocationPath.doCleanUp(context, config, exception);
+                } catch (Throwable e) {
+                    tearDownException = e;
+                    CLog.e("Exception during clean up: %s", tearDownException.toString());
+                    CLog.e(tearDownException);
+                    if (exception == null) {
+                        // only report when the exception is new during tear down
+                        reportFailure(
+                                createFailureFromException(
+                                        tearDownException, FailureStatus.INFRA_FAILURE),
+                                listener);
+                    }
+                }
                 waitForSnapuserd(
                         testInfo, config, SnapuserdWaitPhase.BLOCK_BEFORE_RELEASING, false);
                 if (mSoftStopRequestTime != null) { // soft stop occurred
