@@ -968,14 +968,17 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
          */
         public void checkDeviceBatteryLevel() {
             for (String deviceName : mInvocationContext.getDeviceConfigNames()) {
-                if (mCmd.getConfiguration().getDeviceConfigByName(deviceName).getDeviceOptions()
-                        == null) {
+                IDeviceConfiguration deviceConfig =
+                        mCmd.getConfiguration().getDeviceConfigByName(deviceName);
+                if (deviceConfig == null) {
+                    CLog.d("deviceConfig is null in the configuration, cannot do Battery level check");
+                    return;
+                }
+                if (deviceConfig.getDeviceOptions() == null) {
                     CLog.d("No deviceOptions in the configuration, cannot do Battery level check");
                     return;
                 }
-                final Integer cutoffBattery =
-                        mCmd.getConfiguration()
-                                .getDeviceConfigByName(deviceName)
+                final Integer cutoffBattery = deviceConfig
                                 .getDeviceOptions()
                                 .getCutoffBattery();
 
