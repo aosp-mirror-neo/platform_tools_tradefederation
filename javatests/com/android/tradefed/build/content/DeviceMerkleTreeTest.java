@@ -60,7 +60,7 @@ public class DeviceMerkleTreeTest {
                     DeviceMerkleTree.buildFromContext(
                             contextCurrent,
                             AnalysisHeuristic.REMOVE_EXEMPTION,
-                            DeviceImagePartition.VENDOR.getIsWithinPartition());
+                            DeviceImagePartition.VENDOR);
 
             Truth.assertThat(baseDigest.getHash()).isNotEqualTo(currentDigest.getHash());
             Truth.assertThat(currentDigest.getHash()).isNotEqualTo(currentVendorDigest.getHash());

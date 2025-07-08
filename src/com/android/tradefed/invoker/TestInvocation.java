@@ -1188,7 +1188,9 @@ public class TestInvocation implements ITestInvocation {
                 if (config.getCommandOptions().keepPostProcessorOrder()) {
                     // reverse the post-processor list so that the first post-processor in the list
                     // becomes the outermost post-processor and the first to receive events.
-                    Collections.reverse(postProcessors);
+                    List<IPostProcessor> tmpList = new ArrayList<>(postProcessors);
+                    Collections.reverse(tmpList);
+                    postProcessors = tmpList;
                 }
                 for (IPostProcessor postProcessor : postProcessors) {
                     if (postProcessor.isDisabled()) {

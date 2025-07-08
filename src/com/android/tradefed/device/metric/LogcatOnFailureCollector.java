@@ -53,11 +53,37 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
 
     private Map<ITestDevice, ILogcatReceiver> mLogcatReceivers = new HashMap<>();
     private Map<ITestDevice, Integer> mOffset = new HashMap<>();
+    private boolean runInitDone = false;
     private int mCurrentCount = 0;
     private boolean mFirstThrottle = true;
 
     @Override
+    public void onTestRunStartBlocking() throws DeviceNotAvailableException {
+        mCurrentCount = 0;
+        mFirstThrottle = true;
+        for (ITestDevice device : getRealDevices()) {
+            if (getApiLevelNoThrow(device) < API_LIMIT) {
+                continue;
+            }
+            // In case of multiple runs for the same test runner, re-init the receiver.
+            initReceiver(device);
+            // Get the current offset of the buffer to be able to query later
+            try (InputStreamSource data = mLogcatReceivers.get(device).getLogcatData()) {
+                int offset = (int) data.size();
+                if (offset > OFFSET_CORRECTION) {
+                    offset -= OFFSET_CORRECTION;
+                }
+                mOffset.put(device, offset);
+            }
+        }
+        runInitDone = true;
+    }
+
+    @Override
     public void onTestRunStart(DeviceMetricData runData) {
+        if (runInitDone) {
+            return;
+        }
         mCurrentCount = 0;
         mFirstThrottle = true;
         for (ITestDevice device : getRealDevices()) {
@@ -110,6 +136,7 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
     @Override
     public void onTestRunEnd(DeviceMetricData runData, Map<String, Metric> currentRunMetrics) {
         clearReceivers();
+        runInitDone = false;
     }
 
     @VisibleForTesting
