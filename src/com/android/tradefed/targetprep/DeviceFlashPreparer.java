@@ -451,8 +451,11 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipFastbootFailedMessage(mIgnoreFastbootFailedMessage);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
-                    if (!reEntry) {
-                        // Avoid using incremental during re-entry since it will just wipe
+                    if (reEntry) {
+                       // Avoid using incremental during re-entry since it will just wipe
+                       ((FastbootDeviceFlasher) flasher)
+                                .setIncrementalFlashing(null);
+                    } else {
                         ((FastbootDeviceFlasher) flasher)
                                 .setIncrementalFlashing(mIncrementalImageUtil);
                     }
