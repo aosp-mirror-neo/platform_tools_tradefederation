@@ -822,13 +822,20 @@ public class AdbSshConnectionTest {
         mConnection =
                 new AdbSshConnection(
                         new ConnectionBuilder(
-                                mMockRunUtil, mMockDevice, mMockBuildInfo, mMockLogger));
+                                mMockRunUtil, mMockDevice, mMockBuildInfo, mMockLogger)) {
+                    @Override
+                    GceManager getGceHandler() {
+                        return mGceHandler;
+                    }
+                };
         mOptions = new TestDeviceOptions();
         OptionSetter setter = new OptionSetter(mOptions);
         setter.setOptionValue(TestDeviceOptions.INSTANCE_TYPE_OPTION, "CUTTLEFISH");
         setter.setOptionValue("use-oxygenation-device", "false");
+        doReturn(HostAndPort.fromHost("127.0.0.1")).when(mMockAvdInfo).hostAndPort();
         mOptions.setSshPrivateKeyPath(mMockFile);
         when(mMockFile.canRead()).thenReturn(true);
+
         mConnection.createGceTunnelMonitor(mMockTestDevice, mMockBuildInfo, mMockAvdInfo, mOptions);
         assertTrue(mConnection.getGceTunnelMonitor() instanceof GceSshTunnelMonitor);
     }

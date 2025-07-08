@@ -101,6 +101,9 @@ public class GceSshTunnelMonitor extends AbstractTunnelMonitor {
                         buildInfo.getBuildBranch(),
                         buildInfo.getBuildFlavor(),
                         buildInfo.getBuildId()));
+        if (gce == null) {
+            throw new IllegalArgumentException("HostAndPort information cannot be null.");
+        }
         setDaemon(true);
         mDevice = device;
         mGceHostAndPort = gce;
