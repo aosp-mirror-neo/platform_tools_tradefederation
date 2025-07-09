@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import com.android.tradefed.util.CasUtil;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -49,78 +50,40 @@ public class CasFuseDriverProfileTest {
         mProfile = new CasFuseDriverProfile(mDriverFile.toPath());
     }
 
+    // validateSourceDataPath is a wrapper around CasUtil#validateChunkedDir, so we only need to
+    // test a few basic cases here.
+
     @Test
     public void testValidSourceDataPath_indexFileInChunksDir_success() throws IOException {
         File sourceDir = tempFolder.newFolder("valid_source");
-        tempFolder.newFolder("valid_source/_chunks");
-        tempFolder.newFile("valid_source/_chunks/_chunks_index.json");
+        tempFolder.newFolder("valid_source/" + CasUtil.CHUNKS_DIR_NAME);
+        tempFolder.newFile(
+                "valid_source/" + CasUtil.CHUNKS_DIR_NAME + "/" + CasUtil.CHUNKS_INDEX_FILENAME);
 
         mProfile.validateSourceDataPath(sourceDir.toPath());
 
         // No exception thrown
     }
-
-    @Test
-    public void testValidSourceDataPath_indexFileAsSiblingOfChunksDir_success() throws IOException {
-        File sourceDir = tempFolder.newFolder("valid_source");
-        tempFolder.newFolder("valid_source/_chunks");
-        tempFolder.newFile("valid_source/_chunks_index.json");
-
-        mProfile.validateSourceDataPath(sourceDir.toPath());
-
-        // No exception thrown
-    }
-
-    @Test
-    public void testValidSourceDataPath_doesNotExist() {
-        File nonExistentDir = new File(tempFolder.getRoot(), "non_existent");
-
-        assertThrows(
-                "Should throw IOException when the source directory does not exist.",
-                IOException.class,
-                () -> mProfile.validateSourceDataPath(nonExistentDir.toPath()));
-    }
-
-    @Test
-    public void testValidSourceDataPath_isAFileNotDirectory() throws IOException {
-        File sourceFile = tempFolder.newFile("source_as_file.txt");
-
-        assertThrows(
-                "Should throw IOException when the source path is a file, not a"
-                    + " directory.",
-                IOException.class,
-                () -> mProfile.validateSourceDataPath(sourceFile.toPath()));
-    }
-
 
     @Test
     public void testValidSourceDataPath_missingChunksDir() throws IOException {
         File sourceDir = tempFolder.newFolder("source_missing_chunks_dir");
-        tempFolder.newFile("source_missing_chunks_dir/_chunks_index.json");
+        tempFolder.newFile("source_missing_chunks_dir/" + CasUtil.CHUNKS_INDEX_FILENAME);
 
         assertThrows(
                 "Should throw IOException when the source directory is missing the chunks"
-                    + " directory.",
+                        + " directory.",
                 IOException.class,
                 () -> mProfile.validateSourceDataPath(sourceDir.toPath()));
     }
 
-    @Test
-    public void testValidSourceDataPath_missingIndexFile() throws IOException {
-        File sourceDir = tempFolder.newFolder("source_missing_index");
-        tempFolder.newFolder("source_missing_index/_chunks");
-
-        assertThrows(
-                "Should throw IOException when the source directory is missing the chunks"
-                    + " index file.",
-                IOException.class,
-                () -> mProfile.validateSourceDataPath(sourceDir.toPath()));
-    }
+    // isMountPointReady is a wrapper around CasUtil#isUncompressedDeviceImage, so we only need to
+    // test a few basic cases here.
 
     @Test
     public void testIsMountPointReady_success() throws IOException {
         File mountPoint = tempFolder.newFolder("ready_mount_point");
-        tempFolder.newFile("ready_mount_point/boot.img");
+        tempFolder.newFile("ready_mount_point/" + CasUtil.BOOT_IMAGE_FILENAME);
 
         assertTrue(
                 "Should return true for a mount point containing boot.img.",
@@ -134,15 +97,6 @@ public class CasFuseDriverProfileTest {
         assertFalse(
                 "Should return false if the mount point does not contain boot.img.",
                 mProfile.isMountPointReady(mountPoint.toPath()));
-    }
-
-    @Test
-    public void testIsMountPointReady_mountPointDoesNotExist() {
-        File nonExistentDir = new File(tempFolder.getRoot(), "non_existent_mount_point");
-
-        assertFalse(
-                "Should return false if the mount point directory itself does not exist.",
-                mProfile.isMountPointReady(nonExistentDir.toPath()));
     }
 
     @Test

@@ -18,6 +18,7 @@ package com.android.tradefed.build;
 
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.util.CasUtil;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.io.IOException;
@@ -124,7 +125,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         // TODO(frankfeng): If source data is valid but mounting fails, it is critical to convert
         // the chunks back to device image files when only chunks are available. Otherwise, it would
         // be an infra error.
-        if (manager.isValidSourceData(deviceImage.toPath())) {
+        if (CasUtil.isChunkedDir(deviceImage.toPath())) {
             try {
                 // For rollout phase 1, collect metrics for mounting without returning the mounted
                 // path to avoid breaking.

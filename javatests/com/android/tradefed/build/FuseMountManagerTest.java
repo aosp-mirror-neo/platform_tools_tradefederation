@@ -88,37 +88,6 @@ public class FuseMountManagerTest {
         mManager.unmountAll();
     }
 
-    // Tests for isValidSourceData()
-
-    @Test
-    public void testIsValidSourceData_whenProfileSucceeds_returnsTrue() throws Exception {
-        // Configure the profile to execute its validation method successfully (i.e., not throw)
-        doNothing().when(mMockDriverProfile).validateSourceDataPath(mSourceDir);
-
-        boolean result = mManager.isValidSourceData(mSourceDir);
-
-        assertTrue("Should return true when profile validation succeeds.", result);
-    }
-
-    @Test
-    public void testIsValidSourceData_whenProfileThrowsIOException_returnsFalse() throws Exception {
-        // Configure the profile to throw an IOException, simulating a failed validation
-        doThrow(new IOException("Simulated validation failure"))
-                .when(mMockDriverProfile)
-                .validateSourceDataPath(mSourceDir);
-
-        boolean result = mManager.isValidSourceData(mSourceDir);
-
-        assertFalse("Should return false when profile validation throws an IOException.", result);
-    }
-
-    @Test
-    public void testIsValidSourceData_withNullInput_returnsFalse() {
-        boolean result = mManager.isValidSourceData(null);
-
-        assertFalse("Should return false for a null input path.", result);
-    }
-
     // Tests for mount()
 
     @Test
