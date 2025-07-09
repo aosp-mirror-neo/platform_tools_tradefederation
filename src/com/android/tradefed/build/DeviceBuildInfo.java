@@ -146,11 +146,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     private File mountIfPossible(FuseMountManager manager, File deviceImage) {
         if (CasUtil.isChunkedDir(deviceImage.toPath())) {
             try {
-                // For rollout phase 1, collect metrics for mounting without returning the mounted
-                // path to avoid breaking.
-                manager.mount(deviceImage.toPath());
-                // TODO(frankfeng): Return the mounted path after rollout phase 1.
-                return deviceImage;
+                return manager.mount(deviceImage.toPath()).toFile();
 
             } catch (IOException | InterruptedException e) {
                 CLog.i("Failed to mount '%s'.", deviceImage);
