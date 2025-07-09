@@ -38,7 +38,10 @@ public class ATestFileSystemLogSaver extends FileSystemLogSaver {
     @Override
     protected File generateLogReportDir(IBuildInfo buildInfo, File reportDir, String moduleName)
             throws IOException {
-        // TODO(b/424302356): Add subdirectories per module for their logs.
-        return FileUtil.createTempDir("invocation_", mAtestRootReportDir);
+        if (moduleName == null) {
+            return FileUtil.createTempDir("invocation_", mAtestRootReportDir);
+        }
+        File reportDirWithModule = createBuildDir(null, reportDir, moduleName);
+        return reportDirWithModule;
     }
 }
