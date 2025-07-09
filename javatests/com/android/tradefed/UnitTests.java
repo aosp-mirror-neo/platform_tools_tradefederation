@@ -440,6 +440,7 @@ import com.android.tradefed.util.BugreportTest;
 import com.android.tradefed.util.BuildTestsZipUtilsTest;
 import com.android.tradefed.util.BundletoolUtilTest;
 import com.android.tradefed.util.ByteArrayListTest;
+import com.android.tradefed.util.CasUtilTest;
 import com.android.tradefed.util.ClangProfileIndexerTest;
 import com.android.tradefed.util.ClassPathScannerTest;
 import com.android.tradefed.util.ConditionPriorityBlockingQueueTest;
@@ -1083,6 +1084,7 @@ import org.junit.runners.Suite.SuiteClasses;
     BuildTestsZipUtilsTest.class,
     BundletoolUtilTest.class,
     ByteArrayListTest.class,
+    CasUtilTest.class,
     CentralDirectoryInfoTest.class,
     ClangProfileIndexerTest.class,
     ClassPathScannerTest.class,
