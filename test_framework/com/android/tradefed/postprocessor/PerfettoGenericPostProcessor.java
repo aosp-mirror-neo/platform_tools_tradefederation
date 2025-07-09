@@ -42,11 +42,8 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 
 import perfetto.protos.File.TraceSummary;
 import perfetto.protos.PerfettoMergedMetrics.TraceMetrics;
-import perfetto.protos.V2Metric.TraceMetricV2;
 import perfetto.protos.V2Metric.TraceMetricV2Bundle;
 import perfetto.protos.V2Metric.TraceMetricV2Bundle.Row;
-import perfetto.protos.V2Metric.TraceMetricV2.MetricRow;
-import perfetto.protos.V2Metric.TraceMetricV2.MetricRow.Dimension;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -687,29 +684,6 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
     private Map<String, Metric.Builder> convertPerfettoProtoMessageV2(TraceSummary reportMessage) {
         CLog.d("convertPerfettoProtoMessageV2 reportMessage : " + reportMessage);
         Map<String, ArrayList<Double>> collectedValuesForKey = new HashMap<>();
-
-        for (TraceMetricV2 metric : reportMessage.getMetricList()) {
-            String baseKey = metric.getSpec().getId();
-            for (MetricRow row : metric.getRowList()) {
-                StringBuilder currentKeyBuilder = new StringBuilder(baseKey);
-                for (Dimension dimension : row.getDimensionList()) {
-                    Map<FieldDescriptor, Object> fields = dimension.getAllFields();
-                    for (Entry<FieldDescriptor, Object> fieldEntry : fields.entrySet()) {
-                        if (!(fieldEntry.getValue() instanceof Message)) {
-                            currentKeyBuilder.append("-").append(fieldEntry.getValue().toString());
-                        }
-                    }
-                }
-                String finalRowKey = currentKeyBuilder.toString();
-                double rowValue = row.getValue();
-
-                // Store the value in a list associated with its fully constructed key.
-                collectedValuesForKey
-                        .computeIfAbsent(finalRowKey, k -> new ArrayList<>())
-                        .add(rowValue);
-            }
-        }
-
         for (TraceMetricV2Bundle bundle : reportMessage.getMetricBundlesList()) {
             for (Row row : bundle.getRowList()) {
                 StringBuilder dimensionBuilder = new StringBuilder();

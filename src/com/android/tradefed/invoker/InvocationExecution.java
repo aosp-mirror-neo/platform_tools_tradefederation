@@ -311,7 +311,9 @@ public class InvocationExecution implements IInvocationExecution {
     protected List<ITargetPreparer> getTargetPreparersToRun(
             IConfiguration config, String deviceName) {
         List<ITargetPreparer> preparersToRun = new ArrayList<>();
-        preparersToRun.addAll(config.getDeviceConfigByName(deviceName).getTargetPreparers());
+        if (config.getDeviceConfigByName(deviceName) != null) {
+            preparersToRun.addAll(config.getDeviceConfigByName(deviceName).getTargetPreparers());
+        }
         return preparersToRun;
     }
 
@@ -323,7 +325,9 @@ public class InvocationExecution implements IInvocationExecution {
      */
     protected List<ITargetPreparer> getLabPreparersToRun(IConfiguration config, String deviceName) {
         List<ITargetPreparer> preparersToRun = new ArrayList<>();
-        preparersToRun.addAll(config.getDeviceConfigByName(deviceName).getLabPreparers());
+        if (config.getDeviceConfigByName(deviceName) != null) {
+            preparersToRun.addAll(config.getDeviceConfigByName(deviceName).getLabPreparers());
+        }
         return preparersToRun;
     }
 

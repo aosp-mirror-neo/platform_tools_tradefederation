@@ -150,6 +150,9 @@ public class GeminiDebuggingPostProcessor extends BasePostProcessor {
     }
 
     private PromptUtility.PromptTemplate getPromptTemplateForTestType() {
+        if (CurrentInvocation.getCurrentRunner() == null) {
+            return PromptUtility.PromptTemplate.UNSUPPORTED;
+        }
         switch (CurrentInvocation.getCurrentRunner()) {
             case "com.android.tradefed.testtype.AndroidJUnitTest":
                 return PromptUtility.PromptTemplate.ON_DEVICE;

@@ -53,6 +53,9 @@ public class ConfigurationCtsParserSettings {
             description = "This option is for the purpose of filtering in all of its values.")
     public String mConfigName = null;
 
+    @Option(name = "cts-package-name", description = "the filename of CTS package to download.")
+    public String mCtsPackageName = null;
+
     @Option(
             name = "rootdir-var",
             description =

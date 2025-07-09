@@ -15,10 +15,13 @@
  */
 package com.android.tradefed.result.skipped;
 
+import com.android.annotations.VisibleForTesting;
 import com.android.tradefed.build.content.ContentAnalysisContext;
 import com.android.tradefed.build.content.ContentAnalysisContext.AnalysisMethod;
 import com.android.tradefed.build.content.ContentModuleLister;
 import com.android.tradefed.build.content.DeviceImagePartition;
+import com.android.tradefed.config.ArgsOptionParser;
+import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
@@ -30,10 +33,12 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.observatory.ConfigurationCtsParserSettings;
 import com.android.tradefed.result.skipped.SkipReason.DemotionTrigger;
 import com.android.tradefed.service.TradefedFeatureClient;
 import com.android.tradefed.util.IDisableable;
 import com.android.tradefed.util.MultiMap;
+import com.android.tradefed.util.QuotationAwareTokenizer;
 
 import build.bazel.remote.execution.v2.Digest;
 
@@ -42,6 +47,7 @@ import com.proto.tradefed.feature.FeatureResponse;
 import com.proto.tradefed.feature.PartResponse;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -98,11 +104,11 @@ public class SkipManager implements IDisableable {
     private boolean mReportInvocationModuleSkipped = true;
 
     @Option(
-            name = "image-granularity-strategy",
+            name = "enable-image-granularity-strategy",
             description =
-                    "An option to set the image granularity strategy for analysis and caching.")
-    private ImageGranularityStrategy mImageGranularityStrategy =
-            ImageGranularityStrategy.FULL_IMAGE;
+                    "Whether or not to enable the image granularity strategy for analysis and"
+                            + " caching.")
+    private boolean mEnableImageGranularityStrategy = false;
 
     private enum ImageGranularityStrategy {
         // Caching key is computed using digests from all partitions.
@@ -142,12 +148,16 @@ public class SkipManager implements IDisableable {
     private List<String> mDependencyFiles = new ArrayList<String>();
 
     private String mReasonForSkippingInvocation = "SkipManager decided to skip.";
+    private ImageGranularityStrategy mImageGranularityStrategy =
+            ImageGranularityStrategy.FULL_IMAGE;
     private Set<String> mUnchangedModules = new HashSet<>();
     private Map<String, Digest> mImageFileToDigest = new LinkedHashMap<>();
     private Map<String, Digest> mTestArtifactsToDigest = new LinkedHashMap<>();
 
     /** Setup and initialize the skip manager. */
     public void setup(IConfiguration config, IInvocationContext context) {
+        mImageGranularityStrategy = getImageGranularityStrategy(config.getCommandLine());
+        CLog.d("Image granularity strategy is: %s", mImageGranularityStrategy);
         if (config.getCommandOptions().getInvocationData().containsKey("subprocess")) {
             // Information is going to flow through GlobalFilters mechanism
             return;
@@ -186,6 +196,47 @@ public class SkipManager implements IDisableable {
         }
         CLog.d("Final device digests are: %s", mImageFileToDigest);
         return mImageFileToDigest;
+    }
+
+    /** Parses the command line and returns the image granularity strategy. */
+    private ImageGranularityStrategy getImageGranularityStrategy(String commandLine) {
+        if (mEnableImageGranularityStrategy && commandLine != null) {
+            try {
+                List<String> fullCommandLineArgs =
+                        new ArrayList<String>(
+                                Arrays.asList(QuotationAwareTokenizer.tokenizeLine(commandLine)));
+                // first arg is config name
+                fullCommandLineArgs.remove(0);
+                ConfigurationCtsParserSettings ctsParserSettings =
+                        new ConfigurationCtsParserSettings();
+                ArgsOptionParser ctsOptionParser = new ArgsOptionParser(ctsParserSettings);
+                ctsOptionParser.parseBestEffort(fullCommandLineArgs, true);
+
+                if (ctsParserSettings.mCtsPackageName != null
+                        && ctsParserSettings.mConfigName != null) {
+                    if ("android-vts.zip".equals(ctsParserSettings.mCtsPackageName)
+                            || ("android-cts.zip".equals(ctsParserSettings.mCtsPackageName)
+                                    && "cts-on-gsi".equals(ctsParserSettings.mConfigName))) {
+                        // The VENDOR_ONLY strategy is applicable to all plans in VTS and cts-on-gsi
+                        // plan in CTS.
+                        return ImageGranularityStrategy.VENDOR_ONLY;
+                    } else if ("android-cts.zip".equals(ctsParserSettings.mCtsPackageName)) {
+                        // The SYSTEM_VENDOR strategy is applicable to all plans in CTS except for
+                        // cts-on-gsi.
+                        return ImageGranularityStrategy.SYSTEM_VENDOR;
+                    }
+                }
+            } catch (ConfigurationException ignore) {
+                CLog.e(ignore);
+            }
+        }
+        return ImageGranularityStrategy.FULL_IMAGE;
+    }
+
+    @VisibleForTesting
+    void setImageToDigest(Map<String, Digest> imageFileToDigest) {
+        mImageFileToDigest.clear();
+        mImageFileToDigest.putAll(imageFileToDigest);
     }
 
     public Map<String, Digest> getTestArtifactsToDigest() {
