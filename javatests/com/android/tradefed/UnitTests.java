@@ -20,6 +20,7 @@ import com.android.tradefed.auth.ServiceAccountKeyCredentialFactoryTest;
 import com.android.tradefed.build.AppDeviceBuildInfoTest;
 import com.android.tradefed.build.BootstrapBuildProviderTest;
 import com.android.tradefed.build.BuildInfoTest;
+import com.android.tradefed.build.CasConverterFactoryTest;
 import com.android.tradefed.build.CasFuseDriverProfileTest;
 import com.android.tradefed.build.DeviceBuildDescriptorTest;
 import com.android.tradefed.build.DeviceBuildInfoTest;
@@ -540,6 +541,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AppDeviceBuildInfoTest.class,
     BootstrapBuildProviderTest.class,
     BuildInfoTest.class,
+    CasConverterFactoryTest.class,
     CasFuseDriverProfileTest.class,
     DeviceBuildInfoTest.class,
     DeviceBuildDescriptorTest.class,
