@@ -273,7 +273,8 @@ public class TestInvocation implements ITestInvocation {
             TestInformation testInfo,
             IInvocationExecution invocationPath,
             ITestInvocationListener listener,
-            boolean devicePreSetupDone)
+            boolean devicePreSetupDone,
+            RunMode mode)
             throws Throwable {
         ReportHostLog reportThread = new ReportHostLog(listener, config);
         Runtime.getRuntime().addShutdownHook(reportThread);
@@ -463,6 +464,8 @@ public class TestInvocation implements ITestInvocation {
                     new CloseableTraceScope(InvocationMetricKey.check_device_availability.name())) {
                 if (SystemUtil.isLocalMode()) {
                     CLog.d("Skipping check for device availability for local run.");
+                } else if (RunMode.DELEGATED_INVOCATION.equals(mode)) {
+                    CLog.d("Skipping check for device availability in parent delegator.");
                 } else if (exception == null) {
                     CLog.d("Checking that devices are online.");
                     exception = checkDevicesAvailable(context.getDevices(), listener);
@@ -1493,7 +1496,7 @@ public class TestInvocation implements ITestInvocation {
                 return;
             }
 
-            performInvocation(config, info, invocationPath, listener, deviceInit);
+            performInvocation(config, info, invocationPath, listener, deviceInit, mode);
             setExitCode(ExitCode.NO_ERROR, null);
             InvocationCacheHelper.uploadInvocationResults(
                     config, mInvocationProtoResultReporter, info);
