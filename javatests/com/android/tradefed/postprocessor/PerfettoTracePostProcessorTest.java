@@ -453,4 +453,24 @@ public class PerfettoTracePostProcessorTest {
         FileUtil.recursiveDelete(sqlPackage1);
         FileUtil.recursiveDelete(sqlPackage2);
     }
+
+    @Test
+    public void testConstructOutputFileName() {
+        Assert.assertEquals(
+                mProcessor.constructOutputFileName("metric_", "perfetto"), "metric_perfetto");
+
+        Assert.assertEquals(
+                mProcessor.constructOutputFileName("metric_", "device-trace"),
+                "metric_perfetto_device-trace");
+
+        Assert.assertEquals(
+                mProcessor.constructOutputFileName(
+                        "metric_", "perfetto_test_name_8626233503213068519.perfetto-trace"),
+                "metric_perfetto_test_name_");
+
+        Assert.assertEquals(
+                mProcessor.constructOutputFileName(
+                        "metric_", "device-trace_test_name_7152781518484770426.perfetto-trace"),
+                "metric_perfetto_device-trace_test_name_");
+    }
 }
