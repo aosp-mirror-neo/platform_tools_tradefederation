@@ -1105,7 +1105,7 @@ public class Console extends Thread {
     @SuppressWarnings("SystemConsoleNull") // https://errorprone.info/bugpattern/SystemConsoleNull
     boolean isConsoleFunctional() {
         java.io.Console systemConsole = System.console();
-        if (Runtime.version().feature() < 22) {
+        if (Runtime.version().feature() < 22 || systemConsole == null) {
             return systemConsole != null;
         }
         try {
