@@ -272,17 +272,25 @@ public class TestAppInstallSetupTest {
         mPrep.setAbi(new Abi("arm32", "32"));
         when(mMockTestDevice.getApiLevel()).thenReturn(25);
         when(mMockTestDevice.installPackage(
-                        Mockito.eq(fakeApk), Mockito.eq(true), Mockito.eq("--abi arm32")))
+                        Mockito.eq(fakeApk),
+                        Mockito.eq(true),
+                        Mockito.eq("--abi"),
+                        Mockito.eq("arm32")))
                 .thenReturn(null);
         when(mMockTestDevice.installPackages(
                         Mockito.eq(mTestSplitApkFiles),
                         Mockito.eq(true),
-                        Mockito.eq("--abi arm32")))
+                        Mockito.eq("--abi"),
+                        Mockito.eq("arm32")))
                 .thenReturn(null);
 
         mPrep.setUp(mTestInfo);
         verify(mMockTestDevice, times(2))
-                .installPackage(Mockito.eq(fakeApk), Mockito.eq(true), Mockito.eq("--abi arm32"));
+                .installPackage(
+                        Mockito.eq(fakeApk),
+                        Mockito.eq(true),
+                        Mockito.eq("--abi"),
+                        Mockito.eq("arm32"));
     }
 
     /**
