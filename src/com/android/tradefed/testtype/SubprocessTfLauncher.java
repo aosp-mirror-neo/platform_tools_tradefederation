@@ -178,8 +178,8 @@ public abstract class SubprocessTfLauncher
                             "jack-jacoco-reporter.jar",
                             "emmalib.jar"));
 
-    /** Timeout to wait for the events received from subprocess to finish being processed.*/
-    private static final long EVENT_THREAD_JOIN_TIMEOUT_MS = 30 * 1000;
+    /** Timeout to wait for the events received from subprocess to finish being processed. */
+    private static final long EVENT_THREAD_JOIN_TIMEOUT_MS = 60 * 1000;
 
     protected IRunUtil mRunUtil =  new RunUtil();
 

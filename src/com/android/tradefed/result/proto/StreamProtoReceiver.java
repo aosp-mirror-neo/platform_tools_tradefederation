@@ -16,6 +16,7 @@
 package com.android.tradefed.result.proto;
 
 import com.android.tradefed.invoker.IInvocationContext;
+import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.proto.ProtoResultParser.TestLevel;
@@ -294,7 +295,7 @@ public class StreamProtoReceiver implements Closeable {
     public boolean joinReceiver(long millis) {
         if (mEventReceiver != null) {
             mJoinStarted.set(true);
-            try {
+            try (CloseableTraceScope ignored = new CloseableTraceScope("joinReceiver")) {
                 long waitTime = getJoinTimeout(millis);
                 CLog.i(
                         "Waiting for events to finish being processed for %s",

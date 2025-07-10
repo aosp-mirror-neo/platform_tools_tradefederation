@@ -19,8 +19,7 @@ package com.android.tradefed.build;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
-import com.android.tradefed.util.CommandResult;
-import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.CasUtil;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
@@ -28,9 +27,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import java.io.File;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -80,7 +79,7 @@ public class FuseMountManagerFactory {
 
         // Ensure casviewer is executable. It can be distributed without the execute bit set.
         FileUtil.ensureGroupRWX(casViewerPath.toFile());
-        logCasClientVersion(casViewerPath);
+        CasUtil.logCasClientVersion(casViewerPath);
         this.mCasFuseDriverProfile = new CasFuseDriverProfile(casViewerPath, MOUNT_TIMEOUT_IN_MS);
     }
 
@@ -137,33 +136,6 @@ public class FuseMountManagerFactory {
                 new FuseMountManager(mCasFuseDriverProfile, mRunUtil, mMountRoot);
         mManagers.add(new WeakReference<>(manager));
         return manager;
-    }
-
-    /**
-     * Executes the CAS client with the --version flag and logs the result. This is a diagnostic
-     * helper to confirm which driver is being used.
-     *
-     * @param clientPath The path to the CAS client executable.
-     */
-    private void logCasClientVersion(Path clientPath) {
-        CommandResult cr =
-                mRunUtil.runTimedCmd(5000, clientPath.toAbsolutePath().toString(), "--version");
-        if (cr.getStatus() != CommandStatus.SUCCESS) {
-            CLog.e(
-                    "Failed to extract cas client version. Status: %s\nStdout: %s\nStderr: %s",
-                    cr.getStatus(), cr.getStdout(), cr.getStderr());
-            return;
-        }
-
-        String prefix = "version: ";
-        String clientName = clientPath.getFileName().toString();
-        String version = cr.getStdout().trim();
-        if (version.startsWith(prefix)) {
-            version = version.substring(prefix.length());
-            CLog.d("%s, version: %s", clientName, version);
-        } else {
-            CLog.d("%s, version: unknown", clientName);
-        }
     }
 
     public static List<FuseMountManager> getLiveManagers() {

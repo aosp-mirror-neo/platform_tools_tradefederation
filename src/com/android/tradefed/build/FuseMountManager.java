@@ -86,27 +86,6 @@ public class FuseMountManager {
     }
 
     /**
-     * Checks if the given path is a valid source that can be mounted by the current FUSE profile.
-     *
-     * @param sourceDataPath The path to check.
-     * @return {@code true} if the source is valid, {@code false} otherwise.
-     */
-    public boolean isValidSourceData(Path sourceDataPath) {
-        if (sourceDataPath == null) {
-            return false;
-        }
-
-        try {
-            mDriverProfile.validateSourceDataPath(sourceDataPath);
-            return true;
-
-        } catch (IOException e) {
-            // This is normal. Suppress logging to avoid confusion.
-            return false;
-        }
-    }
-
-    /**
      * Mounts the given source data path to a uniquely created mount point. This method is
      * idempotent: if the same source path is already mounted, it returns the existing mount point.
      *
@@ -127,7 +106,7 @@ public class FuseMountManager {
         } catch (IOException e) {
             throw new IllegalArgumentException(
                     String.format(
-                            "Validation failed for source data path: %s",
+                            "Validation failed for source data path '%s'.",
                             sourceDataPath.toAbsolutePath()),
                     e);
         }
@@ -137,7 +116,7 @@ public class FuseMountManager {
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             mountPoint = createUniqueMountPoint(sourceDataPath);
             CLog.i(
-                    "Mount '%s' at: %s",
+                    "Mount '%s' at '%s'.",
                     sourceDataPath.toAbsolutePath().toString(),
                     mountPoint.toAbsolutePath().toString());
             List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
@@ -158,7 +137,7 @@ public class FuseMountManager {
                     InvocationMetricLogger.addInvocationMetrics(
                             InvocationMetricKey.CAS_MOUNT_SUCCESS_TIME_MS, duration);
                     CLog.i(
-                            "Done mounting '%s' at: %s (took %d ms)",
+                            "Done mounting '%s' at '%s' (took %d ms).",
                             sourceDataPath, mountPoint, duration);
                     mActiveMounts.put(sourceDataPath, new MountInfo(mountPoint, process));
                     return mountPoint; // Exit the method on success.
@@ -222,16 +201,16 @@ public class FuseMountManager {
         String sourceDataPathString = sourceDataPath.toAbsolutePath().toString();
         MountInfo mountInfo = mActiveMounts.get(sourceDataPath);
         if (mountInfo == null) {
-            CLog.w("No mount found for: %s", sourceDataPathString);
+            CLog.w("No mount found for '%s'.", sourceDataPathString);
             return;
         }
 
-        CLog.d("Unmount: %s", sourceDataPathString);
+        CLog.d("Unmount '%s'.", sourceDataPathString);
 
         Path mountPoint = mountInfo.mMountPoint;
         Process process = mountInfo.mProcess;
         if (!process.isAlive()) {
-            CLog.w("Already unmounted: %s", sourceDataPathString);
+            CLog.w("Already unmounted '%s'.", sourceDataPathString);
             deleteMountPoint(mountPoint);
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
             return;
@@ -262,7 +241,7 @@ public class FuseMountManager {
         } finally {
             if (process.isAlive()) {
                 CLog.w(
-                        "FUSE process for %s did not terminate gracefully. Forcibly destroying it.",
+                        "FUSE process for '%s' did not terminate gracefully. Forcibly destroying it.",
                         sourceDataPathString);
                 process.destroyForcibly();
             }
@@ -271,7 +250,7 @@ public class FuseMountManager {
             deleteMountPoint(mountPoint);
 
             CLog.d(
-                    "Done unmounting: %s (took %d ms)",
+                    "Done unmounting '%s' (took %d ms).",
                     sourceDataPathString, System.currentTimeMillis() - startTime);
         }
     }

@@ -838,6 +838,9 @@ public class AdbSshConnectionTest {
 
         mConnection.createGceTunnelMonitor(mMockTestDevice, mMockBuildInfo, mMockAvdInfo, mOptions);
         assertTrue(mConnection.getGceTunnelMonitor() instanceof GceSshTunnelMonitor);
+        GceSshTunnelMonitor sshTunnel = (GceSshTunnelMonitor) mConnection.getGceTunnelMonitor();
+        sshTunnel.shutdown();
+        sshTunnel.cleanUp();
     }
 
     /** Test host orchestrator will not be initialized for neither Oxygenation nor Oxygen. */

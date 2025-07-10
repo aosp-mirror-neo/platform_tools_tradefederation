@@ -288,7 +288,7 @@ public class InvocationMetricLogger {
         CAS_DOWNLOAD_FILE_DOWNLOAD_TIME("cas_download_file_download_time_ms", true),
         CAS_DOWNLOAD_CHUNK_RESTORE_TIME("cas_download_chunk_restore_time_ms", true),
         CAS_DOWNLOAD_E2E_TIME("cas_download_e2e_time_ms", true),
-        // Records CAS mount metrics
+        // Records CAS viewer metrics
         CAS_MOUNT_UNAVAILABLE_COUNT("cas_mount_unavailable_count", true),
         CAS_MOUNT_POINTS_COUNT("cas_mount_points_count", false),
         CAS_MOUNT_TIMEOUT_COUNT("cas_mount_timeout_count", true),
@@ -296,6 +296,10 @@ public class InvocationMetricLogger {
         CAS_MOUNT_FAILURE_COUNT("cas_mount_failure_count", true),
         CAS_MOUNT_SUCCESS_TIME_MS("cas_mount_success_time_ms", true),
         CAS_MOUNT_FAILURE_TIME_MS("cas_mount_failure_time_ms", true),
+        // Records CAS converter metrics
+        CAS_CONVERTER_UNAVAILABLE_COUNT("cas_converter_unavailable_count", true),
+        CAS_CONVERTER_SUCCESS_COUNT("cas_converter_success_count", true),
+        CAS_CONVERTER_FAILURE_COUNT("cas_converter_failure_count", true),
 
         // Download Cache
         CACHE_HIT_COUNT("cache_hit_count", true),

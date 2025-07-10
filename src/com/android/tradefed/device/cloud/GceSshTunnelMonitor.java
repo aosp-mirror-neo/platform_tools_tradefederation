@@ -415,4 +415,8 @@ public class GceSshTunnelMonitor extends AbstractTunnelMonitor {
             }
         }
     }
+
+    public void cleanUp() {
+        FileUtil.deleteFile(mAdbConnectionLogs);
+    }
 }
