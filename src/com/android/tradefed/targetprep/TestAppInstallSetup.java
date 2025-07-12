@@ -385,7 +385,8 @@ public class TestAppInstallSetup extends BaseTargetPreparer
         }
         // Set all the extra install args outside the loop to avoid adding them several times.
         if (abiName != null && testInfo.getDevice().getApiLevel() > 20) {
-            mInstallArgs.add(String.format("--abi %s", abiName));
+            mInstallArgs.add("--abi");
+            mInstallArgs.add(abiName);
         }
         // Handle instant mode: if we are forced in one installation mode or not.
         // Some preparer are locked in one installation mode or another, they ignore the
