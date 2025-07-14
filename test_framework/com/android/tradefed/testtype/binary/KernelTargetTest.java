@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Test runner for executable running on the target and parsing tesult of kernel test. */
 @OptionClass(alias = "kernel-target-test")
@@ -74,6 +75,9 @@ public class KernelTargetTest extends ExecutableTargetTest {
             description = "Parser resolution for KTap results if test outputs are in KTAP format.")
     private KTapResultParser.ParseResolution mKTapResultParserResolution =
             KTapResultParser.ParseResolution.AGGREGATED_SUITE;
+
+    @Option(name = "env-var", description = "Environment variables to set before running the test.")
+    private Map<String, String> mEnvVars = new LinkedHashMap<>();
 
     @Override
     protected boolean doesRunBinaryGenerateTestResults() {
@@ -141,6 +145,7 @@ public class KernelTargetTest extends ExecutableTargetTest {
                 && !compareKernelVersion(mTestMinKernelVersion.get(testName))) {
             listener.testIgnored(description);
         } else {
+            binaryPath = envVarsToString() + binaryPath;
             super.runBinary(binaryPath, listener, description);
         }
     }
@@ -193,5 +198,19 @@ public class KernelTargetTest extends ExecutableTargetTest {
             return;
         }
         super.checkCommandResult(result, listener, description);
+    }
+
+    /** Convert mEnvVars to the format 'k1=v1 k2=v2 ' */
+    private String envVarsToString() {
+        if (mEnvVars == null || mEnvVars.isEmpty()) {
+            return "";
+        }
+
+        String joinedVars =
+                mEnvVars.entrySet().stream()
+                        .map(entry -> entry.getKey() + "=" + entry.getValue())
+                        .collect(Collectors.joining(" "));
+
+        return joinedVars + " ";
     }
 }
