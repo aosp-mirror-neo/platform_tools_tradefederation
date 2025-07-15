@@ -98,6 +98,7 @@ public class IncrementalImageUtil {
     private boolean mAllowSameBuildFlashing = false;
     private boolean mUpdateWasCompleted = false;
     private boolean mSkipBootloaderVersionCheck = false;
+    private boolean mSkipBasebandVersionCheck = false;
     private File mSourceDirectory;
     private File mTargetDirectory; // Don't delete if same as mTargetImage.
 
@@ -281,6 +282,10 @@ public class IncrementalImageUtil {
 
     public void setSkipBootloaderVersionCheck(boolean skipBootloaderVersionCheck) {
         mSkipBootloaderVersionCheck = skipBootloaderVersionCheck;
+    }
+
+    public void setSkipBasebandVersionCheck(boolean skipBasebandVersionCheck) {
+        mSkipBasebandVersionCheck = skipBasebandVersionCheck;
     }
 
     /** Returns whether device is currently using snapshots or not. */
@@ -719,7 +724,7 @@ public class IncrementalImageUtil {
         ImmutableList.Builder<String> cmdArgsBuilder = new ImmutableList.Builder<>();
         cmdArgsBuilder.add(
                 "flashall", "--exclude-dynamic-partitions", "--disable-super-optimization");
-        if (mSkipBootloaderVersionCheck) {
+        if (mSkipBootloaderVersionCheck || mSkipBasebandVersionCheck) {
             cmdArgsBuilder.add("--force");
         }
         List<String> cmdArgs = cmdArgsBuilder.build();
@@ -732,7 +737,9 @@ public class IncrementalImageUtil {
         CLog.d("stderr: %s", fastbootResult.getStderr());
         if ((!CommandStatus.SUCCESS.equals(fastbootResult.getStatus())
                 && FastbootDeviceFlasher.stderrContainsFailed(
-                        fastbootResult.getStderr(), mSkipBootloaderVersionCheck))) {
+                        fastbootResult.getStderr(),
+                        mSkipBootloaderVersionCheck,
+                        mSkipBasebandVersionCheck))) {
             return false;
         }
         RecoveryMode recoveryMode = mDevice.getRecoveryMode();
@@ -810,10 +817,10 @@ public class IncrementalImageUtil {
         String currentBaseBandVersion =
                 FastbootDeviceFlasher.fetchImageVersion(mRunUtil, device, "baseband");
         if (basebandVersion != null && !basebandVersion.equals(currentBaseBandVersion)) {
-            CLog.i("Flashing bootloader %s", basebandVersion);
+            CLog.i("Flashing baseband %s", basebandVersion);
             return true;
         } else {
-            CLog.i("Bootloader is already version %s, skipping flashing", currentBaseBandVersion);
+            CLog.i("Baseband is already version %s, skipping flashing", currentBaseBandVersion);
             return false;
         }
     }
