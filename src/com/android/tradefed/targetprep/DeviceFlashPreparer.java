@@ -123,6 +123,11 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
     private boolean mSkipBootloaderVersionCheck = false;
 
     @Option(
+            name = "skip-baseband-version-check",
+            description = "Allows to ignore radio version and force it installed.")
+    private boolean mSkipBasebandVersionCheck = false;
+
+    @Option(
             name = "ignore-fastboot-failed-message",
             description =
                     "Allows to ignore any FAILED message in fastboot output. This shouldn't be used"
@@ -404,6 +409,7 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 } else {
                     mIncrementalImageUtil.setSkipBootloaderVersionCheck(
                             mSkipBootloaderVersionCheck);
+                    mIncrementalImageUtil.setSkipBasebandVersionCheck(mSkipBasebandVersionCheck);
                     if (mAllowIncrementalOnSameBuild) {
                         mIncrementalImageUtil.allowSameBuildFlashing();
                     }
@@ -448,6 +454,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 if (flasher instanceof FastbootDeviceFlasher) {
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipBootloaderVersionCheck(mSkipBootloaderVersionCheck);
+                    ((FastbootDeviceFlasher) flasher)
+                            .setSkipBasebandVersionCheck(mSkipBasebandVersionCheck);
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipFastbootFailedMessage(mIgnoreFastbootFailedMessage);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
