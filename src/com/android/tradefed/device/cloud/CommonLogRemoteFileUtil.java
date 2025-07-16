@@ -438,6 +438,10 @@ public class CommonLogRemoteFileUtil {
         }
         File cvdLogsDir = hOUtil.pullCvdHostLogs();
         if (cvdLogsDir != null) {
+            // Search log files for known failures for devices hosted by Oxygen and ARM server.
+            // It needs to be done before logDirectory call as some logger may delete file after
+            // they are logged.
+            GceManager.collectErrorSignatures(cvdLogsDir);
             GceManager.logDirectory(cvdLogsDir, null, logger, LogDataType.CUTTLEFISH_LOG);
             FileUtil.recursiveDelete(cvdLogsDir);
         } else {
