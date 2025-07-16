@@ -101,11 +101,23 @@ public class FuseMountManagerFactory {
     private static void logMountPointCount() throws IOException {
         // Record the number of active mount points. This should be close to the maximum concurrent
         // TF tests on a host. A high number indicates a leak of mount points.
+
+        long count = 0;
+
         try (Stream<Path> files = Files.list(mMountRoot)) {
-            long count = files.count();
-            CLog.d("Found %d active mount points in %s", count, mMountRoot);
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
+            count = files.count();
+        }
+
+        CLog.d("Found %d active mount points in %s", count, mMountRoot);
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
+
+        if (count > 10) { // A typical physical TF host has 14 devices.
+            CLog.d("Sample mount points:", count);
+            try (Stream<Path> files = Files.list(mMountRoot)) {
+                files.limit(3)
+                     .forEach(p -> CLog.d("  - %s", p.toAbsolutePath())); // Log each path
+            }
         }
     }
 

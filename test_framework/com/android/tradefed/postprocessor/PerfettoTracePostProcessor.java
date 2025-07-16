@@ -354,8 +354,8 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
         try {
             metricOutputFile =
                     FileUtil.createTempFile(
-                            metricOutputFilePrefix
-                                    + getRawTraceFileName(perfettoRawTraceFile.getName()),
+                            constructOutputFileName(
+                                    metricOutputFilePrefix, perfettoRawTraceFile.getName()),
                             "");
         } catch (IOException e) {
             CLog.e("Not able to create metric perfetto output file.");
@@ -628,19 +628,30 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
     }
 
     /**
-     * Extract the raw trace file name used for constructing the output perfetto metric file name
+     * Construct the file name for the output metric proto file.
      *
-     * @param rawTraceFileName
-     * @return String name of the raw trace file name excluding the UUID.
+     * @param prefix prefix to add to the file name.
+     * @param rawTraceFileName file name of the raw trace file.
+     * @return String file name to use for the metric proto file.
      */
-    private String getRawTraceFileName(String rawTraceFileName) {
-        // For example return perfetto_<test_name>-1_ from
-        // perfetto_<test_name>-1_13388308985625987330.pb excluding the UID.
-        int lastIndex = rawTraceFileName.lastIndexOf("_");
+    @VisibleForTesting
+    String constructOutputFileName(String prefix, String rawTraceFileName) {
+        String fileName = rawTraceFileName;
+
+        // Remove the UID from the end of the raw trace file name. For example:
+        // perfetto_<test_name>-1_13388308985625987330.pb -> perfetto_<test_name>-1_
+        int lastIndex = fileName.lastIndexOf("_");
         if (lastIndex != -1) {
-            return rawTraceFileName.substring(0, lastIndex + 1);
+            fileName = fileName.substring(0, lastIndex + 1);
         }
-        return rawTraceFileName;
+
+        // If the file name does not already start with "perfetto", add that to make it easier for
+        // PerfettoGenericPostProcessor to find.
+        if (!fileName.startsWith("perfetto")) {
+            fileName = "perfetto_" + fileName;
+        }
+
+        return prefix + fileName;
     }
 
     /**

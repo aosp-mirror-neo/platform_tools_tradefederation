@@ -126,6 +126,11 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             return null;
         }
 
+        // TODO(frankfeng): return if image is uncompressed once rollout is done.
+        if (!CasUtil.isChunkedDir(deviceImage.toPath())) {
+            return deviceImage;
+        }
+
         File image = getFuseMountManager()
                 .map(manager -> mountIfPossible(manager, deviceImage))
                 .orElse(deviceImage);
