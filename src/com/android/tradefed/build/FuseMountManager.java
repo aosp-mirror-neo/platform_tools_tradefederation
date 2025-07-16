@@ -115,10 +115,6 @@ public class FuseMountManager {
         Process process = null;
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             mountPoint = createUniqueMountPoint(sourceDataPath);
-            CLog.i(
-                    "Mount '%s' at '%s'.",
-                    sourceDataPath.toAbsolutePath().toString(),
-                    mountPoint.toAbsolutePath().toString());
             List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
 
             process = mRunUtil.runCmdInBackground(command, capturedOutput);
@@ -205,14 +201,12 @@ public class FuseMountManager {
             return;
         }
 
-        CLog.d("Unmount '%s'.", sourceDataPathString);
-
         Path mountPoint = mountInfo.mMountPoint;
         Process process = mountInfo.mProcess;
         if (!process.isAlive()) {
             CLog.w("Already unmounted '%s'.", sourceDataPathString);
-            deleteMountPoint(mountPoint);
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
+            deleteMountPoint(mountPoint);
             return;
         }
 
@@ -241,7 +235,8 @@ public class FuseMountManager {
         } finally {
             if (process.isAlive()) {
                 CLog.w(
-                        "FUSE process for '%s' did not terminate gracefully. Forcibly destroying it.",
+                        "FUSE process for '%s' did not terminate gracefully. Forcibly destroying"
+                            + " it.",
                         sourceDataPathString);
                 process.destroyForcibly();
             }
@@ -337,19 +332,39 @@ public class FuseMountManager {
 
     /**
      * Deletes the given mount point if it exists. This method logs any exceptions but does not
-     * throw as this is a best-effort cleanup.
+     * throw, as this is a best-effort cleanup.
      *
      * @param mountPoint The mount point to delete.
      */
     private void deleteMountPoint(Path mountPoint) {
-        if (mountPoint != null) {
-            try {
-                Files.delete(mountPoint);
-            } catch (IOException e) {
-                CLog.w(
-                        "Failed to delete mount point '%s'. Error: %s",
-                        mountPoint.toAbsolutePath().toString(), e.getMessage());
-            }
+        final long timeoutMs = 1000;
+        final long deadline = System.currentTimeMillis() + timeoutMs;
+        final long intervalMs = 100;
+
+        if (mountPoint == null) {
+            return;
         }
+
+        do {
+            try {
+                if (Files.deleteIfExists(mountPoint)) {
+                    CLog.d("Successfully cleaned up mount point directory: %s", mountPoint);
+                    return;
+                } else {
+                    return;
+                }
+            } catch (IOException e) {
+                // This is expected if the kernel hasn't released the mount yet.
+                CLog.v("Deletion of mount point %s failed, will retry. Error: %s", mountPoint, e);
+            }
+
+            if (System.currentTimeMillis() >= deadline) {
+                break;
+            }
+
+            mRunUtil.sleep(intervalMs);
+        } while (System.currentTimeMillis() < deadline);
+
+        CLog.w("Could not clean up mount point directory after polling: %s", mountPoint);
     }
 }
