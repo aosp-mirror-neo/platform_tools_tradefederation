@@ -1129,11 +1129,13 @@ public class GceManager {
             }
             // Search log files for known failures for devices hosted by Oxygen and ARM server
             if ((options.useOxygen()
+                            || options.useOxygenationDevice()
                             || InstanceType.GCE.equals(options.getInstanceType())
                             || InstanceType.CUTTLEFISH.equals(options.getInstanceType()))
                     && remoteFile != null) {
                 collectErrorSignatures(remoteFile);
             }
+
             if (options.useOxygen() && remoteFile != null) {
                 try (CloseableTraceScope ignore =
                         new CloseableTraceScope("avd:collectDeviceLaunchMetrics")) {
@@ -1178,7 +1180,7 @@ public class GceManager {
         return false;
     }
 
-    private static void collectErrorSignatures(File remoteFile) {
+    public static void collectErrorSignatures(File remoteFile) {
         try (CloseableTraceScope ignore = new CloseableTraceScope("avd:collectErrorSignature")) {
             List<String> signatures = LogCollector.collectErrorSignatures(remoteFile);
             if (signatures.size() > 0) {
