@@ -670,7 +670,7 @@ public class DeviceManager implements IDeviceManager {
         checkInit();
         if (options.shouldCreateTemporarilyPlaceholder()) {
             String serial = options.getSerials().get(0);
-            addAvailableDevice(new RemoteAvdIDevice(serial, serial, true));
+            addAvailableNativeDevice(new RemoteAvdIDevice(serial, serial, true));
         } else if (isTemporary) {
             String rand = UUID.randomUUID().toString();
             String serial = String.format("%s%s", NullDevice.TEMP_NULL_DEVICE_PREFIX, rand);
