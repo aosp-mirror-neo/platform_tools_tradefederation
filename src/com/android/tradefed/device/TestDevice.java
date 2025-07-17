@@ -433,73 +433,50 @@ public class TestDevice extends NativeDevice {
     /** Internal Helper method to get the bugreportz zip file as a {@link File}. */
     @VisibleForTesting
     protected File getBugreportzInternal() {
-        CollectingOutputReceiver receiver = new CollectingOutputReceiver();
         // Does not rely on {@link ITestDevice#executeAdbCommand(String...)} because it does not
         // provide a timeout.
+        File zipFile = null;
         try {
-            executeShellCommand(
-                    BUGREPORTZ_CMD,
-                    receiver,
-                    getOptions().getBugreportzTimeout(),
-                    TimeUnit.MILLISECONDS,
-                    0 /* don't retry */);
-            String output = receiver.getOutput().trim();
-            Matcher match = BUGREPORTZ_RESPONSE_PATTERN.matcher(output);
-            if (!match.find()) {
-                CLog.e("Something went went wrong during bugreportz collection: '%s'", output);
+            zipFile = FileUtil.createTempFile("bugreportz", ".zip");
+            List<String> adbBugreportCmd = new ArrayList<>();
+            adbBugreportCmd.add("bugreport");
+            adbBugreportCmd.add(zipFile.getAbsolutePath());
+            long timeout = TimeUnit.MILLISECONDS.toMillis(getOptions().getBugreportzTimeout());
+            CommandResult res =
+                    executeAdbV2Command(
+                            timeout, new HashMap<>(), 0, adbBugreportCmd.toArray(new String[0]));
+            if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                CLog.e(
+                        "Something went went wrong during bugreportz collection: '%s'",
+                        res.getStdout());
+                FileUtil.deleteFile(zipFile);
                 return null;
-            } else {
-                String remoteFilePath = match.group(2);
-                if (Strings.isNullOrEmpty(remoteFilePath)) {
-                    CLog.e("Invalid bugreportz path found from output: %s", output);
-                    return null;
-                }
-                File zipFile = null;
-                try {
-                    if (!doesFileExist(remoteFilePath)) {
-                        CLog.e("Did not find bugreportz at: '%s'", remoteFilePath);
-                        return null;
-                    }
-                    // Create a placeholder to replace the file
-                    zipFile = FileUtil.createTempFile("bugreportz", ".zip");
-                    // pull
-                    pullFile(remoteFilePath, zipFile);
-                    String bugreportDir =
-                            remoteFilePath.substring(0, remoteFilePath.lastIndexOf('/'));
-                    if (!bugreportDir.isEmpty()) {
-                        // clean bugreport files directory on device
-                        deleteFile(String.format("%s/*", bugreportDir));
-                    }
-
-                    return zipFile;
-                } catch (IOException e) {
-                    CLog.e("Failed to create the temporary file.");
-                    return null;
-                }
             }
+            return zipFile;
+        } catch (IOException e) {
+            CLog.e("Failed to create the output stream file.");
+            CLog.e(e);
+            FileUtil.deleteFile(zipFile);
         } catch (DeviceNotAvailableException e) {
             CLog.e("Device %s became unresponsive while retrieving bugreportz", getSerialNumber());
             CLog.e(e);
+            FileUtil.deleteFile(zipFile);
         }
         return null;
     }
 
     protected InputStreamSource getBugreportInternal() {
-        CollectingByteOutputReceiver receiver = new CollectingByteOutputReceiver();
         try {
-            executeShellCommand(
-                    BUGREPORT_CMD,
-                    receiver,
-                    BUGREPORT_TIMEOUT,
-                    TimeUnit.MILLISECONDS,
-                    0 /* don't retry */);
+            CommandResult res =
+                    executeShellV2Command(
+                            BUGREPORT_CMD, BUGREPORT_TIMEOUT, TimeUnit.MILLISECONDS, 0);
+            return new ByteArrayInputStreamSource(res.getStdout().getBytes());
         } catch (DeviceNotAvailableException e) {
             // Log, but don't throw, so the caller can get the bugreport contents even
             // if the device goes away
             CLog.e("Device %s became unresponsive while retrieving bugreport", getSerialNumber());
             return null;
         }
-        return new ByteArrayInputStreamSource(receiver.getOutput());
     }
 
     /**
