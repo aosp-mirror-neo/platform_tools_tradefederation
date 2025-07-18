@@ -647,19 +647,21 @@ public class ResultDBReporter
             return;
         }
 
-        FailureReason.Kind kind;
-        switch (failure.getFailureStatus()) {
-            case TIMED_OUT:
-                kind = FailureReason.Kind.TIMEOUT;
-                break;
-            case CANCELLED:
-            case INFRA_FAILURE:
-            case SYSTEM_UNDER_TEST_CRASHED:
-                kind = FailureReason.Kind.CRASH;
-                break;
-            default:
-                kind = FailureReason.Kind.ORDINARY;
-                break;
+        FailureReason.Kind kind = FailureReason.Kind.ORDINARY;
+        if (failure.getFailureStatus() != null) {
+            switch (failure.getFailureStatus()) {
+                case TIMED_OUT:
+                    kind = FailureReason.Kind.TIMEOUT;
+                    break;
+                case CANCELLED:
+                case INFRA_FAILURE:
+                case SYSTEM_UNDER_TEST_CRASHED:
+                    kind = FailureReason.Kind.CRASH;
+                    break;
+                default:
+                    kind = FailureReason.Kind.ORDINARY;
+                    break;
+            }
         }
         String truncatedFailureReason =
                 extractAndTruncateFirstLine(failure.getErrorMessage(), MAX_ERROR_MESSAGE_BYTES);
