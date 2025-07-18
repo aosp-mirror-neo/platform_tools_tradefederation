@@ -494,9 +494,11 @@ public class MoblyBinaryHostTest
             if (yamlSummaryFile != null) {
                 try {
                     inputStream = new FileInputStream(yamlSummaryFile);
+                    CLog.d("Found yaml summary file: %s", yamlSummaryFile);
                 } catch (FileNotFoundException ex) {
                     listener.testRunFailed(ex.toString());
                     reportRunFailed = false;
+                    CLog.e(ex);
                 }
             }
         }
