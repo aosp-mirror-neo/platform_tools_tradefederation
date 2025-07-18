@@ -31,7 +31,8 @@ public enum AutoLogCollector {
     LOGCAT_ON_FAILURE(LogcatOnFailureCollector.class),
     SCREENSHOT_ON_FAILURE(ScreenshotOnFailureCollector.class),
     MODULE_LOGCAT(ModuleLogcatCollector.class),
-    DEVICE_TRACE(DeviceTraceCollector.class);
+    DEVICE_TRACE(DeviceTraceCollector.class),
+    MODULE_PERFETTO_COLLECTOR(ModulePerfettoCollector.class);
 
     private Class<?> mClass;
 
