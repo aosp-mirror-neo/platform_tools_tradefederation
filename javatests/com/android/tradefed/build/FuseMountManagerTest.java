@@ -36,12 +36,15 @@ import static org.mockito.Mockito.when;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
+import com.android.tradefed.util.RunUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -61,6 +64,7 @@ public class FuseMountManagerTest {
     @Mock private IRunUtil mMockRunUtil;
     @Mock private Process mMockProcess;
     @Mock private CommandResult mMockCommandResult;
+    @Mock private CommandResult mMockUmountCommandResult;
 
     private FuseMountManager mManager;
     private Path mSourceDir;
@@ -77,7 +81,7 @@ public class FuseMountManagerTest {
         doNothing().when(mMockDriverProfile).validateSourceDataPath(any(Path.class));
         when(mMockDriverProfile.buildMountCommand(any(Path.class), any(Path.class)))
                 .thenReturn(Arrays.asList("fuse-driver", "arg1"));
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L); // 500ms timeout for tests
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(10L);
         when(mMockRunUtil.runCmdInBackground(anyList(), any(OutputStream.class)))
                 .thenReturn(mMockProcess);
     }
@@ -91,7 +95,7 @@ public class FuseMountManagerTest {
     // Tests for mount()
 
     @Test
-    public void testMount_successBeforePolling() throws Exception {
+    public void mount_successBeforePolling() throws Exception {
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
 
         Path mountPoint = mManager.mount(mSourceDir);
@@ -103,7 +107,7 @@ public class FuseMountManagerTest {
     }
 
     @Test
-    public void testMount_success_whenTimeoutIsZero() throws Exception {
+    public void mount_timeoutIsZero_success() throws Exception {
         when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(0L); // Override to 0ms.
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
 
@@ -114,7 +118,7 @@ public class FuseMountManagerTest {
     }
 
     @Test
-    public void testMount_mountPointHasDeviceNameAsPrefix() throws Exception {
+    public void mount_mountPoint_hasDeviceNameAsPrefix() throws Exception {
         Path sourceDir = tempFolder.newFolder("husky-img-12345678.zip").toPath();
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
 
@@ -126,7 +130,7 @@ public class FuseMountManagerTest {
     }
 
     @Test
-    public void testMount_successAfterPolling() throws Exception {
+    public void mount_successAfterPolling() throws Exception {
         when(mMockDriverProfile.isMountPointReady(any(Path.class)))
                 .thenReturn(false, false, true); // Succeeds on the 3rd check
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false); // Still running
@@ -140,7 +144,7 @@ public class FuseMountManagerTest {
     }
 
     @Test
-    public void testMount_idempotency_alreadyMounted() throws Exception {
+    public void mount_idempotency_alreadyMounted() throws Exception {
         // Perform one successful mount
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
         Path firstMountPoint = mManager.mount(mSourceDir);
@@ -158,7 +162,7 @@ public class FuseMountManagerTest {
     }
 
     @Test
-    public void testMount_processExitsPrematurely_throwsException() throws Exception {
+    public void mount_processExitsPrematurely_throwsException() throws Exception {
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true); // Exited!
         when(mMockProcess.exitValue()).thenReturn(1);
@@ -169,22 +173,35 @@ public class FuseMountManagerTest {
     }
 
     @Test
-    public void testMount_timeout_throwsExceptionAndCleansUp() throws Exception {
+    public void mount_timeout_throwsExceptionAndCleansUp() throws Exception {
         // The mount point is never ready
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
+        when(mMockProcess.isAlive()).thenReturn(true, false);
         // The process never exits on its own
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
+            .thenAnswer(invocation -> {
+                long timeout = invocation.getArgument(0);
+                TimeUnit unit = invocation.getArgument(1);
+
+                long sleepMillis = Math.max(5, unit.toMillis(timeout));
+                RunUtil.getDefault().sleep(sleepMillis);
+                return false;
+            });
 
         IOException thrown =
                 assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
         assertTrue(thrown.getMessage().contains("timed out"));
 
-        // Verify that the orphaned process was killed
-        verify(mMockProcess).destroyForcibly();
+        // Verify that the orphaned process was killed and the mount point was deleted.
+        verify(mMockProcess, times(1)).destroy();
+        verify(mMockProcess, never()).destroyForcibly();
+        try (Stream<Path> files = Files.list(mMountRoot)) {
+            assertTrue(files.findAny().isEmpty());
+        }
     }
 
     @Test
-    public void testMount_invalidSource_throwsException() throws Exception {
+    public void mount_invalidSource_throwsException() throws Exception {
         doThrow(new IOException("Source is invalid!"))
                 .when(mMockDriverProfile)
                 .validateSourceDataPath(mSourceDir);
@@ -195,7 +212,7 @@ public class FuseMountManagerTest {
     // Tests for unmount()
 
     @Test
-    public void testUnmount_successful() throws Exception {
+    public void unmount_successful() throws Exception {
         // Perform a successful mount to populate the map.
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
         Path mountPoint = mManager.mount(mSourceDir);
@@ -211,19 +228,20 @@ public class FuseMountManagerTest {
 
         mManager.unmount(mSourceDir);
 
+        verify(mMockProcess, never()).destroy();
         verify(mMockProcess, never()).destroyForcibly();
         // Check that the mount point directory was deleted
         assertFalse(new File(mountPoint.toString()).exists());
     }
 
     @Test
-    public void testUnmount_gracefulFail_forcefulSuccess() throws Exception {
+    public void unmount_gracefulUmountFails_fallbackToProcessDestroy() throws Exception {
         // Perform a successful mount.
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
         Path mountPoint = mManager.mount(mSourceDir);
 
         // Arrange for unmount where fusermount fails and process stays alive.
-        when(mMockProcess.isAlive()).thenReturn(true);
+        when(mMockProcess.isAlive()).thenReturn(true, true, false);
         when(mMockRunUtil.runTimedCmd(
                         anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
@@ -232,13 +250,46 @@ public class FuseMountManagerTest {
 
         mManager.unmount(mSourceDir);
 
-        verify(mMockProcess).destroyForcibly();
+        // Verify that the process was destroyed if fusermount fails.
+        verify(mMockProcess, times(1)).destroy();
+        verify(mMockProcess, never()).destroyForcibly();
+        // Check that the mount point directory was deleted
+        assertFalse(new File(mountPoint.toString()).exists());
+    }
+
+    @Test
+    public void unmount_processDestroyFails_fallbackToProcessDestroyForcibly() throws Exception {
+        // Perform a successful mount.
+        when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);
+        Path mountPoint = mManager.mount(mSourceDir);
+
+        // Arrange for unmount where fusermount fails and process stays alive.
+        when(mMockProcess.isAlive()).thenReturn(true, true, true, false);
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
+                .thenReturn(mMockCommandResult);
+        when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.FAILED);
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(), eq("umount"), eq("-l"), eq(mountPoint.toString())))
+                .thenReturn(mMockUmountCommandResult);
+        when(mMockUmountCommandResult.getStatus()).thenReturn(CommandStatus.SUCCESS);
+
+        mManager.unmount(mSourceDir);
+
+        // Verify that the process was destroyed forcibly if ProcessDestroy() fails.
+        verify(mMockProcess, times(1)).destroy();
+        verify(mMockProcess, times(1)).destroyForcibly();
+        // Verify that the lazy unmount was performed when destroryForcibly().
+        verify(mMockRunUtil, times(1)).runTimedCmd(anyLong(), eq("umount"), eq("-l"), eq(mountPoint.toString()));
+        // Check that the mount point directory was deleted
+        assertFalse(new File(mountPoint.toString()).exists());
     }
 
     // Tests for unmountAll()
 
     @Test
-    public void testUnmountAll() throws Exception {
+    public void unmountAll_success() throws Exception {
         // Mount two different source paths
         Path sourceDir2 = tempFolder.newFolder("source-dir-2").toPath();
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(true);

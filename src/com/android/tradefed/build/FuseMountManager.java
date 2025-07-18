@@ -51,6 +51,15 @@ public class FuseMountManager {
     private final Map<Path, MountInfo> mActiveMounts = new ConcurrentHashMap<>();
     private final Path mMountRoot; // The base path for creation of mount points.
 
+    // Timeouts for unmount operations
+    private static final long FUSEMOUNT_UNMOUNT_TIMEOUT_MS =
+            30 * 1000; // 30 seconds for graceful fusermount
+    private static final long PROCESS_DESTROY_WAIT_TIMEOUT_MS =
+            5 * 1000; // 5 seconds for process.destroy()
+    private static final long PROCESS_FORCIBLE_DESTROY_WAIT_TIMEOUT_MS =
+            10 * 1000; // 10 seconds for process.destroyForcibly()
+    private static final long UMOUNT_LAZY_TIMEOUT_MS = 5 * 1000; // 5 seconds for 'umount -l'
+
     /** MountInfo is a class that holds information about a mounted FUSE filesystem. */
     private static class MountInfo {
         Path mMountPoint;
@@ -152,7 +161,9 @@ public class FuseMountManager {
             } while (System.currentTimeMillis() < deadline);
 
             // FAILURE: Timed out waiting for the mount point to become ready.
-            process.destroyForcibly();
+            if (process != null && process.isAlive()) {
+                destroyProcess(process, mountPoint);
+            }
             deleteMountPoint(mountPoint);
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
@@ -165,7 +176,7 @@ public class FuseMountManager {
         } catch (IOException | InterruptedException e) {
             // FAILURE: Handle all exceptions from the try block here.
             if (process != null && process.isAlive()) {
-                process.destroyForcibly();
+                destroyProcess(process, mountPoint);
             }
             deleteMountPoint(mountPoint);
 
@@ -193,32 +204,51 @@ public class FuseMountManager {
      */
     public void unmount(Path sourceDataPath) {
         final long startTime = System.currentTimeMillis();
-
         String sourceDataPathString = sourceDataPath.toAbsolutePath().toString();
         MountInfo mountInfo = mActiveMounts.get(sourceDataPath);
+
         if (mountInfo == null) {
-            CLog.w("No mount found for '%s'.", sourceDataPathString);
+            CLog.w("No mount found for '%s'. Skipping unmount.", sourceDataPathString);
             return;
         }
 
         Path mountPoint = mountInfo.mMountPoint;
         Process process = mountInfo.mProcess;
-        if (!process.isAlive()) {
-            CLog.w("Already unmounted '%s'.", sourceDataPathString);
-            mActiveMounts.remove(sourceDataPath); // Atomically remove from map
-            deleteMountPoint(mountPoint);
-            return;
-        }
 
         try {
-            // Attempt graceful shutdown first (the preferred way)
-            CommandResult result =
+            if (process.isAlive()) {
+                gracefullyUnmount(process, mountPoint);
+            } else {
+                CLog.d(
+                        "FUSE process for '%s' is already dead. Skipping 'fusermount -u'.",
+                        mountPoint);
+            }
+
+        } finally {
+            mActiveMounts.remove(sourceDataPath); // Atomically remove from map
+            deleteMountPoint(mountPoint); // Best-effort directory cleanup
+
+            CLog.d(
+                    "Done unmounting '%s' (took %d ms).",
+                    sourceDataPathString, System.currentTimeMillis() - startTime);
+        }
+    }
+
+    private void gracefullyUnmount(Process process, Path mountPoint) {
+        try {
+            CommandResult fusermountResult =
                     mRunUtil.runTimedCmd(
-                            10000, "fusermount", "-u", mountPoint.toAbsolutePath().toString());
-            if (result.getStatus() != CommandStatus.SUCCESS) {
+                            FUSEMOUNT_UNMOUNT_TIMEOUT_MS,
+                            "fusermount",
+                            "-u",
+                            mountPoint.toAbsolutePath().toString());
+            if (fusermountResult.getStatus() != CommandStatus.SUCCESS) {
                 CLog.w(
-                        "Graceful shutdown with 'fusermount -u' failed. Stderr: "
-                                + result.getStderr());
+                        "fusermount -u '%s' failed. Status: %s. Stderr: %s. Stdout: %s",
+                        mountPoint,
+                        fusermountResult.getStatus(),
+                        fusermountResult.getStderr(),
+                        fusermountResult.getStdout());
             }
 
             // Allow the process a brief moment to exit on its own after fusermount.
@@ -227,34 +257,86 @@ public class FuseMountManager {
                 return;
             }
 
-        } catch (InterruptedException e) {
-            CLog.e(
-                    "Interrupted while waiting for FUSE process to terminate. Error: %s",
-                    e.getMessage());
-            Thread.currentThread().interrupt();
-        } finally {
-            if (process.isAlive()) {
-                CLog.w(
-                        "FUSE process for '%s' did not terminate gracefully. Forcibly destroying"
-                            + " it.",
-                        sourceDataPathString);
-                process.destroyForcibly();
-            }
+        } catch (Exception e) {
+            CLog.e("Error executing fusermount -u for '%s'. Error: %s", mountPoint, e.getMessage());
+        }
 
-            mActiveMounts.remove(sourceDataPath); // Atomically remove from map
-            deleteMountPoint(mountPoint);
-
-            CLog.d(
-                    "Done unmounting '%s' (took %d ms).",
-                    sourceDataPathString, System.currentTimeMillis() - startTime);
+        if (process.isAlive()) {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_UNMOUNT_GRACEFUL_FAILURE_COUNT, 1);
+            destroyProcess(process, mountPoint);
         }
     }
 
-    /** Unmounts all tracked filesystems in parallel.
+    private void destroyProcess(Process process, Path mountPoint) {
+        CLog.w("Attempting graceful process termination for FUSE driver backing '%s'.", mountPoint);
+        process.destroy(); // Sends SIGTERM
+        try {
+            process.waitFor(PROCESS_DESTROY_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restore interrupt status
+            CLog.e("Interrupted while waiting for FUSE driver to exit. Error: %s", e.getMessage());
+        }
+
+        if (process.isAlive()) {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_UNMOUNT_SIGTERM_FAILURE_COUNT, 1);
+            destroyProcessForcibly(process, mountPoint);
+        }
+    }
+
+    private void destroyProcessForcibly(Process process, Path mountPoint) {
+        CLog.e("FUSE driver for '%s' is still alive. Forcibly destroying process.", mountPoint);
+        process.destroyForcibly(); // Sends SIGKILL
+        try {
+            process.waitFor(PROCESS_FORCIBLE_DESTROY_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            CLog.e(
+                    "Interrupted while waiting for forceful destruction of FUSE driver."
+                            + " Error: %s",
+                    e.getMessage());
+        }
+
+        if (process.isAlive()) {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_UNMOUNT_SIGKILL_FAILURE_COUNT, 1);
+        }
+        // SIGTERM can't be caught, so we need to do a lazy unmount to avoid leaking the mount
+        // point.
+        lazyUnmount(mountPoint);
+    }
+
+    private void lazyUnmount(Path mountPoint) {
+        try {
+            CLog.d("Performing lazy unmount for '%s' to ensure cleanup.", mountPoint);
+            CommandResult lazyUnmountResult =
+                    mRunUtil.runTimedCmd(
+                            UMOUNT_LAZY_TIMEOUT_MS,
+                            "umount",
+                            "-l",
+                            mountPoint.toAbsolutePath().toString());
+            if (lazyUnmountResult.getStatus() != CommandStatus.SUCCESS) {
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.CAS_UNMOUNT_LAZZY_UNMOUNT_FAILURE_COUNT, 1);
+                CLog.e(
+                        "Lazy unmount for '%s' failed. Status: %s. Stderr: %s. Stdout: %s",
+                        mountPoint,
+                        lazyUnmountResult.getStatus(),
+                        lazyUnmountResult.getStderr(),
+                        lazyUnmountResult.getStdout());
+            }
+        } catch (Exception e) {
+            CLog.e("Error executing umount -l for '%s'. Error: %s", mountPoint, e.getMessage());
+        }
+    }
+
+    /**
+     * Unmounts all tracked filesystems in parallel.
      *
      * <p>This method unmounts all tracked filesystems in parallel using a thread pool. It is
-     * intended to be used when all filesystems need to be unmounted, such as when shutting down
-     * the FuseMountManager.
+     * intended to be used when all filesystems need to be unmounted, such as when shutting down the
+     * FuseMountManager.
      */
     public void unmountAll() {
         if (mActiveMounts.keySet().isEmpty()) {
@@ -284,11 +366,15 @@ public class FuseMountManager {
 
         // Shut down the executor and wait for tasks to complete.
         try {
+            // Adjusted timeout for unmountAll to be sum of individual unmount steps + buffer
+            long totalTimeout =
+                    FUSEMOUNT_UNMOUNT_TIMEOUT_MS
+                            + PROCESS_DESTROY_WAIT_TIMEOUT_MS
+                            + UMOUNT_LAZY_TIMEOUT_MS
+                            + 5000;
             executor.shutdown(); // Stop accepting new tasks.
-            if (!executor.awaitTermination(15, TimeUnit.SECONDS)) {
-                CLog.e(
-                        "UnmountAll timed out after 15 seconds. Some FUSE processes may be"
-                            + " orphaned.");
+            if (!executor.awaitTermination(totalTimeout, TimeUnit.MILLISECONDS)) {
+                CLog.e("UnmountAll timed out. Some FUSE processes may be" + " orphaned.");
                 executor.shutdownNow();
             }
         } catch (InterruptedException e) {
@@ -336,7 +422,7 @@ public class FuseMountManager {
      *
      * @param mountPoint The mount point to delete.
      */
-    private void deleteMountPoint(Path mountPoint) {
+    protected void deleteMountPoint(Path mountPoint) {
         final long timeoutMs = 1000;
         final long deadline = System.currentTimeMillis() + timeoutMs;
         final long intervalMs = 100;
@@ -347,15 +433,19 @@ public class FuseMountManager {
 
         do {
             try {
-                if (Files.deleteIfExists(mountPoint)) {
-                    CLog.d("Successfully cleaned up mount point directory: %s", mountPoint);
-                    return;
-                } else {
-                    return;
+                if (!Files.deleteIfExists(mountPoint)) {
+                    if (!Files.exists(mountPoint)) {
+                        return;
+                    }
+                    // If it still exists but deleteIfExists returned false, it might be
+                    // busy/locked.
+                    CLog.v("Deletion of mount point '%s' returned false, will retry.", mountPoint);
                 }
             } catch (IOException e) {
                 // This is expected if the kernel hasn't released the mount yet.
-                CLog.v("Deletion of mount point %s failed, will retry. Error: %s", mountPoint, e);
+                CLog.v(
+                        "Deletion of mount point '%s' failed, will retry. Error: %s",
+                        mountPoint, e.getMessage());
             }
 
             if (System.currentTimeMillis() >= deadline) {
@@ -365,6 +455,8 @@ public class FuseMountManager {
             mRunUtil.sleep(intervalMs);
         } while (System.currentTimeMillis() < deadline);
 
-        CLog.w("Could not clean up mount point directory after polling: %s", mountPoint);
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_UNMOUNT_CLEANUP_FAILURE_COUNT, 1);
+        CLog.w("Could not clean up mount point directory after polling: '%s'", mountPoint);
     }
 }

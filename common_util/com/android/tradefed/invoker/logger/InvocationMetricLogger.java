@@ -16,7 +16,6 @@
 package com.android.tradefed.invoker.logger;
 
 import com.android.tradefed.log.LogUtil.CLog;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -296,6 +295,11 @@ public class InvocationMetricLogger {
         CAS_MOUNT_FAILURE_COUNT("cas_mount_failure_count", true),
         CAS_MOUNT_SUCCESS_TIME_MS("cas_mount_success_time_ms", true),
         CAS_MOUNT_FAILURE_TIME_MS("cas_mount_failure_time_ms", true),
+        CAS_UNMOUNT_GRACEFUL_FAILURE_COUNT("cas_unmount_graceful_failure_count", true),
+        CAS_UNMOUNT_SIGTERM_FAILURE_COUNT("cas_unmount_sigterm_failure_count", true),
+        CAS_UNMOUNT_SIGKILL_FAILURE_COUNT("cas_unmount_sigkill_failure_count", true),
+        CAS_UNMOUNT_LAZZY_UNMOUNT_FAILURE_COUNT("cas_unmount_lazy_unmount_failure_count", true),
+        CAS_UNMOUNT_CLEANUP_FAILURE_COUNT("cas_unmount_cleanup_failure_count", true),
         // Records CAS converter metrics
         CAS_CONVERTER_UNAVAILABLE_COUNT("cas_converter_unavailable_count", true),
         CAS_CONVERTER_SUCCESS_COUNT("cas_converter_success_count", true),

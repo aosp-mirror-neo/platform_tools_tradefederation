@@ -56,6 +56,9 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                 mOptionalFuseMountManager =
                         Optional.of(
                                 FuseMountManagerFactory.getInstance().createCasFuseMountManager());
+                CLog.i(
+                        "Created FuseMountManager for DeviceBuildInfo(0x%s).",
+                        Integer.toHexString(System.identityHashCode(this)));
             } catch (IOException | ExceptionInInitializerError | NoClassDefFoundError e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
@@ -151,7 +154,10 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     private File mountIfPossible(FuseMountManager manager, File deviceImage) {
         if (CasUtil.isChunkedDir(deviceImage.toPath())) {
             try {
-                return manager.mount(deviceImage.toPath()).toFile();
+                // TODO(frankfeng): change to return the mount point when done collecting metrics.
+                manager.mount(deviceImage.toPath()).toFile();
+                manager.unmount(deviceImage.toPath());
+                return deviceImage;
 
             } catch (IOException | InterruptedException e) {
                 CLog.i("Failed to mount '%s'.", deviceImage);
