@@ -91,6 +91,9 @@ public class GceAvdInfo {
                 "Lease aborted due to launcher failure");
         OXYGEN_ERROR_PATTERN_MAP.put(
                 InfraErrorIdentifier.OXYGEN_SERVER_LB_CONNECTION_ERROR, "desc = connection error");
+        OXYGEN_ERROR_PATTERN_MAP.put(
+                InfraErrorIdentifier.OXYGEN_SERVER_UNAVAILABLE,
+                "UNAVAILABLE: The service is currently unavailable");
     }
 
     // Error message for specify Oxygen error.
