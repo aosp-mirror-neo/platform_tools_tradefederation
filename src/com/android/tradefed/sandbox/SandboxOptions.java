@@ -54,6 +54,7 @@ public final class SandboxOptions {
     private static final String SANDBOX_SPLIT_DISCOVERY = "sandbox-split-discovery";
     private static final String SANDBOX_PARALLEL_DOWNLOAD = "sandbox-parallel-download";
     private static final String DELAY_DOWNLOAD_AFTER_SHARDING = "delay-download-after-sharding";
+    private static final String SANDBOX_VALIDATION_TESTS = "sandbox-validation-tests";
 
     @Option(
         name = TF_LOCATION,
@@ -181,6 +182,11 @@ public final class SandboxOptions {
                             + " downloaded size.")
     private boolean mDelayDownloadAfterSharding = true;
 
+    @Option(
+            name = SANDBOX_VALIDATION_TESTS,
+            description = "Whether the test is a validation style of tests using sandbox.")
+    private boolean mSandboxValidationTests = false;
+
     /**
      * Returns the provided directories containing the Trade Federation version to use for
      * sandboxing the run.
@@ -292,5 +298,9 @@ public final class SandboxOptions {
     /** Returns whether or not to delay download after the sharding. */
     public boolean delayDownloadAfterSharding() {
         return mDelayDownloadAfterSharding;
+    }
+
+    public boolean isValidationTest() {
+        return mSandboxValidationTests;
     }
 }
