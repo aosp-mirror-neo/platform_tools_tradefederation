@@ -563,6 +563,14 @@ public class ResultReporter
                                     .addToSkipRetryList(p.getValue().trim());
                         }
                     }
+                    List<Property> runCountProperty =
+                            mInvocation.getProperties().stream()
+                                    .filter(p -> p.getName().equals("run_count"))
+                                    .collect(Collectors.toList());
+                    if (!runCountProperty.isEmpty()) {
+                        context.addInvocationAttribute(
+                                "run_count", runCountProperty.get(0).getValue());
+                    }
                 }
             }
         } finally {
