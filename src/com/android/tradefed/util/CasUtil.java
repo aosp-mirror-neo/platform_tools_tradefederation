@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 public final class CasUtil {
 
@@ -92,7 +93,7 @@ public final class CasUtil {
     /**
      * Returns true if the given path is a valid uncompressed device image.
      *
-     * @param path The path to the device image.
+     * @param path The absolute path to the device image.
      * @return True if the path is a valid uncompressed device image, false otherwise.
      */
     public static boolean isUncompressedDeviceImage(Path path) {
@@ -100,16 +101,15 @@ public final class CasUtil {
         return Files.exists(path.resolve(BOOT_IMAGE_FILENAME));
     }
 
-    /**
-     * Executes the CAS client with the --version flag and logs the result. This is a diagnostic
-     * helper to confirm which driver is being used.
-     *
-     * @param clientPath The path to the CAS client executable.
-     */
-    public static void logCasClientVersion(Path clientPath) {
+    public static void logCasClientVersion(
+            Path clientPath, Consumer<String> versionHandlerFn) {
+        if (clientPath == null) {
+            return;
+        }
+
         String clientName = clientPath.getFileName().toString();
         CommandResult cr =
-                mRunUtil.runTimedCmd(5000, clientPath.toAbsolutePath().toString(), "--version");
+                mRunUtil.runTimedCmd(5000, clientPath.toString(), "--version");
         if (cr.getStatus() != CommandStatus.SUCCESS) {
             CLog.e(
                     "Failed to extract '%s' version. Status: %s\nStdout: %s\nStderr: %s",
@@ -121,9 +121,18 @@ public final class CasUtil {
         String version = cr.getStdout().trim();
         if (version.startsWith(prefix)) {
             version = version.substring(prefix.length());
-            CLog.i("%s, version: %s", clientName, version);
         } else {
-            CLog.i("%s, version: unknown", clientName);
+            version = "unknown";
+        }
+        CLog.i("%s, version: %s", clientName, version);
+
+        if (versionHandlerFn != null) {
+            versionHandlerFn.accept(version);
         }
     }
+
+    public static void logCasClientVersion(Path clientPath) {
+        logCasClientVersion(clientPath, null);
+    }
+
 }
