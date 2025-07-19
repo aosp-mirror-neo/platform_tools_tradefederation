@@ -56,7 +56,11 @@ public enum ModuleParameters {
 
     // SDK sandbox mode
     RUN_ON_SDK_SANDBOX("run_on_sdk_sandbox", ModuleParameters.RUN_ON_SDK_SANDBOX_FAMILY),
-    NOT_RUN_ON_SDK_SANDBOX("not_run_on_sdk_sandbox", ModuleParameters.RUN_ON_SDK_SANDBOX_FAMILY);
+    NOT_RUN_ON_SDK_SANDBOX("not_run_on_sdk_sandbox", ModuleParameters.RUN_ON_SDK_SANDBOX_FAMILY),
+
+    CONCURRENT_FOREGROUND_AND_VISIBLE_BACKGROUND_USER(
+            "concurrent_foreground_and_visible_background_user",
+            ModuleParameters.CONCURRENT_FAMILY);
 
     public static final String INSTANT_APP_FAMILY = "instant_app_family";
     public static final String MULTI_ABI_FAMILY = "multi_abi_family";
@@ -72,6 +76,7 @@ public enum ModuleParameters {
     public static final String RUN_ON_SECONDARY_USER_FAMILY = "run_on_secondary_user_family";
     public static final String RUN_ON_CLONE_PROFILE_FAMILY = "run_on_clone_profile_family";
     public static final String RUN_ON_PRIVATE_PROFILE_FAMILY = "run_on_private_profile_family";
+    public static final String CONCURRENT_FAMILY = "concurrent_family";
 
     private final String mName;
     /** Defines whether several module parameters are associated and mutually exclusive. */
@@ -90,5 +95,15 @@ public enum ModuleParameters {
     /** Returns the family of the Module Parameter. */
     public String getFamily() {
         return mFamily;
+    }
+
+    /** Returns the {@link ModuleParameters} from the string name. */
+    static ModuleParameters fromString(String name) {
+        for (ModuleParameters p : values()) {
+            if (p.mName.equals(name)) {
+                return p;
+            }
+        }
+        return null;
     }
 }

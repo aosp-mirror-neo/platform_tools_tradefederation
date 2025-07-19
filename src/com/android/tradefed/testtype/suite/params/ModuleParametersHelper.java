@@ -35,20 +35,25 @@ import static com.android.tradefed.testtype.suite.params.ModuleParameters.SECOND
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.SECONDARY_USER_ON_DEFAULT_DISPLAY;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.SECONDARY_USER_ON_SECONDARY_DISPLAY;
 
+import com.android.tradefed.log.Log;
 import com.android.tradefed.testtype.suite.params.multiuser.RunOnCloneProfileParameterHandler;
 import com.android.tradefed.testtype.suite.params.multiuser.RunOnPrivateProfileParameterHandler;
 import com.android.tradefed.testtype.suite.params.multiuser.RunOnSecondaryUserParameterHandler;
 import com.android.tradefed.testtype.suite.params.multiuser.RunOnWorkProfileParameterHandler;
+
+import com.google.common.annotations.VisibleForTesting;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.Set;
 
 /** Helper to get the {@link IModuleParameterHandler} associated with the parameter. */
 public final class ModuleParametersHelper {
+    private static final String TAG = ModuleParametersHelper.class.getSimpleName();
 
     private static final Map<ModuleParameters, IModuleParameterHandler> sHandlerMap =
             new LinkedHashMap<>();
@@ -105,10 +110,36 @@ public final class ModuleParametersHelper {
         sOptionalHandlerMap.put(NOT_SECONDARY_USER_ON_DEFAULT_DISPLAY, new NegativeHandler());
         sOptionalHandlerMap.put(RUN_ON_SDK_SANDBOX, new RunOnSdkSandboxHandler());
         sOptionalHandlerMap.put(NOT_RUN_ON_SDK_SANDBOX, new NegativeHandler());
+
+        // Load additional optional handlers from classpath (e.g., from tradefed-contrib)
+        loadHandlersFromServiceLoader();
+    }
+
+    // Dynamically load IModuleParameterHandler implementations using ServiceLoader.
+    private static void loadHandlersFromServiceLoader() {
+        ClassLoader classLoader = ModuleParametersHelper.class.getClassLoader();
+        ServiceLoader<IModuleParameterHandler> loader =
+                ServiceLoader.load(IModuleParameterHandler.class, classLoader);
+        for (IModuleParameterHandler handler : loader) {
+            String identifier = handler.getParameterIdentifier();
+            if (identifier == null) {
+                Log.w(TAG, "Handler " + handler + " returned null parameter identifier");
+                continue;
+            }
+            ModuleParameters param = ModuleParameters.fromString(identifier);
+            if (param == null) {
+                Log.w(TAG, "Handler " + handler + " has unknown identifier " + identifier);
+                continue;
+            }
+            // Add to sOptionalHandlerMap. Use putIfAbsent to avoid overwriting if a
+            // handler for the same param was somehow already registered.
+            sOptionalHandlerMap.putIfAbsent(param, handler);
+            Log.d(TAG, "ServiceLoader registered " + handler + " for " + param);
+        }
     }
 
     // NOTE: sOptionalGroupMap is currently empty, but used on resolveParam(), so don't remove it
-    private static Map<ModuleParameters, Set<ModuleParameters>> sOptionalGroupMap =
+    private static final Map<ModuleParameters, Set<ModuleParameters>> sOptionalGroupMap =
             Collections.emptyMap();
 
     /**
@@ -137,7 +168,7 @@ public final class ModuleParametersHelper {
                 return new HashMap<>();
             }
             Map<ModuleParameters, IModuleParameterHandler> returnMap = new LinkedHashMap<>();
-            returnMap.put(param, getParameterHandler(param, withOptional));
+            returnMap.put(param, handler);
             return returnMap;
         }
         // If the parameter is a group, expand it.
@@ -153,7 +184,8 @@ public final class ModuleParametersHelper {
      *
      * @param withOptional Whether or not to also check optional params.
      */
-    private static IModuleParameterHandler getParameterHandler(
+    @VisibleForTesting
+    static IModuleParameterHandler getParameterHandler(
             ModuleParameters param, boolean withOptional) {
         IModuleParameterHandler value = sHandlerMap.get(param);
         if (value == null && withOptional) {

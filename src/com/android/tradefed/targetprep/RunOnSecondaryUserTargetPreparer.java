@@ -36,7 +36,7 @@ import java.util.Set;
 
 /**
  * An {@link ITargetPreparer} to ensure that the test runs as a secondary user. In addition, if
- * the option {@link START_BACKGROUND_USER} is {@code true} and the current user is already
+ * the option {@link #START_BACKGROUND_USER} is {@code true} and the current user is already
  * a secondary user, it will ensure that there is a visble background secondary user run on a
  * secondary display.
  *
@@ -60,7 +60,8 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
     private static final String SECONDARY_USER_TYPE = "android.os.usertype.full.SECONDARY";
 
     private int userIdToDelete = -1;
-    private int originalUserId;
+    protected int originalUserId;
+    protected int secondaryUserId;
 
     @Option(
             name = TEST_PACKAGE_NAME_OPTION,
@@ -68,7 +69,7 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
                     "the name of a package to be installed on the secondary user. "
                             + "This must already be installed on the device.",
             importance = Option.Importance.IF_UNSET)
-    private List<String> mTestPackages = new ArrayList<>();
+    protected List<String> mTestPackages = new ArrayList<>();
 
     @Option(
             name = START_BACKGROUND_USER,
@@ -76,16 +77,22 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
                     "If true and the current user is a secondary user, it will create a "
                             + "background secondary user (if such user doesn't exist) and "
                             + "start the background user on secondary display")
-    private boolean mStartBackgroundUser;
+    protected boolean mStartBackgroundUser;
 
     @Override
     public void setUp(TestInformation testInfo)
             throws TargetSetupError, DeviceNotAvailableException {
+        if (mStartBackgroundUser && !testInfo.getDevice().isVisibleBackgroundUsersSupported()) {
+            throw new TargetSetupError(
+                    "This device doesn't support visible background users",
+                    testInfo.getDevice().getDeviceDescriptor());
+        }
+
         removeNonForTestingUsers(testInfo.getDevice());
 
         originalUserId = testInfo.getDevice().getCurrentUser();
         // This must be a for-testing user because we removed the not-for-testing ones
-        int secondaryUserId = getTargetSecondaryUserId(testInfo.getDevice());
+        secondaryUserId = getTargetSecondaryUserId(testInfo.getDevice());
 
         if (secondaryUserId == originalUserId) {
             return;

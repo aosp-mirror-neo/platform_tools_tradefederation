@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.testtype.suite.params;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -96,5 +97,14 @@ public class ModuleParametersHelperTest {
 
         assertNotEquals(resolvedParams.size(), 1);
         assertFalse(resolvedParams.keySet().contains(ModuleParameters.MULTIUSER));
+    }
+
+    @Test
+    public void testGetParameterHandler_fromServiceLoader() {
+        IModuleParameterHandler handler =
+                ModuleParametersHelper.getParameterHandler(
+                        ModuleParameters.CONCURRENT_FOREGROUND_AND_VISIBLE_BACKGROUND_USER,
+                        /* withOptional= */ true);
+        assertThat(handler).isInstanceOf(TestServiceLoadedHandler.class);
     }
 }

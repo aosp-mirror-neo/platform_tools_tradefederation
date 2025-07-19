@@ -76,6 +76,13 @@ import java.util.stream.Stream;
 public class TestAppInstallSetup extends BaseTargetPreparer
         implements IAbiReceiver, IDiscoverDependencies, IIncrementalSetup {
 
+    /**
+     * The key for a {@link TestInformation} property that contains a comma-separated list of
+     * package names of installed APKs. This is used to communicate the list of installed packages
+     * to other preparers, such as {@link RunOnSecondaryUserTargetPreparer}.
+     */
+    public static final String INSTALLED_PACKAGES_KEY = "INSTALLED_PACKAGES_KEY";
+
     /** The mode the apk should be install in. */
     private enum InstallMode {
         FULL,
@@ -465,6 +472,20 @@ public class TestAppInstallSetup extends BaseTargetPreparer
                     apkNames.stream().map(a -> new File(a)).collect(Collectors.toList());
             Map<File, String> appFilesAndPackages = resolveApkFiles(testInfo, apkFileNames);
             installer(testInfo, appFilesAndPackages);
+        }
+
+        // Record the package names of all installed APKs. This allows other preparers to know
+        // which packages to make available for other users.
+        for (String packageName : mPackagesInstalled) {
+            String currentPackages = testInfo.properties().get(INSTALLED_PACKAGES_KEY);
+            if (currentPackages == null) {
+                currentPackages = "";
+            }
+            if (!currentPackages.isEmpty()) {
+                currentPackages += ",";
+            }
+            currentPackages += packageName;
+            testInfo.properties().put(INSTALLED_PACKAGES_KEY, currentPackages);
         }
     }
 
