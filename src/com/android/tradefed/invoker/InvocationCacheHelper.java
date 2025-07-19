@@ -35,6 +35,8 @@ import com.android.tradefed.util.QuotationAwareTokenizer;
 
 import build.bazel.remote.execution.v2.Digest;
 
+import com.google.common.base.Strings;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -83,6 +85,9 @@ public class InvocationCacheHelper {
             return;
         }
         if (protoResultsReporter == null) {
+            return;
+        }
+        if (checkIterations(testInfo)) {
             return;
         }
         File protoResults = protoResultsReporter.getOutputFile();
@@ -137,6 +142,10 @@ public class InvocationCacheHelper {
         }
         if (mainConfig.getSkipManager().getImageToDigest().containsValue(null)) {
             CLog.d("No digest for device.");
+            return new CacheInvocationResultDescriptor(false, null);
+        }
+        if (checkIterations(testInfo)) {
+            CLog.d("No caching when using iterations.");
             return new CacheInvocationResultDescriptor(false, null);
         }
         boolean emptyTestsDir = false;
@@ -271,5 +280,23 @@ public class InvocationCacheHelper {
             }
         }
         return sCacheDirectory;
+    }
+
+    private static boolean checkIterations(TestInformation testInfo) {
+        IInvocationContext context = testInfo.getContext();
+        String runCount = context.getAttribute("run_count");
+        if (Strings.isNullOrEmpty(runCount)) {
+            return false;
+        }
+        CLog.d("Evaluating run_count: %s", runCount);
+        try {
+            int runCountInt = Integer.parseInt(runCount);
+            if (runCountInt > 1) {
+                return true;
+            }
+        } catch (NumberFormatException e) {
+            // Not a number
+        }
+        return false;
     }
 }
