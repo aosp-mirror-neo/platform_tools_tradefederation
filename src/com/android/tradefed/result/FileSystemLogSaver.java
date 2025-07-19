@@ -148,8 +148,8 @@ public class FileSystemLogSaver implements ILogSaver {
             return;
         }
         mLogReportDirWithModule =
-                createLogReportDir(null, mLogReportDir, mLogRetentionDays, moduleName);
-        mFileSaver = new LogFileSaver(mLogReportDirWithModule);
+                createLogReportDir(null, mFileSaver.getFileDir(), mLogRetentionDays, moduleName);
+        mFileSaver = new LogFileSaver(null, mLogReportDirWithModule, null, false);
     }
 
     @Override
@@ -225,7 +225,7 @@ public class FileSystemLogSaver implements ILogSaver {
      * @throws IOException if the directory could not be created because a file with the same name
      *     exists or there are no permissions to write to it.
      */
-    private File createBuildDir(IBuildInfo buildInfo, File reportDir, String moduleName)
+    protected File createBuildDir(IBuildInfo buildInfo, File reportDir, String moduleName)
             throws IOException {
         List<String> pathSegments = new ArrayList<String>();
         if (buildInfo != null) {

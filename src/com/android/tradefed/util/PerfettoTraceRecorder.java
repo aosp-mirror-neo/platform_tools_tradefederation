@@ -134,6 +134,8 @@ public class PerfettoTraceRecorder {
                         ".perfetto-trace");
         deviceTraceMetadata.setTraceOutput(traceOutput, false);
 
+        CLog.d("Perfetto trace config file %s:\n %s", traceConfigFile.getAbsolutePath(), configStr);
+
         // start trace
         List<String> cmd =
                 Arrays.asList(
@@ -192,6 +194,9 @@ public class PerfettoTraceRecorder {
         }
         deviceTraceMetadata.setProcess(process);
         deviceMetadataMap.put(device, deviceTraceMetadata);
+        CLog.d(
+                "Started recording trace on %s in pid %s.",
+            device.getSerialNumber(), deviceMetadataMap.get(device).getProcess().pid());
     }
 
     /**

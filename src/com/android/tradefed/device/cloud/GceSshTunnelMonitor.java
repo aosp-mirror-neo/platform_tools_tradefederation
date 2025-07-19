@@ -364,6 +364,10 @@ public class GceSshTunnelMonitor extends AbstractTunnelMonitor {
                 return null;
             }
             CLog.d("Setting device %s serial to %s", device.getSerialNumber(), serial);
+            if (!(device instanceof IManagedTestDevice)) {
+                // This can happen in unit tests
+                return null;
+            }
             ((IManagedTestDevice) device).setIDevice(new RemoteAvdIDevice(serial));
 
             // Do not set setDeviceSerial to keep track of it consistently with the placeholder

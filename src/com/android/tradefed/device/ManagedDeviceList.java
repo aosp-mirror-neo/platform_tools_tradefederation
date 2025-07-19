@@ -77,9 +77,10 @@ class ManagedDeviceList implements Iterable<IManagedTestDevice> {
                     event = DeviceEvent.EXPLICIT_ALLOCATE_REQUEST;
                 }
                 DeviceEventResponse r = element.handleAllocationEvent(event);
+                boolean stateChanged = r.stateChanged;
                 boolean res =
                         r.stateChanged && r.allocationState == DeviceAllocationState.Allocated;
-                if (!res) {
+                if (!stateChanged && r.allocationState == DeviceAllocationState.Allocated) {
                     mDeviceSelectionMatcher
                             .getNoMatchReason()
                             .put(
@@ -87,6 +88,7 @@ class ManagedDeviceList implements Iterable<IManagedTestDevice> {
                                     String.format(
                                             "Device %s is matching but already allocated.",
                                             element.getIDevice().getSerialNumber()));
+                    return false;
                 }
                 return res;
             }

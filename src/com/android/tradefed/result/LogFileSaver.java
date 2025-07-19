@@ -45,24 +45,42 @@ public class LogFileSaver {
 
     /**
      * Creates a {@link LogFileSaver}.
-     * <p/>
-     * Construct a unique file system directory in rootDir/branch/build_id/testTag/uniqueDir
-     * <p/>
-     * If directory creation fails, will use a temp directory.
+     *
+     * <p>Construct a unique file system directory in rootDir/branch/build_id/testTag/uniqueDir
+     *
+     * <p>If directory creation fails, will use a temp directory.
      *
      * @param buildInfo the {@link IBuildInfo}
      * @param rootDir the root file system path
      * @param logRetentionDays If provided a '.retention' file will be written to log directory
-     *            containing a timestamp equal to current time + logRetentionDays. External cleanup
-     *            scripts can use this file to determine when to delete log directories.
+     *     containing a timestamp equal to current time + logRetentionDays. External cleanup scripts
+     *     can use this file to determine when to delete log directories.
      */
-    public LogFileSaver(IBuildInfo buildInfo, File rootDir, Integer logRetentionDays) {
+    public LogFileSaver(
+            IBuildInfo buildInfo, File rootDir, Integer logRetentionDays, Boolean containInvDir) {
         List<String> testArtifactPathSegments = generateTestArtifactPath(buildInfo);
         File buildDir = createBuildDir(testArtifactPathSegments, rootDir);
-        mInvLogDir = createInvLogDir(buildDir, logRetentionDays);
+        mInvLogDir = createInvLogDir(buildDir, logRetentionDays, containInvDir);
         String invLogDirName = mInvLogDir.getName();
         mInvLogPathSegments = new ArrayList<>(testArtifactPathSegments);
         mInvLogPathSegments.add(invLogDirName);
+    }
+
+    /**
+     * Creates a {@link LogFileSaver}.
+     *
+     * <p>Construct a unique file system directory in rootDir/branch/build_id/testTag/uniqueDir
+     *
+     * <p>If directory creation fails, will use a temp directory.
+     *
+     * @param buildInfo the {@link IBuildInfo}
+     * @param rootDir the root file system path
+     * @param logRetentionDays If provided a '.retention' file will be written to log directory
+     *     containing a timestamp equal to current time + logRetentionDays. External cleanup scripts
+     *     can use this file to determine when to delete log directories.
+     */
+    public LogFileSaver(IBuildInfo buildInfo, File rootDir, Integer logRetentionDays) {
+        this(buildInfo, rootDir, logRetentionDays, true);
     }
 
     /**
@@ -74,7 +92,7 @@ public class LogFileSaver {
      * @param rootDir the root file system path
      */
     public LogFileSaver(IBuildInfo buildInfo, File rootDir) {
-        this(buildInfo, rootDir, null);
+        this(buildInfo, rootDir, null, true);
     }
 
     /**
@@ -84,7 +102,7 @@ public class LogFileSaver {
      * @param rootDir
      */
     public LogFileSaver(File rootDir) {
-        this(null, rootDir, null);
+        this(null, rootDir, null, true);
     }
 
     private File createTempDir() {
@@ -110,15 +128,16 @@ public class LogFileSaver {
 
     /**
      * Create unique invocation log directory.
+     *
      * @param buildDir the build directory
      * @param logRetentionDays
      * @return the create invocation directory
      */
-    File createInvLogDir(File buildDir, Integer logRetentionDays) {
+    File createInvLogDir(File buildDir, Integer logRetentionDays, Boolean containInvDir) {
         // now create unique directory within the buildDir
         File invocationDir = null;
         try {
-            invocationDir = FileUtil.createTempDir("inv_", buildDir);
+            invocationDir = containInvDir ? FileUtil.createTempDir("inv_", buildDir) : buildDir;
             if (logRetentionDays != null && logRetentionDays > 0) {
                 new RetentionFileSaver().writeRetentionFile(invocationDir, logRetentionDays);
             }
