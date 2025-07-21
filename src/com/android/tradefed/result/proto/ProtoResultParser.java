@@ -672,7 +672,7 @@ public class ProtoResultParser {
                         log(
                                 "Logging %s [type: %s] from subprocess. url: %s, path: %s [exists:"
                                         + " %s]",
-                                entry.getKey(),
+                                prefix + entry.getKey(),
                                 file.getType(),
                                 file.getUrl(),
                                 file.getPath(),

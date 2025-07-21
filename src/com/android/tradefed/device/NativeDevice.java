@@ -442,7 +442,15 @@ public class NativeDevice
                         DeviceNotAvailableException {
             // Notify of reboot started for all modes
             notifyRebootStarted();
-            getIDevice().reboot(mRebootMode.formatRebootCommand(mReason));
+            List<String> adbRebootCommand = new ArrayList<>();
+            // TODO: change to use execute adb shell function.
+            adbRebootCommand.add("shell");
+            adbRebootCommand.add("reboot");
+            String mode = mRebootMode.getAdbRebootCommand(mReason);
+            if (!mode.isEmpty()) {
+                adbRebootCommand.add(mode);
+            }
+            CommandResult res = executeAdbV2Command(adbRebootCommand.toArray(new String[0]));
             return true;
         }
     }
@@ -4122,6 +4130,10 @@ public class NativeDevice
             } else {
                 return Strings.isNullOrEmpty(reason) ? mRebootTarget : mRebootTarget + "," + reason;
             }
+        }
+
+        String getAdbRebootCommand(@Nullable String reason) {
+            return Strings.isNullOrEmpty(reason) ? mRebootTarget : mRebootTarget + "," + reason;
         }
 
         @Override

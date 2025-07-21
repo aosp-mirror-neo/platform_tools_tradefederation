@@ -79,7 +79,10 @@ public class ImageContentAnalyzer {
                     Arrays.asList(
                             // b/335722003
                             "/boot_otas/boot_ota_4k.zip",
-                            "/boot_otas/boot_ota_16k.zip")) {
+                            "/boot_otas/boot_ota_16k.zip",
+                            // b/431643974
+                            "/lib/egl/libGLES_mali.so",
+                            "/lib64/egl/libGLES_mali.so")) {
                 removed = allDescriptors.removeIf(d -> d.path.endsWith(path)) || removed;
             }
             if (removed) {
