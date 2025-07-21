@@ -971,7 +971,9 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 IDeviceConfiguration deviceConfig =
                         mCmd.getConfiguration().getDeviceConfigByName(deviceName);
                 if (deviceConfig == null) {
-                    CLog.d("deviceConfig is null in the configuration, cannot do Battery level check");
+                    CLog.d(
+                            "deviceConfig is null in the configuration, cannot do Battery level"
+                                    + " check");
                     return;
                 }
                 if (deviceConfig.getDeviceOptions() == null) {
@@ -2032,6 +2034,12 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 device =
                         manager.allocateDevice(deviceConfig.getDeviceRequirements(), useFakeDevice);
                 if (device != null) {
+                    if (mPrintSchedulingWarning) {
+                        CLog.logAndDisplay(
+                                LogLevel.VERBOSE,
+                                "Device '%s' was allocated.",
+                                device.getSerialNumber());
+                    }
                     devices.put(deviceConfig.getDeviceName(), device);
                 } else {
                     allocationResults.addAllocationFailureReason(
