@@ -2504,7 +2504,66 @@ public class TestDeviceTest {
 
     /** Unit test for {@link TestDevice#getActiveApexes()}. */
     @Test
+    public void testGetActiveApexesWithIsFactory() throws Exception {
+        String apexInfoListXml =
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                        + "<apex-info-list>\n"
+                        + "<apex-info moduleName=\"com.android.foo\""
+                        + "     modulePath=\"/system/apex/com.android.foo.apex\""
+                        + "     preinstalledModulePath=\"/system/apex/com.android.foo.apex\""
+                        + "     versionCode=\"100\""
+                        + "     versionName=\"\""
+                        + "     isFactory=\"true\""
+                        + "     isActive=\"true\""
+                        + "     lastUpdateMillis=\"1752834275\""
+                        + "     partition=\"SYSTEM\" />\n"
+                        + "<apex-info moduleName=\"com.android.bar\""
+                        + "     modulePath=\"/system/apex/com.android.bar.apex\""
+                        + "     preinstalledModulePath=\"/system/apex/com.android.bar.apex\""
+                        + "     versionCode=\"100\""
+                        + "     versionName=\"\""
+                        + "     isFactory=\"true\""
+                        + "     isActive=\"false\""
+                        + "     lastUpdateMillis=\"1752834275\""
+                        + "     partition=\"SYSTEM\" />\n"
+                        + "<apex-info moduleName=\"com.android.bar\""
+                        + "     modulePath=\"/data/apex/active/com.android.bar@200.apex\""
+                        + "     preinstalledModulePath=\"/system/apex/com.android.bar.apex\""
+                        + "     versionCode=\"200\""
+                        + "     versionName=\"\""
+                        + "     isFactory=\"false\""
+                        + "     isActive=\"true\""
+                        + "     lastUpdateMillis=\"1752834276\""
+                        + "     partition=\"SYSTEM\" />\n"
+                        + "</apex-info-list>";
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, apexInfoListXml);
+
+        Set<ApexInfo> actual = mTestDevice.getActiveApexes();
+        assertEquals(2, actual.size());
+
+        ApexInfo foo =
+                actual.stream()
+                        .filter(apex -> apex.name.equals("com.android.foo"))
+                        .findFirst()
+                        .get();
+        assertEquals(100, foo.versionCode);
+        assertEquals("/system/apex/com.android.foo.apex", foo.sourceDir);
+        assertTrue(foo.isFactory);
+
+        ApexInfo bar =
+                actual.stream()
+                        .filter(apex -> apex.name.equals("com.android.bar"))
+                        .findFirst()
+                        .get();
+        assertEquals(200, bar.versionCode);
+        assertEquals("/data/apex/active/com.android.bar@200.apex", bar.sourceDir);
+        assertFalse(bar.isFactory);
+    }
+
+    /** Unit test for {@link TestDevice#getActiveApexes()}. */
+    @Test
     public void testGetActiveApexesPlatformSupportsPath() throws Exception {
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, "invalid");
         final String output =
                 "package:/system/apex/com.android.foo.apex="
                         + "com.android.foo versionCode:100\n"
@@ -2533,6 +2592,7 @@ public class TestDeviceTest {
     /** Unit test for {@link TestDevice#getActiveApexes()}. */
     @Test
     public void testGetActiveApexesPlatformDoesNotSupportPath() throws Exception {
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, "invalid");
         final String output =
                 "package:com.android.foo versionCode:100\n"
                         + "package:com.android.bar versionCode:200";
@@ -2563,6 +2623,7 @@ public class TestDeviceTest {
      */
     @Test
     public void testGetActiveApexesForBadOutput() throws Exception {
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, "invalid");
         final String output = "junk output";
         injectShellResponse(TestDevice.LIST_APEXES_CMD, output);
 

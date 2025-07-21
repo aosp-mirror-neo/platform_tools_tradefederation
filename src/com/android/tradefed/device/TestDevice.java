@@ -52,14 +52,21 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
 import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
@@ -85,6 +92,9 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.imageio.ImageIO;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 /**
  * Implementation of a {@link ITestDevice} for a full stack android device
@@ -128,6 +138,7 @@ public class TestDevice extends NativeDevice {
     static final String LIST_PACKAGES_CMD = "pm list packages -f";
     private static final Pattern PACKAGE_REGEX = Pattern.compile("package:(.*)=(.*)");
 
+    static final String CAT_APEX_INFO_LIST_CMD = "cat /apex/apex-info-list.xml";
     static final String LIST_APEXES_CMD = "pm list packages --apex-only --show-versioncode -f";
     private static final Pattern APEXES_WITH_PATH_REGEX =
             Pattern.compile("package:(.*)=(.*) versionCode:(.*)");
@@ -1463,10 +1474,16 @@ public class TestDevice extends NativeDevice {
     /** {@inheritDoc} */
     @Override
     public Set<ApexInfo> getActiveApexes() throws DeviceNotAvailableException {
+        String xml = executeShellCommand(CAT_APEX_INFO_LIST_CMD);
+        Set<ApexInfo> ret = parseApexInfoList(xml, true /* activeOnly */);
+        if (!ret.isEmpty()) {
+            return ret;
+        }
+        // Fallback to old method
         String output = executeShellCommand(LIST_APEXES_CMD);
         // Optimistically parse expecting platform to return paths. If it doesn't, empty set will
         // be returned.
-        Set<ApexInfo> ret = parseApexesFromOutput(output, true /* withPath */);
+        ret = parseApexesFromOutput(output, true /* withPath */);
         if (ret.isEmpty()) {
             ret = parseApexesFromOutput(output, false /* withPath */);
         }
@@ -1485,6 +1502,33 @@ public class TestDevice extends NativeDevice {
                 String packageName = m.group(2);
                 ret.add(packageName);
             }
+        }
+        return ret;
+    }
+
+    private Set<ApexInfo> parseApexInfoList(final String xml, boolean activeOnly) {
+        Set<ApexInfo> ret = new HashSet<>();
+        try (InputStream in = new ByteArrayInputStream(xml.getBytes())) {
+            final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            final DocumentBuilder builder = factory.newDocumentBuilder();
+            builder.setErrorHandler(new DefaultHandler()); // mute stderr logging
+            final Document doc = builder.parse(in);
+            // iterate over <apex-info> element in the doc
+            NodeList apexInfoList = doc.getElementsByTagName("apex-info");
+            for (int i = 0; i < apexInfoList.getLength(); i++) {
+                Element apexInfo = (Element) apexInfoList.item(i);
+                boolean isActive = apexInfo.getAttribute("isActive").equals("true");
+                if (activeOnly && !isActive) {
+                    continue;
+                }
+                boolean isFactory = apexInfo.getAttribute("isFactory").equals("true");
+                String name = apexInfo.getAttribute("moduleName");
+                long version = Long.valueOf(apexInfo.getAttribute("versionCode"));
+                String path = apexInfo.getAttribute("modulePath");
+                ret.add(new ApexInfo(name, version, path, isFactory));
+            }
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            CLog.e("Failed to parse /apex/apex-info-list.xml: " + e.toString());
         }
         return ret;
     }
