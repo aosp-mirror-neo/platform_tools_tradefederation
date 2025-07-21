@@ -25,6 +25,7 @@ import static com.android.tradefed.util.avd.HostOrchestratorClient.Operation;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.StartCVDRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateBugreportRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateSnapshotRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDeleteSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationResultRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildListCvdsRequest;
@@ -392,19 +393,40 @@ public class HostOrchestratorUtil {
             Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
             waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
         } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
-            CLog.e(
-                    "Failed to start a cuttlefish instance with the given id: %s via Host"
-                            + " Orchestrator: %s",
-                    snapshotId, e);
-            return new CommandResult(CommandStatus.EXCEPTION);
+            String errorMsg =
+                    String.format(
+                            "Failed to start a cuttlefish instance with the given id: %s via Host"
+                                    + " Orchestrator: %s",
+                            snapshotId, e);
+            CLog.e(errorMsg);
+            CommandResult result = new CommandResult(CommandStatus.EXCEPTION);
+            result.setStderr(errorMsg);
+            return result;
         }
         return new CommandResult(CommandStatus.SUCCESS);
     }
 
     /** Attempt to delete snapshot of a Cuttlefish instance via Host Orchestrator. */
     public CommandResult deleteSnapshotGce(String snapshotId) {
-        // TODO(b/339304559): Flesh out this section when the host orchestrator is supported.
-        return new CommandResult(CommandStatus.EXCEPTION);
+        try {
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                return buildHOFailureResult();
+            }
+            String baseUrl = getHOBaseUrl(mHOPortNumber);
+            HttpRequest httpRequest = buildDeleteSnapshotRequest(baseUrl, snapshotId);
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+            waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
+        } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
+            String errorMsg =
+                    String.format(
+                            "Failed to delete the snapshot instance %s via Host Orchestrator: %s",
+                            snapshotId, e);
+            CLog.e(errorMsg);
+            CommandResult result = new CommandResult(CommandStatus.EXCEPTION);
+            result.setStderr(errorMsg);
+            return result;
+        }
+        return new CommandResult(CommandStatus.SUCCESS);
     }
 
     /**

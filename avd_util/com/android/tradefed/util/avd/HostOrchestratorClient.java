@@ -132,6 +132,14 @@ public class HostOrchestratorClient {
                 .build();
     }
 
+    // https://github.com/google/android-cuttlefish/blob/main/frontend/src/host_orchestrator/orchestrator/controller.go#L107
+    public static HttpRequest buildDeleteSnapshotRequest(String baseURL, String snapshotId) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/snapshots/%s", baseURL, snapshotId)))
+                .DELETE()
+                .build();
+    }
+
     // https://github.com/google/android-cuttlefish/blob/fff7e3487c924435e6f6120345edf1dddb49d50b/frontend/src/host_orchestrator/orchestrator/controller.go#L65
     public static HttpRequest buildStartCvdRequest(
             String baseURL, String group, String name, StartCVDRequest request) {
