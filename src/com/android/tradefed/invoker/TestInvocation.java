@@ -1324,6 +1324,10 @@ public class TestInvocation implements ITestInvocation {
                                     && config.getCommandOptions()
                                             .reportInvocationCacheResultsInPresubmit()) {
                                 skipInvocation = true;
+                            } else if (!InvocationContext.isPresubmit(context)
+                                    && config.getCommandOptions()
+                                            .reportInvocationCacheResultsInPostsubmit()) {
+                                skipInvocation = true;
                             }
                         }
                     }

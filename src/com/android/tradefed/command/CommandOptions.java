@@ -412,6 +412,12 @@ public class CommandOptions implements ICommandOptions {
     private boolean mEnableCachingInvocationResultsInPresubmit = false;
 
     @Option(
+            name = "report-cache-invocation-results-postsubmit",
+            description =
+                    "Actually enable the reporting of invocation caching status in postsubmit.")
+    private boolean mEnableCachingInvocationResultsInPostsubmit = false;
+
+    @Option(
             name = "delegation-environment",
             description =
                     "Option for compatibility with TradefedDelegator to receive environment"
@@ -1001,6 +1007,12 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean reportInvocationCacheResultsInPresubmit() {
         return mEnableCachingInvocationResultsInPresubmit;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean reportInvocationCacheResultsInPostsubmit() {
+        return mEnableCachingInvocationResultsInPostsubmit;
     }
 
     /** {@inheritDoc} */

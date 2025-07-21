@@ -334,6 +334,9 @@ public interface ICommandOptions {
     /** Returns true if we should report invocation cache results when available in presubmit. */
     public boolean reportInvocationCacheResultsInPresubmit();
 
+    /** Returns true if we should report invocation cache result when available in postsubmit. */
+    public boolean reportInvocationCacheResultsInPostsubmit();
+
     /** Whether to skip logcat for parent process. */
     public boolean shouldSkipParentProcessLogcat();
 
