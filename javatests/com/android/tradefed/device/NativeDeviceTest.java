@@ -1728,27 +1728,9 @@ public class NativeDeviceTest {
     @Test
     public void testDoAdbReboot_emulator() throws Exception {
         final String into = "bootloader";
-        CommandResult commandRes = new CommandResult();
-        commandRes.setStatus(CommandStatus.SUCCESS);
-        when(mMockRunUtil.runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("bootloader")))
-                .thenReturn(commandRes);
+
         mTestDevice.doAdbReboot(RebootMode.REBOOT_INTO_BOOTLOADER, "");
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("bootloader"));
+        verify(mMockIDevice, times(1)).reboot(into);
     }
 
     /** Unit test for {@link NativeDevice#doReboot(RebootMode, String)} ()}. */
@@ -1760,33 +1742,12 @@ public class NativeDeviceTest {
                     public TestDeviceState getDeviceState() {
                         return TestDeviceState.ONLINE;
                     }
-
-                    @Override
-                    protected IRunUtil getRunUtil() {
-                        return mMockRunUtil;
-                    }
                 };
-        CommandResult commandRes = new CommandResult();
-        commandRes.setStatus(CommandStatus.SUCCESS);
-        when(mMockRunUtil.runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot")))
-                .thenReturn(commandRes);
+
         when(mMockStateMonitor.waitForDeviceNotAvailable(Mockito.anyLong())).thenReturn(true);
 
         testDevice.doReboot(RebootMode.REBOOT_FULL, null);
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"));
+        verify(mMockIDevice, times(1)).reboot(null);
     }
 
     /** Unit test for {@link NativeDevice#doReboot(RebootMode, String)} ()}. */
@@ -1841,37 +1802,13 @@ public class NativeDeviceTest {
                     public TestDeviceState getDeviceState() {
                         return TestDeviceState.ONLINE;
                     }
-
-                    @Override
-                    protected IRunUtil getRunUtil() {
-                        return mMockRunUtil;
-                    }
                 };
         String into = "sideload";
 
         when(mMockStateMonitor.waitForDeviceInSideload(Mockito.anyLong())).thenReturn(true);
-        CommandResult commandRes = new CommandResult();
-        commandRes.setStatus(CommandStatus.SUCCESS);
-        when(mMockRunUtil.runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("sideload")))
-                .thenReturn(commandRes);
 
         testDevice.rebootIntoSideload();
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("sideload"));
+        verify(mMockIDevice, times(1)).reboot(into);
     }
 
     /** Unit test for {@link NativeDevice#rebootIntoBootloader()}}. */
@@ -1896,30 +1833,10 @@ public class NativeDeviceTest {
                         return new CommandResult(CommandStatus.SUCCESS);
                     }
                 };
-        CommandResult commandRes = new CommandResult();
-        commandRes.setStatus(CommandStatus.SUCCESS);
-        when(mMockRunUtil.runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("bootloader")))
-                .thenReturn(commandRes);
-
         String into = "bootloader";
 
         testDevice.rebootIntoBootloader();
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("bootloader"));
+        verify(mMockIDevice, times(1)).reboot(into);
         verify(mMockStateMonitor).setFastbootSerialNumber(MOCK_DEVICE_SERIAL);
     }
 
@@ -1979,31 +1896,13 @@ public class NativeDeviceTest {
                         return MOCK_DEVICE_SERIAL;
                     }
                 };
-        CommandResult commandRes = new CommandResult();
-        commandRes.setStatus(CommandStatus.SUCCESS);
-        when(mMockRunUtil.runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("fastboot")))
-                .thenReturn(commandRes);
+        String into = "fastboot";
 
         when(mMockStateMonitor.waitForDeviceFastbootd(Mockito.any(), Mockito.anyLong()))
                 .thenReturn(true);
 
         testDevice.rebootIntoFastbootd();
-        verify(mMockRunUtil, times(1))
-                .runTimedCmd(
-                        Mockito.anyLong(),
-                        Mockito.eq("adb"),
-                        Mockito.eq("-s"),
-                        Mockito.eq("serial"),
-                        Mockito.eq("shell"),
-                        Mockito.eq("reboot"),
-                        Mockito.eq("fastboot"));
+        verify(mMockIDevice, times(1)).reboot(into);
         verify(mMockStateMonitor).setFastbootSerialNumber(MOCK_DEVICE_SERIAL);
     }
 
