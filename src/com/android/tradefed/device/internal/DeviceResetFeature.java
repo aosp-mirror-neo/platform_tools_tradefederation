@@ -27,6 +27,8 @@ import com.android.tradefed.device.cloud.RemoteAndroidVirtualDevice;
 import com.android.tradefed.device.connection.AbstractConnection;
 import com.android.tradefed.device.connection.AdbSshConnection;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.invoker.tracing.CloseableTraceScope;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.service.IRemoteFeature;
 import com.android.tradefed.targetprep.ITargetPreparer;
@@ -143,13 +145,25 @@ public class DeviceResetFeature implements IRemoteFeature, IConfigurationReceive
                 if (labPreparer.isDisabled()) {
                     continue;
                 }
-                labPreparer.setUp(mTestInformation);
+                try (CloseableTraceScope ignore =
+                        new CloseableTraceScope(labPreparer.getClass().getSimpleName())) {
+                    CLog.d(
+                            "starting lab preparer '%s' on device: '%s'",
+                            labPreparer, mTestInformation.getDevice().getSerialNumber());
+                    labPreparer.setUp(mTestInformation);
+                }
             }
             for (ITargetPreparer preparer : configHolder.getTargetPreparers()) {
                 if (preparer.isDisabled()) {
                     continue;
                 }
-                preparer.setUp(mTestInformation);
+                try (CloseableTraceScope ignore =
+                        new CloseableTraceScope(preparer.getClass().getSimpleName())) {
+                    CLog.d(
+                            "starting preparer '%s' on device: '%s'",
+                            preparer, mTestInformation.getDevice().getSerialNumber());
+                    preparer.setUp(mTestInformation);
+                }
             }
         } catch (Exception e) {
             String error = "Failed to setup after reset device.";
