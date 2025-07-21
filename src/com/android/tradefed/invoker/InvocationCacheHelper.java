@@ -265,6 +265,8 @@ public class InvocationCacheHelper {
             commandArray =
                     TradefedDelegator.clearCommandlineFromOneArg(
                             commandArray, "reboot-at-last-retry", true);
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(commandArray, "cas-manifest-file");
         } catch (ConfigurationException e) {
             throw new RuntimeException(e);
         }
