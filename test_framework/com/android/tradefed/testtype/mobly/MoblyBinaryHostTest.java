@@ -489,7 +489,7 @@ public class MoblyBinaryHostTest
         File yamlSummaryFile = null;
         InputStream inputStream = null;
         boolean reportRunFailed = true;
-        while (!future.isDone() && yamlSummaryFile == null) {
+        do {
             yamlSummaryFile = FileUtil.findFile(getLogDir(), MOBLY_TEST_SUMMARY);
             if (yamlSummaryFile != null) {
                 try {
@@ -501,7 +501,7 @@ public class MoblyBinaryHostTest
                     CLog.e(ex);
                 }
             }
-        }
+        } while (!future.isDone() && yamlSummaryFile == null);
         if (inputStream != null) {
             while (!future.isDone()) processYamlTestResults(inputStream, parser, listener, runName);
             if (processYamlTestResults(inputStream, parser, listener, runName)) {
