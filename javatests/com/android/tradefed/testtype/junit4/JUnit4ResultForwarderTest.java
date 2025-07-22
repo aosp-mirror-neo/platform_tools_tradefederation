@@ -28,6 +28,7 @@ import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.testtype.DeviceJUnit4ClassRunner;
+import com.android.tradefed.util.RunUtil;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -107,7 +108,7 @@ public class JUnit4ResultForwarderTest {
                     "", LogDataType.ADB_HOST_LOG, new ByteArrayInputStreamSource(new byte[] {}));
         }
         // make sure LogUploaderThread has time to catch up
-        Thread.sleep(100);
+        RunUtil.getDefault().sleep(1000L);
 
         verify(mTestInvocationListener, times(mTimesToLogMessage))
                 .testLog(anyString(), any(LogDataType.class), any(InputStreamSource.class));
