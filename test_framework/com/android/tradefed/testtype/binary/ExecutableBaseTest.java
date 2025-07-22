@@ -137,7 +137,7 @@ public abstract class ExecutableBaseTest
 
     protected TestDescription[] getFilterDescriptions(Map<String, String> testCommands) {
         return testCommands.keySet().stream()
-                .map(testName -> new TestDescription(testName, testName))
+                .map(this::createTestDescription)
                 .filter(description -> !shouldSkipCurrentTest(description))
                 .toArray(TestDescription[]::new);
     }
@@ -388,12 +388,18 @@ public abstract class ExecutableBaseTest
     private Collection<IRemoteTest> splitByTestCommand() {
         Collection<IRemoteTest> tests = new ArrayList<>();
         for (String path : mBinaryPaths) {
-            tests.add(getTestShard(ImmutableList.of(path), null));
+            TestDescription description = createTestDescription(getBinaryName(path));
+            if (!shouldSkipCurrentTest(description)) {
+                tests.add(getTestShard(ImmutableList.of(path), null));
+            }
         }
         Map<String, String> testCommands = new LinkedHashMap<>(mTestCommands);
         for (String testName : testCommands.keySet()) {
-            String cmd = testCommands.get(testName);
-            tests.add(getTestShard(null, ImmutableMap.of(testName, cmd)));
+            TestDescription description = createTestDescription(testName);
+            if (!shouldSkipCurrentTest(description)) {
+                String cmd = testCommands.get(testName);
+                tests.add(getTestShard(null, ImmutableMap.of(testName, cmd)));
+            }
         }
         return tests;
     }
@@ -481,7 +487,7 @@ public abstract class ExecutableBaseTest
     protected Map<String, String> getAllTestCommands() {
         Map<String, String> testCommands = new LinkedHashMap<>(mTestCommands);
         for (String binary : mBinaryPaths) {
-            testCommands.put(new File(binary).getName(), binary);
+            testCommands.put(getBinaryName(binary), binary);
         }
         return testCommands;
     }
@@ -509,5 +515,13 @@ public abstract class ExecutableBaseTest
     @Override
     public void setConfiguration(IConfiguration configuration) {
         mConfiguration = configuration;
+    }
+
+    private String getBinaryName(String binary) {
+        return new File(binary).getName();
+    }
+
+    private TestDescription createTestDescription(String testName) {
+        return new TestDescription(testName, testName);
     }
 }

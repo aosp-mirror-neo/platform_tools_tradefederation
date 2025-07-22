@@ -16,6 +16,7 @@
 package com.android.tradefed.testtype.binary;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -623,5 +624,38 @@ public class ExecutableTargetTestTest {
                         Mockito.eq(testDescription),
                         Mockito.anyLong(),
                         Mockito.eq(new HashMap<String, MetricMeasurement.Metric>()));
+    }
+
+    /** Test split() for sharding with PER_TEST_CMD type and filters. */
+    @Test
+    public void testShard_splitByTestCommand_withFilters() throws ConfigurationException {
+        mExecutableTargetTest = new ExecutableTargetTest();
+        OptionSetter setter = new OptionSetter(mExecutableTargetTest);
+        setter.setOptionValue("test-command-line", testName1, testCmd1);
+        setter.setOptionValue("test-command-line", testName2, testCmd2);
+        setter.setOptionValue("test-command-line", testName3, testCmd3);
+        setter.setOptionValue("binary", "/path/to/binary1");
+        setter.setOptionValue("binary", "/path/to/binary2");
+        mExecutableTargetTest.addIncludeFilter(testName1);
+        mExecutableTargetTest.addIncludeFilter(testName2);
+        mExecutableTargetTest.addIncludeFilter(testName3);
+        mExecutableTargetTest.addExcludeFilter(testName2);
+        mExecutableTargetTest.addIncludeFilter("binary1");
+
+        Collection<IRemoteTest> testShards = mExecutableTargetTest.split(2);
+
+        assertEquals(3, testShards.size());
+        Map<String, String> allTestCommands = new HashMap<>();
+        for (IRemoteTest test : testShards) {
+            Map<String, String> commands = ((ExecutableTargetTest) test).getAllTestCommands();
+            // Each shard should contain 1 command
+            assertEquals(1, commands.size());
+            allTestCommands.putAll(commands);
+        }
+        assertEquals(testCmd1, allTestCommands.get(testName1));
+        assertNull(allTestCommands.get(testName2)); // excluded
+        assertEquals(testCmd3, allTestCommands.get(testName3));
+        assertEquals("/path/to/binary1", allTestCommands.get("binary1"));
+        assertNull(allTestCommands.get("binary2")); // not included
     }
 }
