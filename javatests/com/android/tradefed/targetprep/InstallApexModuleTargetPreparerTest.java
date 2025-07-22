@@ -492,7 +492,6 @@ public class InstallApexModuleTargetPreparerTest {
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
         verifySuccessfulInstallMultiPackages();
-        verify(mMockDevice, times(3)).getActiveApexes();
         verify(mMockDevice, atLeastOnce()).getActiveApexes();
         verify(mMockDevice, times(1)).getMainlineModuleInfo();
     }
@@ -769,7 +768,7 @@ public class InstallApexModuleTargetPreparerTest {
         when(mMockDevice.getInstalledPackageNames()).thenReturn(installableModules);
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verify(mMockDevice, times(1)).executeShellCommand("pm rollback-app " + APEX_PACKAGE_NAME);
     }
@@ -801,7 +800,7 @@ public class InstallApexModuleTargetPreparerTest {
         when(mMockDevice.getInstalledPackageNames()).thenReturn(installableModules);
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verify(mMockDevice, times(1)).executeShellCommand("dumpsys rollback");
     }
@@ -863,7 +862,7 @@ public class InstallApexModuleTargetPreparerTest {
         verifySuccessfulInstallPackages(Arrays.asList(mFakeApex));
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -882,7 +881,7 @@ public class InstallApexModuleTargetPreparerTest {
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
         verifySuccessfulInstallPackages(Arrays.asList(mFakeApex));
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -899,7 +898,7 @@ public class InstallApexModuleTargetPreparerTest {
         verifySuccessfulInstallPackages(Arrays.asList(mFakeApex));
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -917,7 +916,7 @@ public class InstallApexModuleTargetPreparerTest {
         verifySuccessfulInstallPackages(Arrays.asList(mFakeApex));
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test(expected = TargetSetupError.class)
@@ -958,7 +957,7 @@ public class InstallApexModuleTargetPreparerTest {
             verify(mMockDevice, times(1)).deleteFile(SESSION_DATA_DIR + "*");
             verify(mMockDevice, times(1)).deleteFile(STAGING_DATA_DIR + "*");
             verify(mMockDevice, times(2)).reboot();
-            verify(mMockDevice, times(3)).getActiveApexes();
+            verify(mMockDevice, times(4)).getActiveApexes();
         }
     }
 
@@ -993,7 +992,7 @@ public class InstallApexModuleTargetPreparerTest {
             verify(mMockDevice, times(1)).deleteFile(SESSION_DATA_DIR + "*");
             verify(mMockDevice, times(1)).deleteFile(STAGING_DATA_DIR + "*");
             verify(mMockDevice, times(2)).reboot();
-            verify(mMockDevice, times(3)).getActiveApexes();
+            verify(mMockDevice, times(4)).getActiveApexes();
         }
     }
 
@@ -1028,7 +1027,7 @@ public class InstallApexModuleTargetPreparerTest {
             verify(mMockDevice, times(1)).deleteFile(SESSION_DATA_DIR + "*");
             verify(mMockDevice, times(1)).deleteFile(STAGING_DATA_DIR + "*");
             verify(mMockDevice, times(2)).reboot();
-            verify(mMockDevice, times(3)).getActiveApexes();
+            verify(mMockDevice, times(4)).getActiveApexes();
         }
     }
 
@@ -1063,7 +1062,7 @@ public class InstallApexModuleTargetPreparerTest {
             verify(mMockDevice, times(1)).deleteFile(SESSION_DATA_DIR + "*");
             verify(mMockDevice, times(1)).deleteFile(STAGING_DATA_DIR + "*");
             verify(mMockDevice, times(2)).reboot();
-            verify(mMockDevice, times(3)).getActiveApexes();
+            verify(mMockDevice, times(4)).getActiveApexes();
         }
     }
 
@@ -1085,7 +1084,7 @@ public class InstallApexModuleTargetPreparerTest {
         verifySuccessfulInstallPackages(Arrays.asList(mFakeApex));
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -1112,7 +1111,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -1138,7 +1137,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -1212,7 +1211,7 @@ public class InstallApexModuleTargetPreparerTest {
             verify(mMockDevice, times(1)).deleteFile(STAGING_DATA_DIR + "*");
             verify(mMockDevice, times(2)).reboot();
             verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
-            verify(mMockDevice, times(3)).getActiveApexes();
+            verify(mMockDevice, times(4)).getActiveApexes();
             verify(mMockDevice).waitForDeviceAvailable();
             assertTrue(!mInstallApexModuleTargetPreparer.getApkInstalled().isEmpty());
         } finally {
@@ -1240,7 +1239,8 @@ public class InstallApexModuleTargetPreparerTest {
         verifySuccessfulInstallPackages(Arrays.asList(mFakeApex));
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(4)).getActiveApexes();
+        verify(mMockDevice, times(5)).getActiveApexes();
+        verify(mMockDevice, times(1)).uninstallPackage(APEX_PACKAGE_NAME);
     }
 
     @Test
@@ -1272,7 +1272,7 @@ public class InstallApexModuleTargetPreparerTest {
         verifyCleanInstalledApexPackages(1);
         verifySuccessfulInstallMultiPackages();
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(4)).getActiveApexes();
+        verify(mMockDevice, times(5)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1298,7 +1298,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(4)).getActiveApexes();
+        verify(mMockDevice, times(5)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
         verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
     }
@@ -1324,7 +1324,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1358,7 +1358,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1393,7 +1393,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1442,7 +1442,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1502,7 +1502,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1564,7 +1564,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -1663,7 +1663,7 @@ public class InstallApexModuleTargetPreparerTest {
                             Mockito.any(IBuildInfo.class));
             verify(mMockDevice, times(2)).reboot();
             verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
-            verify(mMockDevice, times(4)).getActiveApexes();
+            verify(mMockDevice, times(5)).getActiveApexes();
             verify(mMockDevice, times(1)).waitForDeviceAvailable();
         } finally {
             FileUtil.deleteFile(mFakeApexApks);
@@ -1771,7 +1771,7 @@ public class InstallApexModuleTargetPreparerTest {
                             Mockito.any(IBuildInfo.class));
             verify(mMockDevice, times(2)).reboot();
             verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
-            verify(mMockDevice, times(4)).getActiveApexes();
+            verify(mMockDevice, times(5)).getActiveApexes();
             verify(mMockDevice, times(1)).waitForDeviceAvailable();
         } finally {
             FileUtil.deleteFile(mFakeApexApks);
@@ -1882,7 +1882,7 @@ public class InstallApexModuleTargetPreparerTest {
                             Mockito.any(IBuildInfo.class));
             verify(mMockDevice, times(2)).reboot();
             verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
-            verify(mMockDevice, times(4)).getActiveApexes();
+            verify(mMockDevice, times(5)).getActiveApexes();
             verify(mMockDevice, times(1)).waitForDeviceAvailable();
         } finally {
             FileUtil.deleteFile(mFakeApexApks);
@@ -1992,7 +1992,7 @@ public class InstallApexModuleTargetPreparerTest {
                             Mockito.any(IBuildInfo.class));
             verify(mMockDevice, times(2)).reboot();
             verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
-            verify(mMockDevice, times(4)).getActiveApexes();
+            verify(mMockDevice, times(5)).getActiveApexes();
             verify(mMockDevice, times(1)).waitForDeviceAvailable();
         } finally {
             FileUtil.recursiveDelete(trainFolder);
@@ -2102,7 +2102,7 @@ public class InstallApexModuleTargetPreparerTest {
                             Mockito.any(IBuildInfo.class));
             verify(mMockDevice, times(2)).reboot();
             verify(mMockDevice, times(1)).executeAdbCommand(trainInstallCmd.toArray(new String[0]));
-            verify(mMockDevice, times(4)).getActiveApexes();
+            verify(mMockDevice, times(5)).getActiveApexes();
             verify(mMockDevice, times(1)).waitForDeviceAvailable();
         } finally {
             FileUtil.deleteFile(mFakeApexApks);
@@ -2297,7 +2297,6 @@ public class InstallApexModuleTargetPreparerTest {
         mockSuccessfulInstallMultiPackages(Arrays.asList(mFakeApex));
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
-        verify(mMockDevice, times(3)).getActiveApexes();
         verify(mMockDevice, atLeastOnce()).getActiveApexes();
         verify(mMockDevice, times(1)).getMainlineModuleInfo();
         verifySuccessfulInstallPackageNoEnableRollback();
@@ -2336,7 +2335,6 @@ public class InstallApexModuleTargetPreparerTest {
         mockSuccessfulInstallMultiPackages(Arrays.asList(mFakeApex, mFakeApex2));
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
-        verify(mMockDevice, times(3)).getActiveApexes();
         verify(mMockDevice, atLeastOnce()).getActiveApexes();
         verify(mMockDevice, times(1)).getMainlineModuleInfo();
         verifySuccessfulInstallMultiPackagesNoEnableRollback();
@@ -2368,7 +2366,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifyCleanInstalledApexPackages(1);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
     }
 
     @Test
@@ -2391,7 +2389,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verifySuccessfulInstallMultiPackages();
         verify(mMockDevice, times(2)).reboot();
-        verify(mMockDevice, times(4)).getActiveApexes();
+        verify(mMockDevice, times(5)).getActiveApexes();
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
 
@@ -2418,7 +2416,7 @@ public class InstallApexModuleTargetPreparerTest {
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
         verify(mMockDevice, times(1)).reboot();
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).uninstallPackage(APK_PACKAGE_NAME);
         verify(mMockDevice, times(1)).getInstalledPackageNames();
     }
@@ -2459,7 +2457,7 @@ public class InstallApexModuleTargetPreparerTest {
 
         mInstallApexModuleTargetPreparer.setUp(mTestInfo);
         mInstallApexModuleTargetPreparer.tearDown(mTestInfo, null);
-        verify(mMockDevice, times(3)).getActiveApexes();
+        verify(mMockDevice, times(4)).getActiveApexes();
         verify(mMockDevice, times(1)).deleteFile(APEX_DATA_DIR + "*");
         verify(mMockDevice, times(1)).deleteFile(SESSION_DATA_DIR + "*");
         verify(mMockDevice, times(1)).deleteFile(STAGING_DATA_DIR + "*");
@@ -2526,7 +2524,7 @@ public class InstallApexModuleTargetPreparerTest {
             Mockito.verify(mMockBundletoolUtil, times(1))
                     .installApksFromZip(mFakeApkZip, mMockDevice, expectedArgs);
             verify(mMockDevice, times(2)).reboot();
-            verify(mMockDevice, times(2)).getActiveApexes();
+            verify(mMockDevice, times(3)).getActiveApexes();
             verify(mMockDevice, times(1)).waitForDeviceAvailable();
         } finally {
             FileUtil.deleteFile(mBundletoolJar);
