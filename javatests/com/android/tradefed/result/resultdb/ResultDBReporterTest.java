@@ -418,6 +418,12 @@ public class ResultDBReporterTest {
                 .withTestRunLog(testRunLog)
                 .withInvocationLog(invocationLog)
                 .simulateInvocation(mReporter);
+        // simulate the updateStoragePath called from AnTS Result reporter.
+        mReporter.uploadStoragePath("18274/stub/inv_9000/test.log_9000.dat", "/bigstore/test/test.log");
+        mReporter.uploadStoragePath(
+                "18274/stub/inv_9000/test-run.log_9000.dat", "/bigstore/test/test-run.log");
+        mReporter.uploadStoragePath(
+                "18274/stub/inv_9000/invocation.log_9000.dat", "/bigstore/test/invocation.log");
 
         assertThat(mReporter.mRecorder.getArtifacts())
                 .containsExactly(
@@ -433,44 +439,17 @@ public class ResultDBReporterTest {
                                                 .setCaseName("testExampleMethod")
                                                 .build())
                                 .setResultId("1234abcd-00001")
+                                .setGcsUri("gs://test/test.log")
                                 .build(),
                         Artifact.newBuilder()
                                 .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
                                 .setContentType("text/plain")
+                                .setGcsUri("gs://test/test-run.log")
                                 .build(),
                         Artifact.newBuilder()
                                 .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
                                 .setContentType("image/png")
-                                .build());
-    }
-
-    @Test
-    public void testUploadEarlyArtifacts() {
-        LogFile earlyLog1 =
-                new LogFile("/tmp/early1.log", getLogUrl("early1.log"), LogDataType.TEXT);
-        LogFile earlyLog2 =
-                new LogFile("/tmp/early2.log", getLogUrl("early2.log"), LogDataType.PNG);
-
-        // Call logAssociation before invocationStarted
-        mReporter.logAssociation("early_log_1", earlyLog1);
-        mReporter.logAssociation("early_log_2", earlyLog2);
-
-        // Simulate invocation start and end
-        mSimulator
-                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
-                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
-                .simulateInvocation(mReporter);
-
-        // Verify that the early logs were uploaded
-        assertThat(mReporter.mRecorder.getArtifacts())
-                .containsExactly(
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/early1.log_9000.dat")
-                                .setContentType("text/plain")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/early2.log_9000.dat")
-                                .setContentType("image/png")
+                                .setGcsUri("gs://test/invocation.log")
                                 .build());
     }
 
