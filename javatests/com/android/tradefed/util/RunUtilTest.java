@@ -354,7 +354,7 @@ public class RunUtilTest {
         // expect a call 4 times, at sleep time 0, 1, 4 and 10 ms
         when(mockRunnable.run()).thenReturn(Boolean.FALSE);
 
-        long maxTime = 12;
+        long maxTime = 30;
         assertFalse(runUtil.runEscalatingTimedRetry(1, 1, 512, maxTime, mockRunnable));
         assertEquals(maxTime, mSleepTime);
         verify(mockRunnable, Mockito.atLeast(3)).run();

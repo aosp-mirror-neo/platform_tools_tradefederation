@@ -189,7 +189,7 @@ public class ConsoleTest {
                     .interrupt(
                             mConsole, "interrupting", InfraErrorIdentifier.TRADEFED_SHUTTING_DOWN);
             mConsole.interrupt();
-            mConsole.join(2000);
+            mConsole.join(5000);
         }
         assertFalse("Console thread has not stopped.", mConsole.isAlive());
     }

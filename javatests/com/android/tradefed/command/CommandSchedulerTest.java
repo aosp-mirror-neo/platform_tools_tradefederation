@@ -452,6 +452,7 @@ public class CommandSchedulerTest {
         mDeviceOptions.addSerial(dev.getSerialNumber());
         mMockConfiguration.validateOptions();
 
+        mScheduler.setPrintSchedulingWarning(true);
         mScheduler.start();
         mScheduler.addCommand(args);
         mScheduler.addCommand(args);

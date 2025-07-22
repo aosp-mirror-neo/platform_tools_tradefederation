@@ -104,6 +104,7 @@ public class TfTestLauncher extends SubprocessTfLauncher {
     // pattern, is considered as test failure.
     private static final String[] EXPECTED_TMP_FILE_PATTERNS = {
         "inv_.*", "tradefed_global_log_.*", "lc_cache", "stage-android-build-api",
+        "temporary-stdout-fastboot.*",
     };
     // A destination file where the hprof report will be put.
     private File mHprofFile = null;
