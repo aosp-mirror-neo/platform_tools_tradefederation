@@ -13,21 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.android.tradefed.util;
 
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.util.FileUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class CasUtil {
 
     public static final String CHUNKS_DIR_NAME = "_chunks";
     public static final String CHUNKS_INDEX_FILENAME = "_chunks_index.json";
     public static final String BOOT_IMAGE_FILENAME = "boot.img";
+    public static final String CAS_LOG_ROOT_NAME = "tf-cas-fuse-log-root";
+    private static final Pattern LOG_LINE_PATTERN =
+            Pattern.compile(
+                    "^[IWEF]\\d{4}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{6}\\s+\\d+\\s+[^:]+:\\d+].*");
 
     private static final IRunUtil mRunUtil = RunUtil.getDefault();
 
@@ -58,15 +67,13 @@ public final class CasUtil {
             throw new IOException("path is null");
         }
         if (!Files.isDirectory(path)) {
-            throw new IOException(
-                    String.format("'%s' is not a directory", path));
+            throw new IOException(String.format("'%s' is not a directory", path));
         }
         Path chunksDirPath = path.resolve(CHUNKS_DIR_NAME);
         if (!Files.isDirectory(chunksDirPath)) {
             throw new IOException(
                     String.format(
-                            "subdirectory '%s' not found in directory: %s",
-                            CHUNKS_DIR_NAME, chunksDirPath));
+                            "subdirectory '%s' not found in directory: %s", CHUNKS_DIR_NAME, path));
         }
         List<Path> chunksIndexFilePaths =
                 Arrays.asList(
@@ -75,8 +82,7 @@ public final class CasUtil {
         if (chunksIndexFilePaths.stream().filter(Files::exists).count() == 0) {
             throw new IOException(
                     String.format(
-                            "File '%s' not found in directory: '%s'",
-                            CHUNKS_INDEX_FILENAME, path));
+                            "File '%s' not found in directory: '%s'", CHUNKS_INDEX_FILENAME, path));
         }
     }
 
@@ -101,15 +107,13 @@ public final class CasUtil {
         return Files.exists(path.resolve(BOOT_IMAGE_FILENAME));
     }
 
-    public static void logCasClientVersion(
-            Path clientPath, Consumer<String> versionHandlerFn) {
+    public static void logCasClientVersion(Path clientPath, Consumer<String> versionHandlerFn) {
         if (clientPath == null) {
             return;
         }
 
         String clientName = clientPath.getFileName().toString();
-        CommandResult cr =
-                mRunUtil.runTimedCmd(5000, clientPath.toString(), "--version");
+        CommandResult cr = mRunUtil.runTimedCmd(5000, clientPath.toString(), "--version");
         if (cr.getStatus() != CommandStatus.SUCCESS) {
             CLog.e(
                     "Failed to extract '%s' version. Status: %s\nStdout: %s\nStderr: %s",
@@ -135,4 +139,117 @@ public final class CasUtil {
         logCasClientVersion(clientPath, null);
     }
 
+    public static Path createUniqueCasLogDir(Path logDirRootPath) throws IOException {
+        if (logDirRootPath == null) {
+            logDirRootPath = Path.of(System.getProperty("java.io.tmpdir"), CAS_LOG_ROOT_NAME);
+        }
+        Path logDirPath = logDirRootPath.resolve(UUID.randomUUID().toString());
+        // The path will be logged by the caller, logging it here would be spammy.
+        Files.createDirectories(logDirPath);
+        return logDirPath;
+    }
+
+    /**
+     * Reads the CAS log file from the given directory.
+     *
+     * @param logDirPath The directory path to read the CAS log file from.
+     * @param clientName The name of the CAS client.
+     * @param tag The tag of the CAS log file, like "INFO", "WARNING", "ERROR", etc.
+     * @param removeLogDirAfterRead Whether to remove the log directory after reading the log file.
+     * @return The CAS log file content.
+     * @throws IOException If the CAS log file cannot be read.
+     */
+    public static String getCasLogFromDir(
+            Path logDirPath, String clientName, String tag, boolean removeLogDirAfterRead)
+            throws IOException {
+        if (logDirPath == null) {
+            throw new IOException("logDirPath is null");
+        }
+        String log = readCasLogFileFromDir(logDirPath, clientName, tag);
+        if (removeLogDirAfterRead) {
+            FileUtil.recursiveDelete(logDirPath.toFile());
+        }
+        return log;
+    }
+
+    /**
+     * Reads the CAS log file from the given directory.
+     *
+     * @param logDirPath The directory path to read the CAS log file from.
+     * @param clientName The name of the CAS client.
+     * @param tag The tag of the CAS log file, like "INFO", "WARNING", "ERROR", etc.
+     * @return The CAS log file content.
+     * @throws IOException If the CAS log file cannot be read.
+     */
+    private static String readCasLogFileFromDir(Path logDirPath, String clientName, String tag)
+            throws IOException {
+        Path logFilePath = logDirPath.resolve(clientName + "." + tag);
+        if (!Files.exists(logFilePath)) {
+            CLog.w("CAS log file not found: %s", logFilePath);
+            throw new IOException(String.format("CAS log file not found: %s", logFilePath));
+        }
+        return removeLogHeader(Files.readString(logFilePath));
+    }
+
+    /**
+     * Reads the CAS log file "<clientName>.INFO" from the given directory and remove the log
+     * directory. This is a convenience method that wraps the above method with default parameters.
+     * It also handles the IOException and returns null if the log file cannot be read.
+     *
+     * @param logDirPath The directory path to read the CAS log file from.
+     * @param clientName The name of the CAS client.
+     * @return The CAS log file content or "" if the log file cannot be read.
+     */
+    public static String getCasLogFromDir(Path logDirPath, String clientName) {
+        try {
+            return getCasLogFromDir(logDirPath, clientName, "INFO", true);
+        } catch (IOException e) {
+            CLog.e(e);
+            return null;
+        }
+    }
+
+    /**
+     * Removes the log header from the given log string.
+     *
+     * <p>The log header are a group of lines before the first log line that conforms to the log
+     * line format. There isn't a documented way to suppress the header, so this is a workaround to
+     * remove the header which is usually not useful.
+     *
+     * @param logString The log string to remove the header from.
+     * @return The log string with the header removed or the original string if it is null or empty.
+     */
+    private static String removeLogHeader(String logString) {
+        if (logString == null || logString.isEmpty()) {
+            return logString;
+        }
+
+        String[] lines = logString.split("\\r?\\n");
+        StringBuilder resultBuilder = new StringBuilder();
+        boolean headerSkipped = false;
+
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+
+            if (!headerSkipped) {
+                Matcher matcher = LOG_LINE_PATTERN.matcher(trimmedLine);
+                if (matcher.matches()) {
+                    headerSkipped = true; // Found the first log line, stop skipping header
+                } else {
+                    // This is a header line, skip it
+                    continue;
+                }
+            }
+            // If header has been skipped (or this is the first line that made headerSkipped true),
+            // append the current line.
+            // Add a newline ONLY if resultBuilder is not empty (i.e., not the very first line being
+            // appended).
+            if (resultBuilder.length() > 0) {
+                resultBuilder.append("\n");
+            }
+            resultBuilder.append(line);
+        }
+
+        return resultBuilder.toString();
+    }
 }
