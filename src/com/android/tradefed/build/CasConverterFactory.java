@@ -29,6 +29,7 @@ import com.google.common.base.Strings;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 
 /** A singleton class for converting a FastCDC-chunked directory to its original directory. */
 public class CasConverterFactory {
@@ -57,7 +58,12 @@ public class CasConverterFactory {
 
         // Ensure `casconverter` is executable. It can be distributed without the execute bit set.
         FileUtil.ensureGroupRWX(casConverterPath.toFile());
-        logCasClientVersion(casConverterPath);
+        logCasClientVersion(
+                casConverterPath,
+                version -> {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.CAS_CONVERTER_VERSION, version);
+                });
         this.mCasConverterPath = casConverterPath;
     }
 
@@ -68,8 +74,8 @@ public class CasConverterFactory {
     }
 
     @VisibleForTesting
-    void logCasClientVersion(Path casConverterPath) {
-        CasUtil.logCasClientVersion(casConverterPath);
+    void logCasClientVersion(Path casConverterPath, Consumer<String> versionConsumer) {
+        CasUtil.logCasClientVersion(casConverterPath, versionConsumer);
     }
 
     @VisibleForTesting
