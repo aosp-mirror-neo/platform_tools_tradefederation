@@ -51,6 +51,7 @@ public class DeviceResetFeature implements IRemoteFeature, IConfigurationReceive
 
     public static final String DEVICE_RESET_FEATURE_NAME = "resetDevice";
     public static final String DEVICE_NAME = "device_name";
+    public static final String DEVICE_INDEX = "device_index";
 
     private IConfiguration mConfig;
     private TestInformation mTestInformation;
@@ -86,11 +87,30 @@ public class DeviceResetFeature implements IRemoteFeature, IConfigurationReceive
         }
         IDeviceConfiguration configHolder = mConfig.getDeviceConfigByName(deviceName);
         int index = 0;
-        for (IDeviceConfiguration deviceConfig : mConfig.getDeviceConfig()) {
-            if (deviceConfig == configHolder) {
-                break;
+        if (configHolder == null) {
+            String indexString = request.getArgsMap().get(DEVICE_INDEX);
+            if (indexString == null) {
+                responseBuilder.setErrorInfo(
+                        ErrorInfo.newBuilder().setErrorTrace("No device_index args specified."));
+                return responseBuilder.build();
             }
-            index++;
+            try {
+                index = Integer.parseInt(indexString);
+            } catch (NumberFormatException e) {
+                responseBuilder.setErrorInfo(
+                        ErrorInfo.newBuilder()
+                                .setErrorTrace(
+                                        String.format(
+                                                "Invalid device_index: %s", index)));
+                return responseBuilder.build();
+            }
+        } else {
+            for (IDeviceConfiguration deviceConfig : mConfig.getDeviceConfig()) {
+                if (deviceConfig == configHolder) {
+                    break;
+                }
+                index++;
+            }
         }
         mTestInformation.setActiveDeviceIndex(index);
         String response =
