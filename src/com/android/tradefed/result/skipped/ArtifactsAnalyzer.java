@@ -24,6 +24,7 @@ import com.android.tradefed.build.content.DeviceImagePartition;
 import com.android.tradefed.build.content.ImageContentAnalyzer;
 import com.android.tradefed.build.content.TestContentAnalyzer;
 import com.android.tradefed.config.IConfiguration;
+import com.android.tradefed.device.IDeviceSelection.BaseDeviceType;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.NullDevice;
 import com.android.tradefed.invoker.InvocationContext;
@@ -81,11 +82,22 @@ public class ArtifactsAnalyzer {
         int i = 0;
         for (Entry<ITestDevice, IBuildInfo> deviceBuild :
                 information.getContext().getDeviceBuildMap().entrySet()) {
+            BaseDeviceType typeRequested =
+                    configuration
+                            .getDeviceConfig()
+                            .get(i)
+                            .getDeviceRequirements()
+                            .getBaseDeviceTypeRequested();
+            boolean analyzeNullPlaceholder = false;
+            if (typeRequested != null && typeRequested.equals(BaseDeviceType.NATIVE_DEVICE)) {
+                analyzeNullPlaceholder = true;
+            }
             BuildAnalysis report =
                     analyzeArtifact(
                             deviceBuild,
                             mImageAnalysis.get(deviceBuild.getKey()),
-                            configuration.getDeviceConfig().get(i).isFake());
+                            configuration.getDeviceConfig().get(i).isFake(),
+                            analyzeNullPlaceholder);
             reports.add(report);
             i++;
         }
@@ -144,12 +156,14 @@ public class ArtifactsAnalyzer {
     private BuildAnalysis analyzeArtifact(
             Entry<ITestDevice, IBuildInfo> deviceBuild,
             List<ContentAnalysisContext> context,
-            boolean isFake) {
+            boolean isFake,
+            boolean analyzeNullPlaceholder) {
         ITestDevice device = deviceBuild.getKey();
         IBuildInfo build = deviceBuild.getValue();
         Map<String, Digest> imageToDigest = new LinkedHashMap<>();
         boolean deviceImageChanged = true; // anchor toward changing
-        if (!isFake
+        if (!analyzeNullPlaceholder
+                && !isFake
                 && device.getIDevice() != null
                 && device.getIDevice().getClass().isAssignableFrom(NullDevice.class)) {
             deviceImageChanged = false; // No device image
