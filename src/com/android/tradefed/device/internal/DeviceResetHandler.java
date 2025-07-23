@@ -77,8 +77,13 @@ public class DeviceResetHandler {
         }
         FeatureResponse response;
         try {
+            int deviceIndex = -1;
+            for (ITestDevice d : mContext.getDevices()) {
+                deviceIndex++;
+            }
             Map<String, String> args = new HashMap<>();
             args.put(DeviceResetFeature.DEVICE_NAME, mContext.getDeviceName(device));
+            args.put(DeviceResetFeature.DEVICE_INDEX, String.valueOf(deviceIndex));
             response = mClient.triggerFeature(DeviceResetFeature.DEVICE_RESET_FEATURE_NAME, args);
             CLog.d("Response from reset request: %s", response.getResponse());
         } finally {

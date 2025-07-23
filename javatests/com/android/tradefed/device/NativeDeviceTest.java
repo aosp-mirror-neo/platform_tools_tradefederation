@@ -336,7 +336,7 @@ public class NativeDeviceTest {
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
-                    public boolean pushFileInternal(
+                    public boolean pushFileWithAdbCommand(
                             File localFile,
                             String remoteFilePath,
                             boolean skipContentProvider,
@@ -357,9 +357,11 @@ public class NativeDeviceTest {
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
-                    public String executeShellCommand(String cmd)
+                    public CommandResult executeShellV2Command(String cmd)
                             throws DeviceNotAvailableException {
-                        return "";
+                        CommandResult res = new CommandResult();
+                        res.setStatus(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -387,11 +389,13 @@ public class NativeDeviceTest {
             mTestDevice =
                     new TestableAndroidNativeDevice() {
                         @Override
-                        public String executeShellCommand(String cmd)
+                        public CommandResult executeShellV2Command(String cmd)
                                 throws DeviceNotAvailableException {
                             // Ensure we never attempt to push the excluded child.
                             assertFalse(cmd.contains(childDir.getName()));
-                            return "";
+                            CommandResult res = new CommandResult();
+                            res.setStatus(CommandStatus.SUCCESS);
+                            return res;
                         }
 
                         @Override

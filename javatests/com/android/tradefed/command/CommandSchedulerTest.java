@@ -496,7 +496,7 @@ public class CommandSchedulerTest {
         mFakeDeviceManager.freeDevice(dev, FreeDeviceState.AVAILABLE);
         mFakeDeviceManager.freeDevice(expectedDevice, FreeDeviceState.AVAILABLE);
         mScheduler.shutdownOnEmpty();
-        mScheduler.join();
+        mScheduler.join(120000L);
         verify(mMockInvocation, times(2))
                 .invoke(
                         (IInvocationContext) any(),

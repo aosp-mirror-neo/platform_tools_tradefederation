@@ -16,12 +16,23 @@
 
 package com.android.tradefed.observatory;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
+
 import com.android.tradefed.build.IBuildProvider;
 import com.android.tradefed.command.ICommandOptions;
 import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IDeviceConfiguration;
 import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.log.ILogRegistry;
 import com.android.tradefed.sandbox.SandboxOptions;
 import com.android.tradefed.sandbox.TradefedSandbox; // For calling its static method directly
 import com.android.tradefed.testtype.IRemoteTest;
@@ -40,17 +51,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.withSettings;
 
 /** Unit tests for {@link TestZipDiscoveryExecutor}. */
 @RunWith(JUnit4.class)
@@ -116,7 +116,8 @@ public class TestZipDiscoveryExecutorTest {
         for (int i = 0; i < zipsArray.length(); i++) {
             actualZips.add(zipsArray.getString(i));
         }
-        assertEquals("Set of zips in JSON output does not match expected.", expectedZips, actualZips);
+        assertEquals(
+                "Set of zips in JSON output does not match expected.", expectedZips, actualZips);
 
         if (noPossibleDiscovery) {
             assertTrue(
@@ -170,7 +171,10 @@ public class TestZipDiscoveryExecutorTest {
         String[] args = {"contains_haiku_keyword", "some_mobly_stuff"};
         when(mTestDiscoveryUtil.isTradefedConfiguration(args)).thenReturn(false);
         String result = mTestZipDiscoveryExecutor.discoverTestZips(args);
-        assertJsonOutput(result, new LinkedHashSet<>(Arrays.asList("haiku-presubmit", "general-tests.zip")), false);
+        assertJsonOutput(
+                result,
+                new LinkedHashSet<>(Arrays.asList("haiku-presubmit", "general-tests.zip")),
+                false);
     }
 
     @Test
@@ -192,7 +196,11 @@ public class TestZipDiscoveryExecutorTest {
             mTestZipDiscoveryExecutor.discoverTestZips(args);
             fail("Should have thrown TestDiscoveryException for no tests found.");
         } catch (TestDiscoveryException e) {
-            assertTrue(e.getMessage().contains("Tradefed Observatory discovered no tests from the IConfiguration"));
+            assertTrue(
+                    e.getMessage()
+                            .contains(
+                                    "Tradefed Observatory discovered no tests from the"
+                                            + " IConfiguration"));
             assertEquals(DiscoveryExitCode.ERROR, e.exitCode());
         }
     }
@@ -206,7 +214,11 @@ public class TestZipDiscoveryExecutorTest {
             mTestZipDiscoveryExecutor.discoverTestZips(args);
             fail("Should have thrown TestDiscoveryException for empty test list.");
         } catch (TestDiscoveryException e) {
-            assertTrue(e.getMessage().contains("Tradefed Observatory discovered no tests from the IConfiguration"));
+            assertTrue(
+                    e.getMessage()
+                            .contains(
+                                    "Tradefed Observatory discovered no tests from the"
+                                            + " IConfiguration"));
             assertEquals(DiscoveryExitCode.ERROR, e.exitCode());
         }
     }
@@ -254,7 +266,8 @@ public class TestZipDiscoveryExecutorTest {
         when(mMockConfiguration.getConfigurationObject(Configuration.SANBOX_OPTIONS_TYPE_NAME))
                 .thenReturn(realSandboxOptions);
         String result = mTestZipDiscoveryExecutor.discoverTestZips(args);
-        Set<String> expectedZips = new LinkedHashSet<>(Arrays.asList("custom-sandbox-1.zip", "custom-sandbox-2.zip"));
+        Set<String> expectedZips =
+                new LinkedHashSet<>(Arrays.asList("custom-sandbox-1.zip", "custom-sandbox-2.zip"));
         assertJsonOutput(result, expectedZips, false);
     }
 
@@ -286,7 +299,8 @@ public class TestZipDiscoveryExecutorTest {
     @Test
     public void discoverTestZips_tradefed_testSuiteWithSandboxMatching_addsExtraTargets() throws Exception {
         String[] args = {"config.xml"};
-        String configName = "cts-suite"; // Example: ensure this name has known behavior with real static method
+        String configName =
+                "cts-suite"; // Example: ensure this name has known behavior with real static method
         when(mTestDiscoveryUtil.isTradefedConfiguration(args)).thenReturn(true);
         when(mMockConfiguration.getTests()).thenReturn(Collections.singletonList(mMockTestSuite));
         SandboxOptions realSandboxOptions = new SandboxOptions();
@@ -298,9 +312,14 @@ public class TestZipDiscoveryExecutorTest {
 
         // Calling the REAL static method.
         Set<String> expectedZipsFromRealStaticMethod = TradefedSandbox.matchSandboxExtraBuildTargetByConfigName(configName);
-        System.out.println("Note: Test 'discoverTestZips_tradefed_testSuiteWithSandboxMatching_addsExtraTargets' " +
-                "is calling the real TradefedSandbox.matchSandboxExtraBuildTargetByConfigName for config: '" + configName +
-                "'. Expected output based on real method: " + expectedZipsFromRealStaticMethod);
+        System.out.println(
+                "Note: Test"
+                    + " 'discoverTestZips_tradefed_testSuiteWithSandboxMatching_addsExtraTargets'"
+                    + " is calling the real"
+                    + " TradefedSandbox.matchSandboxExtraBuildTargetByConfigName for config: '"
+                        + configName
+                        + "'. Expected output based on real method: "
+                        + expectedZipsFromRealStaticMethod);
 
         String result = mTestZipDiscoveryExecutor.discoverTestZips(args);
         assertJsonOutput(result, expectedZipsFromRealStaticMethod, false);
@@ -342,11 +361,25 @@ public class TestZipDiscoveryExecutorTest {
 
     @Test
     public void discoverTestZips_tradefed_hasOutputResultFile_executesWithoutError() throws Exception {
-        System.out.println("Note: Static logging calls (DdmPreferences, Log, LogRegistry) " +
-                "will use real implementations. This test only checks for runtime errors in this path.");
+        System.out.println(
+                "Note: Static logging calls (DdmPreferences, Log, LogRegistry) will use real"
+                    + " implementations. This test only checks for runtime errors in this path.");
         String[] args = {"config.xml"};
         when(mTestDiscoveryUtil.isTradefedConfiguration(args)).thenReturn(true);
         when(mTestDiscoveryUtil.hasOutputResultFile()).thenReturn(true);
+
+        mTestZipDiscoveryExecutor =
+                new TestZipDiscoveryExecutor(mTestDiscoveryUtil) {
+                    @Override
+                    protected void initializeLogOutput() {}
+                    ;
+
+                    @Override
+                    protected com.android.tradefed.log.ILogRegistry getLogRegistry() {
+                        return mock(ILogRegistry.class);
+                    }
+                    ;
+                };
 
         try {
             mTestZipDiscoveryExecutor.discoverTestZips(args);
@@ -355,7 +388,9 @@ public class TestZipDiscoveryExecutorTest {
             // even with real static calls, unless the real static calls themselves are problematic
             // in a test environment (e.g. LogRegistry.getLogRegistry().unregisterLogger() failing).
             e.printStackTrace();
-            fail("discoverTestZips threw an unexpected exception when hasOutputResultFile=true: " + e.getMessage());
+            fail(
+                    "discoverTestZips threw an unexpected exception when hasOutputResultFile=true: "
+                            + e.getMessage());
         }
         assertTrue("Test for hasOutputResultFile=true path completed execution.", true);
     }

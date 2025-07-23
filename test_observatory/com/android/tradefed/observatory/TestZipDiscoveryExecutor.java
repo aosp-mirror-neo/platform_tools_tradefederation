@@ -24,6 +24,7 @@ import com.android.tradefed.config.IDeviceConfiguration;
 import com.android.tradefed.invoker.tracing.ActiveTrace;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.invoker.tracing.TracingLogger;
+import com.android.tradefed.log.ILogRegistry;
 import com.android.tradefed.log.Log;
 import com.android.tradefed.log.LogRegistry;
 import com.android.tradefed.log.StdoutLogger;
@@ -75,11 +76,7 @@ public class TestZipDiscoveryExecutor {
             return nonTradefedDiscovery(args);
         }
         if (mTestDiscoveryUtil.hasOutputResultFile()) {
-            DdmPreferences.setLogLevel(Log.LogLevel.VERBOSE.getStringValue());
-            Log.setLogOutput(LogRegistry.getLogRegistry());
-            StdoutLogger logger = new StdoutLogger();
-            logger.setLogLevel(Log.LogLevel.VERBOSE);
-            LogRegistry.getLogRegistry().registerLogger(logger);
+            initializeLogOutput();
         }
         boolean reportNoPossibleDiscovery = true;
         // Create IConfiguration base on command line args.
@@ -166,9 +163,21 @@ public class TestZipDiscoveryExecutor {
             return formatResults(reportNoPossibleDiscovery, testZipRegexSet);
         } finally {
             if (mTestDiscoveryUtil.hasOutputResultFile()) {
-                LogRegistry.getLogRegistry().unregisterLogger();
+                getLogRegistry().unregisterLogger();
             }
         }
+    }
+
+    protected void initializeLogOutput() {
+        DdmPreferences.setLogLevel(Log.LogLevel.VERBOSE.getStringValue());
+        Log.setLogOutput(LogRegistry.getLogRegistry());
+        StdoutLogger logger = new StdoutLogger();
+        logger.setLogLevel(Log.LogLevel.VERBOSE);
+        LogRegistry.getLogRegistry().registerLogger(logger);
+    }
+
+    protected ILogRegistry getLogRegistry() {
+        return LogRegistry.getLogRegistry();
     }
 
     private String formatResults(boolean reportNoPossibleDiscovery, Set<String> zipRegex)
