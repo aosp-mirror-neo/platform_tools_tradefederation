@@ -54,7 +54,7 @@ public class CasFuseDriverProfileTest {
     // test a few basic cases here.
 
     @Test
-    public void testValidSourceDataPath_indexFileInChunksDir_success() throws IOException {
+    public void validSourceDataPath_indexFileInChunksDir_success() throws IOException {
         File sourceDir = tempFolder.newFolder("valid_source");
         tempFolder.newFolder("valid_source/" + CasUtil.CHUNKS_DIR_NAME);
         tempFolder.newFile(
@@ -66,7 +66,7 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testValidSourceDataPath_missingChunksDir() throws IOException {
+    public void validSourceDataPath_missingChunksDir() throws IOException {
         File sourceDir = tempFolder.newFolder("source_missing_chunks_dir");
         tempFolder.newFile("source_missing_chunks_dir/" + CasUtil.CHUNKS_INDEX_FILENAME);
 
@@ -81,7 +81,7 @@ public class CasFuseDriverProfileTest {
     // test a few basic cases here.
 
     @Test
-    public void testIsMountPointReady_success() throws IOException {
+    public void isMountPointReady_success() throws IOException {
         File mountPoint = tempFolder.newFolder("ready_mount_point");
         tempFolder.newFile("ready_mount_point/" + CasUtil.BOOT_IMAGE_FILENAME);
 
@@ -91,7 +91,7 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testIsMountPointReady_missingBootImage() throws IOException {
+    public void isMountPointReady_missingBootImage() throws IOException {
         File mountPoint = tempFolder.newFolder("not_ready_mount_point");
 
         assertFalse(
@@ -100,7 +100,7 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testBuildMountCommand() {
+    public void buildMountCommand_noLogDir_success() {
         Path sourceDir = new File("/fake/source/dir").toPath();
         Path mountPoint = new File("/fake/mount/point").toPath();
         List<String> expectedCommand =
@@ -121,13 +121,37 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testGetDriverName() {
+    public void buildMountCommand_withLogDir_success() {
+        Path sourceDir = new File("/fake/source/dir").toPath();
+        Path mountPoint = new File("/fake/mount/point").toPath();
+        Path logDir = new File("/fake/log/dir").toPath();
+        List<String> expectedCommand =
+                Arrays.asList(
+                        mDriverFile.getAbsolutePath(),
+                        "--chunks",
+                        sourceDir.resolve("_chunks").toAbsolutePath().toString(),
+                        "--mount",
+                        mountPoint.toAbsolutePath().toString(),
+                        "--log-dir",
+                        logDir.toAbsolutePath().toString());
+
+        List<String> actualCommand = mProfile.buildMountCommand(sourceDir, mountPoint, logDir);
+
+        assertNotNull("Command list should not be null.", actualCommand);
+        assertEquals(
+                "The generated command should match the expected format.",
+                expectedCommand,
+                actualCommand);
+    }
+
+    @Test
+    public void getDriverName() {
         assertEquals(
                 "The driver name should be 'casviewer'.", "casviewer", mProfile.getDriverName());
     }
 
     @Test
-    public void testGetMountTimeoutInMs() {
+    public void getMountTimeoutInMs() {
         assertEquals(
                 "The default mount timeout should be 500 milliseconds.",
                 500,
@@ -135,7 +159,7 @@ public class CasFuseDriverProfileTest {
     }
 
     @Test
-    public void testGetMountTimeoutInMs_customTimeout() {
+    public void getMountTimeoutInMs_customTimeout() {
         mProfile = new CasFuseDriverProfile(mDriverFile.toPath(), 1000);
         assertEquals(
                 "The custom mount timeout should be 1000 milliseconds.",

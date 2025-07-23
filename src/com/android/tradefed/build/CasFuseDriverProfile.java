@@ -70,12 +70,27 @@ public class CasFuseDriverProfile implements IFuseDriverProfile {
 
     @Override
     public List<String> buildMountCommand(Path sourceDataPath, Path mountPoint) {
+        return buildMountCommand(sourceDataPath, mountPoint, null);
+    }
+
+    @Override
+    public List<String> buildMountCommand(Path sourceDataPath, Path mountPoint, Path logDir) {
+        if (logDir == null) {
+            return Arrays.asList(
+                    mDriverPath.toAbsolutePath().toString(),
+                    "--chunks",
+                    sourceDataPath.resolve(CasUtil.CHUNKS_DIR_NAME).toAbsolutePath().toString(),
+                    "--mount",
+                    mountPoint.toAbsolutePath().toString());
+        }
         return Arrays.asList(
                 mDriverPath.toAbsolutePath().toString(),
                 "--chunks",
                 sourceDataPath.resolve(CasUtil.CHUNKS_DIR_NAME).toAbsolutePath().toString(),
                 "--mount",
-                mountPoint.toAbsolutePath().toString());
+                mountPoint.toAbsolutePath().toString(),
+                "--log-dir",
+                logDir.toAbsolutePath().toString());
     }
 
     @Override

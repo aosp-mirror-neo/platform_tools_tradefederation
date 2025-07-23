@@ -63,6 +63,18 @@ public interface IFuseDriverProfile {
     List<String> buildMountCommand(Path sourceDataPath, Path mountPoint);
 
     /**
+     * Creates the command line to execute the mount command and log to the given directory.
+     *
+     * @param sourceDataPath The source data path.
+     * @param mountPoint The target mount point.
+     * @param logDir The directory to store the log files.
+     * @return A list of string representing the command line to execute.
+     */
+    default List<String> buildMountCommand(Path sourceDataPath, Path mountPoint, Path logDir)  {
+        return buildMountCommand(sourceDataPath, mountPoint);
+    }
+
+    /**
      * A descriptive name for this driver type.
      *
      * @return The driver's name (e.g., "FastCDC", "sshfs").
