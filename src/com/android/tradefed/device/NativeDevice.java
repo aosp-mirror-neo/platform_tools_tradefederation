@@ -393,7 +393,7 @@ public class NativeDevice
         }
 
         @Override
-        public boolean run() throws TimeoutException, IOException {
+        public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
             if (mPipeAsInput != null) {
                 mResult = getRunUtil().runTimedCmdWithInputRedirect(mTimeout, mPipeAsInput, mCmd);
             } else {
@@ -421,12 +421,20 @@ public class NativeDevice
     }
 
     /** {@link DeviceAction} for rebooting a device. */
-    protected class RebootDeviceAction implements DeviceAction {
+    protected class RebootDeviceAction extends AdbShellAction {
 
         private final RebootMode mRebootMode;
         @Nullable private final String mReason;
 
-        RebootDeviceAction(RebootMode rebootMode, @Nullable String reason) {
+        RebootDeviceAction(
+                RebootMode rebootMode,
+                @Nullable String reason,
+                String[] cmd,
+                File pipeAsInput,
+                OutputStream pipeToOutput,
+                OutputStream pipeToError,
+                long timeout) {
+            super(cmd, pipeAsInput, pipeToOutput, pipeToError, timeout);
             mRebootMode = rebootMode;
             mReason = reason;
         }
@@ -436,14 +444,12 @@ public class NativeDevice
                     || mRebootMode == RebootMode.REBOOT_INTO_FASTBOOTD;
         }
 
+        // TODO: return more detail AdbCommandRejectedException instead of IOException only,
         @Override
-        public boolean run()
-                throws TimeoutException, IOException, AdbCommandRejectedException,
-                        DeviceNotAvailableException {
+        public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
             // Notify of reboot started for all modes
             notifyRebootStarted();
-            getIDevice().reboot(mRebootMode.formatRebootCommand(mReason));
-            return true;
+            return super.run();
         }
     }
 
@@ -2707,6 +2713,15 @@ public class NativeDevice
                     logDeviceActionException(actionDescription, e, false);
                     lastException = e;
                 } catch (IOException e) {
+                    // Workaround to not recover device if TCP adb is used.
+                    if (isAdbTcp()
+                            && (action instanceof RebootDeviceAction)
+                            && ((RebootDeviceAction) action).isFastbootOrBootloader()) {
+                        CLog.d(
+                                "Ignore IOException when TCP device is rebooted"
+                                        + " into fastboot.");
+                        return true;
+                    }
                     logDeviceActionException(actionDescription, e, true);
                     lastException = e;
                 } catch (InstallException e) {
@@ -4021,6 +4036,10 @@ public class NativeDevice
             }
         }
 
+        String getAdbRebootCommand(@Nullable String reason) {
+            return Strings.isNullOrEmpty(reason) ? mRebootTarget : mRebootTarget + "," + reason;
+        }
+
         @Override
         public String toString() {
             return mRebootTarget;
@@ -4104,7 +4123,18 @@ public class NativeDevice
      */
     protected RebootDeviceAction createRebootDeviceAction(
             RebootMode rebootMode, @Nullable final String reason) {
-        return new RebootDeviceAction(rebootMode, reason);
+        String mode = rebootMode.getAdbRebootCommand(reason);
+        String adbRebootCommand = String.format("reboot %s", mode);
+        adbRebootCommand = adbRebootCommand.trim();
+        final String[] fullCmd = buildAdbShellCommand(adbRebootCommand, false);
+        return new RebootDeviceAction(
+                rebootMode,
+                reason,
+                fullCmd,
+                null,
+                null,
+                null,
+                TimeUnit.MILLISECONDS.toMillis(getCommandTimeout()));
     }
 
     /**
