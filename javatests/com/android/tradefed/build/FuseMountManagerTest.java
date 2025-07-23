@@ -79,9 +79,10 @@ public class FuseMountManagerTest {
 
         // Default mock behaviors for success cases
         doNothing().when(mMockDriverProfile).validateSourceDataPath(any(Path.class));
-        when(mMockDriverProfile.buildMountCommand(any(Path.class), any(Path.class)))
+        when(mMockDriverProfile.buildMountCommand(
+                        any(Path.class), any(Path.class), any(Path.class)))
                 .thenReturn(Arrays.asList("fuse-driver", "arg1"));
-        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(10L);
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
         when(mMockRunUtil.runCmdInBackground(anyList(), any(OutputStream.class)))
                 .thenReturn(mMockProcess);
     }
@@ -133,7 +134,7 @@ public class FuseMountManagerTest {
     public void mount_successAfterPolling() throws Exception {
         when(mMockDriverProfile.isMountPointReady(any(Path.class)))
                 .thenReturn(false, false, true); // Succeeds on the 3rd check
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false); // Still running
+        stubProcessWaitForToReturn(mMockProcess, false); // Still running
 
         Path mountPoint = mManager.mount(mSourceDir);
 
@@ -164,32 +165,24 @@ public class FuseMountManagerTest {
     @Test
     public void mount_processExitsPrematurely_throwsException() throws Exception {
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true); // Exited!
+        stubProcessWaitForToReturn(mMockProcess, true); // Exited!
         when(mMockProcess.exitValue()).thenReturn(1);
 
-        IOException thrown =
-                assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
+        IOException thrown = assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
         assertTrue(thrown.getMessage().contains("failed on startup"));
     }
 
     @Test
     public void mount_timeout_throwsExceptionAndCleansUp() throws Exception {
+        // Set the timeout to 20ms to let it times out faster.
+        when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(20L);
         // The mount point is never ready
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
         when(mMockProcess.isAlive()).thenReturn(true, false);
         // The process never exits on its own
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
-            .thenAnswer(invocation -> {
-                long timeout = invocation.getArgument(0);
-                TimeUnit unit = invocation.getArgument(1);
+        stubProcessWaitForToReturn(mMockProcess, false);
 
-                long sleepMillis = Math.max(5, unit.toMillis(timeout));
-                RunUtil.getDefault().sleep(sleepMillis);
-                return false;
-            });
-
-        IOException thrown =
-                assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
+        IOException thrown = assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
         assertTrue(thrown.getMessage().contains("timed out"));
 
         // Verify that the orphaned process was killed and the mount point was deleted.
@@ -224,7 +217,7 @@ public class FuseMountManagerTest {
                         anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
         when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.SUCCESS);
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true);
+        stubProcessWaitForToReturn(mMockProcess, true);
 
         mManager.unmount(mSourceDir);
 
@@ -246,7 +239,7 @@ public class FuseMountManagerTest {
                         anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
         when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.FAILED);
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
+        stubProcessWaitForToReturn(mMockProcess, false);
 
         mManager.unmount(mSourceDir);
 
@@ -269,9 +262,8 @@ public class FuseMountManagerTest {
                         anyLong(), eq("fusermount"), eq("-u"), eq(mountPoint.toString())))
                 .thenReturn(mMockCommandResult);
         when(mMockCommandResult.getStatus()).thenReturn(CommandStatus.FAILED);
-        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(false);
-        when(mMockRunUtil.runTimedCmd(
-                        anyLong(), eq("umount"), eq("-l"), eq(mountPoint.toString())))
+        stubProcessWaitForToReturn(mMockProcess, false);
+        when(mMockRunUtil.runTimedCmd(anyLong(), eq("umount"), eq("-l"), eq(mountPoint.toString())))
                 .thenReturn(mMockUmountCommandResult);
         when(mMockUmountCommandResult.getStatus()).thenReturn(CommandStatus.SUCCESS);
 
@@ -281,7 +273,8 @@ public class FuseMountManagerTest {
         verify(mMockProcess, times(1)).destroy();
         verify(mMockProcess, times(1)).destroyForcibly();
         // Verify that the lazy unmount was performed when destroryForcibly().
-        verify(mMockRunUtil, times(1)).runTimedCmd(anyLong(), eq("umount"), eq("-l"), eq(mountPoint.toString()));
+        verify(mMockRunUtil, times(1))
+                .runTimedCmd(anyLong(), eq("umount"), eq("-l"), eq(mountPoint.toString()));
         // Check that the mount point directory was deleted
         assertFalse(new File(mountPoint.toString()).exists());
     }
@@ -304,5 +297,15 @@ public class FuseMountManagerTest {
         // Verify that unmount() was called once for each source path.
         verify(spyManager, times(1)).unmount(mSourceDir);
         verify(spyManager, times(1)).unmount(sourceDir2);
+    }
+
+    private void stubProcessWaitForToReturn(Process mockProcess, boolean returnValue)
+            throws InterruptedException {
+        when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
+                .thenAnswer(
+                        invocation -> {
+                            RunUtil.getDefault().sleep(5);
+                            return returnValue;
+                        });
     }
 }
