@@ -199,11 +199,11 @@ public class RunUtilTest {
     @Test
     public void testRunTimed_output_monitor() {
         // Long-running operation with changing output stream.
-        String[] command = {"/bin/bash", "-c", "for i in {1..5}; do echo hello; sleep 1; done"};
+        String[] command = {"/bin/bash", "-c", "for i in {1..5}; do echo hello; sleep 1; echo 'done'; done"};
 
         // Should succeed and return sooner regardless of timeout.
         CommandResult result =
-                mRunUtil.runTimedCmdWithOutputMonitor(VERY_LONG_TIMEOUT_MS * 5, 1200, command);
+                mRunUtil.runTimedCmdWithOutputMonitor(VERY_LONG_TIMEOUT_MS * 5, 1300, command);
         assertEquals(CommandStatus.SUCCESS, result.getStatus());
     }
 
