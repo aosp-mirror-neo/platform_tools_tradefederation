@@ -79,7 +79,12 @@ public class FuseMountManagerFactory {
 
         // Ensure casviewer is executable. It can be distributed without the execute bit set.
         FileUtil.ensureGroupRWX(casViewerPath.toFile());
-        CasUtil.logCasClientVersion(casViewerPath);
+        CasUtil.logCasClientVersion(
+                casViewerPath,
+                version -> {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.CAS_VIEWER_VERSION, version);
+                });
         this.mCasFuseDriverProfile = new CasFuseDriverProfile(casViewerPath, MOUNT_TIMEOUT_IN_MS);
     }
 
@@ -115,8 +120,7 @@ public class FuseMountManagerFactory {
         if (count > 10) { // A typical physical TF host has 14 devices.
             CLog.d("Sample mount points:", count);
             try (Stream<Path> files = Files.list(mMountRoot)) {
-                files.limit(3)
-                     .forEach(p -> CLog.d("  - %s", p.toAbsolutePath())); // Log each path
+                files.limit(3).forEach(p -> CLog.d("  - %s", p.toAbsolutePath())); // Log each path
             }
         }
     }

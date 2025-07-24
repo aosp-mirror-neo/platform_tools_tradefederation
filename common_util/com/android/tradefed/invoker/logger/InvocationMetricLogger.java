@@ -256,6 +256,8 @@ public class InvocationMetricLogger {
 
         // CAS downloader metrics
         CAS_VERSION("cas_version", false),
+        CAS_VIEWER_VERSION("cas_viewer_version", false),
+        CAS_CONVERTER_VERSION("cas_converter_version", false),
         CAS_DOWNLOAD_ERRORS("cas_download_errors", true),
         CAS_DOWNLOAD_ERROR_FILES("cas_download_error_files", true),
         CAS_DOWNLOAD_ERROR_BUILD_ID("cas_download_error_build_id", true),

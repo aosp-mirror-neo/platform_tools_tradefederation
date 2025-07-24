@@ -39,6 +39,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.EnumSet;
 import java.util.Set;
+import java.util.function.Consumer;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -149,7 +150,7 @@ public class CasConverterFactoryTest {
         spyCasConverterFactory = spy(factoryInstance); // Spy on the instance
         doNothing()
                 .when(spyCasConverterFactory)
-                .logCasClientVersion(any(Path.class)); // Stub internal logging
+                .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
         CommandResult successResult = new CommandResult();
@@ -197,7 +198,7 @@ public class CasConverterFactoryTest {
         spyCasConverterFactory = spy(factoryInstance); // Spy on the instance
         doNothing()
                 .when(spyCasConverterFactory)
-                .logCasClientVersion(any(Path.class)); // Stub internal logging
+                .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
 
         // Mock the CommandResult for a failed conversion
         CommandResult failureResult = new CommandResult();

@@ -22,8 +22,10 @@ package com.android.tradefed.build;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.util.CasUtil;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import java.io.ByteArrayOutputStream;
@@ -44,6 +46,9 @@ import java.util.concurrent.TimeUnit;
 // It is responsible for starting and stopping the FUSE driver processes, and for ensuring that
 // the mount points are ready to be used.
 public class FuseMountManager {
+    // Root directory for all CAS log dirs (one per mount) for easy checking of failed cleanups.
+    private static final Path CAS_LOG_ROOT = Path.of("/tmp/tf-cas-fuse-log-root");
+    private static final String CAS_VIEWER_NAME = "casviewer";
     private final IFuseDriverProfile mDriverProfile;
     private final IRunUtil mRunUtil;
     // Map to associate a source data path with its corresponding mount information (mount point and
@@ -63,10 +68,12 @@ public class FuseMountManager {
     /** MountInfo is a class that holds information about a mounted FUSE filesystem. */
     private static class MountInfo {
         Path mMountPoint;
+        Path mLogDir;
         Process mProcess;
 
-        MountInfo(Path mountPoint, Process process) {
+        MountInfo(Path mountPoint, Path logDir, Process process) {
             mMountPoint = mountPoint;
+            mLogDir = logDir;
             mProcess = process;
         }
     }
@@ -121,10 +128,13 @@ public class FuseMountManager {
         }
 
         Path mountPoint = null;
+        Path logDir = null;
         Process process = null;
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             mountPoint = createUniqueMountPoint(sourceDataPath);
-            List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
+            logDir = CasUtil.createUniqueCasLogDir(CAS_LOG_ROOT);
+            List<String> command =
+                    mDriverProfile.buildMountCommand(sourceDataPath, mountPoint, logDir);
 
             process = mRunUtil.runCmdInBackground(command, capturedOutput);
             if (process == null) { // Unlikely to happen.
@@ -144,7 +154,7 @@ public class FuseMountManager {
                     CLog.i(
                             "Done mounting '%s' at '%s' (took %d ms).",
                             sourceDataPath, mountPoint, duration);
-                    mActiveMounts.put(sourceDataPath, new MountInfo(mountPoint, process));
+                    mActiveMounts.put(sourceDataPath, new MountInfo(mountPoint, logDir, process));
                     return mountPoint; // Exit the method on success.
                 }
 
@@ -160,25 +170,15 @@ public class FuseMountManager {
                 }
             } while (System.currentTimeMillis() < deadline);
 
-            // FAILURE: Timed out waiting for the mount point to become ready.
-            if (process != null && process.isAlive()) {
-                destroyProcess(process, mountPoint);
-            }
-            deleteMountPoint(mountPoint);
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
-            throw new IOException(
-                    String.format(
-                            "Mount process started but mount point is not ready (timed out)."
-                                    + " Output: %s",
-                            capturedOutput.toString(StandardCharsets.UTF_8)));
-
+            // FAILURE: Timed out waiting for mount point to be ready.
+            logTimeout(sourceDataPath, capturedOutput.toString(StandardCharsets.UTF_8), logDir);
+            throw new IOException(String.format("Mount process started but timed out."));
         } catch (IOException | InterruptedException e) {
             // FAILURE: Handle all exceptions from the try block here.
             if (process != null && process.isAlive()) {
                 destroyProcess(process, mountPoint);
             }
-            deleteMountPoint(mountPoint);
+            cleanUp(mountPoint, logDir);
 
             // Log generic failure metrics for any exception path.
             InvocationMetricLogger.addInvocationMetrics(
@@ -194,6 +194,12 @@ public class FuseMountManager {
             }
             throw e;
         }
+    }
+
+    private void logTimeout(Path sourceDataPath, String output, Path logDir) {
+        InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
+        String log = CasUtil.getCasLogFromDir(logDir, CAS_VIEWER_NAME);
+        CLog.i("Mounting of '%s' timed out. Output:\n%s\nLog:\n%s", sourceDataPath, output, log);
     }
 
     /**
@@ -213,6 +219,7 @@ public class FuseMountManager {
         }
 
         Path mountPoint = mountInfo.mMountPoint;
+        Path logDir = mountInfo.mLogDir;
         Process process = mountInfo.mProcess;
 
         try {
@@ -226,7 +233,7 @@ public class FuseMountManager {
 
         } finally {
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
-            deleteMountPoint(mountPoint); // Best-effort directory cleanup
+            cleanUp(mountPoint, logDir); // Best-effort directory cleanup
 
             CLog.d(
                     "Done unmounting '%s' (took %d ms).",
@@ -417,22 +424,22 @@ public class FuseMountManager {
     }
 
     /**
-     * Deletes the given mount point if it exists. This method logs any exceptions but does not
-     * throw, as this is a best-effort cleanup.
+     * Deletes the mount point and log dir. This method logs any exceptions but does not throw, as
+     * this is a best-effort cleanup.
      *
      * @param mountPoint The mount point to delete.
+     * @param logDir The log directory to delete.
      */
-    protected void deleteMountPoint(Path mountPoint) {
+    protected void cleanUp(Path mountPoint, Path logDir) {
         final long timeoutMs = 1000;
         final long deadline = System.currentTimeMillis() + timeoutMs;
         final long intervalMs = 100;
 
-        if (mountPoint == null) {
-            return;
-        }
-
         do {
             try {
+                if (Files.exists(logDir)) {
+                    FileUtil.recursiveDelete(logDir.toFile());
+                }
                 if (!Files.deleteIfExists(mountPoint)) {
                     if (!Files.exists(mountPoint)) {
                         return;
@@ -457,6 +464,9 @@ public class FuseMountManager {
 
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.CAS_UNMOUNT_CLEANUP_FAILURE_COUNT, 1);
-        CLog.w("Could not clean up mount point directory after polling: '%s'", mountPoint);
+        CLog.w("Could not clean up mount point directory after polling: %s", mountPoint);
+        if (Files.exists(logDir)) {
+            CLog.w("Could not clean up log directory after polling: %s", logDir);
+        }
     }
 }
