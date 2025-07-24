@@ -21,6 +21,7 @@ import static org.mockito.Mockito.when;
 import com.android.ddmlib.IDevice;
 import com.android.tradefed.command.remote.DeviceDescriptor;
 import com.android.tradefed.device.ITestDevice.RecoveryMode;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.ConditionPriorityBlockingQueue;
 import com.android.tradefed.util.ConditionPriorityBlockingQueue.IMatcher;
@@ -207,6 +208,7 @@ public class MockDeviceManager implements IDeviceManager {
         }
         ITestDevice d = mAvailableDeviceQueue.poll(new TestDeviceMatcher(options));
         if (d != null) {
+            CLog.d("Allocating device '%s", d.getSerialNumber());
             mDvcMon.notifyDeviceStateChange(
                     d.getSerialNumber(),
                     DeviceAllocationState.Available,
@@ -219,11 +221,11 @@ public class MockDeviceManager implements IDeviceManager {
     @Override
     public void freeDevice(ITestDevice device, FreeDeviceState state) {
         if (!state.equals(FreeDeviceState.UNAVAILABLE)) {
-            mAvailableDeviceQueue.add(device);
             mDvcMon.notifyDeviceStateChange(
                     device.getSerialNumber(),
                     DeviceAllocationState.Allocated,
                     DeviceAllocationState.Available);
+            mAvailableDeviceQueue.add(device);
         }
     }
 
