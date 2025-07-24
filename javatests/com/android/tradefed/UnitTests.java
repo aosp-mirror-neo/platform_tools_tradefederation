@@ -142,6 +142,7 @@ import com.android.tradefed.device.metric.HostStatsdMetricCollectorTest;
 import com.android.tradefed.device.metric.JavaCodeCoverageCollectorTest;
 import com.android.tradefed.device.metric.LogcatOnFailureCollectorTest;
 import com.android.tradefed.device.metric.LogcatTimingMetricCollectorTest;
+import com.android.tradefed.device.metric.ModulePerfettoCollectorTest;
 import com.android.tradefed.device.metric.PerfettoFilePullerCollectorTest;
 import com.android.tradefed.device.metric.PerfettoPullerMetricCollectorTest;
 import com.android.tradefed.device.metric.RebootReasonCollectorTest;
@@ -705,6 +706,7 @@ import org.junit.runners.Suite.SuiteClasses;
     JavaCodeCoverageCollectorTest.class,
     LogcatOnFailureCollectorTest.class,
     LogcatTimingMetricCollectorTest.class,
+    ModulePerfettoCollectorTest.class,
     PerfettoFilePullerCollectorTest.class,
     PerfettoPullerMetricCollectorTest.class,
     RebootReasonCollectorTest.class,
