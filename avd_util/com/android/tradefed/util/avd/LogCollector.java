@@ -143,7 +143,12 @@ public class LogCollector {
                                             Pattern.compile(".*launcher.*"),
                                             new AbstractMap.SimpleEntry<>(
                                                     "Assertion `mutex->__data.__owner == 0' failed",
-                                                    "cf_webrtc_crash")))
+                                                    "cf_webrtc_crash")),
+                                    new AbstractMap.SimpleEntry<>(
+                                            Pattern.compile(".*host_orchestrator.*"),
+                                            new AbstractMap.SimpleEntry<>(
+                                                    "RESOURCE_EXHAUSTED",
+                                                    "gcp_resource_exhausted")))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     /**

@@ -450,6 +450,7 @@ public class CommonLogRemoteFileUtil {
 
         File tempFile =
                 hOUtil.downloadLogFile("host_orchestrator", HostOrchestratorUtil.URL_HO_LOG);
+        GceManager.collectErrorSignatures(tempFile);
         GceManager.logAndDeleteFile(tempFile, "host_orchestrator", logger);
         // The following logs endpoints are only available using the Cuttlefish Host Image.
         if (options != null && options.useOxygenationDevice()) {
