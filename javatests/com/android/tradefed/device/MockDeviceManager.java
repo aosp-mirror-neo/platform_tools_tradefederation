@@ -208,7 +208,7 @@ public class MockDeviceManager implements IDeviceManager {
         }
         ITestDevice d = mAvailableDeviceQueue.poll(new TestDeviceMatcher(options));
         if (d != null) {
-            CLog.d("Allocating device '%s", d.getSerialNumber());
+            CLog.d("Allocating device '%s'", d.getSerialNumber());
             mDvcMon.notifyDeviceStateChange(
                     d.getSerialNumber(),
                     DeviceAllocationState.Available,
@@ -225,7 +225,9 @@ public class MockDeviceManager implements IDeviceManager {
                     device.getSerialNumber(),
                     DeviceAllocationState.Allocated,
                     DeviceAllocationState.Available);
+            CLog.d("Freeing device '%s'", device.getSerialNumber());
             mAvailableDeviceQueue.add(device);
+            CLog.d("Queue size: %d", mAvailableDeviceQueue.size());
         }
     }
 
