@@ -95,6 +95,7 @@ import org.mockito.stubbing.Answer;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -6366,26 +6367,7 @@ public class TestDeviceTest {
                     protected File getBugreportzInternal() {
                         return null;
                     }
-
-                    @Override
-                    public IFileEntry getFileEntry(String path) throws DeviceNotAvailableException {
-                        return entryMock;
-                    }
-
-                    @Override
-                    public File pullFile(String remoteFilePath, int userId)
-                            throws DeviceNotAvailableException {
-                        try {
-                            // Return an empty zip file for the partial bugreportz
-                            return FileUtil.createTempFile("bugreportz-test", ".zip");
-                        } catch (IOException e) {
-                            throw new RuntimeException();
-                        }
-                    }
                 };
-        IFileEntry childNode = mock(IFileEntry.class);
-        when(entryMock.getChildren(false)).thenReturn(Arrays.asList(childNode));
-        when(childNode.getName()).thenReturn("bugreport-test-partial.zip");
         FileInputStreamSource f = null;
 
         try {
@@ -6468,6 +6450,21 @@ public class TestDeviceTest {
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
+                    public CommandResult executeShellV2Command(
+                            String command,
+                            File pipeAsInput,
+                            OutputStream pipeToOutput,
+                            final long maxTimeoutForCommand,
+                            final TimeUnit timeUnit,
+                            int retryAttempts)
+                            throws DeviceNotAvailableException {
+                        CommandResult res = new CommandResult();
+                        res.setStatus(CommandStatus.SUCCESS);
+                        res.setStdout("This is a test");
+                        return res;
+                    }
+
+                    @Override
                     public int getApiLevel() throws DeviceNotAvailableException {
                         return 19;
                     }
@@ -6516,15 +6513,15 @@ public class TestDeviceTest {
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
-                    public void executeShellCommand(
+                    public CommandResult executeShellV2Command(
                             String command,
-                            IShellOutputReceiver receiver,
-                            long maxTimeToOutputShellResponse,
-                            TimeUnit timeUnit,
+                            File pipeAsInput,
+                            OutputStream pipeToOutput,
+                            final long maxTimeoutForCommand,
+                            final TimeUnit timeUnit,
                             int retryAttempts)
                             throws DeviceNotAvailableException {
-                        String fakeRep = expectedOutput;
-                        receiver.addOutput(fakeRep.getBytes(), 0, fakeRep.getBytes().length);
+                        throw new DeviceNotAvailableException("test", "serial");
                     }
 
                     @Override
@@ -6532,15 +6529,13 @@ public class TestDeviceTest {
                         return 22;
                     }
                 };
-
-        // FIXME: this isn't actually causing a DeviceNotAvailableException to be thrown
-        doThrow(new DeviceNotAvailableException("test", "serial"))
-                .when(mMockRecovery)
-                .recoverDevice(Mockito.eq(mMockStateMonitor), Mockito.eq(false));
-
-        assertEquals(
-                expectedOutput,
-                StreamUtil.getStringFromStream(mTestDevice.getBugreport().createInputStream()));
+        InputStreamSource res = null;
+        try {
+            res = mTestDevice.getBugreport();
+            assertEquals(0, res.size());
+        } finally {
+            StreamUtil.cancel(res);
+        }
     }
 
     @Test
@@ -6548,12 +6543,11 @@ public class TestDeviceTest {
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
-                    public void executeShellCommand(
-                            String command,
-                            IShellOutputReceiver receiver,
-                            long maxTimeToOutputShellResponse,
-                            TimeUnit timeUnit,
-                            int retryAttempts)
+                    public CommandResult executeAdbV2Command(
+                            long timeout,
+                            Map<String, String> envMap,
+                            int retryAttempts,
+                            String... cmdArgs)
                             throws DeviceNotAvailableException {
                         throw new DeviceNotAvailableException("test", "serial");
                     }
@@ -6569,21 +6563,25 @@ public class TestDeviceTest {
                     }
                 };
 
-        assertEquals(0, mTestDevice.getBugreport().size());
+        InputStreamSource res = null;
+        try {
+            res = mTestDevice.getBugreport();
+            assertEquals(0, res.size());
+        } finally {
+            StreamUtil.cancel(res);
+        }
     }
 
     @Test
     public void testGetBugreport_deviceUnavail_fallback() throws Exception {
-        final IFileEntry fakeEntry = mock(IFileEntry.class);
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
-                    public void executeShellCommand(
-                            String command,
-                            IShellOutputReceiver receiver,
-                            long maxTimeToOutputShellResponse,
-                            TimeUnit timeUnit,
-                            int retryAttempts)
+                    public CommandResult executeAdbV2Command(
+                            long timeout,
+                            Map<String, String> envMap,
+                            int retryAttempts,
+                            String... cmdArgs)
                             throws DeviceNotAvailableException {
                         throw new DeviceNotAvailableException("test", "serial");
                     }
@@ -6592,26 +6590,7 @@ public class TestDeviceTest {
                     public int getApiLevel() throws DeviceNotAvailableException {
                         return 24;
                     }
-
-                    @Override
-                    public IFileEntry getFileEntry(String path) throws DeviceNotAvailableException {
-                        return fakeEntry;
-                    }
-
-                    @Override
-                    public File pullFile(String remoteFilePath) throws DeviceNotAvailableException {
-                        try {
-                            return FileUtil.createTempFile("bugreport", ".txt");
-                        } catch (IOException e) {
-                            return null;
-                        }
-                    }
                 };
-        List<IFileEntry> list = new ArrayList<>();
-        list.add(fakeEntry);
-        when(fakeEntry.getChildren(false)).thenReturn(list);
-        when(fakeEntry.getName()).thenReturn("bugreport-NYC-2016-08-17-10-17-00.tmp");
-
         InputStreamSource res = null;
         try {
             res = mTestDevice.getBugreport();
@@ -6624,37 +6603,27 @@ public class TestDeviceTest {
     /** Unit test for {@link NativeDevice#getBugreportz()}. */
     @Test
     public void testGetBugreportz() throws IOException {
+        String fakeRep = "OK:/data/0/com.android.shell/bugreports/bugreport1970-10-27.zip";
+        File tmpFile = File.createTempFile("bug", ".zip");
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
-                    public void executeShellCommand(
-                            String command,
-                            IShellOutputReceiver receiver,
-                            long maxTimeToOutputShellResponse,
-                            TimeUnit timeUnit,
-                            int retryAttempts)
-                            throws DeviceNotAvailableException {
-                        String fakeRep =
-                                "OK:/data/0/com.android.shell/bugreports/bugreport1970-10-27.zip";
-                        receiver.addOutput(fakeRep.getBytes(), 0, fakeRep.getBytes().length);
-                    }
-
-                    @Override
-                    public boolean doesFileExist(String destPath)
-                            throws DeviceNotAvailableException {
-                        return true;
-                    }
-
-                    @Override
-                    public boolean pullFile(String remoteFilePath, File localFile)
-                            throws DeviceNotAvailableException {
-                        return true;
-                    }
-
-                    @Override
-                    public void deleteFile(String deviceFilePath)
-                            throws DeviceNotAvailableException {
-                        assertEquals("/data/0/com.android.shell/bugreports/*", deviceFilePath);
+                    public CommandResult executeAdbV2Command(
+                            long timeout,
+                            Map<String, String> envMap,
+                            int retryAttempts,
+                            String... cmdArgs) {
+                        CommandResult res = new CommandResult();
+                        try {
+                            FileWriter writer = new FileWriter(tmpFile);
+                            writer.write(fakeRep);
+                            writer.flush();
+                        } catch (java.lang.Exception e) {
+                            res.setStatus(CommandStatus.FAILED);
+                            return res;
+                        }
+                        res.setStatus(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -6665,9 +6634,10 @@ public class TestDeviceTest {
         FileInputStreamSource f = null;
         try {
             f = (FileInputStreamSource) mTestDevice.getBugreportz();
-            assertNotNull(f);
-            assertTrue(f.createInputStream().available() == 0);
+            assertNotNull(tmpFile);
+            assertEquals(tmpFile.length(), fakeRep.length());
         } finally {
+            FileUtil.deleteFile(tmpFile);
             StreamUtil.cancel(f);
             if (f != null) {
                 f.cleanFile();

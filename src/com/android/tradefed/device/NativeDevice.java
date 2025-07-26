@@ -2446,9 +2446,17 @@ public class NativeDevice
     public CommandResult executeAdbV2Command(
             long timeout, Map<String, String> envMap, String... cmdArgs)
             throws DeviceNotAvailableException {
+        return executeAdbV2Command(timeout, envMap, MAX_RETRY_ATTEMPTS, cmdArgs);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeAdbV2Command(
+            long timeout, Map<String, String> envMap, int retryAttempts, String... cmdArgs)
+            throws DeviceNotAvailableException {
         final String[] fullCmd = buildAdbCommand(cmdArgs);
         AdbAction adbAction = new AdbAction(timeout, fullCmd, "shell".equals(cmdArgs[0]), envMap);
-        performDeviceAction(String.format("adb %s", cmdArgs[0]), adbAction, MAX_RETRY_ATTEMPTS);
+        performDeviceAction(String.format("adb %s", cmdArgs[0]), adbAction, retryAttempts);
         return adbAction.mResult;
     }
 

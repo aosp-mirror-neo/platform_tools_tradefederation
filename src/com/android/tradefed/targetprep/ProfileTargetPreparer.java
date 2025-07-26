@@ -295,6 +295,7 @@ public abstract class ProfileTargetPreparer extends BaseTargetPreparer {
         testInfo.properties().remove(RUN_TESTS_AS_USER_KEY);
         if (profileIdToDelete != -1) {
             testInfo.getDevice().removeUser(profileIdToDelete);
+            profileIdToDelete = -1;
         }
 
         if (mDeviceOwnerToSet != null) {

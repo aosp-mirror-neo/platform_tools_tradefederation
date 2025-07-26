@@ -22,6 +22,7 @@ import static com.android.tradefed.util.avd.HostOrchestratorClient.Operation;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.StartCVDRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateBugreportRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateSnapshotRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDeleteSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationResultRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildPowerwashRequest;
@@ -81,6 +82,13 @@ public class HostOrchestratorClientTest {
                         "https://ho.test", "group", "name", new CreateSnapshotRequest("req"));
 
         Assert.assertEquals("https://ho.test/cvds/group/name/snapshots", r.uri().toString());
+    }
+
+    @Test
+    public void testBuildDeleteSnapshotRequest() throws Exception {
+        HttpRequest r = buildDeleteSnapshotRequest("https://ho.test", "id-1");
+
+        Assert.assertEquals("https://ho.test/snapshots/id-1", r.uri().toString());
     }
 
     @Test
