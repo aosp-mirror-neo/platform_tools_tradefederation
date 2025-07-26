@@ -101,7 +101,11 @@ public class InspectionUtil {
                                     InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_WEBRTC_CRASH),
                             new AbstractMap.SimpleEntry<>(
                                     "fetch_cvd_failure_artifact_not_found",
-                                    InfraErrorIdentifier.ARTIFACT_NOT_FOUND))
+                                    InfraErrorIdentifier.ARTIFACT_NOT_FOUND),
+                            new AbstractMap.SimpleEntry<>(
+                                    "gcp_resource_exhausted",
+                                    InfraErrorIdentifier
+                                            .CUTTLEFISH_LAUNCH_FAILURE_GCP_RESOURCE_EXHAUSTED))
                     .collect(
                             Collectors.toMap(
                                     Map.Entry::getKey,
