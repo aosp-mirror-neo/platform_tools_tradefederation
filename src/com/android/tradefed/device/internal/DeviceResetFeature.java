@@ -212,6 +212,8 @@ public class DeviceResetFeature implements IRemoteFeature, IConfigurationReceive
         if (connection instanceof AdbSshConnection) {
             return ((AdbSshConnection) connection).powerwashGce(user, offset);
         }
-        return new CommandResult(CommandStatus.EXCEPTION);
+        CommandResult result = new CommandResult(CommandStatus.EXCEPTION);
+        result.setStderr("Not implemented");
+        return result;
     }
 }
