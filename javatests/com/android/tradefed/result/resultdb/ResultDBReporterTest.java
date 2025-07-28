@@ -37,6 +37,7 @@ import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.result.skipped.SkipManager;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
@@ -410,6 +411,8 @@ public class ResultDBReporterTest {
                 new LogFile("/tmp/test-run.log", getLogUrl("test-run.log"), LogDataType.TEXT);
         LogFile invocationLog =
                 new LogFile("/tmp/invocation.log", getLogUrl("invocation.log"), LogDataType.PNG);
+        LogFile newLog = new LogFile("/tmp/new.log", getLogUrl("new.log"), LogDataType.TEXT);
+        LogFile invalidLog = new LogFile("", getLogUrl("invalid.log"), LogDataType.TEXT);
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
@@ -419,12 +422,16 @@ public class ResultDBReporterTest {
                 .withInvocationLog(invocationLog)
                 .simulateInvocation(mReporter);
         // simulate the updateStoragePath called from AnTS Result reporter.
-        mReporter.uploadStoragePath("18274/stub/inv_9000/test.log_9000.dat", "/bigstore/test/test.log");
+        mReporter.uploadStoragePath("18274/stub/inv_9000/test.log_9000.dat", "/bigstore/test/test.log", testLog);
         mReporter.uploadStoragePath(
-                "18274/stub/inv_9000/test-run.log_9000.dat", "/bigstore/test/test-run.log");
+                "18274/stub/inv_9000/test-run.log_9000.dat", "/bigstore/test/test-run.log", testRunLog);
         mReporter.uploadStoragePath(
-                "18274/stub/inv_9000/invocation.log_9000.dat", "/bigstore/test/invocation.log");
-
+                "18274/stub/inv_9000/invocation.log_9000.dat", "/bigstore/test/invocation.log", invocationLog);
+        // uploadStoragePath called with unseen resource ID.
+        mReporter.uploadStoragePath("18274/stub/inv_9000/new.log_9000.dat", "/bigstore/test/new.log", newLog);
+        // uploadStoragePath called with invalid storage path.
+        mReporter.uploadStoragePath("18274/stub/inv_9000/invalid.log_9000.dat", "/bigstore/", invalidLog);
+        // Verify the artifacts are uploaded to ResultDB.
         assertThat(mReporter.mRecorder.getArtifacts())
                 .containsExactly(
                         Artifact.newBuilder()
@@ -450,6 +457,15 @@ public class ResultDBReporterTest {
                                 .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
                                 .setContentType("image/png")
                                 .setGcsUri("gs://test/invocation.log")
+                                .build(),
+                        Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/new.log_9000.dat")
+                                .setContentType("text/plain")
+                                .setGcsUri("gs://test/new.log")
+                                .build(),
+                         Artifact.newBuilder()
+                                .setArtifactId("18274/stub/inv_9000/invalid.log_9000.dat")
+                                .setContents(ByteString.EMPTY)
                                 .build());
     }
 

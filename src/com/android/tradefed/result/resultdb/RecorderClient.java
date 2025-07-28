@@ -31,6 +31,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -185,7 +186,7 @@ public class RecorderClient implements IRecorderClient {
     }
 
     @Override
-    public void uploadTestResult(TestResult result) {
+    public void enqueueTestResult(TestResult result) {
         try {
             mTestResultChannel.enqueue(result);
         } catch (InterruptedException e) {
@@ -194,11 +195,20 @@ public class RecorderClient implements IRecorderClient {
     }
 
     @Override
-    public void uploadArtifact(Artifact artifact) {
+    public void enqueueArtifact(Artifact artifact) {
         try {
             mArtifactChannel.enqueue(artifact);
         } catch (InterruptedException e) {
             CLog.e("Failed to enqueue artifact: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uploadArtifact(Artifact artifact) {
+        try {
+            batchUploadArtifacts(ImmutableList.of(artifact));
+        } catch (StatusRuntimeException e) {
+            CLog.e("Failed to upload artifact: " + e.getMessage());
         }
     }
 

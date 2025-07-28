@@ -102,6 +102,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -358,6 +359,12 @@ public class ResultReporter
     private Multimap<String, LogAssociation> mLogAssociations =
             Multimaps.synchronizedMultimap(HashMultimap.create());
 
+    // Queue to store log associations received before invocationStarted.
+    private ConcurrentLinkedQueue<LogFile> mEarlyAssociations = new ConcurrentLinkedQueue<>();
+
+    // Set to true if the invocationEnded is called.
+    private boolean mInvocationEnded = false;
+
     // Legacy test result it for interacting with v2 log upload api. We need this id
     // to ensure compatibility with logs uploaded using the legacy v2 api.
     private long mLegacyResultId;
@@ -536,6 +543,19 @@ public class ResultReporter
                             "You must either pass both invocation id and work unit id, or pass"
                                     + " none");
                 }
+
+                // Add early associations to the mLogAssociations for later upload.
+                LogFile log;
+                while ((log = mEarlyAssociations.poll()) != null) {
+                    mLogAssociations.put(
+                            mWorkUnitId,
+                            new LogAssociation(
+                                    mInvocation,
+                                    mWorkUnitId,
+                                    mCurrentTestResult,
+                                    mLegacyResultId,
+                                    log));
+                }
             } catch (GeneralSecurityException | IOException e) {
                 mDisable = true;
                 if (mClient != null) {
@@ -680,6 +700,7 @@ public class ResultReporter
         if (mDisable) {
             return;
         }
+        mInvocationEnded = true;
         long invocationEnd = System.currentTimeMillis();
         try (CloseableTraceScope end = new CloseableTraceScope("ants:invocationEnded")) {
             if (mEnableSponge && mSpongeInvocationId != null) {
@@ -1391,7 +1412,28 @@ public class ResultReporter
             return;
         }
         if (mWorkUnits == null) {
-            CLog.d("Workunit isn't initialized yet.");
+            // InvocationStarted is not called and the work unit ID is not known.
+            // We save these early association to memory and add them to the mLogAssociations map
+            // when invocation is started.
+            CLog.v("Received early association %s %s %s", dataName, log.getPath(), log.getUrl());
+            mEarlyAssociations.add(log);
+            return;
+        }
+        if (mInvocationEnded) {
+            // InvocationEnded is called. There will no more calls to upload log associations in
+            // mLogAssociations.
+            // So we upload the log association directly here.
+            CLog.v(
+                    "Received association after invocation ended %s %s %s",
+                    dataName, log.getPath(), log.getUrl());
+            LogAssociation logAssociation =
+                    new LogAssociation(
+                            mInvocation, mWorkUnitId, mCurrentTestResult, mLegacyResultId, log);
+            try {
+                uploadLogAssociations(new ArrayList<>(Arrays.asList(logAssociation)));
+            } catch (IOException e) {
+                CLog.e(e);
+            }
             return;
         }
         CLog.v("Received association %s %s %s", dataName, log.getPath(), log.getUrl());
@@ -1852,7 +1894,7 @@ public class ResultReporter
                 result.add(property);
             }
         }
-        for (Property migrationProperty: mMigrationTestProperties) {
+        for (Property migrationProperty : mMigrationTestProperties) {
             result.add(migrationProperty);
         }
         return result;
@@ -1941,7 +1983,8 @@ public class ResultReporter
                         mClient.getTestArtifact(
                                 mInvocation.getInvocationId(), association.getResourceId());
                 String storagePath = artifact.getStoragePath();
-                rdbReporter.uploadStoragePath(association.getResourceId(), storagePath);
+                rdbReporter.uploadStoragePath(
+                        association.getResourceId(), storagePath, association.getLog());
             }
         }
     }
