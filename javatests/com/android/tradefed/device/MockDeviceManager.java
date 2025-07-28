@@ -196,7 +196,7 @@ public class MockDeviceManager implements IDeviceManager {
 
     /** {@inheritDoc} */
     @Override
-    public ITestDevice allocateDevice(IDeviceSelection options, boolean isTemporary) {
+    public synchronized ITestDevice allocateDevice(IDeviceSelection options, boolean isTemporary) {
         if (mGceDeviceRequested) {
             ((DeviceSelectionOptions) options).setGceDeviceRequested(true);
         }
