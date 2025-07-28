@@ -427,7 +427,9 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
             if (mMountFileSystemCheckEnabled) {
                 String fileSystem = getFileSystem(externalStore);
                 if (Strings.isNullOrEmpty(fileSystem)) {
-                    CLog.w("Failed to get the fileSystem of '%s'", externalStore);
+                    CLog.w(
+                            "Failed to get the fileSystem of '%s' on device %s",
+                            externalStore, getIDevice().getSerialNumber());
                     continue;
                 }
                 if (TMPFS_MAGIC.contains(fileSystem)) {
@@ -772,9 +774,13 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
             return null;
         }
         String output = receiver.getOutput().trim();
-        CLog.v("'%s' returned %s", statCommand, output);
+        CLog.v(
+                "'%s' returned %s on device %s",
+                statCommand, output, getIDevice().getSerialNumber());
         if (Longs.tryParse(output) == null && Longs.tryParse(output, 16) == null) {
-            CLog.w("stat command return value should be a number. output: %s", output);
+            CLog.w(
+                    "stat on command return value should be a number. output: %s (device %s)",
+                    output, getIDevice().getSerialNumber());
             return null;
         }
         return output;
