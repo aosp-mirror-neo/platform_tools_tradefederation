@@ -355,7 +355,7 @@ public class RunUtilTest {
         when(mockRunnable.run()).thenReturn(Boolean.FALSE);
 
         long maxTime = 30;
-        assertFalse(runUtil.runEscalatingTimedRetry(1, 1, 512, maxTime, mockRunnable));
+        assertFalse(runUtil.runEscalatingTimedRetry(10, 1, 512, maxTime, mockRunnable));
         assertEquals(maxTime, mSleepTime);
         verify(mockRunnable, Mockito.atLeast(3)).run();
     }

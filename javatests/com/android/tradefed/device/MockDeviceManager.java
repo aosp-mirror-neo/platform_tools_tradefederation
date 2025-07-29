@@ -196,7 +196,7 @@ public class MockDeviceManager implements IDeviceManager {
 
     /** {@inheritDoc} */
     @Override
-    public synchronized ITestDevice allocateDevice(IDeviceSelection options, boolean isTemporary) {
+    public ITestDevice allocateDevice(IDeviceSelection options, boolean isTemporary) {
         if (mGceDeviceRequested) {
             ((DeviceSelectionOptions) options).setGceDeviceRequested(true);
         }
@@ -206,28 +206,34 @@ public class MockDeviceManager implements IDeviceManager {
         if (mStubDeviceRequested) {
             ((DeviceSelectionOptions) options).setStubEmulatorRequested(true);
         }
-        ITestDevice d = mAvailableDeviceQueue.poll(new TestDeviceMatcher(options));
-        if (d != null) {
-            CLog.d("Allocating device '%s'", d.getSerialNumber());
-            mDvcMon.notifyDeviceStateChange(
-                    d.getSerialNumber(),
-                    DeviceAllocationState.Available,
-                    DeviceAllocationState.Allocated);
+        CLog.d("Polling mAvailableDeviceQueue: size: %d",
+                mAvailableDeviceQueue.size());
+        synchronized (mAvailableDeviceQueue) {
+            ITestDevice d = mAvailableDeviceQueue.poll(new TestDeviceMatcher(options));
+            if (d != null) {
+                CLog.d("Allocating device '%s'", d.getSerialNumber());
+                mDvcMon.notifyDeviceStateChange(
+                        d.getSerialNumber(),
+                        DeviceAllocationState.Available,
+                        DeviceAllocationState.Allocated);
+            }
+            return d;
         }
-        return d;
     }
 
     /** {@inheritDoc} */
     @Override
     public void freeDevice(ITestDevice device, FreeDeviceState state) {
         if (!state.equals(FreeDeviceState.UNAVAILABLE)) {
-            mDvcMon.notifyDeviceStateChange(
-                    device.getSerialNumber(),
-                    DeviceAllocationState.Allocated,
-                    DeviceAllocationState.Available);
-            CLog.d("Freeing device '%s'", device.getSerialNumber());
-            mAvailableDeviceQueue.add(device);
-            CLog.d("Queue size: %d", mAvailableDeviceQueue.size());
+            synchronized (mAvailableDeviceQueue) {
+                mDvcMon.notifyDeviceStateChange(
+                        device.getSerialNumber(),
+                        DeviceAllocationState.Allocated,
+                        DeviceAllocationState.Available);
+                CLog.d("Freeing device '%s'", device.getSerialNumber());
+                mAvailableDeviceQueue.add(device);
+                CLog.d("Queue size: %d", mAvailableDeviceQueue.size());
+            }
         }
     }
 

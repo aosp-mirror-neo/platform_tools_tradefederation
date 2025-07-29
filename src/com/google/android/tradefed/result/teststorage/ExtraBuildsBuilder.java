@@ -28,7 +28,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -55,15 +55,15 @@ final class ExtraBuildsBuilder {
     /**
      * Creates an extra builds field for an invocation. Takes the current extra builds and add the
      * builds found in the extra-builds command line argument. Will only add builds that are missing
-     * from the invocation.
+     * from the invocation. If there are no changes, returns an empty list.
      */
     public List<BuildDescriptor> build(List<BuildDescriptor> currentBuilds) {
         if (extraBuildsAttribute.isEmpty()) {
             return Collections.emptyList();
         }
 
-        Set<BuildDescriptor> newBuilds = new HashSet<>();
-        Set<BuildDescriptor> result = new HashSet<>();
+        Set<BuildDescriptor> newBuilds = new LinkedHashSet<>();
+        Set<BuildDescriptor> result = new LinkedHashSet<>();
         if (currentBuilds != null) {
             result.addAll(currentBuilds);
         }
@@ -79,6 +79,12 @@ final class ExtraBuildsBuilder {
             CLog.e("%s", e);
         }
 
+        if (newBuilds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (newBuilds.stream().allMatch(result::contains)) {
+            return Collections.emptyList();
+        }
         result.addAll(newBuilds);
         return Collections.unmodifiableList(result.stream().collect(toList()));
     }
