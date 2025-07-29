@@ -139,6 +139,9 @@ public class AdbSshConnection extends AdbTcpConnection {
                             TimeUnit.MILLISECONDS.toSeconds(queueTime));
                 }
                 launchGce(getBuildInfo(), getAttributes());
+                CLog.d(
+                        "launchGce finished in %sms, max wait time is %sms",
+                        getCurrentTime() - startTime, remainingTime);
                 remainingTime = remainingTime - (getCurrentTime() - startTime);
             } finally {
                 if (GlobalConfiguration.getInstance()
