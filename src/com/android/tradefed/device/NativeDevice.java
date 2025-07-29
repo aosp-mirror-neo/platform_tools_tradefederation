@@ -6163,8 +6163,13 @@ public class NativeDevice
         try {
             // Use default 5 minutes freshness
             Future<Integer> batteryFuture = getIDevice().getBattery();
-            // Get cached value or wait up to 500ms for battery level query
-            return batteryFuture.get(500, TimeUnit.MILLISECONDS);
+            // Get cached value or wait up to 9100ms for battery level query.
+            // The computation can be inferred from BatteryFetcher#initiateBatteryQuery:
+            //  - Maximum time to get model property (INITIAL_GET_PROP_TIMEOUT_MS = 5s)
+            //  - Timeout of querying sysfs (BATTERY_TIMEOUT_MS = 2s)
+            //  - Timeout of querying dumpsys as backup (BATTERY_TIMEOUT_MS = 2s)
+            //  - 100ms of buffer to run additional processing
+            return batteryFuture.get(9100, TimeUnit.MILLISECONDS);
         } catch (InterruptedException
                 | ExecutionException
                 | java.util.concurrent.TimeoutException e) {
