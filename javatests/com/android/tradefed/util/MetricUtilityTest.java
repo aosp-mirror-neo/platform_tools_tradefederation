@@ -528,6 +528,8 @@ public class MetricUtilityTest {
                         "third_test_metric-total:6.00\n" +
                         "third_test_metric-metric-count:3.00\n" +
                         "third_test_metric-last-first-diff:2.00\n" +
+                        "third_test_metric-mad:1.00\n" +
+                        "third_test_metric-mad-coeff:50.00\n" +
                         "\n" +
                         "\n";
             case OUTPUT_5:
@@ -542,6 +544,8 @@ public class MetricUtilityTest {
                         "third_test_metric-total:6.00\n" +
                         "third_test_metric-metric-count:3.00\n" +
                         "third_test_metric-last-first-diff:2.00\n" +
+                        "third_test_metric-mad:1.00\n" +
+                        "third_test_metric-mad-coeff:50.00\n" +
                         "third_test_metric-p50:2.00\n" +
                         "third_test_metric-p90:2.80\n" +
                         "third_test_metric-p99:2.98\n" +
@@ -559,6 +563,8 @@ public class MetricUtilityTest {
                         "first_test_metric-total:4.40\n" +
                         "first_test_metric-metric-count:2.00\n" +
                         "first_test_metric-last-first-diff:-1.40\n" +
+                        "first_test_metric-mad:0.70\n" +
+                        "first_test_metric-mad-coeff:31.82\n" +
                         "\n" +
                         "\n";
             case OUTPUT_7:
@@ -573,6 +579,8 @@ public class MetricUtilityTest {
                         "first_test_metric-total:2.90\n" +
                         "first_test_metric-metric-count:1.00\n" +
                         "first_test_metric-last-first-diff:2.90\n" +
+                        "first_test_metric-mad:0.00\n" +
+                        "first_test_metric-mad-coeff:0.00\n" +
                         "\n" +
                         "\n" +
                         "pkg#test2\n" +
@@ -586,6 +594,8 @@ public class MetricUtilityTest {
                         "second_test_metric-total:1.50\n" +
                         "second_test_metric-metric-count:1.00\n" +
                         "second_test_metric-last-first-diff:1.50\n" +
+                        "second_test_metric-mad:0.00\n" +
+                        "second_test_metric-mad-coeff:0.00\n" +
                         "\n" +
                         "\n";
             case OUTPUT_8:

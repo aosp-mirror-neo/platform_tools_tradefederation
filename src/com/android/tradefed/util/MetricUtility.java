@@ -61,6 +61,8 @@ public class MetricUtility {
     private static final String STATS_KEY_TOTAL = "total";
     private static final String STATS_KEY_COUNT = "metric-count";
     private static final String STATS_KEY_DIFF = "last-first-diff";
+    private static final String STATS_KEY_MAD = "mad";
+    private static final String STATS_KEY_MAD_COEFF = "mad-coeff";
     private static final String STATS_KEY_PERCENTILE_PREFIX = "p";
     private static final String STATS_KEY_SEPARATOR = "-";
     private static final Joiner CLASS_METHOD_JOINER = Joiner.on("#").skipNulls();
@@ -280,6 +282,12 @@ public class MetricUtility {
         // present.
         double diff = (values.size() > 1) ? (values.get(values.size() - 1) - values.get(0))
                 : values.get(0);
+        // Calculate median absolute deviation
+        List<Double> absoluteDeviations = values.stream()
+                .map(v -> Math.abs(v - median))
+                .collect(Collectors.toList());
+        double mad = Quantiles.median().compute(absoluteDeviations);
+        double madCoefficient = (mad / median) * 100;
 
         stats.put(STATS_KEY_MIN, Collections.min(values));
         stats.put(STATS_KEY_MAX, Collections.max(values));
@@ -290,6 +298,8 @@ public class MetricUtility {
         stats.put(STATS_KEY_TOTAL, sum);
         stats.put(STATS_KEY_COUNT, count);
         stats.put(STATS_KEY_DIFF, diff);
+        stats.put(STATS_KEY_MAD, mad);
+        stats.put(STATS_KEY_MAD_COEFF, madCoefficient);
         percentileStat
                 .entrySet()
                 .stream()
