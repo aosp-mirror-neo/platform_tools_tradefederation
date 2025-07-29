@@ -1849,6 +1849,9 @@ public class ResultReporter
                 result.add(property);
             }
         }
+        for (Property migrationProperty: mMigrationTestProperties) {
+            result.add(migrationProperty);
+        }
         return result;
     }
 
