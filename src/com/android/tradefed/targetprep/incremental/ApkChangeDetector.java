@@ -22,9 +22,11 @@ import com.android.ddmlib.MultiLineReceiver;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.log.LogUtil.CLog;
+
 import com.google.common.base.Splitter;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hashing;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -33,6 +35,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.StringTokenizer;
+
 import javax.annotation.Nullable;
 
 /**
@@ -359,6 +362,16 @@ public class ApkChangeDetector {
     @VisibleForTesting
     boolean ensureIncrementalSetupSupported(ITestDevice device)
         throws DeviceNotAvailableException {
+        if (device.isVisibleBackgroundUsersSupported()) {
+            // Skip incremental setup in this case, otherwise when the test runs as a visible
+            // background user and if the app is already installed for the current user, it will
+            // skip the installation for the visible background user, causing the test to fail.
+            // See b/433548567.
+            CLog.d(
+                    "Skip incremental setup because this device supports visible background"
+                            + " users");
+            return false;
+        }
         if (incrementalSetupSupportEnsureResult != null) {
             return incrementalSetupSupportEnsureResult;
         }
