@@ -5241,37 +5241,17 @@ public class TestDeviceTest {
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
-                    public File pullFile(String remoteFilePath) throws DeviceNotAvailableException {
-                        assertEquals("/data/local/tmp/display_0.png", remoteFilePath);
-                        return new File("fakewhatever");
-                    }
-
-                    @Override
-                    byte[] convertPngFile(File pngFile, String format, boolean rescale) {
-                        return "image".getBytes();
+                    protected boolean performDeviceAction(
+                            String actionDescription, DeviceAction action, int retryAttempts)
+                            throws DeviceNotAvailableException {
+                        return false;
                     }
                 };
-        CommandResult res = new CommandResult(CommandStatus.FAILED);
-        OutputStream outStream = null;
-        when(mMockRunUtil.runTimedCmd(
-                        120000L,
-                        outStream,
-                        outStream,
-                        "adb",
-                        "-s",
-                        "serial",
-                        "shell",
-                        "screencap",
-                        "-p",
-                        "-d",
-                        "0",
-                        "/data/local/tmp/display_0.png"))
-                .thenReturn(res);
-        InputStreamSource data = mTestDevice.getScreenshot();
-        assertNotNull(data);
+        InputStreamSource res = mTestDevice.getScreenshot();
+        assertNotNull(res);
         assertEquals(
                 "Error: device reported null for screenshot.",
-                StreamUtil.getStringFromStream(data.createInputStream()));
+                StreamUtil.getStringFromStream(res.createInputStream()));
     }
 
     /** Test for {@link TestDevice#getScreenshot()} when action succeed. */
@@ -5280,32 +5260,17 @@ public class TestDeviceTest {
         mTestDevice =
                 new TestableTestDevice() {
                     @Override
-                    public File pullFile(String remoteFilePath) throws DeviceNotAvailableException {
-                        assertEquals("/data/local/tmp/display_0.png", remoteFilePath);
-                        return new File("fakewhatever");
+                    protected boolean performDeviceAction(
+                            String actionDescription, DeviceAction action, int retryAttempts)
+                            throws DeviceNotAvailableException {
+                        return true;
                     }
 
                     @Override
-                    byte[] convertPngFile(File pngFile, String format, boolean rescale) {
+                    byte[] compressRawImage(RawImage rawImage, String format, boolean rescale) {
                         return "image".getBytes();
                     }
                 };
-        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
-        OutputStream outStream = null;
-        when(mMockRunUtil.runTimedCmd(
-                        120000L,
-                        outStream,
-                        outStream,
-                        "adb",
-                        "-s",
-                        "serial",
-                        "shell",
-                        "screencap",
-                        "-p",
-                        "-d",
-                        "0",
-                        "/data/local/tmp/display_0.png"))
-                .thenReturn(res);
         InputStreamSource data = mTestDevice.getScreenshot();
         assertNotNull(data);
         assertTrue(data instanceof ByteArrayInputStreamSource);
@@ -6006,11 +5971,6 @@ public class TestDeviceTest {
                     public File pullFile(String remoteFilePath) throws DeviceNotAvailableException {
                         assertEquals("/data/local/tmp/display_0.png", remoteFilePath);
                         return new File("fakewhatever");
-                    }
-
-                    @Override
-                    byte[] convertPngFile(File pngFile, String format, boolean rescale) {
-                        return "image".getBytes();
                     }
                 };
         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
