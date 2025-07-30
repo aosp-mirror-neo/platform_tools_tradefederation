@@ -92,6 +92,7 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
     private DeviceMetricData mTestData;
     private String mRunName;
     private String mTestName;
+    private boolean mIsDefaultCollection = false;
 
     /**
      * Variable for whether or not to skip the collection of one test case because it was filtered.
@@ -828,5 +829,15 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
     @Override
     public boolean isDisabledReceiver() {
         return mDisableReceiver;
+    }
+
+    @Override
+    public void enableDefaultMetricCollection() {
+        mIsDefaultCollection = true;
+    }
+
+    @Override
+    public boolean isDefaultMetricCollectionEnabled() {
+        return mIsDefaultCollection;
     }
 }

@@ -175,4 +175,35 @@ public interface IMetricCollector extends ILogSaverListener, IDisableable {
      * @throws DeviceNotAvailableException
      */
     public default void onTestModuleEnded() throws DeviceNotAvailableException {}
+
+    /**
+     * Allows collectors to enable default metrics collection. When default metric collection is
+     * enabled, the collector should only collect metrics when {@link
+     * #collectMetrics(MetricCollectionLevel, String)} is called.
+     */
+    public default void enableDefaultMetricCollection() {}
+
+    /** Whether the collector is collecting metrics as part of default metric collection. */
+    public default boolean isDefaultMetricCollectionEnabled() {
+        return false;
+    }
+
+    /**
+     * Callback to collect metrics/logs on demand. Should only be used when {@link
+     * #isDefaultMetricCollectionEnabled()} is true.
+     *
+     * @param level A {@link MetricCollectionLevel}, signalling the point of collection. This level
+     *     will be used by collectors to collect the relevant metrics/logs.
+     * @param name The name that should be used for the collected metric file
+     */
+    public default void collectMetrics(MetricCollectionLevel level, String name)
+            throws DeviceNotAvailableException {}
+
+    /** Enumeration representing the current level of Metric collection. */
+    public enum MetricCollectionLevel {
+        MODULE,
+        TEST_RUN,
+        TEST_CASE,
+        NULL // represents no collection
+    }
 }
