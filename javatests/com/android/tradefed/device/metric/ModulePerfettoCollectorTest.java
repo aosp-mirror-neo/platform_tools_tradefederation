@@ -80,7 +80,7 @@ public class ModulePerfettoCollectorTest {
     }
 
     @Test
-    public void testCollectOnModule() throws Exception {
+    public void testCollectOnModuleLevel() throws Exception {
         File fakeTrace = File.createTempFile("fake_trace", ".perfetto-trace");
         try {
             // Write some data to the file so it's not empty and is logged.
@@ -101,6 +101,34 @@ public class ModulePerfettoCollectorTest {
 
             assertEquals(
                     "perfetto-debug-trace_test_module_onTestModuleEnded_1", nameCaptor.getValue());
+        } finally {
+            fakeTrace.delete();
+        }
+    }
+
+    @Test
+    public void testCollectOnRunLevel() throws Exception {
+        // Set the flag to false to simulate run-level capture.
+        mCollector.setModuleLevelFlag(false);
+        File fakeTrace = File.createTempFile("fake_trace", ".perfetto-trace");
+        try {
+            // Write some data to the file so it's not empty and is logged.
+            try (FileOutputStream out = new FileOutputStream(fakeTrace)) {
+                out.write("some trace data".getBytes());
+            }
+
+            when(mMockPerfettoTraceRecorder.stopTrace(mMockDevice)).thenReturn(fakeTrace);
+
+            mCollector.onTestRunStart(new DeviceMetricData(mMockContext));
+            verify(mMockPerfettoTraceRecorder).startTrace(eq(mMockDevice), anyString(), any());
+
+            mCollector.onTestRunEnd(new DeviceMetricData(mMockContext), Collections.emptyMap());
+            verify(mMockPerfettoTraceRecorder).stopTrace(mMockDevice);
+
+            ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
+            verify(mMockListener).testLog(nameCaptor.capture(), eq(LogDataType.PERFETTO), any());
+
+            assertEquals("perfetto-debug-trace_test_module_onTestRunEnd_1", nameCaptor.getValue());
         } finally {
             fakeTrace.delete();
         }

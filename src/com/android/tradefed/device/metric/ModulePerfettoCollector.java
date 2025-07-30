@@ -21,6 +21,7 @@ import com.android.tradefed.config.Option;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.FileInputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.util.PerfettoTraceRecorder;
@@ -46,31 +47,58 @@ public class ModulePerfettoCollector extends BaseDeviceMetricCollector {
 
     // Minimum size of the trace file to be logged.
     private static final int MIN_LOG_SIZE = 10;
-
     @VisibleForTesting PerfettoTraceRecorder mPerfettoTraceRecorder = new PerfettoTraceRecorder();
-
     private Map<ITestDevice, Integer> mTraceCountMap = new LinkedHashMap<>();
     // Map of trace files and the proper name it should be logged with
     private Map<File, String> mTraceFilesMap = new LinkedHashMap();
+    private boolean mModuleLevelFlag = false;
 
     @Override
     public boolean captureModuleLevel() {
         return true;
     }
 
+    // Enable IDeviceActionReceiver by default for reboot events.
     public ModulePerfettoCollector() {
         setDisableReceiver(false);
+    }
+
+    public void setModuleLevelFlag(boolean levelFlag) {
+        mModuleLevelFlag = levelFlag;
+    }
+
+    public boolean isOnModuleLevel() {
+        return mModuleLevelFlag;
     }
 
     @Override
     public void onTestModuleStarted() throws DeviceNotAvailableException {
         CLog.d("ModulePerfettoCollector: onTestModuleStarted");
+        setModuleLevelFlag(true);
         startCollecting();
+    }
+
+    @Override
+    public void onTestRunStart(DeviceMetricData runData) {
+        CLog.d("ModulePerfettoCollector: onTestRunStart");
+        if (!isOnModuleLevel()) {
+            startCollecting();
+        }
+    }
+
+    @Override
+    public void onTestRunEnd(
+            DeviceMetricData runData, final Map<String, Metric> currentRunMetrics) {
+        CLog.d("ModulePerfettoCollector: onTestRunEnd");
+        if (!isOnModuleLevel()) {
+            stopCollecting("onTestRunEnd");
+        }
     }
 
     @Override
     public void onTestModuleEnded() throws DeviceNotAvailableException {
         CLog.d("ModulePerfettoCollector: onTestModuleEnded");
+        setModuleLevelFlag(false);
         stopCollecting("onTestModuleEnded");
     }
 
