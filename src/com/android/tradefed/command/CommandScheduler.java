@@ -493,11 +493,16 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
 
         private final IDeviceManager mDeviceManager;
         private boolean mDeviceReleased = false;
+        private boolean mMarkReleased = true;
         private Map<ITestDevice, FreeDeviceState> mDevicesStates = null;
 
-        FreeDeviceHandler(IDeviceManager deviceManager, IScheduledInvocationListener... listeners) {
+        FreeDeviceHandler(
+                IDeviceManager deviceManager,
+                boolean markRelease,
+                IScheduledInvocationListener... listeners) {
             super(listeners);
             mDeviceManager = deviceManager;
+            mMarkReleased = markRelease;
         }
 
         @Override
@@ -507,6 +512,9 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 return;
             }
             mDevicesStates = devicesStates;
+            if (mMarkReleased) {
+                context.markReleasedEarly();
+            }
             for (ITestDevice device : context.getDevices()) {
                 mDeviceManager.freeDevice(device, devicesStates.get(device));
             }
@@ -540,7 +548,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
 
         FreeNullDeviceHandler(
                 IDeviceManager deviceManager, IScheduledInvocationListener... listeners) {
-            super(deviceManager, listeners);
+            super(deviceManager, true, listeners);
             mDeviceManager = deviceManager;
         }
 
@@ -1391,7 +1399,9 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
             ExecutableCommand cmd = cmdDeviceEntry.getKey();
             try (CloseableTraceScope ignored = new CloseableTraceScope("startInvocation")) {
                 startInvocation(
-                        cmdDeviceEntry.getValue(), cmd, new FreeDeviceHandler(getDeviceManager()));
+                        cmdDeviceEntry.getValue(),
+                        cmd,
+                        new FreeDeviceHandler(getDeviceManager(), shouldMarkReleased()));
             }
             cmd.getCommandTracker().incrementScheduledCount();
             if (cmd.isLoopMode()
@@ -1940,7 +1950,11 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
         context.addAllocatedDevice(allocatedDevices);
         CLog.d("Executing '%s' on '%s'", cmdTracker.getArgs()[0], allocatedDevices);
         if (reservedDevices.isEmpty()) {
-            startInvocation(context, execCmd, listener, new FreeDeviceHandler(manager));
+            startInvocation(
+                    context,
+                    execCmd,
+                    listener,
+                    new FreeDeviceHandler(manager, shouldMarkReleased()));
         } else {
             // Free NullDevice only. Leave alone reserved devices.
             startInvocation(context, execCmd, listener, new FreeNullDeviceHandler(manager));
@@ -2707,5 +2721,9 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
     @Override
     public void setPrintSchedulingWarning(boolean print) {
         mPrintSchedulingWarning = print;
+    }
+
+    protected boolean shouldMarkReleased() {
+        return true;
     }
 }

@@ -122,6 +122,7 @@ public class CommandSchedulerTest {
     @Mock IKeyStoreClient mMockKeyStoreClient;
     private IInvocationContext mContext;
     private boolean mIsFirstInvoke = true; // For testRun_rescheduled()
+    private boolean mMarkReleased = true;
     @Captor private ArgumentCaptor<HashMap<String, ITestDevice>> devicesCapture;
 
     class TestableCommandScheduler extends CommandScheduler {
@@ -194,6 +195,11 @@ public class CommandSchedulerTest {
         @Override
         public synchronized CommandFileWatcher getCommandFileWatcher() {
             return mMockFileWatcher;
+        }
+
+        @Override
+        protected boolean shouldMarkReleased() {
+            return mMarkReleased;
         }
     }
 
@@ -814,6 +820,7 @@ public class CommandSchedulerTest {
      */
     @Test
     public void testDeviceReleasedEarly_conflict() throws Throwable {
+        mMarkReleased = false;
         String[] args = new String[] {"test"};
         mFakeDeviceManager.setNumDevices(1);
         assertTrue(mFakeDeviceManager.getQueueOfAvailableDeviceSize() == 1);
