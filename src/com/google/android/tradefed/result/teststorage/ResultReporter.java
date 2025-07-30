@@ -39,10 +39,12 @@ import com.android.tradefed.metrics.proto.MetricMeasurement;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ILogSaverListener;
+import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.ITestSummaryListener;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
+import com.android.tradefed.result.resultdb.ResultDBReporter;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.testtype.suite.ITestSuite;
@@ -58,6 +60,7 @@ import com.google.android.tradefed.build.AbLocalBuildProvider;
 import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
 import com.google.api.services.androidbuildinternal.v3.model.AconfigFlag;
 import com.google.api.services.androidbuildinternal.v3.model.AconfigFlags;
+import com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata;
 import com.google.api.services.androidbuildinternal.v3.model.BuildDescriptor;
 import com.google.api.services.androidbuildinternal.v3.model.DebugInfo;
 import com.google.api.services.androidbuildinternal.v3.model.Invocation;
@@ -1907,8 +1910,39 @@ public class ResultReporter
         if (logAssociations.isEmpty()) {
             return;
         }
+        // Obtain the ResultDB reporter from the configuration.
+        ResultDBReporter rdbReporter = null;
+        for (ITestInvocationListener listener : mConfiguration.getTestInvocationListeners()) {
+            if (listener instanceof ResultDBReporter) {
+                rdbReporter = (ResultDBReporter) listener;
+                break;
+            }
+        }
+
         try (CloseableTraceScope ignored = new CloseableTraceScope("uploadLogAssociations")) {
+            // UploadAssociations to AnTS. This call is blocking.
             mClient.uploadAssociations(logAssociations, mParallelLogUploadPool);
+        }
+
+        try (CloseableTraceScope ignored = new CloseableTraceScope("reportStoragePath")) {
+            if (rdbReporter == null) {
+                CLog.v("ResultDB reporter is null, skipping reporting storage path.");
+                return;
+            }
+            // Temporary solution to sent AnTS test artifact storage path to ResultDB, as part of
+            // the migration from AnTS to ResultDB (go/convergence-tr).
+            // TODO(beining): Remove this method once we can properly migrate AnTS artifacts to
+            // ResultDB.
+            for (LogAssociation association : logAssociations) {
+                if (!association.isSupported()) {
+                    continue;
+                }
+                BuildArtifactMetadata artifact =
+                        mClient.getTestArtifact(
+                                mInvocation.getInvocationId(), association.getResourceId());
+                String storagePath = artifact.getStoragePath();
+                rdbReporter.uploadStoragePath(association.getResourceId(), storagePath);
+            }
         }
     }
 

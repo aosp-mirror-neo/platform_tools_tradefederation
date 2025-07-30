@@ -67,7 +67,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -130,8 +130,8 @@ public class ResultDBReporter
     // No more log associations can be uploaded with in Result reporter after this set to true.
     private boolean mLogAssociationTerminated = false;
 
-    // Queue to store artifacts received before invocationStarted.
-    private ConcurrentLinkedQueue<Artifact> mEarlyArtifacts = new ConcurrentLinkedQueue<>();
+    // A map from resource ID to TestArtifact.
+    private Map<String, Artifact> mTestArtifacts = new ConcurrentHashMap<>();
 
     @Override
     public void setConfiguration(IConfiguration configuration) {
@@ -149,32 +149,18 @@ public class ResultDBReporter
             return;
         }
 
+        String resourceId = getAntsResourceId(logFile);
+        if (resourceId.isEmpty()) {
+            // Ignore logs with empty resource id.
+            return;
+        }
         String contentType = logFile.getType().getContentType();
         Artifact.Builder artifactBuilder =
-                Artifact.newBuilder()
-                        .setArtifactId(getArtifactId(logFile))
-                        .setContentType(contentType)
-                        .setContents(ByteString.EMPTY);
+                Artifact.newBuilder().setArtifactId(resourceId).setContentType(contentType);
 
-        if (mRecorder == null) {
-            // InvocationStarted is not called. We save these early association to memory and will
-            // upload them once invocation is ready.
-            CLog.v(
-                    "Received early association %s %s %s",
-                    dataName, logFile.getPath(), logFile.getUrl());
-            mEarlyArtifacts.add(artifactBuilder.build());
-            return;
-        }
-
-        if (mLogAssociationTerminated) {
-            // TODO: Tradefed still upload logs after invocationEnd is called. We need to figure out
-            // how to upload these logs to ResultDB.
-            CLog.v(
-                    "Late association will be ignored for now %s %s %s",
-                    dataName, logFile.getPath(), logFile.getUrl());
-            return;
-        }
-        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
+        CLog.v(
+                "Received association %s %s %s %s",
+                dataName, resourceId, logFile.getPath(), logFile.getUrl());
 
         if (mCurrentTestResult != null) {
             TestIdentifier testId = mCurrentTestResult.getTestIdStructured();
@@ -189,31 +175,58 @@ public class ResultDBReporter
                                     .setCaseName(testId.getCaseName()))
                     .setResultId(mCurrentTestResult.getResultId());
         }
-        mRecorder.uploadArtifact(artifactBuilder.build());
+        mTestArtifacts.put(resourceId, artifactBuilder.build());
+        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
     }
 
-    private String getArtifactId(LogFile logFile) {
-        String artifactId = "";
-        // Fallback to use the file name in the logFile path.
-        String[] pathSegments = logFile.getPath().split("/");
-        if (pathSegments.length > 0) {
-            artifactId = pathSegments[pathSegments.length - 1];
+    // Temporary solution to upload AnTS test artifact storage path to ResultDB, as part of the
+    // migration from AnTS to ResultDB (go/convergence-tr). This method should only be called by
+    // AnTS reporter when the storage path is available. This method also requires the
+    // logAssociation for the same resource ID to be called earlier, so that the artifact
+    // is already in the mTestArtifacts map.
+    // TODO(beining): Remove this method once we can properly migrate AnTS artifacts to ResultDB.
+    public void uploadStoragePath(String resourceId, String storagePath) {
+        if (mDisable) {
+            return;
         }
+        CLog.v("Uploading storage path %s %s", resourceId, storagePath);
+        Artifact artifact = mTestArtifacts.remove(resourceId);
+        if (artifact == null) {
+            CLog.d("Artifact for resource ID %s not found.", resourceId);
+            return;
+        }
+        if (storagePath.matches("^/bigstore/([^/]+)/.+$")) {
+            // Convert storage path to GCS URI.
+            String gcsUri = storagePath.replaceFirst("^/bigstore/", "gs://");
+            artifact = artifact.toBuilder().setGcsUri(gcsUri).build();
+        } else {
+            // Upload empty content for invalid GCS storage path.
+            artifact = artifact.toBuilder().setContents(ByteString.EMPTY).build();
+        }
+        // Queue the artifact for upload.
+        mRecorder.uploadArtifact(artifact);
+    }
+
+    // Returns the AnTS artifact resource ID.
+    private String getAntsResourceId(LogFile logFile) {
+        // We need to decode the resourceId because the backend expects that it is unencoded,
+        // but TF gives as the url that is already encoded.
+        String resourceId = "";
         if (logFile.getUrl() == null) {
-            return artifactId;
+            resourceId = "";
+        } else {
+            Matcher m = LOGSAVER_PATTERN.matcher(logFile.getUrl());
+            if (!m.find()) {
+                resourceId = "";
+            } else {
+                try {
+                    resourceId = new URI(m.group(1)).getPath();
+                } catch (URISyntaxException e) {
+                    // ignore
+                }
+            }
         }
-        Matcher m = LOGSAVER_PATTERN.matcher(logFile.getUrl());
-        if (!m.find()) {
-            return artifactId;
-        }
-        try {
-            // We need to decode the resourceId because the backend expects that it is unencoded,
-            // but TF gives as the url that is already encoded.
-            artifactId = new URI(m.group(1)).getPath();
-        } catch (URISyntaxException e) {
-            // ignore
-        }
-        return artifactId;
+        return resourceId;
     }
 
     @Override
@@ -319,18 +332,8 @@ public class ResultDBReporter
         }
         mBaseVariant = mBaseVariantBuilder.build();
 
-        // Upload early artifacts.
-        uploadEarlyArtifacts();
-
         CLog.logAndDisplay(
                 LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
-    }
-
-    private void uploadEarlyArtifacts() {
-        Artifact artifact;
-        while ((artifact = mEarlyArtifacts.poll()) != null) {
-            mRecorder.uploadArtifact(artifact);
-        }
     }
 
     private Boolean isStaging(IInvocationContext context) {
