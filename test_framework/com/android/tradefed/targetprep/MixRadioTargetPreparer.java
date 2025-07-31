@@ -46,8 +46,10 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
     @Option(name = "radio-file-key", description = "The key of the downloaded radio image file.")
     private String radioFileKey = "radio.img.gz";
 
-    @Option(name = "radio-build-id", description = "The build id of the radio image.")
-    private String radioBuildId;
+    @Option(
+            name = "baseband-build-info-file-key",
+            description = "The key of the baseband version file.")
+    private String basebandBuildInfoFileKey = "BUILD_INFO";
 
     private IConfiguration mConfig;
 
@@ -64,18 +66,27 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
         IBuildInfo buildInfo = testInfo.getBuildInfo();
         IDeviceBuildInfo deviceBuild = (IDeviceBuildInfo) buildInfo;
 
-        // Add check for radioBuildId
-        if (radioBuildId == null) {
-            throw new TargetSetupError(
-                    "radio-build-id must be specified in the gcl file.",
-                    device.getDeviceDescriptor());
-        }
-
         File tmpRadioDir = null;
         try {
             tmpRadioDir = FileUtil.createTempDir("radio_dir");
             File downloadedRadioFile = new File(tmpRadioDir, "radio.img");
             File srcFile;
+            File basebandBuildInfoFile;
+            String basebandVersion;
+
+            if (buildInfo.getFile(basebandBuildInfoFileKey) != null) {
+                CLog.i(
+                        "BUILD_INFO artifact fetched successfully: %s",
+                        buildInfo.getFile(basebandBuildInfoFileKey).getName());
+                basebandBuildInfoFile = buildInfo.getFile(basebandBuildInfoFileKey);
+                basebandVersion = getBasebandVersionFromBuildInfo(basebandBuildInfoFile);
+                CLog.i("Baseband version from build info file: %s", basebandVersion);
+            } else {
+                throw new TargetSetupError(
+                        "BUILD_INFO artifact not found, couldn't determine baseband version.",
+                        device.getDeviceDescriptor());
+            }
+
             if (buildInfo.getFile(radioFileKey) == null) {
                 throw new TargetSetupError(
                         radioFileKey
@@ -104,7 +115,7 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
                 throw new TargetSetupError(
                         "Could not find radio images", device.getDeviceDescriptor());
             }
-            mixRadio(device, deviceBuild, radioBuildId, downloadedRadioFile);
+            mixRadio(device, deviceBuild, basebandVersion, downloadedRadioFile);
         } catch (IOException e) {
             throw new TargetSetupError(
                     "Could not mix device and radio images", e, device.getDeviceDescriptor());
@@ -118,17 +129,19 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
      *
      * @param device the test device
      * @param deviceBuildInfo the device build info
+     * @param basebandVersion the baseband version to replace in the device build info
      * @param downloadedRadioImage the downloaded radio image
      */
     private void mixRadio(
             ITestDevice device,
             IDeviceBuildInfo deviceBuildInfo,
-            String radioBuildId,
+            String basebandVersion,
             File downloadedRadioImage)
             throws TargetSetupError, BuildError, DeviceNotAvailableException {
         try {
             try {
                 mConfig.injectOptionValue("skip-baseband-version-check", "true");
+                mConfig.injectOptionValue("check-baseband-version-after-flash", "true");
                 CLog.i("Skip baseband version check");
             } catch (ConfigurationException e) {
                 CLog.e(e);
@@ -136,7 +149,6 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
             // Clean up radio image.
             String radioImageFilePath = deviceBuildInfo.getBasebandImageFile().getAbsolutePath();
             File radioImageFile = deviceBuildInfo.getBasebandImageFile();
-            String basebandVersion = deviceBuildInfo.getBasebandVersion();
 
             ArrayList<File> doNotClean = new ArrayList<File>();
             for (VersionedFile fileRecord : deviceBuildInfo.getFiles()) {
@@ -145,26 +157,38 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
             }
             deviceBuildInfo.cleanUp(doNotClean);
 
-            // Replace build ID in baseband version with `basebandVersion`.
-            // This is a fake version to make sure the radio image is flashed.
-            Matcher versionMatcher = Pattern.compile("(.*-)[^-]+").matcher(basebandVersion);
-            String versionReplacement = "$1" + radioBuildId;
-            CLog.i("versionReplacement: " + versionReplacement);
-
             // Replace radio image of deviceBuildInfo w/ the new one and update version.
             radioImageFile.delete();
 
             File testRadioImageFile = new File(radioImageFilePath);
             FileUtil.hardlinkFile(downloadedRadioImage, testRadioImageFile);
 
-            deviceBuildInfo.setBasebandImage(
-                    testRadioImageFile, versionMatcher.replaceAll(versionReplacement));
+            // Set the baseband image of deviceBuildInfo to the new one.
+            deviceBuildInfo.setBasebandImage(testRadioImageFile, basebandVersion);
             CLog.i(
                     "Successfully mixed device %s and radio image %s",
-                    deviceBuildInfo, radioBuildId);
+                    deviceBuildInfo, deviceBuildInfo.getBasebandVersion());
         } catch (IOException e) {
             throw new TargetSetupError(
                     "Could not mix device and radio images", e, device.getDeviceDescriptor());
+        }
+    }
+
+    private String getBasebandVersionFromBuildInfo(File basebandBuildInfoFile)
+            throws TargetSetupError {
+        try {
+            String fileContent = FileUtil.readStringFromFile(basebandBuildInfoFile);
+            // Regex to extract baseband version from build info file.
+            // Example: g5400I-250721-250723-B-13820602,g5400I-250609-0715-P100516012
+            Pattern pattern = Pattern.compile("g[a-zA-Z0-9]+-\\d+-\\d+(-[a-zA-Z0-9]+)?-(P?\\d+)");
+            Matcher versionMatcher = pattern.matcher(fileContent);
+            if (versionMatcher.find()) {
+                return versionMatcher.group(0);
+            } else {
+                throw new TargetSetupError("Could not read baseband version from build info file");
+            }
+        } catch (IOException e) {
+            throw new TargetSetupError("Could not read baseband version from build info file", e);
         }
     }
 }

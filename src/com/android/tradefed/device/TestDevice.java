@@ -53,7 +53,6 @@ import com.google.common.base.Strings;
 
 import org.apache.commons.compress.archivers.zip.ZipFile;
 
-import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
@@ -939,23 +938,26 @@ public class TestDevice extends NativeDevice {
     @Override
     public InputStreamSource getScreenshot(String format, boolean rescale)
             throws DeviceNotAvailableException {
-        return getScreenshot(0, format, rescale);
+        if (!format.equalsIgnoreCase("PNG") && !format.equalsIgnoreCase("JPEG")){
+            CLog.e("Screenshot: Format %s is not supported, defaulting to PNG.", format);
+            format = "PNG";
+        }
+        ScreenshotAction action = new ScreenshotAction();
+        if (performDeviceAction("screenshot", action, MAX_RETRY_ATTEMPTS)) {
+            byte[] imageData =
+                    compressRawImage(action.mRawScreenshot, format.toUpperCase(), rescale);
+            if (imageData != null) {
+                return new ByteArrayInputStreamSource(imageData);
+            }
+        }
+        // Return an error in the buffer
+        return new ByteArrayInputStreamSource(
+                "Error: device reported null for screenshot.".getBytes());
     }
 
     /** {@inheritDoc} */
     @Override
     public InputStreamSource getScreenshot(long displayId) throws DeviceNotAvailableException {
-        return getScreenshot(displayId, "PNG", false);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public InputStreamSource getScreenshot(long displayId, String format, boolean rescale)
-            throws DeviceNotAvailableException {
-        if (!format.equalsIgnoreCase("PNG") && !format.equalsIgnoreCase("JPEG")) {
-            CLog.e("Screenshot: Format %s is not supported, defaulting to PNG.", format);
-            format = "PNG";
-        }
         final String tmpDevicePath = String.format("/data/local/tmp/display_%s.png", displayId);
         CommandResult result =
                 executeShellV2Command(
@@ -964,66 +966,16 @@ public class TestDevice extends NativeDevice {
             // Return an error in the buffer
             CLog.e("Error: device reported error for screenshot:");
             CLog.e("stdout: %s\nstderr: %s", result.getStdout(), result.getStderr());
-            return new ByteArrayInputStreamSource(
-                    "Error: device reported null for screenshot.".getBytes());
+            return null;
         }
         try {
             File tmpScreenshot = pullFile(tmpDevicePath);
             if (tmpScreenshot == null) {
                 return null;
             }
-            if ("PNG".equalsIgnoreCase(format) && !rescale) {
-                return new FileInputStreamSource(tmpScreenshot, true);
-            }
-            byte[] imageData = convertPngFile(tmpScreenshot, format.toUpperCase(), rescale);
-            if (imageData != null) {
-                return new ByteArrayInputStreamSource(imageData);
-            }
+            return new FileInputStreamSource(tmpScreenshot, true);
         } finally {
             deleteFile(tmpDevicePath);
-        }
-        return new ByteArrayInputStreamSource(
-                "Error: device reported null for screenshot.".getBytes());
-    }
-
-    @VisibleForTesting
-    byte[] convertPngFile(File pngFile, String format, boolean rescale) {
-        BufferedImage image = pngFileToBufferedImage(pngFile, format);
-
-        // Rescale to reduce size if needed
-        // Screenshot default format is 1080 x 1920, 8-bit/color RGBA
-        // By cutting in half we can easily keep good quality and smaller size
-        if (rescale) {
-            image = rescaleImage(image);
-        }
-
-        return getImageData(image, format);
-    }
-
-    private BufferedImage pngFileToBufferedImage(File pngFile, String format) {
-        try {
-            BufferedImage sourceImage = ImageIO.read(pngFile);
-            if (sourceImage == null) {
-                CLog.e("Failed to get secreenshot image.");
-                return null;
-            }
-            if ("png".equalsIgnoreCase(format)) {
-                return sourceImage;
-            }
-            BufferedImage jpegImage =
-                    new BufferedImage(
-                            sourceImage.getWidth(),
-                            sourceImage.getHeight(),
-                            BufferedImage.TYPE_3BYTE_BGR);
-
-            Graphics2D g2d = jpegImage.createGraphics();
-            g2d.drawImage(sourceImage, 0, 0, null);
-            g2d.dispose();
-
-            return jpegImage;
-        } catch (IOException e) {
-            CLog.e("I/O error occrred during convert screenshot");
-            return null;
         }
     }
 

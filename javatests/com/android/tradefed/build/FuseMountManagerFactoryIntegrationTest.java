@@ -129,10 +129,6 @@ public class FuseMountManagerFactoryIntegrationTest {
      * ensuring tests are isolated.
      */
     private void resetFactorySingleton() throws Exception {
-        Field rootField = FuseMountManagerFactory.class.getDeclaredField("mMountRoot");
-        rootField.setAccessible(true);
-        rootField.set(null, null); // Sets the static field to null
-
         Field managersField = FuseMountManagerFactory.class.getDeclaredField("mManagers");
         managersField.setAccessible(true);
         List<?> managersList = (List<?>) managersField.get(null);

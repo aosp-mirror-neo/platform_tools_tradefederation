@@ -107,6 +107,7 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
     private boolean mSkipBootloaderVersionCheck = false;
     private boolean mSkipFastbootFailedMessage = false;
     private boolean mSkipBasebandVersionCheck = false;
+    private boolean mCheckBasebandVersionAfterFlash = false;
 
     private String mRamdiskPartition = "root";
 
@@ -270,18 +271,35 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 cmdArgs.add(SKIP_REBOOT_PARAM);
             }
             cmdArgs.addAll(mFlashOptions);
-            if (mSkipBootloaderVersionCheck) {
+        }
+
+        // If the action is flash and the partition is bootloader or baseband, add --force to the
+        // fastboot command to skip the version check.
+        if ("flash".equals(action) && args.length >= 1) {
+            String partition = args[0];
+            if (mSkipBootloaderVersionCheck && getBootPartitionName().equals(partition)) {
                 CLog.d("Adding --force to fastboot command to skip bootloader version check");
                 forceFlash = true;
             }
-            if (mSkipBasebandVersionCheck) {
+            if (mSkipBasebandVersionCheck && BASEBAND_IMAGE_NAME.equals(partition)) {
                 CLog.d("Adding --force to fastboot command to skip baseband version check");
                 forceFlash = true;
             }
-            if (forceFlash) {
-                cmdArgs.add(FORCE_FLASH_PARAM);
-            }
         }
+        // If the action is flashall(system flash), add --force to the fastboot command to skip the
+        // version check
+        // for bootloader and baseband.
+        if ("flashall".equals(action)
+                && (mSkipBootloaderVersionCheck || mSkipBasebandVersionCheck)) {
+            CLog.d(
+                    "Adding --force to fastboot command to skip bootloader and baseband version"
+                            + " check");
+            forceFlash = true;
+        }
+        if (forceFlash) {
+            cmdArgs.add(FORCE_FLASH_PARAM);
+        }
+
         cmdArgs.add(action);
         cmdArgs.addAll(Arrays.asList(args));
         return cmdArgs.toArray(new String[cmdArgs.size()]);
@@ -575,6 +593,21 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         if (checkShouldFlashBaseband(device, deviceBuild)) {
             CLog.i("Flashing baseband %s", deviceBuild.getBasebandVersion());
             flashBaseband(device, deviceBuild.getBasebandImageFile());
+
+            // Check baseband version after flash.
+            if (mCheckBasebandVersionAfterFlash) {
+                CLog.i("Checking baseband version after flash");
+                String currentBasebandVersion = getImageVersion(device, "baseband");
+                if (deviceBuild.getBasebandVersion() != null
+                        && !currentBasebandVersion.equals(deviceBuild.getBasebandVersion())) {
+                    throw new TargetSetupError(
+                            String.format(
+                                    "Baseband version mismatch after flash: Actual: %s, Expected:"
+                                            + " %s",
+                                    currentBasebandVersion, deviceBuild.getBasebandVersion()),
+                            device.getDeviceDescriptor());
+                }
+            }
         }
     }
 
@@ -1047,8 +1080,10 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 continue;
             }
         }
-        throw new TargetSetupError(String.format(
-                "Could not find version for '%s' after %d retry attempts", imageName, attempts),
+        throw new TargetSetupError(
+                String.format(
+                        "Could not find version for '%s' after %d retry attempts",
+                        imageName, attempts),
                 device.getDeviceDescriptor());
     }
 
@@ -1353,6 +1388,10 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
         mSkipBasebandVersionCheck = skipBasebandVersionCheck;
     }
 
+    protected void setCheckBasebandVersionAfterFlash(boolean checkBasebandVersionAfterFlash) {
+        mCheckBasebandVersionAfterFlash = checkBasebandVersionAfterFlash;
+    }
+
     protected void setSkipFastbootFailedMessage(boolean skipFastbootFailedMessage) {
         mSkipFastbootFailedMessage = skipFastbootFailedMessage;
     }
@@ -1363,5 +1402,9 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
 
     public boolean shouldSkipBasebandVersionCheck() {
         return mSkipBasebandVersionCheck;
+    }
+
+    public boolean shouldCheckBasebandVersionAfterFlash() {
+        return mCheckBasebandVersionAfterFlash;
     }
 }

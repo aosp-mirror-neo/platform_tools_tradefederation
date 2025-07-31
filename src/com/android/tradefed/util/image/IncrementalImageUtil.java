@@ -814,6 +814,10 @@ public class IncrementalImageUtil {
 
     private boolean shouldFlashBaseband(ITestDevice device, String basebandVersion)
             throws DeviceNotAvailableException, TargetSetupError {
+        if (mSkipBasebandVersionCheck) {
+            CLog.i("Skip baseband version check");
+            return true;
+        }
         String currentBaseBandVersion =
                 FastbootDeviceFlasher.fetchImageVersion(mRunUtil, device, "baseband");
         if (basebandVersion != null && !basebandVersion.equals(currentBaseBandVersion)) {
