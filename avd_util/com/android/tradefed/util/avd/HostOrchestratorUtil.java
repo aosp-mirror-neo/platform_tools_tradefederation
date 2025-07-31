@@ -609,6 +609,11 @@ public class HostOrchestratorUtil {
         return String.format("http://%s:%s", host, port);
     }
 
+    /** Return the host orchestrator base URL */
+    public String getHOBaseUrl() {
+        return getHOBaseUrl(mHOPortNumber);
+    }
+
     /** Close the connection to the remote oxygenation device with a given {@link Process}. */
     public void closeTunnelConnection() {
         if (mUseOxygenation) {
