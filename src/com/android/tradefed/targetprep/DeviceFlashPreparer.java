@@ -134,6 +134,13 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                             + " without a good reason.")
     private boolean mIgnoreFastbootFailedMessage = false;
 
+    @Option(
+            name = "check-baseband-version-after-flash",
+            description =
+                    "Check the baseband version after flash is the same one in the DeviceBuildInfo,"
+                        + " which is replaced by the mix-radio-target-preparer.")
+    private boolean mCheckBasebandVersionAfterFlash = false;
+
     @Option(name = "wipe-timeout",
             description = "the timeout for the command of wiping user data.", isTimeVal = true)
     private long mWipeTimeout = 4 * 60 * 1000;
@@ -456,6 +463,8 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                             .setSkipBootloaderVersionCheck(mSkipBootloaderVersionCheck);
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipBasebandVersionCheck(mSkipBasebandVersionCheck);
+                    ((FastbootDeviceFlasher) flasher)
+                            .setCheckBasebandVersionAfterFlash(mCheckBasebandVersionAfterFlash);
                     ((FastbootDeviceFlasher) flasher)
                             .setSkipFastbootFailedMessage(mIgnoreFastbootFailedMessage);
                     ((FastbootDeviceFlasher) flasher).setFlashOptions(mFastbootFlashOptions);
