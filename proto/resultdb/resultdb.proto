@@ -26,11 +26,13 @@ import public "tools/tradefederation/core/proto/resultdb/common.proto";
 import public "tools/tradefederation/core/proto/resultdb/instruction.proto";
 import public "tools/tradefederation/core/proto/resultdb/invocation.proto";
 import public "tools/tradefederation/core/proto/resultdb/predicate.proto";
+import public "tools/tradefederation/core/proto/resultdb/root_invocation.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_aggregation.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_result.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_variant.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_verdict.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_metadata.proto";
+import public "tools/tradefederation/core/proto/resultdb/work_unit.proto";
 
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
 option java_package = "com.android.resultdb.proto";
@@ -41,6 +43,17 @@ option java_multiple_files = true;
 // Use of LUCI is subject to the Google [Terms of Service](https://policies.google.com/terms)
 // and [Privacy Policy](https://policies.google.com/privacy).
 service ResultDB {
+  // == Root invocations and work units ========================================
+  // Retrieves a root invocation.
+  rpc GetRootInvocation(GetRootInvocationRequest) returns (RootInvocation) {};
+
+  // Retrieves a work unit.
+  rpc GetWorkUnit(GetWorkUnitRequest) returns (WorkUnit) {};
+
+  // Retrieves a list of work units.
+  rpc BatchGetWorkUnits(BatchGetWorkUnitsRequest) returns (BatchGetWorkUnitsResponse) {};
+
+  // == Invocations ============================================================
   // Retrieves an invocation.
   rpc GetInvocation(GetInvocationRequest) returns (Invocation) {};
 
@@ -212,6 +225,66 @@ service ResultDB {
   // Queries invocation artifacts that match a search_string for given variant_union_hash and artifact_id.
   rpc QueryInvocationVariantArtifacts(QueryInvocationVariantArtifactsRequest) returns (
     QueryInvocationVariantArtifactsResponse) {}
+}
+
+// A request message for the GetRootInvocation RPC.
+message GetRootInvocationRequest {
+  // The name of the root invocation to read, see RootInvocation.name.
+  string name = 1 [ (google.api.field_behavior) = REQUIRED ];
+}
+
+// A request message for the GetWorkUnit RPC.
+message GetWorkUnitRequest {
+  // The name of the work unit to read, see WorkUnit.name.
+  string name = 1 [ (google.api.field_behavior) = REQUIRED ];
+
+  // The view to apply to the returned work unit. Defaults to BASIC.
+  WorkUnitView view = 2;
+}
+
+// A request message for the BatchGetWorkUnits RPC.
+//
+// As per google.aip.dev/231, this request will be handled atomically:
+// either it will succeed in reading all nominated work units or it will fail.
+message BatchGetWorkUnitsRequest {
+  // The parent root invocation shared by all work units being retrieved.
+  // Format: rootInvocations/{root_invocation_id}
+  // The parent of all work units specified in `names` must match this
+  // field.
+  // Required.
+  string parent = 1 [ (google.api.field_behavior) = REQUIRED ];
+
+  // The names of the work units to retrieve.
+  // A maximum of 500 work units can be retrieved in a batch.
+  // Format: rootInvocations/{root_invocation_id}/workUnits/{work_unit_id}
+  repeated string names = 2 [ (google.api.field_behavior) = REQUIRED ];
+
+  // The view to apply to returned work units. Using the view BASIC is
+  // strongly recommended as response size limits could be easily exceeded
+  // if FULL is used (as each work unit's extended properties may be up to
+  // ~2MB). Defaults to BASIC.
+  WorkUnitView view = 3;
+}
+
+// WorkUnitView represents the set of work unit fields to be retrieved.
+// See https://google.aip.dev/157.
+enum WorkUnitView {
+  // The default / unset value. The API will default to the basic view.
+  WORK_UNIT_VIEW_UNSPECIFIED = 0;
+
+  // Include basic information about the work unit. Excludes
+  // extended_properties.
+  WORK_UNIT_VIEW_BASIC = 1;
+
+  // Include all fields, including extended_properties.
+  WORK_UNIT_VIEW_FULL = 2;
+}
+
+// A response message for the BatchGetWorkUnits RPC.
+message BatchGetWorkUnitsResponse {
+  // The work units requested. These will appear in the same order as
+  // names in the request, i.e. work_units[i] corresponds to names[i].
+  repeated WorkUnit work_units = 1;
 }
 
 // A request message for GetInvocation RPC.
@@ -652,6 +725,36 @@ message QueryTestVariantsRequest {
   //   It can be requested by "status_v2_effective" or "status_v2_effective asc"
   //   where status_v2_effective is a virtual field representing the above sort order.
   string order_by = 9;
+
+  // An AIP-160 style filter to select test variants to return.
+  //
+  // Filtering supports a subset of [AIP-160 filtering](https://google.aip.dev/160).
+  //
+  // All values are case-sensitive.
+  //
+  // A bare value is searched for in the column test_id. E.g. ninja.
+  //
+  // You can use AND, OR and NOT (case sensitive) logical operators, along
+  // with grouping. '-' is equivalent to NOT. Multiple bare values are
+  // considered to be AND separated.  E.g. These are equivalent:
+  // hello world
+  // and:
+  // hello AND world
+  //
+  // More examples:
+  // a OR b
+  // a AND NOT(b or -c)
+  //
+  // You can filter particular columns with '=', '!=' and ':' (has) operators.
+  // The right hand side of the operator must be a simple value. E.g:
+  // test_id:telemetry
+  // -variant.os:mac
+  //
+  // Supported columns to search on:
+  // - test_id
+  // - variant_hash
+  // - variant
+  string filter = 10;
 }
 
 // A response message for QueryTestVariants RPC.
