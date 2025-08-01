@@ -231,8 +231,14 @@ public class DynamicSystemPreparer extends BaseTargetPreparer implements ILabPre
             // Flash pvmfw.img and reboot back
             CLog.i("Reboot into booloader and flash pvmfw.img");
             device.rebootIntoBootloader();
-            device.executeFastbootCommand(
-                    String.format("flash pvmfw %s", pvmfwImg.getAbsolutePath()));
+            CommandResult r =
+                    device.executeLongFastbootCommand("flash", "pvmfw", pvmfwImg.getAbsolutePath());
+            if (r.getStatus() != CommandStatus.SUCCESS) {
+                throw new TargetSetupError(
+                        String.format("Fail fastboot flash pvmfw: %s", r.getStderr()),
+                        device.getDeviceDescriptor());
+            }
+            CLog.i("Reboot back to system.");
             device.reboot();
             device.waitForDeviceAvailable();
         } finally {
