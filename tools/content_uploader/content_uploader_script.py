@@ -32,7 +32,7 @@ from uploader import CasInfo
 from uploader import Uploader
 
 
-VERSION = '1.9'
+VERSION = '1.10'
 
 CAS_UPLOADER_PREBUILT_PATH = 'tools/tradefederation/prebuilts/'
 CAS_UPLOADER_PATH = 'tools/content_addressed_storage/prebuilts/'

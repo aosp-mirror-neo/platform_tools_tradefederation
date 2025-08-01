@@ -217,6 +217,23 @@ exit 1
                 self.assertIn('Failed to upload', log_lines)
                 self.assertIn('Output from casuploader (failed)', log_lines)
 
+    def test_symbols_zip_ignored(self):
+        """Log and casuploader output from failed upload task are logged."""
+        tests = ArtifactConfig(
+            '*-tests-*zip',
+            unzip = True,
+        )
+        with tempfile.TemporaryDirectory() as dist_dir:
+            artifacts = [tests]
+            self._create_fake_imagefile(dist_dir, 'device-tests-symbols-123.zip')
+            with self.assertLogs(level=logging.INFO) as cm:
+                cas_info = CasInfo('INSTANCE', 'SERVICE', 'abc', (1, 4))
+                tasks = Uploader(cas_info).create_upload_tasks(
+                        artifacts, self.test_dir, dist_dir)
+                self.assertEqual(len(tasks), 0)
+                log_lines = '\n'.join(cm.output)
+                self.assertIn('Ignore symbols zip files (*-symbols-*.zip)', log_lines)
+
 
 if __name__ == '__main__':
     unittest.main()
