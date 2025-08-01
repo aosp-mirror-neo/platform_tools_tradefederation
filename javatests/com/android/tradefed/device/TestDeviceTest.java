@@ -2890,14 +2890,50 @@ public class TestDeviceTest {
     }
 
     /**
+     * Test that multiuser output is handled by {@link TestDevice#getRemainingCreatableUserCount()}.
+     */
+    @Test
+    public void testGetRemainingCreatableUserCount() throws Exception {
+        // Feature is only supported after 36.
+        injectSystemProperty(SDK_VERSION, "37");
+        injectSystemProperty(BUILD_CODENAME, "REL");
+
+        final String userType = "android.os.usertype.full.SECONDARY";
+        final String getMaxUsersCommand = "pm get-remaining-user-count --user-type " + userType;
+        injectShellResponse(getMaxUsersCommand, "Remaining user count: 4");
+
+        assertEquals(4, mTestDevice.getRemainingCreatableUserCount(userType));
+    }
+
+    /**
      * Test that multi user output is handled by {@link TestDevice#getMaxNumberOfUsersSupported()}.
      */
     @Test
     public void testMaxNumberOfUsersSupported() throws Exception {
         final String getMaxUsersCommand = "pm get-max-users";
-        injectShellResponse(getMaxUsersCommand, "Maximum supported users: 4");
+        injectShellResponse(getMaxUsersCommand, "Maximum supported switchable users: 4");
 
         assertEquals(4, mTestDevice.getMaxNumberOfUsersSupported());
+    }
+
+    /**
+     * Test that multi user output is handled by {@link TestDevice#getMaxNumberOfUsersSupported()}
+     * when a user-type parameter is passed in.
+     */
+    @Test
+    public void testMaxNumberOfUsersSupported_userType() throws Exception {
+        // Feature is only supported after 36.
+        injectSystemProperty(SDK_VERSION, "37");
+        injectSystemProperty(BUILD_CODENAME, "REL");
+
+        final String getMaxUsersCommand =
+                "pm get-max-users --user-type android.os.usertype.profile.MANAGED";
+        injectShellResponse(
+                getMaxUsersCommand,
+                "Maximum supported users of type android.os.usertype.profile.MANAGED: 1");
+
+        assertEquals(
+                1, mTestDevice.getMaxNumberOfUsersSupported("android.os.usertype.profile.MANAGED"));
     }
 
     /** Test that invalid output is handled by {@link TestDevice#getMaxNumberOfUsersSupported()}. */
@@ -2956,7 +2992,7 @@ public class TestDeviceTest {
         injectSystemProperty(SDK_VERSION, "28");
         injectSystemProperty(BUILD_CODENAME, "REL");
         final String getMaxUsersCommand = "pm get-max-users";
-        injectShellResponse(getMaxUsersCommand, "Maximum supported users: 1");
+        injectShellResponse(getMaxUsersCommand, "Maximum supported switchable users: 1");
 
         assertFalse(mTestDevice.isMultiUserSupported());
     }
@@ -2978,7 +3014,7 @@ public class TestDeviceTest {
         injectSystemProperty(SDK_VERSION, "28");
         injectSystemProperty(BUILD_CODENAME, "REL");
         final String getMaxUsersCommand = "pm get-max-users";
-        injectShellResponse(getMaxUsersCommand, "Maximum supported users: 4");
+        injectShellResponse(getMaxUsersCommand, "Maximum supported switchable users: 4");
 
         assertTrue(mTestDevice.isMultiUserSupported());
     }

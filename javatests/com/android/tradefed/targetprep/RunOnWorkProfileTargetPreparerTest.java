@@ -34,6 +34,7 @@ import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.UserInfo;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.result.error.DeviceErrorIdentifier;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -92,18 +93,40 @@ public final class RunOnWorkProfileTargetPreparerTest {
         mPreparer.setProfileUserType(USERTYPE_MANAGED_PROFILE);
         mPreparer.setTradefedUserType(MANAGED_PROFILE);
 
-        ArrayList<Integer> userIds = new ArrayList<>();
-        userIds.add(0);
-
         when(mTestInfo.getDevice().hasFeature("android.software.managed_users")).thenReturn(true);
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(2);
-        when(mTestInfo.getDevice().listUsers()).thenReturn(userIds);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_MANAGED_PROFILE)))
+                .thenReturn(1);
         when(mTestInfo.getDevice().executeShellCommand("dumpsys device_policy")).thenReturn("");
-        when(mTestInfo.getDevice().getApiLevel()).thenReturn(34); // U
+        when(mTestInfo.getDevice().getApiLevel()).thenReturn(37);
     }
 
     @Test
     public void setUp_createsAndStartsWorkProfile() throws Exception {
+        String expectedCreateUserCommand = CREATE_MANAGED_PROFILE_COMMAND;
+        when(mTestInfo.getDevice().executeShellCommand(expectedCreateUserCommand))
+                .thenReturn(CREATED_USER_10_MESSAGE);
+
+        mPreparer.setUp(mTestInfo);
+
+        verify(mTestInfo.getDevice()).executeShellCommand(expectedCreateUserCommand);
+        verify(mTestInfo.getDevice()).startUser(10, /* waitFlag= */ true);
+    }
+
+    @Test
+    public void setUp_oldVersion_usesGetMaxNumberOfUsersSupported() throws Exception {
+        when(mTestInfo.getDevice().getApiLevel()).thenReturn(34);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(2);
+
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_MANAGED_PROFILE)))
+                .thenThrow(
+                        new HarnessRuntimeException(
+                                "API not supported",
+                                DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE));
+
+        ArrayList<Integer> userIds = new ArrayList<>();
+        userIds.add(0);
+        when(mTestInfo.getDevice().listUsers()).thenReturn(userIds);
+
         String expectedCreateUserCommand = CREATE_MANAGED_PROFILE_COMMAND;
         when(mTestInfo.getDevice().executeShellCommand(expectedCreateUserCommand))
                 .thenReturn(CREATED_USER_10_MESSAGE);
@@ -122,6 +145,7 @@ public final class RunOnWorkProfileTargetPreparerTest {
         when(mTestInfo.getDevice().executeShellCommand(expectedCreateUserCommand))
                 .thenReturn(CREATED_USER_10_MESSAGE);
         when(mTestInfo.getDevice().getApiLevel()).thenReturn(28);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(3);
 
         mPreparer.setUp(mTestInfo);
 
@@ -369,7 +393,8 @@ public final class RunOnWorkProfileTargetPreparerTest {
 
     @Test
     public void setUp_doesNotSupportAdditionalUsers_doesNotChangeTestUser() throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_MANAGED_PROFILE)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -380,7 +405,8 @@ public final class RunOnWorkProfileTargetPreparerTest {
     @Test
     public void setUp_doesNotSupportAdditionalUsers_alreadyHasWorkProfile_runsTestAsExistingUser()
             throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_MANAGED_PROFILE)))
+                .thenReturn(0);
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 11,
@@ -401,7 +427,8 @@ public final class RunOnWorkProfileTargetPreparerTest {
     @Test
     public void setUp_doesNotSupportAdditionalUsers_alreadyHasWorkProfile_doesNotSkipTests()
             throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_MANAGED_PROFILE)))
+                .thenReturn(0);
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 11,
