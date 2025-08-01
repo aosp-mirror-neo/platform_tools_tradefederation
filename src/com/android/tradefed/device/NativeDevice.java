@@ -3237,6 +3237,13 @@ public class NativeDevice
 
     /** {@inheritDoc} */
     @Override
+    public InputStreamSource getScreenshot(Long displayId, String format, boolean rescale)
+            throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for Screenshot");
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public void clearLastConnectedWifiNetwork() {
         mLastConnectedWifiSsid = null;
         mLastConnectedWifiPsk = null;
