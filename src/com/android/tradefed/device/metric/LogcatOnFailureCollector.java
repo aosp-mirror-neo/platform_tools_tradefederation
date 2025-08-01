@@ -328,4 +328,9 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
                 break;
         }
     }
+
+    @Override
+    public boolean captureModuleLevel() {
+        return true;
+    }
 }
