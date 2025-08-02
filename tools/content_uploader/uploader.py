@@ -313,6 +313,9 @@ class Uploader:
                     if os.path.isdir(file):
                         logging.warning('Ignore artifact match (dir): %s', file)
                         continue
+                    if '-symbols-' in file and file.endswith('.zip'):
+                        logging.warning('Ignore symbols zip files (*-symbols-*.zip): %s', file)
+                        continue
                     rel_path = Uploader._get_relative_path(dist_dir, file)
                     for task_artifact in Uploader._artifact_variations(rel_path, artifact):
                         path = Uploader._artifact_path(rel_path, task_artifact)

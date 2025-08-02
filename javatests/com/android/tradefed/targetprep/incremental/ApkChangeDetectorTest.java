@@ -456,4 +456,17 @@ public final class ApkChangeDetectorTest {
 
         assertThat(incrementalSetupSupported).isTrue();
     }
+
+    @Test
+    public void ensureIncrementalSetupSupported_returnsFalse_visibleBackgroundUsersSupported()
+            throws Exception {
+        ApkChangeDetector apkChangeDetector = spy(new ApkChangeDetector());
+        doReturn(true).when(mMockDevice).isVisibleBackgroundUsersSupported();
+
+        boolean incrementalSetupSupported =
+                apkChangeDetector.ensureIncrementalSetupSupported(mMockDevice);
+
+        assertThat(incrementalSetupSupported).isFalse();
+        verify(mMockDevice, times(0)).executeShellCommand(Mockito.any());
+    }
 }

@@ -25,7 +25,7 @@ import java.util.Map;
 /** Version of logcat collector but for module. */
 public class ModuleLogcatCollector extends LogcatOnFailureCollector {
 
-    private static final int MAX_LOGAT_SIZE_BYTES = 40 * 1024 * 1024;
+    private static final int MAX_LOGCAT_SIZE_BYTES = 40 * 1024 * 1024;
 
     @Override
     public boolean captureModuleLevel() {
@@ -39,7 +39,7 @@ public class ModuleLogcatCollector extends LogcatOnFailureCollector {
 
     @Override
     public void onTestModuleEnded() throws DeviceNotAvailableException {
-        collectAndLog("module-logcat", MAX_LOGAT_SIZE_BYTES);
+        collectAndLog("module-logcat", MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
         super.onTestRunEnd(null, null);
     }
 

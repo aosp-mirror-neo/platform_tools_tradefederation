@@ -60,10 +60,11 @@ public class FuseMountManager {
     private final Map<Path, MountInfo> mActiveMounts = new ConcurrentHashMap<>();
     private final Path mMountRoot; // The base path for creation of mount points.
 
-    // Timeouts for unmount operations
-    private static final long FUSEMOUNT_TIMEOUT_MS = 2 * 1000; // For 'fusermount -u'.
-    private static final long UMOUNT_LAZY_TIMEOUT_MS = 5 * 1000; // For 'umount -l'.
-    private static final long PROCESS_WAIT_TIMEOUT_MS = 1000; // For fuse process to exit.
+    // Timeouts for unmount operations. The process may still alive after a fuse command is done.
+    // Wait for the process to terminate before the next step.
+    private static final long FUSEMOUNT_TIMEOUT_MS = 2 * 1000; // For 'fusermount -u' to complete.
+    private static final long UMOUNT_LAZY_TIMEOUT_MS = 5 * 1000; // For 'umount -l' to complete.
+    private static final long PROCESS_WAIT_TIMEOUT_MS = 5 * 1000; // For fuse process to terminate.
 
     /** MountInfo is a class that holds information about a mounted FUSE filesystem. */
     private static class MountInfo {

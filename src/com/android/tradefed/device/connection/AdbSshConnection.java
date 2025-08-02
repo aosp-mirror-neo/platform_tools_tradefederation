@@ -1060,6 +1060,15 @@ public class AdbSshConnection extends AdbTcpConnection {
         return mHOUtil;
     }
 
+    /** Helper to return the host orchestrator Base URl */
+    public String getHOBaseURL() {
+        if (mHOUtil == null) {
+            CLog.e("Host Orchestrator Util has not been initialized. Cannot get base url.");
+            return null;
+        }
+        return mHOUtil.getHOBaseUrl();
+    }
+
     /**
      * Inspect host VM and retrieve more details in DeviceInspectionResult.
      *

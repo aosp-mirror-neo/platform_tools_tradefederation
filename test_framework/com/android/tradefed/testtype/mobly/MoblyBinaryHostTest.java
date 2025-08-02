@@ -652,6 +652,18 @@ public class MoblyBinaryHostTest
                     TestErrorIdentifier.UNEXPECTED_MOBLY_BEHAVIOR);
         }
 
+        // Add Host Orchestrator Base URL for Oxygen or Oxygenation To Yaml Config
+        // This is needed for Mobly Tests to be able to communicate with the CVD Host Orchestrator
+        String hoBaseUrl = getTestInfo().getContext().getAttribute("ho_base_url");
+        if (hoBaseUrl != null && !hoBaseUrl.isEmpty()) {
+            Map<String, Object> testParams = (Map<String, Object>) targetTb.get("TestParams");
+            if (testParams == null) {
+                testParams = new HashMap<>();
+                targetTb.put("TestParams", testParams);
+            }
+            testParams.put("ho_base_url", hoBaseUrl);
+        }
+
         // Inject log path
         Map<String, Object> paramsMap = (Map<String, Object>) configMap.get("MoblyParams");
         if (paramsMap == null) {

@@ -90,20 +90,27 @@ public class PerfettoTraceRecorder {
         RunUtil.getDefault()
                 .runTimedCmd(10000, "chmod", "u+x", perfettoExecutable.getAbsolutePath());
 
+
         // Read the trace config into a string.
         String configStr = null;
-        if (traceConfigFileName == null) {
-            // If no file name was given, get the default trace config from resource.
-            InputStream configStream =
-                    PerfettoTraceRecorder.class.getResourceAsStream(
-                            "/perfetto/trace_config.textproto");
+        String resolvedTraceConfigPath = traceConfigFileName;
+        if (resolvedTraceConfigPath == null) {
+            resolvedTraceConfigPath = "/perfetto/trace_config.textproto";
+        } else {
+            resolvedTraceConfigPath = String.format("/perfetto/%s", traceConfigFileName);
+        }
+
+        InputStream configStream =
+                PerfettoTraceRecorder.class.getResourceAsStream(resolvedTraceConfigPath);
+        if (configStream != null) {
             configStr = StreamUtil.getStringFromStream(configStream);
         } else {
-            // Otherwise retrieve it from the test artifacts.
+            // If not found in resources, try to find it in test artifacts.
             File file = SearchArtifactUtil.searchFile(traceConfigFileName, true);
             if (file == null) {
                 CLog.e(
-                        "Failed to retrieve trace config file %s from test artifacts",
+                        "Failed to retrieve trace config file %s from both resources and test"
+                                + " artifacts",
                         traceConfigFileName);
                 return;
             }

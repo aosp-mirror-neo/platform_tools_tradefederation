@@ -37,7 +37,7 @@ public enum ModuleParameters {
 
     // Secondary user started on background, visible in the default display
     SECONDARY_USER_ON_DEFAULT_DISPLAY(
-            "secondary_user_on_defauilt_display",
+            "secondary_user_on_default_display",
             ModuleParameters.SECONDARY_USER_ON_DEFAULT_DISPLAY_FAMILY),
     NOT_SECONDARY_USER_ON_DEFAULT_DISPLAY(
             "not_secondary_user_on_default_display",
