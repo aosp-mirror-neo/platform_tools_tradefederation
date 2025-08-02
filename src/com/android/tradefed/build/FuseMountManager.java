@@ -131,11 +131,13 @@ public class FuseMountManager {
         Path mountPoint = null;
         Path logDir = null;
         Process process = null;
+        String casviewerPath = null;
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             mountPoint = createUniqueMountPoint(sourceDataPath);
             logDir = CasUtil.createUniqueCasLogDir(CAS_LOG_ROOT);
             List<String> command =
                     mDriverProfile.buildMountCommand(sourceDataPath, mountPoint, logDir);
+            casviewerPath = command.get(0);
 
             process = mRunUtil.runCmdInBackground(command, capturedOutput);
             if (process == null) { // Unlikely to happen.
@@ -175,6 +177,15 @@ public class FuseMountManager {
             throw new IOException(String.format("Mount process started but timed out."));
         } catch (IOException | InterruptedException e) {
             // FAILURE: Handle all exceptions from the try block here.
+
+            if (e.getMessage().contains("error=13, Permission denied") && casviewerPath != null) {
+                // Check if casviewer still has executable bit set.
+                CommandResult cr = mRunUtil.runTimedCmd(5000, "ls", "-l", casviewerPath);
+                CLog.d(
+                        "ls -l '%s': Status: %s\nStdout:\n%s\nStderr:\n%s",
+                        casviewerPath, cr.getStatus(), cr.getStdout(), cr.getStderr());
+            }
+
             if (process != null && process.isAlive()) {
                 destroyProcess(process, mountPoint);
             }

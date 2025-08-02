@@ -1095,8 +1095,9 @@ public class RunUtil implements IRunUtil {
                                 try {
                                     StreamUtil.copyStreams(src, dest);
                                 } catch (IOException e) {
-                                    CLog.e("Failed to read input stream '%s'.", name);
-                                    CLog.e(e);
+                                    CLog.e(
+                                            "Failed to read input stream '%s'. Error: %s",
+                                            name, e.getMessage());
                                 }
                             }
                         });
