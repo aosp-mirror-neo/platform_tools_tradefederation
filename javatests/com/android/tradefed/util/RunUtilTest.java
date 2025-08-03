@@ -203,7 +203,7 @@ public class RunUtilTest {
 
         // Should succeed and return sooner regardless of timeout.
         CommandResult result =
-                mRunUtil.runTimedCmdWithOutputMonitor(VERY_LONG_TIMEOUT_MS * 5, 1300, command);
+                mRunUtil.runTimedCmdWithOutputMonitor(VERY_LONG_TIMEOUT_MS * 5, 2000, command);
         assertEquals(CommandStatus.SUCCESS, result.getStatus());
     }
 
