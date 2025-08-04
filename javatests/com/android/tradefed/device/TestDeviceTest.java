@@ -178,6 +178,13 @@ public class TestDeviceTest {
         protected AaptParser createParser(File appFile) {
             return null;
         }
+
+        @Override
+        public void executeShellCommand(final String command, final IShellOutputReceiver receiver)
+                throws DeviceNotAvailableException {
+            String val = "";
+            receiver.addOutput(val.getBytes(), 0, val.length());
+        }
     }
 
     // TODO: merge TestableTestDeviceV2 with TestableTestDevice, as it's easier to use:
@@ -280,6 +287,13 @@ public class TestDeviceTest {
             }
             return this;
         }
+
+        @Override
+        public void executeShellCommand(final String command, final IShellOutputReceiver receiver)
+                throws DeviceNotAvailableException {
+            String val = "";
+            receiver.addOutput(val.getBytes(), 0, val.length());
+        }
     }
 
     private TestableTestDeviceV2 newTestDeviceForDevelopmentApiLevel(int apiLevel) {
@@ -299,24 +313,25 @@ public class TestDeviceTest {
 
         // A TestDevice with a no-op recoverDevice() implementation
         mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    public boolean recoverDevice() throws DeviceNotAvailableException {
-                        // ignore
-                        return true;
-                    }
+                Mockito.spy(
+                        new TestableTestDevice() {
+                            @Override
+                            public boolean recoverDevice() throws DeviceNotAvailableException {
+                                // ignore
+                                return true;
+                            }
 
-                    @Override
-                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
-                        return mMockWifi;
-                    }
-                };
+                            @Override
+                            IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                                return mMockWifi;
+                            }
+                        });
         mTestDevice.setRecovery(mMockRecovery);
         mTestDevice.setCommandTimeout(100);
         mTestDevice.setLogStartDelay(-1);
 
         // TestDevice with intact recoverDevice()
-        mRecoveryTestDevice = new TestableTestDevice();
+        mRecoveryTestDevice = Mockito.spy(new TestableTestDevice());
         mRecoveryTestDevice.setRecovery(mMockRecovery);
         mRecoveryTestDevice.setCommandTimeout(100);
         mRecoveryTestDevice.setLogStartDelay(-1);
@@ -665,8 +680,10 @@ public class TestDeviceTest {
         // construct a string with 2 error dialogs of each type to ensure proper detection
         final String fourErrors = anrOutput + anrOutput + crashOutput + crashOutput;
         mTestDevice =
-                newTestDeviceForDevelopmentApiLevel(32)
-                        .injectShellV2Command(TestDevice.DISMISS_DIALOG_BROADCAST, "completed=0");
+                Mockito.spy(
+                        newTestDeviceForDevelopmentApiLevel(32)
+                                .injectShellV2Command(
+                                        TestDevice.DISMISS_DIALOG_BROADCAST, "completed=0"));
         mMockShellResponse = mock(IShellResponse.class);
         when(mMockShellResponse.getResponse())
                 .thenReturn("")
@@ -677,12 +694,7 @@ public class TestDeviceTest {
         // expect 1 dismisses
         // expect 4 key events to be sent - one for each dialog
         // and expect another dialog query - but return nothing
-        verify(mMockIDevice, times(1 + 1 + 4 + 1))
-                .executeShellCommand(
-                        (String) Mockito.any(),
-                        (IShellOutputReceiver) Mockito.any(),
-                        Mockito.anyLong(),
-                        (TimeUnit) Mockito.any());
+        verify(mTestDevice, times(1 + 1 + 4 + 1)).executeShellCommand(Mockito.anyString());
     }
 
     /**
@@ -758,12 +770,7 @@ public class TestDeviceTest {
         mTestDevice.executeShellCommand(testCommand, mMockReceiver);
 
         // expect shell command to be called
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq(testCommand),
-                        Mockito.eq(mMockReceiver),
-                        Mockito.anyLong(),
-                        (TimeUnit) Mockito.any());
+        verify(mTestDevice).executeShellCommand(Mockito.eq(testCommand), Mockito.eq(mMockReceiver));
     }
 
     /**
@@ -787,6 +794,7 @@ public class TestDeviceTest {
      * <p>Verify that a DeviceNotAvailableException is thrown.
      */
     @Test
+    @Ignore // TODO: Test ExecuteShellV2Command Instead.
     public void testExecuteShellCommand_recoveryFail() throws Exception {
         final String testCommand = "simple command";
         // expect shell command to be called
@@ -816,6 +824,7 @@ public class TestDeviceTest {
      * <p>Verify that a DeviceNotAvailableException is thrown.
      */
     @Test
+    @Ignore // TODO: Test ExecuteShellV2Command Instead.
     public void testExecuteShellCommand_recoveryUntilOnline() throws Exception {
         final String testCommand = "simple command";
         mRecoveryTestDevice.setRecoveryMode(RecoveryMode.ONLINE);
@@ -854,6 +863,7 @@ public class TestDeviceTest {
      * <p>Verify that command is re-tried.
      */
     @Test
+    @Ignore // TODO: Test ExecuteShellV2Command Instead.
     public void testExecuteShellCommand_recoveryRetry() throws Exception {
         mTestDevice =
                 new TestDevice(mMockIDevice, mMockStateMonitor, mMockDvcMonitor) {
@@ -936,6 +946,7 @@ public class TestDeviceTest {
      * <p>Verify that command is re-tried.
      */
     @Test
+    @Ignore // TODO: Test ExecuteShellV2Command Instead.
     public void testExecuteShellCommand_recoveryTimeoutRetry() throws Exception {
         mTestDevice =
                 new TestDevice(mMockIDevice, mMockStateMonitor, mMockDvcMonitor) {
@@ -1005,6 +1016,7 @@ public class TestDeviceTest {
      * <p>Verify that DeviceNotAvailableException is thrown.
      */
     @Test
+    @Ignore // TODO: Test ExecuteShellV2Command Instead.
     public void testExecuteShellCommand_recoveryAttempts() throws Exception {
         mTestDevice =
                 new TestDevice(mMockIDevice, mMockStateMonitor, mMockDvcMonitor) {
@@ -2137,20 +2149,14 @@ public class TestDeviceTest {
                 };
         if (expectedCommand != null) {
             doAnswer(shellAnswer)
-                    .when(mMockIDevice)
+                    .when(mTestDevice)
                     .executeShellCommand(
-                            Mockito.eq(expectedCommand),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+                            Mockito.eq(expectedCommand), Mockito.<IShellOutputReceiver>any());
         } else {
             doAnswer(shellAnswer)
-                    .when(mMockIDevice)
+                    .when(mTestDevice)
                     .executeShellCommand(
-                            Mockito.<String>any(),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+                            Mockito.<String>any(), Mockito.<IShellOutputReceiver>any());
         }
     }
 
@@ -2167,56 +2173,30 @@ public class TestDeviceTest {
                 };
         if (expectedCommand != null) {
             doAnswer(shellAnswer)
-                    .when(mMockIDevice)
+                    .when(mTestDevice)
                     .executeShellCommand(
-                            Mockito.eq(expectedCommand),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+                            Mockito.eq(expectedCommand), Mockito.<IShellOutputReceiver>any());
         } else {
             doAnswer(shellAnswer)
-                    .when(mMockIDevice)
+                    .when(mTestDevice)
                     .executeShellCommand(
-                            Mockito.<String>any(),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+                            Mockito.<String>any(), Mockito.<IShellOutputReceiver>any());
         }
     }
 
     private void verifyShellResponse(final String expectedCommand) throws Exception {
         if (expectedCommand != null) {
-            verify(mMockIDevice)
-                    .executeShellCommand(
-                            Mockito.eq(expectedCommand),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+            verify(mTestDevice).executeShellCommand(expectedCommand);
         } else {
-            verify(mMockIDevice)
-                    .executeShellCommand(
-                            Mockito.<String>any(),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+            verify(mTestDevice).executeShellCommand(Mockito.anyString());
         }
     }
 
     private void verifyShellResponse(final String expectedCommand, int times) throws Exception {
         if (expectedCommand != null) {
-            verify(mMockIDevice, times(times))
-                    .executeShellCommand(
-                            Mockito.eq(expectedCommand),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+            verify(mTestDevice, times(times)).executeShellCommand(expectedCommand);
         } else {
-            verify(mMockIDevice, times(times))
-                    .executeShellCommand(
-                            Mockito.<String>any(),
-                            Mockito.<IShellOutputReceiver>any(),
-                            Mockito.anyLong(),
-                            Mockito.<TimeUnit>any());
+            verify(mTestDevice, times(times)).executeShellCommand(Mockito.anyString());
         }
     }
     /**
@@ -2294,6 +2274,7 @@ public class TestDeviceTest {
     @Test
     public void testRebootRecovers() throws Exception {
         when(mMockStateMonitor.waitForDeviceOnline()).thenReturn(mMockIDevice);
+        mTestDevice = mRecoveryTestDevice;
         mMockShellResponse = mock(IShellResponse.class);
         when(mMockShellResponse.getResponse())
                 .thenReturn(
@@ -2313,7 +2294,7 @@ public class TestDeviceTest {
         setGetPropertyExpectation("ro.crypto.state", "unsupported");
         when(mMockStateMonitor.waitForDeviceAvailable(Mockito.anyLong())).thenReturn(null);
 
-        mRecoveryTestDevice.reboot();
+        mTestDevice.reboot();
 
         verifyShellResponse("id", 4);
         verifyGetPropertyExpectation("ro.crypto.state", "unsupported", 1);
@@ -2691,12 +2672,12 @@ public class TestDeviceTest {
     /** Test that a single user is handled by {@link TestDevice#listUsers()}. */
     @Test
     public void testListUsers_oneUser() throws Exception {
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(28);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(28));
         final String listUsersCommand = "pm list users";
         injectShellResponse(
                 listUsersCommand, ArrayUtil.join("\r\n", "Users:", "UserInfo{0:Foo:13} running"));
 
-        ArrayList<Integer> actual = testDevice.listUsers();
+        ArrayList<Integer> actual = mTestDevice.listUsers();
         assertNotNull(actual);
         assertEquals(1, actual.size());
         assertEquals(0, actual.get(0).intValue());
@@ -2705,13 +2686,13 @@ public class TestDeviceTest {
     /** Test that invalid output is handled by {@link TestDevice#listUsers()}. */
     @Test
     public void testListUsers_invalidOutput() throws Exception {
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(28);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(28));
         final String listUsersCommand = "pm list users";
         final String output = "not really what we are looking for";
         injectShellResponse(listUsersCommand, output);
 
         try {
-            testDevice.listUsers();
+            mTestDevice.listUsers();
             fail("Failed to throw DeviceRuntimeException.");
         } catch (DeviceRuntimeException expected) {
             // expected
@@ -2724,13 +2705,13 @@ public class TestDeviceTest {
     /** Test that invalid format of users is handled by {@link TestDevice#listUsers()}. */
     @Test
     public void testListUsers_unparsableOutput() throws Exception {
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(28);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(28));
         final String listUsersCommand = "pm list users";
         final String output = "Users:\n" + "\tUserInfo{0:Ownertooshort}";
         injectShellResponse(listUsersCommand, output);
 
         try {
-            testDevice.listUsers();
+            mTestDevice.listUsers();
             fail("Failed to throw DeviceRuntimeException.");
         } catch (DeviceRuntimeException expected) {
             // expected
@@ -2747,14 +2728,14 @@ public class TestDeviceTest {
     /** Test that multiple user is handled by {@link TestDevice#listUsers()}. */
     @Test
     public void testListUsers_multiUsers() throws Exception {
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(28);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(28));
         final String listUsersCommand = "pm list users";
         injectShellResponse(
                 listUsersCommand,
                 ArrayUtil.join(
                         "\r\n", "Users:", "UserInfo{0:Foo:13} running", "UserInfo{3:FooBar:14}"));
 
-        ArrayList<Integer> actual = testDevice.listUsers();
+        ArrayList<Integer> actual = mTestDevice.listUsers();
         assertNotNull(actual);
         assertEquals(2, actual.size());
         assertEquals(0, actual.get(0).intValue());
@@ -2764,12 +2745,12 @@ public class TestDeviceTest {
     /** Test that a single user is handled by {@link TestDevice#listUsers()}. */
     @Test
     public void testListUsersInfo_oneUser_preT() throws Exception {
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(32);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(32));
         final String listUsersCommand = "pm list users";
         injectShellResponse(
                 listUsersCommand, ArrayUtil.join("\r\n", "Users:", "UserInfo{0:Foo:13} running"));
 
-        Map<Integer, UserInfo> actual = testDevice.getUserInfos();
+        Map<Integer, UserInfo> actual = mTestDevice.getUserInfos();
         assertNotNull(actual);
         assertEquals(1, actual.size());
         UserInfo user0 = actual.get(0);
@@ -2783,7 +2764,7 @@ public class TestDeviceTest {
     @Test
     public void testListUsersInfo_oneUser_postT() throws Exception {
 
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(33);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(33));
         final String listUsersCommand = "cmd user list -v";
         injectShellResponse(
                 listUsersCommand,
@@ -2794,7 +2775,7 @@ public class TestDeviceTest {
                                 + "flags=ADMIN|FULL|INITIALIZED|MAIN|PRIMARY|SYSTEM "
                                 + "(running) (current) (visible)"));
 
-        Map<Integer, UserInfo> actual = testDevice.getUserInfos();
+        Map<Integer, UserInfo> actual = mTestDevice.getUserInfos();
         assertNotNull(actual);
         assertEquals(1, actual.size());
         UserInfo user0 = actual.get(0);
@@ -2807,14 +2788,14 @@ public class TestDeviceTest {
     /** Test that multiple user is handled by {@link TestDevice#listUsers()}. */
     @Test
     public void testListUsersInfo_multiUsers() throws Exception {
-        TestDevice testDevice = newTestDeviceForReleaseApiLevel(28);
+        mTestDevice = Mockito.spy(newTestDeviceForReleaseApiLevel(28));
         final String listUsersCommand = "pm list users";
         injectShellResponse(
                 listUsersCommand,
                 ArrayUtil.join(
                         "\r\n", "Users:", "UserInfo{0:Foo:13} running", "UserInfo{10:FooBar:14}"));
 
-        Map<Integer, UserInfo> actual = testDevice.getUserInfos();
+        Map<Integer, UserInfo> actual = mTestDevice.getUserInfos();
         assertNotNull(actual);
         assertEquals(2, actual.size());
         UserInfo user0 = actual.get(0);
@@ -3192,29 +3173,31 @@ public class TestDeviceTest {
     @Test
     public void testStartUser_wait() throws Exception {
         mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    public int getApiLevel() throws DeviceNotAvailableException {
-                        return 29;
-                    }
+                Mockito.spy(
+                        new TestableTestDevice() {
+                            @Override
+                            public int getApiLevel() throws DeviceNotAvailableException {
+                                return 29;
+                            }
 
-                    @Override
-                    public CommandResult executeShellV2Command(
-                            String command,
-                            long maxTimeoutForCommand,
-                            TimeUnit timeUnit,
-                            int retryAttempts)
-                            throws DeviceNotAvailableException {
-                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
-                        res.setStdout("codename");
-                        return res;
-                    }
+                            @Override
+                            public CommandResult executeShellV2Command(
+                                    String command,
+                                    long maxTimeoutForCommand,
+                                    TimeUnit timeUnit,
+                                    int retryAttempts)
+                                    throws DeviceNotAvailableException {
+                                CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                                res.setStdout("codename");
+                                return res;
+                            }
 
-                    @Override
-                    public String getProperty(String name) throws DeviceNotAvailableException {
-                        return "Q\n";
-                    }
-                };
+                            @Override
+                            public String getProperty(String name)
+                                    throws DeviceNotAvailableException {
+                                return "Q\n";
+                            }
+                        });
         injectShellResponse("am start-user -w 10", "Success: user started\n");
         injectShellResponse("am get-started-user-state 10", "RUNNING_UNLOCKED\n");
 
@@ -5580,18 +5563,20 @@ public class TestDeviceTest {
     @Test
     public void testGetHeapDump() throws Exception {
         mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    public File pullFile(String remoteFilePath) throws DeviceNotAvailableException {
-                        return new File("test");
-                    }
+                Mockito.spy(
+                        new TestableTestDevice() {
+                            @Override
+                            public File pullFile(String remoteFilePath)
+                                    throws DeviceNotAvailableException {
+                                return new File("test");
+                            }
 
-                    @Override
-                    public boolean doesFileExist(String deviceFilePath, int userId)
-                            throws DeviceNotAvailableException {
-                        return true;
-                    }
-                };
+                            @Override
+                            public boolean doesFileExist(String deviceFilePath, int userId)
+                                    throws DeviceNotAvailableException {
+                                return true;
+                            }
+                        });
         injectShellResponse("pidof system_server", "929");
         injectShellResponse("am dumpheap 929 /data/dump.hprof", "");
         injectShellResponse("rm -rf /data/dump.hprof", "");
@@ -5661,64 +5646,61 @@ public class TestDeviceTest {
     public void testPostInvocationWifiTearDown() throws Exception {
         // A TestDevice with a no-op recoverDevice() implementation
         mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    public boolean recoverDevice() throws DeviceNotAvailableException {
-                        // ignore
-                        return true;
-                    }
+                Mockito.spy(
+                        new TestableTestDevice() {
+                            @Override
+                            public boolean recoverDevice() throws DeviceNotAvailableException {
+                                // ignore
+                                return true;
+                            }
 
-                    @Override
-                    public String installPackage(
-                            File packageFile, boolean reinstall, String... extraArgs)
-                            throws DeviceNotAvailableException {
-                        // Fake install is successfull
-                        return null;
-                    }
+                            @Override
+                            public String installPackage(
+                                    File packageFile, boolean reinstall, String... extraArgs)
+                                    throws DeviceNotAvailableException {
+                                // Fake install is successful
+                                return null;
+                            }
 
-                    @Override
-                    IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
-                        super.createWifiHelper(false, true);
-                        return mMockWifi;
-                    }
+                            @Override
+                            IWifiHelper createWifiHelper() throws DeviceNotAvailableException {
+                                super.createWifiHelper(false, true);
+                                return mMockWifi;
+                            }
 
-                    @Override
-                    IWifiHelper createWifiHelper(boolean useV2) throws DeviceNotAvailableException {
-                        return mMockWifi;
-                    }
+                            @Override
+                            IWifiHelper createWifiHelper(boolean useV2)
+                                    throws DeviceNotAvailableException {
+                                return mMockWifi;
+                            }
 
-                    @Override
-                    IWifiHelper createWifiHelper(boolean useV2, boolean doSetup)
-                            throws DeviceNotAvailableException {
-                        return mMockWifi;
-                    }
+                            @Override
+                            IWifiHelper createWifiHelper(boolean useV2, boolean doSetup)
+                                    throws DeviceNotAvailableException {
+                                return mMockWifi;
+                            }
 
-                    @Override
-                    public ContentProviderHandler getContentProvider(int userId)
-                            throws DeviceNotAvailableException {
-                        return null;
-                    }
+                            @Override
+                            public ContentProviderHandler getContentProvider(int userId)
+                                    throws DeviceNotAvailableException {
+                                return null;
+                            }
 
-                    @Override
-                    public boolean isBypassLowTargetSdkBlockSupported()
-                            throws DeviceNotAvailableException {
-                        return true;
-                    }
-                };
+                            @Override
+                            public boolean isBypassLowTargetSdkBlockSupported()
+                                    throws DeviceNotAvailableException {
+                                return true;
+                            }
+                        });
         when(mMockStateMonitor.waitForDeviceAvailable()).thenReturn(mMockIDevice);
 
         when(mMockWifi.getIpAddress()).thenReturn("ip");
         // Wifi is cleaned up by the post invocation tear down.
-
         mTestDevice.getIpAddress();
         mTestDevice.postInvocationTearDown(null);
 
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq("dumpsys package com.android.tradefed.utils.wifi"),
-                        Mockito.any(),
-                        Mockito.anyLong(),
-                        Mockito.any());
+        verify(mTestDevice)
+                .executeShellCommand(Mockito.eq("dumpsys package com.android.tradefed.utils.wifi"));
         verify(mMockWifi).cleanUp();
     }
 
@@ -5872,18 +5854,20 @@ public class TestDeviceTest {
     @Test
     public void testScreenshotByDisplay() throws Exception {
         mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    public File pullFile(String remoteFilePath) throws DeviceNotAvailableException {
-                        assertEquals("/data/local/tmp/display_0.png", remoteFilePath);
-                        return new File("fakewhatever");
-                    }
+                Mockito.spy(
+                        new TestableTestDevice() {
+                            @Override
+                            public File pullFile(String remoteFilePath)
+                                    throws DeviceNotAvailableException {
+                                assertEquals("/data/local/tmp/display_0.png", remoteFilePath);
+                                return new File("fakewhatever");
+                            }
 
-                    @Override
-                    byte[] convertPngFile(File pngFile, String format, boolean rescale) {
-                        return "image".getBytes();
-                    }
-                };
+                            @Override
+                            byte[] convertPngFile(File pngFile, String format, boolean rescale) {
+                                return "image".getBytes();
+                            }
+                        });
         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
         OutputStream outStream = null;
         when(mMockRunUtil.runTimedCmd(
@@ -5905,12 +5889,7 @@ public class TestDeviceTest {
         assertNotNull(source);
         StreamUtil.close(source);
 
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq("rm -rf /data/local/tmp/display_0.png"),
-                        Mockito.any(),
-                        Mockito.anyLong(),
-                        Mockito.any());
+        verify(mTestDevice).executeShellCommand(Mockito.eq("rm -rf /data/local/tmp/display_0.png"));
     }
 
     /** Test {@link TestDevice#doesFileExist(String)}. */

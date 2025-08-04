@@ -92,6 +92,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
 import com.google.errorprone.annotations.FormatMethod;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -378,6 +379,7 @@ public class NativeDevice
 
         private String[] mCmd;
         private long mTimeout;
+        private long mOutputTimeout;
         private File mPipeAsInput; // Used in pushFile, uses local file as input to "content write"
         private OutputStream mPipeToOutput; // Used in pullFile, to pipe content from "content read"
         private OutputStream mPipeToError;
@@ -393,12 +395,37 @@ public class NativeDevice
             mPipeToOutput = pipeToOutput;
             mPipeToError = pipeToError;
             mTimeout = timeout;
+            mOutputTimeout = 0L;
+        }
+
+        AdbShellAction(
+                String[] cmd,
+                File pipeAsInput,
+                OutputStream pipeToOutput,
+                OutputStream pipeToError,
+                long timeout,
+                long outputTimeout) {
+            mCmd = cmd;
+            mPipeAsInput = pipeAsInput;
+            mPipeToOutput = pipeToOutput;
+            mPipeToError = pipeToError;
+            mTimeout = timeout;
+            mOutputTimeout = outputTimeout;
         }
 
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
             if (mPipeAsInput != null) {
                 mResult = getRunUtil().runTimedCmdWithInputRedirect(mTimeout, mPipeAsInput, mCmd);
+            } else if (mOutputTimeout != 0) {
+                mResult =
+                        getRunUtil()
+                                .runTimedCmdWithOutputMonitor(
+                                        mTimeout,
+                                        mOutputTimeout,
+                                        mPipeToOutput,
+                                        mPipeToError,
+                                        mCmd);
             } else {
                 mResult = getRunUtil().runTimedCmd(mTimeout, mPipeToOutput, mPipeToError, mCmd);
             }
@@ -1034,16 +1061,13 @@ public class NativeDevice
     @Override
     public void executeShellCommand(final String command, final IShellOutputReceiver receiver)
             throws DeviceNotAvailableException {
-        DeviceAction action = new DeviceAction() {
-            @Override
-            public boolean run() throws TimeoutException, IOException,
-                    AdbCommandRejectedException, ShellCommandUnresponsiveException {
-                getIDevice().executeShellCommand(command, receiver,
-                        getCommandTimeout(), TimeUnit.MILLISECONDS);
-                return true;
-            }
-        };
-        performDeviceAction(String.format("shell %s", command), action, MAX_RETRY_ATTEMPTS);
+        executeShellCommand(
+                command,
+                receiver,
+                getCommandTimeout(),
+                0L,
+                TimeUnit.MILLISECONDS,
+                MAX_RETRY_ATTEMPTS);
     }
 
     /**
@@ -1053,16 +1077,8 @@ public class NativeDevice
     public void executeShellCommand(final String command, final IShellOutputReceiver receiver,
             final long maxTimeToOutputShellResponse, final TimeUnit timeUnit,
             final int retryAttempts) throws DeviceNotAvailableException {
-        DeviceAction action = new DeviceAction() {
-            @Override
-            public boolean run() throws TimeoutException, IOException, AdbCommandRejectedException,
-                    ShellCommandUnresponsiveException {
-                getIDevice().executeShellCommand(command, receiver,
-                        maxTimeToOutputShellResponse, timeUnit);
-                return true;
-            }
-        };
-        performDeviceAction(String.format("shell %s", command), action, retryAttempts);
+        executeShellCommand(
+                command, receiver, 0L, maxTimeToOutputShellResponse, timeUnit, retryAttempts);
     }
 
     /** {@inheritDoc} */
@@ -1075,23 +1091,41 @@ public class NativeDevice
             final TimeUnit timeUnit,
             final int retryAttempts)
             throws DeviceNotAvailableException {
-        DeviceAction action =
-                new DeviceAction() {
-                    @Override
-                    public boolean run()
-                            throws TimeoutException, IOException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException {
-                        getIDevice()
-                                .executeShellCommand(
-                                        command,
-                                        receiver,
-                                        maxTimeoutForCommand,
-                                        maxTimeToOutputShellResponse,
-                                        timeUnit);
-                        return true;
+        CLog.d("ExecuteShellCommand: %s", command);
+        ByteArrayOutputStream stdOutBytesReceiver = new ByteArrayOutputStream();
+        ByteArrayOutputStream stdErrBytesReceiver = new ByteArrayOutputStream();
+        CommandResult result =
+                executeShellV2Command(
+                        command,
+                        null,
+                        stdOutBytesReceiver,
+                        stdErrBytesReceiver,
+                        maxTimeoutForCommand,
+                        maxTimeToOutputShellResponse,
+                        timeUnit,
+                        retryAttempts,
+                        true);
+        if (receiver == null || receiver.isCancelled()) {
+            return;
+        }
+        try {
+            ByteArrayOutputStream combinedData = new ByteArrayOutputStream();
+            if (stdOutBytesReceiver.size() != 0) {
+                stdOutBytesReceiver.writeTo(combinedData);
                     }
-                };
-        performDeviceAction(String.format("shell %s", command), action, retryAttempts);
+            if (stdErrBytesReceiver.size() != 0) {
+                if (combinedData.size() != 0) {
+                    combinedData.write('\n');
+                }
+                stdErrBytesReceiver.writeTo(combinedData);
+            }
+            receiver.addOutput(combinedData.toByteArray(), 0, combinedData.size());
+            receiver.flush();
+        } catch (IOException e) {
+            CLog.e("Failed to result to receiver: %s", e.getMessage());
+        } finally {
+            receiver.flush();
+        }
     }
 
     /**
@@ -1209,6 +1243,29 @@ public class NativeDevice
             final TimeUnit timeUnit,
             int retryAttempts)
             throws DeviceNotAvailableException {
+        return executeShellV2Command(
+                cmd,
+                pipeAsInput,
+                pipeToOutput,
+                pipeToError,
+                maxTimeoutForCommand,
+                0L,
+                timeUnit,
+                retryAttempts,
+                false);
+    }
+
+    private CommandResult executeShellV2Command(
+            String cmd,
+            File pipeAsInput,
+            OutputStream pipeToOutput,
+            OutputStream pipeToError,
+            final long maxTimeoutForCommand,
+            final long maxOutputTimeout,
+            final TimeUnit timeUnit,
+            int retryAttempts,
+            boolean oldShellCommand)
+            throws DeviceNotAvailableException {
         // If the device does not support the v2 shell features. Exit status will not be propagated
         // and stdout/stderr will be merged in stdout.
         //
@@ -1221,14 +1278,15 @@ public class NativeDevice
                 !getIDevice().supportsFeature(IDevice.Feature.SHELL_V2)
                         && getOptions().useExitStatusWorkaround();
 
-        final String[] fullCmd = buildAdbShellCommand(cmd, parseExitStatus);
+        final String[] fullCmd = buildAdbShellCommand(cmd, parseExitStatus, oldShellCommand);
         AdbShellAction adbActionV2 =
                 new AdbShellAction(
                         fullCmd,
                         pipeAsInput,
                         pipeToOutput,
                         pipeToError,
-                        timeUnit.toMillis(maxTimeoutForCommand));
+                        timeUnit.toMillis(maxTimeoutForCommand),
+                        timeUnit.toMillis(maxOutputTimeout));
         performDeviceAction(String.format("adb %s", fullCmd[4]), adbActionV2, retryAttempts);
         if (parseExitStatus) {
             postProcessExitStatus(adbActionV2.mResult);
@@ -2618,14 +2676,22 @@ public class NativeDevice
     }
 
     /** Builds the OS command for the given adb shell command session and args */
-    protected String[] buildAdbShellCommand(String command, boolean forceExitStatusDetection) {
+    protected String[] buildAdbShellCommand(
+            String command, boolean forceExitStatusDetection, boolean oldShellCommand) {
         // TODO: implement the shell v2 support in ddmlib itself.
-        String[] commandArgs =
-                QuotationAwareTokenizer.tokenizeLine(
-                        command,
-                        /** No logging */
-                        false);
-
+        String[] commandArgs;
+        // for any old command from ddmlib executeShellCommand
+        // we will pass it to adb shell command as a single string.
+        if (oldShellCommand) {
+            commandArgs = new String[1];
+            commandArgs[0] = command;
+        } else {
+            commandArgs =
+                    QuotationAwareTokenizer.tokenizeLine(
+                            command,
+                            /** No logging */
+                            false);
+        }
         String[] exitStatusProbe;
         if (forceExitStatusDetection) {
             exitStatusProbe = new String[] {";", "echo", EXIT_STATUS_DELIMITER + "$?"};
@@ -4086,7 +4152,7 @@ public class NativeDevice
         String mode = rebootMode.getAdbRebootCommand(reason);
         String adbRebootCommand = String.format("reboot %s", mode);
         adbRebootCommand = adbRebootCommand.trim();
-        final String[] fullCmd = buildAdbShellCommand(adbRebootCommand, false);
+        final String[] fullCmd = buildAdbShellCommand(adbRebootCommand, false, false);
         return new RebootDeviceAction(
                 rebootMode,
                 reason,

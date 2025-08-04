@@ -726,7 +726,7 @@ public class TestDevice extends NativeDevice {
     }
 
     /**
-     * Core implementation for installing application with split apk files {@link
+     * Core implementation for installing application with sfplit apk files {@link
      * IDevice#installPackages(List, boolean, List)} See
      * "https://developer.android.com/studio/build/configure-apk-splits" on how to split apk to
      * several files.
@@ -2863,7 +2863,7 @@ public class TestDevice extends NativeDevice {
             getRunUtil().allowInterrupt(true);
             // Manually execute the adb action to avoid any kind of recovery
             // since it hard to interrupt the forwarding
-            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false);
+            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false, false);
             AdbShellAction adbActionV2 =
                     new AdbShellAction(
                             fullCmd,
