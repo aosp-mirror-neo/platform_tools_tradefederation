@@ -273,6 +273,7 @@ public class GceSshTunnelMonitor extends AbstractTunnelMonitor {
             if (mAdbConnectionLogs == null) {
                 try {
                     mAdbConnectionLogs = FileUtil.createTempFile("adb-connection", ".txt");
+                    CLog.d("Creating adb-connection logs placeholder file: %s", mAdbConnectionLogs);
                 } catch (IOException e) {
                     FileUtil.deleteFile(mAdbConnectionLogs);
                     CLog.e(e);

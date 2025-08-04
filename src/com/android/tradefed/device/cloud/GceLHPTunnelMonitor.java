@@ -109,6 +109,7 @@ public class GceLHPTunnelMonitor extends AbstractTunnelMonitor {
             if (mAdbConnectionLog == null) {
                 try {
                     mAdbConnectionLog = FileUtil.createTempFile("adb-connection", ".txt");
+                    CLog.d("Creating adb-connection logs placeholder file: %s", mAdbConnectionLog);
                 } catch (IOException e) {
                     FileUtil.deleteFile(mAdbConnectionLog);
                     CLog.e(e);
