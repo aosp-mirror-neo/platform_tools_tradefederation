@@ -268,9 +268,9 @@ public class DefaultLogCollectionListener extends ResultAndLogForwarder {
         // for each collector instance, collect if their collection level at on-failure match
         for (Map.Entry<AutoLogCollector, IMetricCollector> collectorInstanceMap :
                 mCollectorInstances.entrySet()) {
-            MetricCollectionLevel alwaysOnLevel =
+            MetricCollectionLevel onFailureLevel =
                     mOnFailureCollectors.get(collectorInstanceMap.getKey());
-            if (alwaysOnLevel.equals(level)) {
+            if (onFailureLevel.equals(level)) {
                 try {
                     collectorInstanceMap.getValue().collectMetrics(level, name);
                 } catch (Throwable t) {
