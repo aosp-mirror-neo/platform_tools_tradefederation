@@ -35,19 +35,38 @@ public class RemoveSystemAppPreparer extends BaseTargetPreparer {
             description = "the name of the file to remove (extension included)")
     private List<String> mFiles= new ArrayList<String>();
 
+    @Option(
+            name = "uninstall-system-app-package",
+            description = "the name of the package to remove")
+    private List<String> mPackages = new ArrayList<String>();
+
     /** {@inheritDoc} */
     @Override
     public void setUp(TestInformation testInformation)
             throws TargetSetupError, DeviceNotAvailableException {
         ITestDevice device = testInformation.getDevice();
         device.remountSystemWritable();
-        for (String file : mFiles) {
-            CLog.d("Removing system app %s from /system/app", file);
-            device.executeShellCommand(String.format("rm /system/app/%s", file));
-            CLog.d("Removing system app %s from /system/priv-app", file);
-            device.executeShellCommand(String.format("rm /system/priv-app/%s", file));
+        if (!mFiles.isEmpty()) {
+            for (String file : mFiles) {
+                CLog.d("Removing system app %s from /system/app", file);
+                device.executeShellCommand(String.format("rm /system/app/%s", file));
+                CLog.d("Removing system app %s from /system/priv-app", file);
+                device.executeShellCommand(String.format("rm /system/priv-app/%s", file));
+            }
         }
-
+        if (!mPackages.isEmpty()) {
+            for (String pkgName : mPackages) {
+                String pathOutput =
+                        device.executeShellCommand(String.format("pm path %s", pkgName));
+                if (pathOutput != null
+                        && !pathOutput.trim().isEmpty()
+                        && pathOutput.contains(":")) {
+                    String packagePath = pathOutput.trim().split(":")[1].trim();
+                    CLog.d("Removing system app %s file: %s", pkgName, packagePath);
+                    device.executeShellCommand(String.format("rm -rf %s", packagePath));
+                }
+            }
+        }
         // Reboot the device to put /system back into read-only
         device.reboot();
         device.waitForDeviceAvailable();

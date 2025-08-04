@@ -19,7 +19,7 @@ syntax = "proto3";
 package luci.resultdb.v1;
 
 import "google/protobuf/timestamp.proto";
-import public "tools/tradefederation/core/proto/resultdb/invocation.proto";
+import public "tools/tradefederation/core/proto/resultdb/common.proto";
 
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
 option java_package = "com.android.resultdb.proto";

@@ -18,8 +18,6 @@ syntax = "proto3";
 
 package luci.resultdb.v1;
 
-import "google/protobuf/timestamp.proto";
-
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
 option java_package = "com.android.resultdb.proto";
 option java_multiple_files = true;
@@ -58,16 +56,20 @@ message Variant {
   // These values must be the same for all tests in a given execution of
   // a module. Variants specific to a particular test case should be
   // encoded in the test method name (see TestIdentifier.method).
+  //
+  // The total size (as measured by proto.Size) must be less than 1,024 bytes.
   map<string, string> def = 1;
 }
 
 // A string key-value pair. Typically used for tagging, see Invocation.tags
 message StringPair {
   // Regex: ^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$
-  // Max length: 64.
+  // Max length: 64 bytes.
   string key = 1;
 
-  // Max length: 256.
+  // Must be valid UTF-8, Unicode Normalization Form C, printable characters
+  // only.
+  // Max length: 256 bytes.
   string value = 2;
 }
 
@@ -151,10 +153,10 @@ message TestIdentifier {
   // Hash of the module variant.
   // hex(sha256(sorted(''.join('%s:%s\n' for k, v in module_variant.items()))))[:8].
   //
-  // In result upload and download contexts, this field is OUTPUT_ONLY and will be
+  // In the context of the TestResult record, this field is OUTPUT_ONLY and will be
   // automatically computed from the provided module_variant (do not set it yourself).
-  // When specifying the tests to query in a ResultDB (not Recorder) RPC request, this field
-  // may be specified as an alternative to module_variant.
+  // In the context of ResultDB Query RPCs accepting this type as a request filter,
+  // this field may be specified as an alternative to module_variant.
   string module_variant_hash = 4;
 
   // Intermediate hierarchy - coarse name.
@@ -337,6 +339,40 @@ message TestIdentifierBase {
   string case_name = 7;
 }
 
+// ModuleIdentifier represents the identity of a module.
+message ModuleIdentifier {
+  // The name of the module being tested. A module is a set of tests which run
+  // with the same test harness, and typically corresponds with a unit of
+  // build, such as a bazel test target.
+  //
+  // See TestIdentifier.module_name for more details.
+  string module_name = 1;
+
+  // The scheme of the module, for example, "junit" or "gtest".
+  //
+  // Must match one of the schemes in the ResultDB service configuration (see
+  // go/resultdb-schemes). Additional values can be configured as needed.
+  //
+  // See TestIdentifier.module_scheme for more details.
+  string module_scheme = 2;
+
+  // Description of one specific way of running the tests in a module,
+  // e.g. specific ABI (x64/x86/...), build flags and/or operating system.
+  //
+  // See TestIdentifier.module_variant for more details.
+  Variant module_variant = 3;
+
+  // Hash of the module variant.
+  //
+  // In the context of the WorkUnit record, this field is always OUTPUT_ONLY and will be
+  // automatically computed from the provided module_variant (do not set it yourself).
+  // In the context of ResultDB Query RPCs accepting this type as a request filter,
+  // this field may be specified as an alternative to module_variant.
+  //
+  // See TestIdentifier.module_variant_hash for more details.
+  string module_variant_hash = 4;
+}
+
 // GitilesCommit specifies the position of the gitiles commit an invocation
 // ran against, in a repository's commit log. More specifically, a ref's commit
 // log.
@@ -380,6 +416,34 @@ message GerritChange {
   int64 patchset = 4;
 }
 
+// Specifies the source code that was tested.
+message Sources {
+  // The base version of code sources checked out. Mandatory.
+  // If necessary, we could add support for non-gitiles sources here in
+  // future, using a oneof statement. E.g.
+  // oneof system {
+  //    GitilesCommit gitiles_commit = 1;
+  //    SubversionRevision svn_revision = 4;
+  //    ...
+  // }
+  GitilesCommit gitiles_commit = 1;
+
+  // The changelist(s) which were applied upon the base version of sources
+  // checked out. E.g. in commit queue tryjobs.
+  //
+  // At most 10 changelist(s) may be specified here. If there
+  // are more, only include the first 10 and set is_dirty.
+  repeated GerritChange changelists = 2;
+
+  // Whether there were any changes made to the sources, not described above.
+  // For example, a version of a dependency was upgraded before testing (e.g.
+  // in an autoroller recipe).
+  //
+  // Cherry-picking a changelist on top of the base checkout is not considered
+  // making the sources dirty as it is reported separately above.
+  bool is_dirty = 3;
+}
+
 // Deprecated: Use GitilesCommit instead.
 message CommitPosition {
   // The following fields identify a git repository and a ref within which the
@@ -392,27 +456,6 @@ message CommitPosition {
   // above.
   int64 position = 4;
 }
-
-// Deprecated: Do not use.
-message CommitPositionRange {
-  // The lowest commit position to include in the range.
-  CommitPosition earliest = 1;
-
-  // Include only commit positions that that are strictly lower than this.
-  CommitPosition latest = 2;
-}
-
-// A range of timestamps.
-//
-// Currently unused.
-message TimeRange {
-  // The oldest timestamp to include in the range.
-  google.protobuf.Timestamp earliest = 1;
-
-  // Include only timestamps that are strictly older than this.
-  google.protobuf.Timestamp latest = 2;
-}
-
 
 // Represents a reference in a source control system.
 message SourceRef {
