@@ -65,7 +65,7 @@ import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.error.TestErrorIdentifier;
 import com.android.tradefed.retry.IRetryDecision;
-import com.android.tradefed.retry.RetryLogSaverResultForwarder;
+import com.android.tradefed.retry.RetryResultAndLogForwarder;
 import com.android.tradefed.retry.RetryStatistics;
 import com.android.tradefed.retry.RetryStrategy;
 import com.android.tradefed.suite.checker.ISystemStatusCheckerReceiver;
@@ -1259,11 +1259,11 @@ public class InvocationExecution implements IInvocationExecution {
                         remainingTests.remove(test);
                         continue;
                     }
-                    CLog.d("Using RetryLogSaverResultForwarder to forward results.");
+                    CLog.d("Using RetryResultAndLogForwarder to forward results.");
                     ModuleListener mainGranularRunListener =
                             new ModuleListener(null, info.getContext());
-                    RetryLogSaverResultForwarder runListener =
-                            initializeListeners(config, listener, mainGranularRunListener);
+                    RetryResultAndLogForwarder runListener =
+                            initializeListeners(listener, mainGranularRunListener);
                     mainGranularRunListener.setAttemptIsolation(
                             CurrentInvocation.runCurrentIsolation());
                     try {
@@ -1530,23 +1530,13 @@ public class InvocationExecution implements IInvocationExecution {
         }
     }
 
-    private RetryLogSaverResultForwarder initializeListeners(
-            IConfiguration config,
+    private RetryResultAndLogForwarder initializeListeners(
             ITestInvocationListener mainListener,
             ITestInvocationListener mainGranularLevelListener) {
         List<ITestInvocationListener> currentTestListeners = new ArrayList<>();
         currentTestListeners.add(mainGranularLevelListener);
         currentTestListeners.add(mainListener);
-        return new RetryLogSaverResultForwarder(
-                config.getLogSaver(), currentTestListeners, config) {
-            @Override
-            public void testLog(
-                    String dataName, LogDataType dataType, InputStreamSource dataStream) {
-                // We know for sure that the sub-listeners are LogSaverResultForwarder
-                // so we delegate to them to save and generate the logAssociation.
-                testLogForward(dataName, dataType, dataStream);
-            }
-        };
+        return new RetryResultAndLogForwarder(currentTestListeners);
     }
 
     private void addRetryTime(long retryTimeMs) {

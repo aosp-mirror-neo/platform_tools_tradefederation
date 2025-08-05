@@ -68,8 +68,8 @@ import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogFile;
-import com.android.tradefed.result.LogSaverResultForwarder;
 import com.android.tradefed.result.MultiFailureDescription;
+import com.android.tradefed.result.ResultAndLogForwarder;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.TestErrorIdentifier;
@@ -488,18 +488,16 @@ public class ITestSuiteTest {
         StatusCheckerResult result = new StatusCheckerResult(CheckStatus.FAILED);
         result.setErrorMessage("some failures.");
         result.setBugreportNeeded(true);
-        LogSaverResultForwarder allListeners =
-                new LogSaverResultForwarder(
-                        mMockLogSaver, Arrays.asList(mMockListener), mStubMainConfiguration);
+        ResultAndLogForwarder allListeners = new ResultAndLogForwarder(mMockListener);
         when(mMockSysChecker.preExecutionCheck(Mockito.eq(mMockDevice))).thenReturn(result);
-        when(mMockDevice.logBugreport(Mockito.any(), Mockito.any(LogSaverResultForwarder.class)))
+        when(mMockDevice.logBugreport(Mockito.any(), Mockito.any(ResultAndLogForwarder.class)))
                 .thenReturn(true);
         when(mMockSysChecker.postExecutionCheck(Mockito.eq(mMockDevice))).thenReturn(result);
         expectTestRun(allListeners);
 
         mTestSuite.run(mTestInfo, allListeners);
         verify(mMockDevice, times(2))
-                .logBugreport(Mockito.any(), Mockito.any(LogSaverResultForwarder.class));
+                .logBugreport(Mockito.any(), Mockito.any(ResultAndLogForwarder.class));
     }
 
     /**
@@ -515,10 +513,8 @@ public class ITestSuiteTest {
 
         when(mMockSysChecker.preExecutionCheck(Mockito.eq(mMockDevice)))
                 .thenThrow(new RuntimeException("I failed."));
-        LogSaverResultForwarder allListeners =
-                new LogSaverResultForwarder(
-                        mMockLogSaver, Arrays.asList(mMockListener), mStubMainConfiguration);
-        when(mMockDevice.logBugreport(Mockito.any(), Mockito.any(LogSaverResultForwarder.class)))
+        ResultAndLogForwarder allListeners = new ResultAndLogForwarder(mMockListener);
+        when(mMockDevice.logBugreport(Mockito.any(), Mockito.any(ResultAndLogForwarder.class)))
                 .thenReturn(true);
 
         when(mMockSysChecker.postExecutionCheck(Mockito.eq(mMockDevice)))
@@ -527,7 +523,7 @@ public class ITestSuiteTest {
 
         mTestSuite.run(mTestInfo, allListeners);
         verify(mMockDevice, times(2))
-                .logBugreport(Mockito.any(), Mockito.any(LogSaverResultForwarder.class));
+                .logBugreport(Mockito.any(), Mockito.any(ResultAndLogForwarder.class));
     }
 
     /**
@@ -584,9 +580,7 @@ public class ITestSuiteTest {
         mTestSuite.setSystemStatusChecker(sysChecker);
         when(mMockSysChecker.preExecutionCheck(Mockito.eq(mMockDevice)))
                 .thenReturn(new StatusCheckerResult(CheckStatus.SUCCESS));
-        LogSaverResultForwarder allListeners =
-                new LogSaverResultForwarder(
-                        mMockLogSaver, Arrays.asList(mMockListener), mStubMainConfiguration);
+        ResultAndLogForwarder allListeners = new ResultAndLogForwarder(mMockListener);
         when(mMockDevice.logBugreport(Mockito.any(), Mockito.any())).thenReturn(true);
 
         // No bugreport is captured if not explicitly requested
@@ -598,7 +592,7 @@ public class ITestSuiteTest {
 
         mTestSuite.run(mTestInfo, allListeners);
         verify(mMockDevice, times(1))
-                .logBugreport(Mockito.any(), Mockito.any(LogSaverResultForwarder.class));
+                .logBugreport(Mockito.any(), Mockito.any(ResultAndLogForwarder.class));
         verify(mMockListener)
                 .testRunStarted(
                         Mockito.eq(ITestSuite.MODULE_CHECKER_PRE + "_test"),

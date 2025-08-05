@@ -38,8 +38,10 @@ import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.connection.AbstractConnection;
 import com.android.tradefed.device.connection.AdbTcpConnection;
+import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.device.metric.CollectorHelper;
 import com.android.tradefed.device.metric.IMetricCollector;
+import com.android.tradefed.device.metric.IMetricCollector.MetricCollectionLevel;
 import com.android.tradefed.device.metric.IMetricCollectorReceiver;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.error.IHarnessException;
@@ -63,7 +65,6 @@ import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.ITestLoggerReceiver;
 import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
-import com.android.tradefed.result.LogSaverResultForwarder;
 import com.android.tradefed.result.ResultAndLogForwarder;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
@@ -427,6 +428,25 @@ public abstract class ITestSuite
                     "Whether to apply post processors in the order they are mentioned in the"
                             + " config.")
     private boolean mKeepPostProcessorOrder = false;
+
+    @Option(
+            name = "enable-default-logs",
+            description = "Whether to collect debugging logs by default.")
+    private boolean mEnableDefaultLogs = false;
+
+    @Option(
+            name = "log-level-on-failure",
+            description =
+                    "A map to change the default log level of a AutoLogCollector at which logs will"
+                            + " be collected during failures.")
+    private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelOnFailure = new LinkedHashMap<>();
+
+    @Option(
+            name = "log-level-always-on",
+            description =
+                    "A map to change the default log level of a AutoLogCollector at which logs will"
+                            + " be collected regardless of failures.")
+    private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelAlwaysOn = new LinkedHashMap<>();
 
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
@@ -955,19 +975,6 @@ public abstract class ITestSuite
                                         ModuleDefinition.MODULE_ISOLATED,
                                         CurrentInvocation.moduleCurrentIsolation().toString());
                     }
-                    // Unify invocation level listeners, module listeners and module post-processors
-                    ITestInvocationListener allListenersWithoutLogSaver =
-                            listenerWithPostProcessors(module, listener, moduleListeners);
-                    // NOTE: do not set log saver again, since the previous log saver should have
-                    // already set it to the correct listeners.
-                    ITestInvocationListener allListenersWithLogSaver =
-                            new LogSaverResultForwarder(
-                                    mMainConfiguration.getLogSaver(),
-                                    Arrays.asList(allListenersWithoutLogSaver),
-                                    module.getModuleConfiguration(),
-                                    false);
-                    // Only the module callback will be called here.
-                    listenerWithCollectors = allListenersWithLogSaver;
                     List<IMetricCollector> allCollectors = new LinkedList<>();
                     if (mMetricCollectors != null) {
                         allCollectors.addAll(mMetricCollectors);
@@ -975,6 +982,19 @@ public abstract class ITestSuite
                     if (module.getModuleConfiguration().getMetricCollectors() != null) {
                         allCollectors.addAll(module.getModuleConfiguration().getMetricCollectors());
                     }
+
+                    // enable default log collection
+                    ITestInvocationListener listenerWithLogCollection = listener;
+                    if (mEnableDefaultLogs) {
+                        listenerWithLogCollection =
+                                enableDefaultLogCollection(module, listener, allCollectors);
+                    }
+                    // Unify invocation level listeners, module listeners and module post-processors
+                    ITestInvocationListener allListeners =
+                            listenerWithPostProcessors(
+                                    module, listenerWithLogCollection, moduleListeners);
+                    // Only the module callback will be called here.
+                    listenerWithCollectors = allListeners;
                     for (IMetricCollector collector :
                             CollectorHelper.cloneCollectors(allCollectors)) {
                         if (collector.isDisabled()) {
@@ -1063,7 +1083,7 @@ public abstract class ITestSuite
                             if (mInLocalRetry) {
                                 CLog.v("Skip module-configuration logging in local retry.");
                             } else {
-                                allListenersWithLogSaver.testLog(
+                                allListeners.testLog(
                                         "module-configuration", LogDataType.HARNESS_CONFIG, source);
                             }
                         }
@@ -1096,7 +1116,7 @@ public abstract class ITestSuite
                             module.getModuleInvocationContext()
                                     .addInvocationAttribute(ModuleDefinition.SPARSE_MODULE, "true");
                         } else {
-                            runSingleModule(module, moduleInfo, allListenersWithoutLogSaver);
+                            runSingleModule(module, moduleInfo, allListeners);
                         }
                     } finally {
                         module.getModuleInvocationContext()
@@ -1126,7 +1146,7 @@ public abstract class ITestSuite
                     }
                     if (moduleRan) {
                         // Module isolation routine
-                        moduleIsolation(mContext, allListenersWithLogSaver);
+                        moduleIsolation(mContext, allListeners);
                     }
                 }
             } catch (DeviceNotAvailableException e) {
@@ -1173,14 +1193,6 @@ public abstract class ITestSuite
             ModuleDefinition module,
             ITestInvocationListener invocationListener,
             List<ITestInvocationListener> moduleListeners) {
-        // Strip LogSaverResultForwarder from invocationListener as a RetryLogSaverResultForwarder
-        // will be added during module execution later.
-        if (invocationListener instanceof LogSaverResultForwarder) {
-            List<ITestInvocationListener> origListeners =
-                    ((LogSaverResultForwarder) invocationListener).getListeners();
-            invocationListener = new ResultAndLogForwarder(origListeners);
-        }
-
         IConfiguration config = module.getModuleConfiguration();
         List<String> testTypes = config.getConfigurationDescription().getMetaData(TEST_TYPE_KEY);
         List<ITestInvocationListener> allListeners = new ArrayList<>();
@@ -1224,6 +1236,63 @@ public abstract class ITestSuite
             }
         }
         return allListenerWithForwarder;
+    }
+
+    /**
+     * Inserts {@link DefaultLogCollectionListener} to the listeners chain and removes duplicated
+     * auto log collectors.
+     */
+    private ITestInvocationListener enableDefaultLogCollection(
+            ModuleDefinition module,
+            ITestInvocationListener listener,
+            List<IMetricCollector> mainCollectors)
+            throws DeviceNotAvailableException {
+        DefaultLogCollectionListener logCollectionListener =
+                new DefaultLogCollectionListener(listener, module.getModuleInvocationContext());
+        // change the default log levels if any change is requested
+        for (Map.Entry<AutoLogCollector, MetricCollectionLevel> entrySet :
+                mLogLevelOnFailure.entrySet()) {
+            logCollectionListener.changeOnFailureLevel(entrySet.getKey(), entrySet.getValue());
+        }
+        for (Map.Entry<AutoLogCollector, MetricCollectionLevel> entrySet :
+                mLogLevelAlwaysOn.entrySet()) {
+            logCollectionListener.changeAlwaysOnLevel(entrySet.getKey(), entrySet.getValue());
+        }
+        logCollectionListener.createAndInitializeCollectors();
+
+        // Avoid collecting duplicated logs by removing collectors that are part of the default
+        // collection from the main collectors list
+        Set<AutoLogCollector> defaultCollectors = logCollectionListener.getInitializedCollectors();
+        Map<IMetricCollector, AutoLogCollector> collectorTypeMap =
+                getEnumTypesFromCollectors(mainCollectors);
+
+        Iterator<IMetricCollector> mainCollectorItr = mainCollectors.iterator();
+        while (mainCollectorItr.hasNext()) {
+            IMetricCollector collector = mainCollectorItr.next();
+            if (collectorTypeMap.get(collector) != null
+                    && defaultCollectors.contains(collectorTypeMap.get(collector))) {
+                mainCollectorItr.remove();
+                CLog.d(
+                        "Removing %s due to default log collection.",
+                        collectorTypeMap.get(collector));
+            }
+        }
+        return logCollectionListener;
+    }
+
+    /** Returns a map of collectors to their respective {@link AutoLogCollector} type if exists. */
+    private Map<IMetricCollector, AutoLogCollector> getEnumTypesFromCollectors(
+            List<IMetricCollector> collectors) {
+        Map<IMetricCollector, AutoLogCollector> enumMap = new LinkedHashMap<>();
+        for (IMetricCollector collector : collectors) {
+            for (AutoLogCollector autoLogCollector : AutoLogCollector.values()) {
+                if (autoLogCollector.mClass.isInstance(collector)) {
+                    enumMap.put(collector, autoLogCollector);
+                    break;
+                }
+            }
+        }
+        return enumMap;
     }
 
     /** Log the module configuration. */
@@ -1323,7 +1392,6 @@ public abstract class ITestSuite
      * @param module The {@link ModuleDefinition} to be ran.
      * @param moduleInfo The {@link TestInformation} for the module.
      * @param allListeners The {@link ITestInvocationListener} where to report results
-     * @param failureListener special listener that we add to collect information on failures.
      * @throws DeviceNotAvailableException
      */
     private void runSingleModule(
@@ -1332,12 +1400,6 @@ public abstract class ITestSuite
             ITestInvocationListener allListeners)
             throws DeviceNotAvailableException {
         Map<String, String> properties = new LinkedHashMap<>();
-        ITestInvocationListener allListenersWithLogSaver =
-                new LogSaverResultForwarder(
-                        mMainConfiguration.getLogSaver(),
-                        Arrays.asList(allListeners),
-                        module.getModuleConfiguration(),
-                        false);
         try (CloseableTraceScope ignored = new CloseableTraceScope("module_pre_check")) {
             if (mRebootPerModule) {
                 if ("user".equals(mDevice.getProperty(DeviceProperties.BUILD_TYPE))) {
@@ -1353,10 +1415,7 @@ public abstract class ITestSuite
             if (!mSkipAllSystemStatusCheck && !mSystemStatusCheckers.isEmpty()) {
                 properties.putAll(
                         runPreModuleCheck(
-                                module.getId(),
-                                mSystemStatusCheckers,
-                                mDevice,
-                                allListenersWithLogSaver));
+                                module.getId(), mSystemStatusCheckers, mDevice, allListeners));
             }
             if (mCollectTestsOnly) {
                 module.setCollectTestsOnly(mCollectTestsOnly);
@@ -1404,10 +1463,7 @@ public abstract class ITestSuite
             try (CloseableTraceScope ignored = new CloseableTraceScope("module_post_check")) {
                 properties.putAll(
                         runPostModuleCheck(
-                                module.getId(),
-                                mSystemStatusCheckers,
-                                mDevice,
-                                allListenersWithLogSaver));
+                                module.getId(), mSystemStatusCheckers, mDevice, allListeners));
             }
         }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
