@@ -47,8 +47,13 @@ class StubClient implements IRecorderClient {
     }
 
     @Override
-    public void uploadTestResult(TestResult result) {
+    public void enqueueTestResult(TestResult result) {
         mTestResults.add(result);
+    }
+
+    @Override
+    public void enqueueArtifact(Artifact artifact) {
+        mArtifacts.add(artifact);
     }
 
     @Override

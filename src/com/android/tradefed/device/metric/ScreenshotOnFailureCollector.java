@@ -42,6 +42,33 @@ public class ScreenshotOnFailureCollector extends BaseDeviceMetricCollector {
     @Override
     public void onTestFail(DeviceMetricData testData, TestDescription test)
             throws DeviceNotAvailableException {
+        // during default collection, screenshot will be collected manually
+        if (!isDefaultMetricCollectionEnabled()) {
+            collectScreenShot(test.toString());
+        }
+    }
+
+    @Override
+    public void collectMetrics(MetricCollectionLevel level, String name)
+            throws DeviceNotAvailableException {
+        collectScreenShot(name);
+    }
+
+    @Override
+    public boolean captureModuleLevel() {
+        return true;
+    }
+
+    private boolean shouldCollect(ITestDevice device) {
+        TestDeviceState state = device.getDeviceState();
+        if (!TestDeviceState.ONLINE.equals(state)) {
+            CLog.d("Skip ScreenshotOnFailureCollector device is in state '%s'", state);
+            return false;
+        }
+        return true;
+    }
+
+    private void collectScreenShot(String name) throws DeviceNotAvailableException {
         if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
             if (mFirstThrottle) {
                 CLog.w("Throttle capture of screenshot-on-failure due to too many failures.");
@@ -58,7 +85,7 @@ public class ScreenshotOnFailureCollector extends BaseDeviceMetricCollector {
             try (InputStreamSource screenSource = device.getScreenshot()) {
                 CLog.d("Captured screenshot-on-failure.");
                 super.testLog(
-                        String.format(NAME_FORMAT, test.toString(), device.getSerialNumber()),
+                        String.format(NAME_FORMAT, name, device.getSerialNumber()),
                         LogDataType.PNG,
                         screenSource);
             } finally {
@@ -66,14 +93,5 @@ public class ScreenshotOnFailureCollector extends BaseDeviceMetricCollector {
             }
         }
         mCurrentCount++;
-    }
-
-    private boolean shouldCollect(ITestDevice device) {
-        TestDeviceState state = device.getDeviceState();
-        if (!TestDeviceState.ONLINE.equals(state)) {
-            CLog.d("Skip ScreenshotOnFailureCollector device is in state '%s'", state);
-            return false;
-        }
-        return true;
     }
 }

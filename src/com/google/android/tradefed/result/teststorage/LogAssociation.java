@@ -34,6 +34,8 @@ import java.util.regex.Pattern;
  * particular log file was created by a particular test.
  */
 public class LogAssociation {
+    // MUST update the logsaver pattern in com.android.tradefed.result.resultdb.ResultDBReporter,
+    // if this pattern is changed.
     private static final Pattern LOGSAVER_PATTERN =
             Pattern.compile(
                     "https:\\/\\/android-build.googleplex.com\\/builds\\/.+\\/.+\\/.+\\/.+\\/tests\\/\\d+\\/(.+)");

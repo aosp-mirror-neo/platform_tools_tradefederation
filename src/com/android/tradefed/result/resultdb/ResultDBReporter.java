@@ -127,9 +127,8 @@ public class ResultDBReporter
     private AtomicInteger mResultCounter = new AtomicInteger(0);
     // Base for generate test result ID.
     private String mResultIdBase;
-    // No more log associations can be uploaded with in Result reporter after this set to true.
-    private boolean mLogAssociationTerminated = false;
-
+    // No more log associations can be added to the upload queue after this set to true.
+    private boolean mUploadQueueFinalized = false;
     // A map from resource ID to TestArtifact.
     private Map<String, Artifact> mTestArtifacts = new ConcurrentHashMap<>();
 
@@ -154,9 +153,7 @@ public class ResultDBReporter
             // Ignore logs with empty resource id.
             return;
         }
-        String contentType = logFile.getType().getContentType();
-        Artifact.Builder artifactBuilder =
-                Artifact.newBuilder().setArtifactId(resourceId).setContentType(contentType);
+        Artifact.Builder artifactBuilder = Artifact.newBuilder().setArtifactId(resourceId);
 
         CLog.v(
                 "Received association %s %s %s %s",
@@ -179,32 +176,69 @@ public class ResultDBReporter
         CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
     }
 
-    // Temporary solution to upload AnTS test artifact storage path to ResultDB, as part of the
-    // migration from AnTS to ResultDB (go/convergence-tr). This method should only be called by
-    // AnTS reporter when the storage path is available. This method also requires the
-    // logAssociation for the same resource ID to be called earlier, so that the artifact
-    // is already in the mTestArtifacts map.
-    // TODO(beining): Remove this method once we can properly migrate AnTS artifacts to ResultDB.
-    public void uploadStoragePath(String resourceId, String storagePath) {
+    /**
+     * Uploads the storage path of an AnTS test artifact to ResultDB.
+     *
+     * <p>This is a temporary solution for the migration from AnTS to ResultDB (see
+     * go/convergence-tr). This method should be called by the AnTS reporter when an artifact's
+     * storage path becomes available.
+     *
+     * <p>The AnTS reporter guarantees it will call this method for every artifact it uploads. This
+     * reporter, in turn, will upload all such artifacts to ResultDB with the correct test
+     * association. For correct log association,it is required that {@link #logAssociation(String,
+     * LogFile)} has been called for the same resource ID beforehand. This ensures that the artifact
+     * is already tracked. Otherwise, the artifact will be associated with the top-level work unit
+     * of the tradefed invocation.
+     *
+     * <p>This method must not be called before {@link #invocationStarted(IInvocationContext)}. It
+     * can be called after {@link #invocationEnded(long)} for invocations managed by an upstream
+     * system, as they are not finalized by this reporter. This does not apply to locally created
+     * invocations, which are finalized in {@link #invocationEnded(long)}.
+     *
+     * <p>TODO(beining): Remove this method once we can properly migrate AnTS artifacts to ResultDB.
+     *
+     * @param resourceId The resource ID of the artifact.
+     * @param storagePath The storage path of the artifact (e.g., a /bigstore/ path).
+     * @param logFile The {@link LogFile} object associated with the artifact.
+     */
+    public void uploadStoragePath(String resourceId, String storagePath, LogFile logFile) {
         if (mDisable) {
+            return;
+        }
+        if (mRecorder == null) {
+            CLog.w(
+                    "Recorder is not initialized, skipping upload storage path %s %s",
+                    resourceId, storagePath);
             return;
         }
         CLog.v("Uploading storage path %s %s", resourceId, storagePath);
         Artifact artifact = mTestArtifacts.remove(resourceId);
         if (artifact == null) {
-            CLog.d("Artifact for resource ID %s not found.", resourceId);
-            return;
+            // If the artifact is not found, it means the log association is not called before.
+            // Upload the artifact to the top work unit.
+            CLog.d(
+                    "Artifact for resource ID %s not found, upload to the top work unit.",
+                    resourceId);
+            artifact = Artifact.newBuilder().setArtifactId(resourceId).build();
         }
         if (storagePath.matches("^/bigstore/([^/]+)/.+$")) {
+            // The storage path is a valid bigstore path, set the artifact to with GCS URI.
+            String contentType = logFile.getType().getContentType();
             // Convert storage path to GCS URI.
             String gcsUri = storagePath.replaceFirst("^/bigstore/", "gs://");
-            artifact = artifact.toBuilder().setGcsUri(gcsUri).build();
+            artifact = artifact.toBuilder().setGcsUri(gcsUri).setContentType(contentType).build();
         } else {
-            // Upload empty content for invalid GCS storage path.
+            // The storage path is not a valid bigstore path, set the artifact with empty contents.
             artifact = artifact.toBuilder().setContents(ByteString.EMPTY).build();
         }
+        if (mUploadQueueFinalized) {
+            // If the upload queue is finalized, make block call to upload the artifact directly.
+            CLog.d("Upload queue is finalized, has been called, upload the artifact directly.");
+            mRecorder.uploadArtifact(artifact);
+            return;
+        }
         // Queue the artifact for upload.
-        mRecorder.uploadArtifact(artifact);
+        mRecorder.enqueueArtifact(artifact);
     }
 
     // Returns the AnTS artifact resource ID.
@@ -303,7 +337,7 @@ public class ResultDBReporter
                 // Make sure we cancel the client, otherwise it will leak a thread since
                 // invocationEnded will be skipped.
                 mRecorder.finalizeUpload();
-                mLogAssociationTerminated = true;
+                mUploadQueueFinalized = true;
             }
             throw new RuntimeException(e);
         }
@@ -362,7 +396,7 @@ public class ResultDBReporter
             return;
         }
         mRecorder.finalizeUpload();
-        mLogAssociationTerminated = true;
+        mUploadQueueFinalized = true;
         if (mManageInvocation) {
             mRecorder.finalizeInvocation();
         }
@@ -478,7 +512,7 @@ public class ResultDBReporter
                             .setSkippedReason(skippedReason)
                             .setSummaryHtml(summaryHtml)
                             .build();
-            mRecorder.uploadTestResult(currentTest);
+            mRecorder.enqueueTestResult(currentTest);
             CLog.d("Backfilled %s SKIPPED", currentTest);
         }
     }
@@ -751,7 +785,7 @@ public class ResultDBReporter
             }
         }
         mCurrentTestResult = testResultBuilder.build();
-        mRecorder.uploadTestResult(mCurrentTestResult);
+        mRecorder.enqueueTestResult(mCurrentTestResult);
         mCurrentTestResult = null;
     }
 

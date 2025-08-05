@@ -39,10 +39,18 @@ public interface IRecorderClient {
      *
      * @param result The test result to upload.
      */
-    public void uploadTestResult(TestResult result);
+    public void enqueueTestResult(TestResult result);
 
     /**
      * Enqueue an artifact to upload to ResultDB.
+     *
+     * @param artifact The artifact to upload.
+     */
+    public void enqueueArtifact(Artifact artifact);
+
+    /**
+     * Upload an artifact to ResultDB. This is a blocking call. Prefer to use {@link
+     * #enqueueArtifact(Artifact)} if possible.
      *
      * @param artifact The artifact to upload.
      */
@@ -50,8 +58,8 @@ public interface IRecorderClient {
 
     /**
      * Finalize the upload of test results and artifacts. This method should be called after all
-     * test results and artifacts have been uploaded. Any uploadTestResult and uploadArtifact calls
-     * after this method will be ignored.
+     * test results and artifacts have been enqueued. Any enqueueTestResult and enqueueArtifact
+     * calls after this method will be ignored.
      */
     public void finalizeUpload();
 }

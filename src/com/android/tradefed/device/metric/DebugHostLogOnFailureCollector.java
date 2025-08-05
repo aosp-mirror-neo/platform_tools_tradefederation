@@ -15,7 +15,12 @@
  */
 package com.android.tradefed.device.metric;
 
+import static com.android.tradefed.device.metric.IMetricCollector.MetricCollectionLevel.MODULE;
+import static com.android.tradefed.device.metric.IMetricCollector.MetricCollectionLevel.TEST_CASE;
+import static com.android.tradefed.device.metric.IMetricCollector.MetricCollectionLevel.TEST_RUN;
+
 import com.android.annotations.VisibleForTesting;
+import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.log.ILeveledLogOutput;
 import com.android.tradefed.log.LogRegistry;
 import com.android.tradefed.log.LogUtil.CLog;
@@ -35,35 +40,54 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
 
     private int mCurrentCount = 0;
     private boolean mFirstThrottle = true;
-    private Long offset = null;
+    private LogOffsets mLogOffsets = new LogOffsets();
 
     @Override
     public void onTestRunStart(DeviceMetricData runData) {
-        offset = null;
         mCurrentCount = 0;
         mFirstThrottle = true;
-        // TODO: Improve the offset from the start of the method instead.
-        try (InputStreamSource source = getLogger().getLog()) {
-            if (source == null) {
-                CLog.e(
-                        "Could not obtain the host logs for debugging. It won't be available "
-                                + "in the event of test cases failures.");
-                return;
-            }
-            offset = source.size();
+        collectCurrentOffsets(TEST_RUN);
+    }
+
+    @Override
+    public void onTestStart(DeviceMetricData testData) throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            collectCurrentOffsets(TEST_CASE);
+        }
+    }
+
+    @Override
+    public void onTestModuleStarted() throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            collectCurrentOffsets(MODULE);
         }
     }
 
     @Override
     public void onTestFail(DeviceMetricData testData, TestDescription test) {
-        if (offset == null) {
-            return;
-        }
-        if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-            if (mFirstThrottle) {
-                CLog.w("Throttle capture of host_log-on-failure due to too many failures.");
-                mFirstThrottle = false;
+        // do not collect during default collection. It will be manually collected.
+        if (!isDefaultMetricCollectionEnabled()) {
+            if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
+                if (mFirstThrottle) {
+                    CLog.w("Throttle capture of host_log-on-failure due to too many failures.");
+                    mFirstThrottle = false;
+                }
+                return;
             }
+            collectHostLog(TEST_RUN, test.toString());
+            mCurrentCount++;
+        }
+    }
+
+    @VisibleForTesting
+    ILeveledLogOutput getLogger() {
+        LogRegistry registry = (LogRegistry) LogRegistry.getLogRegistry();
+        return registry.getLogger();
+    }
+
+    private void collectHostLog(MetricCollectionLevel level, String name) {
+        Integer offset = mLogOffsets.getOffset(level);
+        if (offset == null) {
             return;
         }
         try (InputStreamSource source = getLogger().getLog()) {
@@ -75,10 +99,7 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
                 try (InputStreamSource logSource =
                         new SnapshotInputStreamSource("host-log-failure", stream)) {
                     super.testLog(
-                            String.format(NAME_FORMAT, test.toString()),
-                            LogDataType.HOST_LOG,
-                            logSource);
-                    mCurrentCount++;
+                            String.format(NAME_FORMAT, name), LogDataType.HOST_LOG, logSource);
                 }
             }
         } catch (IOException e) {
@@ -86,9 +107,62 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
         }
     }
 
-    @VisibleForTesting
-    ILeveledLogOutput getLogger() {
-        LogRegistry registry = (LogRegistry) LogRegistry.getLogRegistry();
-        return registry.getLogger();
+    /** Get the current offset of the buffer to be able to query later. */
+    private void collectCurrentOffsets(MetricCollectionLevel level) {
+        try (InputStreamSource source = getLogger().getLog()) {
+            if (source == null) {
+                CLog.e(
+                        "Could not obtain the host logs for debugging. It won't be available "
+                                + "in the event of test cases failures.");
+                // if host log could not be obtained, reset the offset to null.
+                mLogOffsets.setOffset(null, level);
+                return;
+            }
+            mLogOffsets.setOffset((int) source.size(), level);
+        }
+    }
+
+    @Override
+    public boolean captureModuleLevel() {
+        return true;
+    }
+
+    @Override
+    public void collectMetrics(MetricCollectionLevel level, String name) {
+        switch (level) {
+            case TEST_CASE:
+                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
+                    if (mFirstThrottle) {
+                        CLog.w(
+                                "Throttle capture of host_log-on-failure due to too many"
+                                        + " failures.");
+                        mFirstThrottle = false;
+                    }
+                    return;
+                }
+                mCurrentCount++;
+                name = "test-level-" + name;
+                break;
+            case TEST_RUN:
+                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
+                    if (mFirstThrottle) {
+                        CLog.w(
+                                "Throttle capture of host_log-on-failure due to too many"
+                                        + " failures.");
+                        mFirstThrottle = false;
+                    }
+                    return;
+                }
+                mCurrentCount++;
+                name = "test-run-level-" + name;
+                break;
+            case MODULE:
+                name = "module-level-" + name;
+                break;
+            default:
+                // Should never happen
+                break;
+        }
+        collectHostLog(level, name);
     }
 }
