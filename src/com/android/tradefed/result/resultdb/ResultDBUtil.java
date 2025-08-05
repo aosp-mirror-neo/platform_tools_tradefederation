@@ -23,6 +23,7 @@ import com.android.tradefed.result.skipped.SkipReason;
 import com.google.common.base.Strings;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 /** Utility class for ResultDB reporter. */
 public final class ResultDBUtil {
@@ -36,17 +37,51 @@ public final class ResultDBUtil {
         return sb.toString();
     }
 
+    /** A simple class to hold the result of a truncation operation. */
+    public static final class TruncationResult {
+        private final String truncatedString;
+        private final boolean wasTruncated;
+
+        public TruncationResult(String truncatedString, boolean wasTruncated) {
+            this.truncatedString = truncatedString;
+            this.wasTruncated = wasTruncated;
+        }
+
+        public String getTruncatedString() {
+            return truncatedString;
+        }
+
+        public boolean wasTruncated() {
+            return wasTruncated;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            TruncationResult that = (TruncationResult) o;
+            return wasTruncated == that.wasTruncated
+                    && Objects.equals(truncatedString, that.truncatedString);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(truncatedString, wasTruncated);
+        }
+    }
+
     /**
      * Truncates the string to the given max bytes, avoiding breaking up a multi-byte character.
      *
      * @param input the string to truncate
      * @param maxBytes the maximum number of bytes (in utf-8 encoding) to truncate to
-     * @return the truncated string
+     * @return a {@link TruncationResult} containing the truncated string and a boolean indicating
+     *     if truncation happened.
      */
-    public static String truncateString(String input, int maxBytes) {
+    public static TruncationResult truncateString(String input, int maxBytes) {
         byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
         if (bytes.length <= maxBytes) {
-            return input;
+            return new TruncationResult(input, false);
         }
 
         int byteCount = 0;
@@ -65,7 +100,7 @@ public final class ResultDBUtil {
                 break;
             }
         }
-        return result.toString();
+        return new TruncationResult(result.toString(), true);
     }
 
     /**

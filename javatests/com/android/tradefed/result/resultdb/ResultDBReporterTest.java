@@ -36,6 +36,7 @@ import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.result.skipped.SkipManager;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
@@ -251,7 +252,8 @@ public class ResultDBReporterTest {
                                                 .setKind(FailureReason.Kind.ORDINARY)
                                                 .addErrors(
                                                         FailureReason.Error.newBuilder()
-                                                                .setMessage("Fail Trace")))
+                                                                .setMessage("Fail Trace")
+                                                                .setTrace("Fail Trace")))
                                 .build(),
                         newTestResult("testMethodAssumption")
                                 .setResultId("1234abcd-00003")
@@ -261,6 +263,7 @@ public class ResultDBReporterTest {
                                         SkippedReason.newBuilder()
                                                 .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
                                                 .setReasonMessage("Assumption Fail Trace"))
+                                .setSummaryHtml("Assumption Fail Trace")
                                 .build(),
                         newTestResult("testMethodIgnored")
                                 .setResultId("1234abcd-00004")
@@ -282,7 +285,12 @@ public class ResultDBReporterTest {
     }
 
     @Test
-    public void testWithFailureDescription_failureStatus_testFailure() {
+    public void testWithFailureDescription_failureStatus_testFailure_large_trace() {
+        // Put failure message longer than the RBD trace field limit (4096 bytes).
+        String failureMessage = "";
+        for (int i = 0; i < 4096 + 100; i++) {
+            failureMessage += "a";
+        }
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
@@ -290,21 +298,38 @@ public class ResultDBReporterTest {
                         "com.google.ExampleClass",
                         "testMethodFailed",
                         FailureDescription.create(
-                                "Failure Message", TestRecordProto.FailureStatus.TEST_FAILURE))
+                                failureMessage, TestRecordProto.FailureStatus.TEST_FAILURE))
                 .simulateInvocation(mReporter);
 
-        assertThat(mReporter.mRecorder.getTestResults())
+        FailureReason.Error expectedRDBError =
+                FailureReason.Error.newBuilder()
+                        // Message field has a limit of 1024 bytes.
+                        .setMessage(failureMessage.substring(0, 1024))
+                        // Trace field has a limit of 4096 bytes.
+                        .setTrace(failureMessage.substring(0, 4096))
+                        .build();
+        TestResult expectedTestResult =
+                newTestResult("testMethodFailed")
+                        .setStatusV2(TestResult.Status.FAILED)
+                        .setResultId("1234abcd-00001")
+                        .setFailureReason(
+                                FailureReason.newBuilder()
+                                        .setKind(FailureReason.Kind.ORDINARY)
+                                        .addErrors(expectedRDBError))
+                        .setSummaryHtml("TF error type: TEST_FAILURE")
+                        .build();
+        assertThat(mReporter.mRecorder.getTestResults()).containsExactly(expectedTestResult);
+
+        // Verify the full skip reason artifact is uploaded to ResultDB.
+        assertThat(mReporter.mRecorder.getArtifacts())
                 .containsExactly(
-                        newTestResult("testMethodFailed")
-                                .setStatusV2(TestResult.Status.FAILED)
-                                .setResultId("1234abcd-00001")
-                                .setFailureReason(
-                                        FailureReason.newBuilder()
-                                                .setKind(FailureReason.Kind.ORDINARY)
-                                                .addErrors(
-                                                        FailureReason.Error.newBuilder()
-                                                                .setMessage("Failure Message")))
-                                .setSummaryHtml("TF error type: TEST_FAILURE")
+                        Artifact.newBuilder()
+                                .setArtifactId("testFailed_trace")
+                                .setContentType("text/plain")
+                                .setSizeBytes(4196)
+                                .setTestIdStructured(expectedTestResult.getTestIdStructured())
+                                .setResultId(expectedTestResult.getResultId())
+                                .setContents(ByteString.copyFromUtf8(failureMessage))
                                 .build());
     }
 
@@ -330,7 +355,11 @@ public class ResultDBReporterTest {
                                                 .setKind(FailureReason.Kind.CRASH)
                                                 .addErrors(
                                                         FailureReason.Error.newBuilder()
-                                                                .setMessage("Failure Message")))
+                                                                .setMessage("Failure Message")
+                                                                .setTrace(
+                                                                        "Failure Message\n"
+                                                                            + " java.lang.RuntimeException:"
+                                                                            + " Failure Message")))
                                 .setSummaryHtml("TF error type: SYSTEM_UNDER_TEST_CRASHED")
                                 .build());
     }
@@ -356,7 +385,8 @@ public class ResultDBReporterTest {
                                                 .setKind(FailureReason.Kind.TIMEOUT)
                                                 .addErrors(
                                                         FailureReason.Error.newBuilder()
-                                                                .setMessage("Failure Message")))
+                                                                .setMessage("Failure Message")
+                                                                .setTrace("Failure Message")))
                                 .setSummaryHtml("TF error type: TIMED_OUT")
                                 .build());
     }
