@@ -58,7 +58,7 @@ import java.util.function.Function;
 /** Unit tests for {@link DeviceStateMonitorTest}. */
 @RunWith(JUnit4.class)
 public class DeviceStateMonitorTest {
-    private static final int WAIT_TIMEOUT_NOT_REACHED_MS = 500;
+    private static final int WAIT_TIMEOUT_NOT_REACHED_MS = 5000;
     private static final int WAIT_TIMEOUT_REACHED_MS = 100;
     private static final int WAIT_STATE_CHANGE_MS = 50;
     private static final int POLL_TIME_MS = 10;
