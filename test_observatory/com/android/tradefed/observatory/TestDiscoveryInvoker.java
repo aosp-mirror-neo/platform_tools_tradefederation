@@ -612,7 +612,8 @@ public class TestDiscoveryInvoker {
                             "Could not find any files under %s", jarCtsPath.getAbsolutePath()));
         }
         for (File toolsFile : jarCtsPath.listFiles()) {
-            if (toolsFile.getName().endsWith(".jar")) {
+            // Skip ATS jars.
+            if (!toolsFile.getName().startsWith("ats") && toolsFile.getName().endsWith(".jar")) {
                 classpathList.add(toolsFile);
             }
         }

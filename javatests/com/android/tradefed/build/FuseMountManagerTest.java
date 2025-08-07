@@ -180,7 +180,7 @@ public class FuseMountManagerTest {
         when(mMockDriverProfile.isMountPointReady(any(Path.class))).thenReturn(false);
         when(mMockProcess.isAlive()).thenReturn(true, false);
         // The process never exits on its own
-        stubProcessWaitForToReturn(mMockProcess, false);
+        stubProcessWaitForToReturnAfterDelayInMs(mMockProcess, false, 5L);
 
         IOException thrown = assertThrows(IOException.class, () -> mManager.mount(mSourceDir));
         assertTrue(thrown.getMessage().contains("timed out"));
@@ -299,12 +299,21 @@ public class FuseMountManagerTest {
         verify(spyManager, times(1)).unmount(sourceDir2);
     }
 
+    // Stub process.waitFor() to return the given value immediately.
     private void stubProcessWaitForToReturn(Process mockProcess, boolean returnValue)
             throws InterruptedException {
+        stubProcessWaitForToReturnAfterDelayInMs(mockProcess, returnValue, 0L);
+    }
+
+    // Stub process.waitFor() to return the given value after the given delay.
+    private void stubProcessWaitForToReturnAfterDelayInMs(
+            Process mockProcess, boolean returnValue, long delayMs) throws InterruptedException {
         when(mMockProcess.waitFor(anyLong(), any(TimeUnit.class)))
                 .thenAnswer(
                         invocation -> {
-                            RunUtil.getDefault().sleep(5);
+                            if (delayMs > 0) {
+                                RunUtil.getDefault().sleep(delayMs);
+                            }
                             return returnValue;
                         });
     }

@@ -35,6 +35,7 @@ import com.android.tradefed.testtype.IDeviceTest;
 import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -52,6 +53,11 @@ public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfig
 
     @Option(name = "module-name", description = "The name of the test module to run.")
     private String mTestModule = null;
+
+    @Option(
+            name = "do-not-consider-binary",
+            description = "Set of binary names to not consider when running the test.")
+    private Set<String> mDoNotConsiderBinary = new LinkedHashSet<>();
 
     private ITestDevice mDevice = null;
 
@@ -111,6 +117,9 @@ public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfig
         String moduleName = getTestModule();
         String fileName = getFileName(fullPath);
         if (moduleName != null && !fileName.startsWith(moduleName)) {
+            return true;
+        }
+        if (mDoNotConsiderBinary.contains(fileName)) {
             return true;
         }
 
@@ -213,6 +222,7 @@ public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfig
             }
         }
         int testCount = foundTests.size();
+        CLog.d("tests found: %s", foundTests);
         CLog.d("Total test count: %d", testCount);
         long startTimeMs = System.currentTimeMillis();
         String name = new File(fullPath).getName();
