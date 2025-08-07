@@ -86,6 +86,11 @@ public class LUCIResultReporter extends CollectingTestListener
     @Option(name = "log-output-dir", description = "Path to save the JSON result file and other log files.")
     private File mLogOutputDir = null;
 
+    @Option(
+        name = "report-failures",
+        description = "Whether or not to generate output when the invocation fails.")
+    private boolean mReportFailures = false;
+
     private boolean mHasInvocationFailures = false;
     private LinkedHashMap<String, LogFile> mLoggedFiles = new LinkedHashMap<>();
     private File mRootDir = null;
@@ -113,11 +118,13 @@ public class LUCIResultReporter extends CollectingTestListener
     @Override
     public void invocationStarted(IInvocationContext context) {
         super.invocationStarted(context);
-        try {
-            mRootDir = FileUtil.createTempDir(RESULT_DIR);
-        } catch(IOException e) {
-            CLog.e("Failed to create tmpdir");
-            CLog.e(e);
+        if (mLogOutputDir == null) {
+            try {
+                mRootDir = FileUtil.createTempDir(RESULT_DIR);
+            } catch(IOException e) {
+                CLog.e("Failed to create tmpdir");
+                CLog.e(e);
+            }
         }
     }
 
@@ -130,7 +137,7 @@ public class LUCIResultReporter extends CollectingTestListener
     @Override
     public void invocationEnded(long elapsedTime) {
         super.invocationEnded(elapsedTime);
-        if (mHasInvocationFailures) {
+        if (mHasInvocationFailures && !mReportFailures) {
             CLog.d("Skipping reporting because there are invocation failures.");
         } else {
           try {
@@ -154,23 +161,11 @@ public class LUCIResultReporter extends CollectingTestListener
               CLog.e(e);
           }
         }
-
         // Log the result file locations to console.
         for (Entry<String, LogFile> entry : mLoggedFiles.entrySet()) {
             String dataName = entry.getKey();
             LogFile logFile = entry.getValue();
             printLog(dataName, logFile);
-            if (mLogOutputDir != null) {
-              // If the output path is specified, copy all log artifacts there.
-              try {
-                  File logFullPathFile = new File(logFile.getPath());
-                  FileUtil.copyFile(logFullPathFile,
-                      new File(mLogOutputDir, logFullPathFile.getName()));
-              } catch (IOException e) {
-                  CLog.e("Failed to copy JSON result file to " + mLogOutputDir.toString());
-                  CLog.e(e);
-              }
-            }
         }
     }
 
@@ -330,6 +325,21 @@ public class LUCIResultReporter extends CollectingTestListener
     /** Collects result files. */
     @Override
     public void logAssociation(String dataName, LogFile logFile) {
+        CLog.logAndDisplay(LogLevel.DEBUG, "New logAssociation: %s: %s (size: %.2f KB)\r\n",
+            dataName, logFile.getPath(), logFile.getSize() / 1024.0);
+        if (mLogOutputDir != null) {
+            // If the output path is specified, copy all log artifacts there.
+            try {
+                File logFullPathFile = new File(logFile.getPath());
+                CLog.logAndDisplay(LogLevel.DEBUG, "Copying log file: %s to %s\r\n",
+                        dataName, mLogOutputDir);
+                FileUtil.copyFile(logFullPathFile,
+                    new File(mLogOutputDir, logFullPathFile.getName()));
+            } catch (IOException e) {
+                CLog.e("Failed to copy JSON result file to " + mLogOutputDir.toString());
+                CLog.e(e);
+            }
+        }
         mLoggedFiles.put(dataName, logFile);
     }
 

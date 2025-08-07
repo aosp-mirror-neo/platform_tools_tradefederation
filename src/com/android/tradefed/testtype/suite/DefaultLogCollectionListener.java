@@ -39,7 +39,9 @@ import com.android.tradefed.result.TestDescription;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** A listener that will collect test logs by default. */
 public class DefaultLogCollectionListener extends ResultAndLogForwarder {
@@ -104,14 +106,32 @@ public class DefaultLogCollectionListener extends ResultAndLogForwarder {
         }
     }
 
+    public Set<AutoLogCollector> getInitializedCollectors() {
+        return mCollectorInstances.keySet();
+    }
+
     /** Change the default always-on collection level for a given collector. */
     public void changeAlwaysOnLevel(AutoLogCollector logCollector, MetricCollectionLevel level) {
-        mAlwaysOnCollectors.put(logCollector, level);
+        if (mAlwaysOnCollectors.get(logCollector) != null) {
+            mAlwaysOnCollectors.put(logCollector, level);
+        } else {
+            CLog.d(
+                    "Ignoring always-on log level change request for %s collector since this"
+                            + " collector is not part of default log collection.",
+                    logCollector);
+        }
     }
 
     /** Change the default on-failure collection level for a given collector. */
     public void changeOnFailureLevel(AutoLogCollector logCollector, MetricCollectionLevel level) {
-        mOnFailureCollectors.put(logCollector, level);
+        if (mOnFailureCollectors.get(logCollector) != null) {
+            mOnFailureCollectors.put(logCollector, level);
+        } else {
+            CLog.d(
+                    "Ignoring on-failure log level change request for %s collector since this"
+                            + " collector is not part of default log collection.",
+                    logCollector);
+        }
     }
 
     @Override
@@ -183,29 +203,32 @@ public class DefaultLogCollectionListener extends ResultAndLogForwarder {
 
     @Override
     public void testEnded(TestDescription test, Map<String, String> testMetrics) {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectTestLevel) {
-            collectForFailures(TEST_CASE, test.getTestName());
+            collectorsUsedInFailure = collectForFailures(TEST_CASE, test.getTestName());
         }
-        collectForAlwaysOn(TEST_CASE, test.getTestName());
+        collectForAlwaysOn(TEST_CASE, test.getTestName(), collectorsUsedInFailure);
         mMainListeners.testEnded(test, testMetrics);
     }
 
     @Override
     public void testEnded(TestDescription test, long endTime, Map<String, String> testMetrics) {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectTestLevel) {
-            collectForFailures(TEST_CASE, test.getTestName());
+            collectorsUsedInFailure = collectForFailures(TEST_CASE, test.getTestName());
         }
-        collectForAlwaysOn(TEST_CASE, test.getTestName());
+        collectForAlwaysOn(TEST_CASE, test.getTestName(), collectorsUsedInFailure);
         mMainListeners.testEnded(test, endTime, testMetrics);
     }
 
     @Override
     public void testEnded(
             TestDescription test, HashMap<String, MetricMeasurement.Metric> testMetrics) {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectTestLevel) {
-            collectForFailures(TEST_CASE, test.getTestName());
+            collectorsUsedInFailure = collectForFailures(TEST_CASE, test.getTestName());
         }
-        collectForAlwaysOn(TEST_CASE, test.getTestName());
+        collectForAlwaysOn(TEST_CASE, test.getTestName(), collectorsUsedInFailure);
         mMainListeners.testEnded(test, testMetrics);
     }
 
@@ -214,10 +237,11 @@ public class DefaultLogCollectionListener extends ResultAndLogForwarder {
             TestDescription test,
             long endTime,
             HashMap<String, MetricMeasurement.Metric> testMetrics) {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectTestLevel) {
-            collectForFailures(TEST_CASE, test.getTestName());
+            collectorsUsedInFailure = collectForFailures(TEST_CASE, test.getTestName());
         }
-        collectForAlwaysOn(TEST_CASE, test.getTestName());
+        collectForAlwaysOn(TEST_CASE, test.getTestName(), collectorsUsedInFailure);
         mMainListeners.testEnded(test, endTime, testMetrics);
     }
 
@@ -238,33 +262,37 @@ public class DefaultLogCollectionListener extends ResultAndLogForwarder {
     @Override
     public void testRunEnded(
             long elapsedTime, HashMap<String, MetricMeasurement.Metric> runMetrics) {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectTestRunLevel) {
-            collectForFailures(TEST_RUN, mCurrentTestRunName);
+            collectorsUsedInFailure = collectForFailures(TEST_RUN, mCurrentTestRunName);
         }
-        collectForAlwaysOn(TEST_RUN, mCurrentTestRunName);
+        collectForAlwaysOn(TEST_RUN, mCurrentTestRunName, collectorsUsedInFailure);
         mMainListeners.testRunEnded(elapsedTime, runMetrics);
     }
 
     @Override
     public void testRunEnded(long elapsedTimeMillis, Map<String, String> runMetrics) {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectTestRunLevel) {
-            collectForFailures(TEST_RUN, mCurrentTestRunName);
+            collectorsUsedInFailure = collectForFailures(TEST_RUN, mCurrentTestRunName);
         }
-        collectForAlwaysOn(TEST_RUN, mCurrentTestRunName);
+        collectForAlwaysOn(TEST_RUN, mCurrentTestRunName, collectorsUsedInFailure);
         mMainListeners.testRunEnded(elapsedTimeMillis, runMetrics);
     }
 
     @Override
     public void testModuleEnded() {
+        Set<AutoLogCollector> collectorsUsedInFailure = new LinkedHashSet<>();
         if (mCollectAtModuleLevel) {
             collectForFailures(MODULE, "module");
         }
-        collectForAlwaysOn(MODULE, "module");
+        collectForAlwaysOn(MODULE, "module", collectorsUsedInFailure);
         mMainListeners.testModuleEnded();
     }
 
-    private void collectForFailures(MetricCollectionLevel level, String name) {
+    private Set<AutoLogCollector> collectForFailures(MetricCollectionLevel level, String name) {
         // TODO: see if we can collect asynchronously
+        Set<AutoLogCollector> collectorsUsed = new LinkedHashSet<>();
         // for each collector instance, collect if their collection level at on-failure match
         for (Map.Entry<AutoLogCollector, IMetricCollector> collectorInstanceMap :
                 mCollectorInstances.entrySet()) {
@@ -272,22 +300,34 @@ public class DefaultLogCollectionListener extends ResultAndLogForwarder {
                     mOnFailureCollectors.get(collectorInstanceMap.getKey());
             if (onFailureLevel.equals(level)) {
                 try {
+                    collectorsUsed.add(collectorInstanceMap.getKey());
                     collectorInstanceMap.getValue().collectMetrics(level, name);
                 } catch (Throwable t) {
                     CLog.e(t);
                 }
             }
         }
+        return collectorsUsed;
     }
 
-    private void collectForAlwaysOn(MetricCollectionLevel level, String name) {
+    private void collectForAlwaysOn(
+            MetricCollectionLevel level,
+            String name,
+            Set<AutoLogCollector> collectorsPreviouslyCalled) {
         // TODO: see if we can collect asynchronously
         // for each collector instance, collect if their collection level at always-on match
+        // Also avoid collecting if the collector is already called during on failure collection.
         for (Map.Entry<AutoLogCollector, IMetricCollector> collectorInstanceMap :
                 mCollectorInstances.entrySet()) {
             MetricCollectionLevel alwaysOnLevel =
                     mAlwaysOnCollectors.get(collectorInstanceMap.getKey());
             if (alwaysOnLevel.equals(level)) {
+                if (collectorsPreviouslyCalled.contains(collectorInstanceMap.getKey())) {
+                    CLog.d(
+                            "Skipping %s during always-on since it was already collected during"
+                                    + " failures.");
+                    continue;
+                }
                 try {
                     collectorInstanceMap.getValue().collectMetrics(level, name);
                 } catch (Throwable t) {

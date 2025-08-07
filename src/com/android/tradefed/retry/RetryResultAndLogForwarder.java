@@ -16,33 +16,27 @@
 package com.android.tradefed.retry;
 
 import com.android.tradefed.config.IConfiguration;
-import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ITestInvocationListener;
-import com.android.tradefed.result.LogSaverResultForwarder;
+import com.android.tradefed.result.ResultAndLogForwarder;
 
 import java.util.List;
 
 /** Forwarder that also handles passing the current attempt we are at. */
-public class RetryLogSaverResultForwarder extends LogSaverResultForwarder {
+public class RetryResultAndLogForwarder extends ResultAndLogForwarder {
 
     private int mAttemptNumber = 0;
     private IConfiguration mConfig;
 
-    public RetryLogSaverResultForwarder(
-            ILogSaver logSaver, List<ITestInvocationListener> listeners, IConfiguration config) {
-        this(logSaver, listeners, config, 0);
+    public RetryResultAndLogForwarder(List<ITestInvocationListener> listeners) {
+        this(listeners, 0);
     }
 
     /**
      * Constructor with prevAttempts not tracked already. prevAttempts will likely come from setup
      * retries.
      */
-    public RetryLogSaverResultForwarder(
-            ILogSaver logSaver,
-            List<ITestInvocationListener> listeners,
-            IConfiguration config,
-            int prevAttempts) {
-        super(logSaver, listeners, config);
+    public RetryResultAndLogForwarder(List<ITestInvocationListener> listeners, int prevAttempts) {
+        super(listeners);
         mAttemptNumber = prevAttempts;
     }
 
