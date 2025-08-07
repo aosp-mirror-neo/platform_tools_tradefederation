@@ -24,15 +24,12 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.testtype.IAbi;
-
 import com.google.common.collect.ImmutableSet;
-
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.FilenameFilter;
@@ -40,7 +37,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystemException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -480,7 +476,7 @@ public class FileUtil {
             if (!ignoreExistingFile) {
                 throw e;
             }
-        } catch (FileSystemException e) {
+        } catch (IOException e) {
             if (e.getMessage().contains("Invalid cross-device link")) {
                 CLog.d("Hardlink failed: '%s', falling back to copy.", e.getMessage());
                 copyFile(origFile, destFile);
@@ -495,15 +491,6 @@ public class FileUtil {
                     CLog.d(
                             "Too many links for file: %s, Hard link count: %d",
                             origFile.getAbsolutePath(), linkCount);
-                    String destDir = destFile.getParent();
-                    // All hosts are on Linux, so we can use df to get the filesystem stats.
-                    CommandResult result =
-                            RunUtil.getDefault()
-                                    .runTimedCmd(
-                                            10 * 1000, "df", destDir);
-                    if (result.getExitCode() == 0) {
-                        CLog.d("df output for %s: %s", destFile, result.getStdout());
-                    }
                 } catch (IOException ioe) {
                     CLog.e("Error retrieving file or filesystem stats: " + ioe.getMessage());
                 }
