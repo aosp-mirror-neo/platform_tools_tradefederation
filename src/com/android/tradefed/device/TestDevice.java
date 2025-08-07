@@ -44,6 +44,7 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.KeyguardControllerState;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.TimeUtil;
 import com.android.tradefed.util.ZipUtil2;
@@ -1400,10 +1401,25 @@ public class TestDevice extends NativeDevice {
         }
 
         @Override
-        public boolean run() throws IOException, TimeoutException, AdbCommandRejectedException,
-                ShellCommandUnresponsiveException, InstallException, SyncException {
+        public boolean run()
+                throws IOException,
+                        TimeoutException,
+                        AdbCommandRejectedException,
+                        ShellCommandUnresponsiveException,
+                        InstallException,
+                        SyncException,
+                        DeviceNotAvailableException {
             DumpsysPackageReceiver receiver = new DumpsysPackageReceiver();
-            getIDevice().executeShellCommand("dumpsys package p", receiver);
+            ShellOutputReceiverStream outputReceiverStream =
+                    new ShellOutputReceiverStream(receiver);
+            CommandResult res = executeShellV2Command("dumpsys package p", outputReceiverStream);
+            if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                CLog.e("Faild to get dump pakgs: %s", res);
+                throw new DeviceNotAvailableException(
+                        String.format(
+                                "Failed to run `adb shell dumpsys package p`: %s", res.getStderr()),
+                        getSerialNumber());
+            }
             mPkgInfoMap = receiver.getPackages();
             if (mPkgInfoMap.size() == 0) {
                 // Package parsing can fail if package manager is currently down. throw exception
