@@ -5546,6 +5546,7 @@ public class NativeDevice
         mFastbootSerialNumber = null;
         // Default implementation
         if (getIDevice() instanceof StubDevice) {
+            mTrackingSerialNumber = null;
             return;
         }
         // Reset the Content Provider bit.
