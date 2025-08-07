@@ -69,7 +69,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -222,6 +221,7 @@ public class IsolatedHostTest
     private File mSubprocessLog;
     private File mWorkDir;
     private boolean mReportedFailure = false;
+    private boolean mRunStarted = false;
 
     private static final String ROOT_DIR = "ROOT_DIR";
     private ServerSocket mServer = null;
@@ -355,6 +355,9 @@ public class IsolatedHostTest
         } catch (IOException e) {
             if (!mReportedFailure) {
                 // Avoid overriding the failure
+                if (!mRunStarted) {
+                    listener.testRunStarted(this.getClass().getCanonicalName(), 0);
+                }
                 FailureDescription failure =
                         FailureDescription.create(
                                 StreamUtil.getStackTrace(e), FailureStatus.INFRA_FAILURE);
@@ -784,19 +787,8 @@ public class IsolatedHostTest
         listener = wrapListener(listener);
         runnerMessage.writeDelimitedTo(socket.getOutputStream());
 
-        Instant start = Instant.now();
         try {
             return processRunnerReply(socket.getInputStream(), listener);
-        } catch (SocketTimeoutException e) {
-            mReportedFailure = true;
-            FailureDescription failure =
-                    FailureDescription.create(
-                            StreamUtil.getStackTrace(e), FailureStatus.INFRA_FAILURE);
-            listener.testRunFailed(failure);
-            listener.testRunEnded(
-                    Duration.between(start, Instant.now()).toMillis(),
-                    new HashMap<String, Metric>());
-            return false;
         } finally {
             // This will get associated with the module since it can contains several test runs
             try (FileInputStreamSource source = new FileInputStreamSource(mSubprocessLog)) {
@@ -810,20 +802,29 @@ public class IsolatedHostTest
         TestDescription currentTest = null;
         CloseableTraceScope methodScope = null;
         CloseableTraceScope runScope = null;
-        boolean runStarted = false;
+        mRunStarted = false;
         boolean success = true;
         while (true) {
             RunnerReply reply = null;
             try {
                 reply = RunnerReply.parseDelimitedFrom(input);
             } catch (SocketTimeoutException ste) {
+                if (!mRunStarted) {
+                    listener.testRunStarted(this.getClass().getCanonicalName(), 0);
+                }
                 if (currentTest != null) {
                     // Subprocess has hard crashed
                     listener.testFailed(currentTest, StreamUtil.getStackTrace(ste));
                     listener.testEnded(
                             currentTest, System.currentTimeMillis(), new HashMap<String, Metric>());
                 }
-                throw ste;
+                mReportedFailure = true;
+                FailureDescription failure =
+                        FailureDescription.create(
+                                StreamUtil.getStackTrace(ste), FailureStatus.INFRA_FAILURE);
+                listener.testRunFailed(failure);
+                listener.testRunEnded(0L, new HashMap<String, Metric>());
+                return false;
             }
             if (reply == null) {
                 if (currentTest != null) {
@@ -841,7 +842,7 @@ public class IsolatedHostTest
                                                         && f.getName().endsWith(".log"))
                                 .collect(Collectors.toList());
 
-                if (!runStarted) {
+                if (!mRunStarted) {
                     listener.testRunStarted(this.getClass().getCanonicalName(), 0);
                 }
                 for (File f : logFiles) {
@@ -866,9 +867,10 @@ public class IsolatedHostTest
                 case RUNNER_STATUS_FINISHED_ERROR:
                     CLog.e("Received message that runner errored");
                     CLog.e("From Runner: " + reply.getMessage());
-                    if (!runStarted) {
+                    if (!mRunStarted) {
                         listener.testRunStarted(this.getClass().getCanonicalName(), 0);
                     }
+                    mReportedFailure = true;
                     FailureDescription failure =
                             FailureDescription.create(
                                     reply.getMessage(), FailureStatus.INFRA_FAILURE);
@@ -928,7 +930,7 @@ public class IsolatedHostTest
                                         desc, event.getEndTime(), new HashMap<String, Metric>());
                                 break;
                             case TOPIC_RUN_STARTED:
-                                runStarted = true;
+                                mRunStarted = true;
                                 listener.testRunStarted(event.getClassName(), event.getTestCount());
                                 runScope = new CloseableTraceScope(event.getClassName());
                                 break;
@@ -939,6 +941,7 @@ public class IsolatedHostTest
                                     runScope.close();
                                     runScope = null;
                                 }
+                                mRunStarted = false;
                                 break;
                             default:
                         }
