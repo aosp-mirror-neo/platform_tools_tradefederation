@@ -138,6 +138,8 @@ public class AdbSshConnection extends AdbTcpConnection {
                             "Fetch and launch CVD permit obtained after %ds",
                             TimeUnit.MILLISECONDS.toSeconds(queueTime));
                 }
+                // Reset start time for device launch time calculation.
+                startTime = getCurrentTime();
                 launchGce(getBuildInfo(), getAttributes());
                 CLog.d(
                         "launchGce finished in %sms, max wait time is %sms",
