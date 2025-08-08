@@ -183,17 +183,27 @@ public final class HostUtils {
         } catch (ClassNotFoundException cnfe) {
             throw new IllegalArgumentException(
                     String.format("Cannot find test class %s", className), cnfe);
-        } catch (IllegalAccessError | NoClassDefFoundError err) {
+        } catch (IllegalAccessError | NoClassDefFoundError | VerifyError err) {
+            // NOTE: If we get these errors, we assume it's not a test class.
+            // However, unfortunately, that's not always true. See: b/437397316
+            //
             // IllegalAccessError can happen when the class or one of its super
             // class/interfaces are package-private. We can't load such class from
             // here (= outside of the package). Since our intention is not to load
             // all classes in the jar, but to find our the main test classes, this
             // can be safely skipped.
-            // NoClassDefFoundError is also okay because certain CTS test cases
-            // might statically link to a jar library (e.g. tools.jar from JDK)
-            // where certain internal classes in the library are referencing
-            // classes that are not available in the jar. Again, since our goal here
-            // is to find test classes, this can be safely skipped.
+            //
+            // NoClassDefFoundError can happen because test modules may
+            // statically link to a jar library (e.g. tools.jar from JDK),
+            // without also statically linking all its dependencies.
+            // Note, in this situation, we assume it's from a non-test class.
+            // But as commented above, that's actually not always true.
+            // If a test class extends a class from a library that's missing,
+            // we would get this exception, and would skip the class silengly.
+            //
+            // VerifyError may be raised instead of NoClassDefFoundError as well,
+            // depending on how exactly the missing class is used.
+            // See b/324063814 and b/436912327 as examples.
             return false;
         } catch (SecurityException e) {
             throw new IllegalArgumentException(
