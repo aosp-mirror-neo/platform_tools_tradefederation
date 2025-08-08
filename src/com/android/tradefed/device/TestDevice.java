@@ -520,70 +520,6 @@ public class TestDevice extends NativeDevice {
         return internalInstallPackage(packageFile, reinstall, args);
     }
 
-    public String installPackage(final File packageFile, final File certFile,
-            final boolean reinstall, final String... extraArgs) throws DeviceNotAvailableException {
-        long startTime = System.currentTimeMillis();
-        try {
-            // use array to store response, so it can be returned to caller
-            final String[] response = new String[1];
-            DeviceAction installAction =
-                    new DeviceAction() {
-                        @Override
-                        public boolean run()
-                                throws InstallException, SyncException, IOException,
-                                        TimeoutException, AdbCommandRejectedException {
-                            // TODO: create a getIDevice().installPackage(File, File...) method when
-                            // the
-                            // dist cert functionality is ready to be open sourced
-                            String remotePackagePath =
-                                    getIDevice().syncPackageToDevice(packageFile.getAbsolutePath());
-                            String remoteCertPath =
-                                    getIDevice().syncPackageToDevice(certFile.getAbsolutePath());
-                            // trick installRemotePackage into issuing a 'pm install <apk> <cert>'
-                            // command, by adding apk path to extraArgs, and using cert as the
-                            // 'apk file'.
-                            String[] newExtraArgs = new String[extraArgs.length + 1];
-                            System.arraycopy(extraArgs, 0, newExtraArgs, 0, extraArgs.length);
-                            newExtraArgs[newExtraArgs.length - 1] =
-                                    String.format("\"%s\"", remotePackagePath);
-                            try {
-                                InstallReceiver receiver = createInstallReceiver();
-                                getIDevice()
-                                        .installRemotePackage(
-                                                remoteCertPath,
-                                                reinstall,
-                                                receiver,
-                                                INSTALL_TIMEOUT_MINUTES,
-                                                INSTALL_TIMEOUT_TO_OUTPUT_MINUTES,
-                                                TimeUnit.MINUTES,
-                                                newExtraArgs);
-                                response[0] = handleInstallReceiver(receiver, packageFile);
-                            } catch (InstallException e) {
-                                response[0] = handleInstallationError(e);
-                            } finally {
-                                getIDevice().removeRemotePackage(remotePackagePath);
-                                getIDevice().removeRemotePackage(remoteCertPath);
-                            }
-                            return true;
-                        }
-                    };
-            performDeviceAction(
-                    String.format("install %s", packageFile.getAbsolutePath()),
-                    installAction,
-                    MAX_RETRY_ATTEMPTS);
-            List<File> packageFiles = new ArrayList<>();
-            packageFiles.add(packageFile);
-            allowLegacyStorageForApps(packageFiles);
-            return response[0];
-        } finally {
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
-                    System.currentTimeMillis() - startTime);
-        }
-    }
-
     /**
      * {@inheritDoc}
      */
@@ -662,28 +598,6 @@ public class TestDevice extends NativeDevice {
     public String uninstallPackage(final String packageName) throws DeviceNotAvailableException {
         // use array to store response, so it can be returned to caller
         return adbUninstallPackage(packageName);
-    }
-
-    private String uninstallPackage(String packageName, @Nullable String extraArgs)
-            throws DeviceNotAvailableException {
-        final String finalExtraArgs = (extraArgs == null) ? "" : extraArgs;
-
-        // use array to store response, so it can be returned to caller
-        final String[] response = new String[1];
-        DeviceAction uninstallAction =
-                () -> {
-                    CLog.d("Uninstalling %s with extra args %s", packageName, finalExtraArgs);
-
-                    String result = getIDevice().uninstallApp(packageName, finalExtraArgs);
-                    response[0] = result;
-                    return result == null;
-                };
-
-        performDeviceAction(
-                String.format("uninstall %s with extra args %s", packageName, finalExtraArgs),
-                uninstallAction,
-                MAX_RETRY_ATTEMPTS);
-        return response[0];
     }
 
     /** {@inheritDoc} */
@@ -1054,22 +968,6 @@ public class TestDevice extends NativeDevice {
         } catch (IOException e) {
             CLog.e("I/O error occrred during convert screenshot");
             return null;
-        }
-    }
-
-    private class ScreenshotAction implements DeviceAction {
-
-        RawImage mRawScreenshot;
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public boolean run() throws IOException, TimeoutException, AdbCommandRejectedException,
-                ShellCommandUnresponsiveException, InstallException, SyncException {
-            mRawScreenshot =
-                    getIDevice().getScreenshot(MAX_SCREENSHOT_TIMEOUT, TimeUnit.MILLISECONDS);
-            return mRawScreenshot != null;
         }
     }
 

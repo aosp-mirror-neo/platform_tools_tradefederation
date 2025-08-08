@@ -1310,43 +1310,6 @@ public class TestDeviceTest {
         assertEquals("ip:5555", mTestDevice.switchToAdbTcp());
     }
 
-    /**
-     * Test simple success case for {@link TestDevice#installPackage(File, File, boolean,
-     * String...)}.
-     */
-    @Test
-    public void testInstallPackages() throws Exception {
-        mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    InstallReceiver createInstallReceiver() {
-                        InstallReceiver receiver = new InstallReceiver();
-                        receiver.processNewLines(new String[] {"Success"});
-                        return receiver;
-                    }
-                };
-        final String certFile = "foo.dc";
-        final String apkFile = "foo.apk";
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(certFile))).thenReturn(certFile);
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(apkFile))).thenReturn(apkFile);
-        // expect apk path to be passed as extra arg
-        mMockIDevice.installRemotePackage(
-                Mockito.eq(certFile),
-                Mockito.eq(true),
-                Mockito.any(),
-                Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                Mockito.eq(TestDevice.INSTALL_TIMEOUT_TO_OUTPUT_MINUTES),
-                Mockito.eq(TimeUnit.MINUTES),
-                Mockito.eq("-l"),
-                Mockito.contains(apkFile));
-        setMockIDeviceAppOpsToPersist();
-        mMockIDevice.removeRemotePackage(certFile);
-        mMockIDevice.removeRemotePackage(apkFile);
-
-        assertNull(mTestDevice.installPackage(new File(apkFile), new File(certFile), true, "-l"));
-        verifyMockIDeviceAppOpsToPersist();
-    }
-
     private void setMockIDeviceAppOpsToPersist() {
         when(mMockRunUtil.runTimedCmd(
                         Mockito.anyLong(),
@@ -1373,38 +1336,6 @@ public class TestDeviceTest {
                         Mockito.eq("shell"),
                         Mockito.eq("appops"),
                         Mockito.eq("write-settings"));
-    }
-
-    /** Test when a timeout during installation with certificat is thrown. */
-    @Test
-    public void testInstallPackages_timeout() throws Exception {
-        final String certFile = "foo.dc";
-        final String apkFile = "foo.apk";
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(certFile))).thenReturn(certFile);
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(apkFile))).thenReturn(apkFile);
-        setMockIDeviceAppOpsToPersist();
-
-        // expect apk path to be passed as extra arg
-        doThrow(new InstallException(new TimeoutException()))
-                .when(mMockIDevice)
-                .installRemotePackage(
-                        Mockito.eq(certFile),
-                        Mockito.eq(true),
-                        Mockito.any(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_TO_OUTPUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES),
-                        Mockito.eq("-l"),
-                        Mockito.contains(apkFile));
-
-        assertTrue(
-                mTestDevice
-                        .installPackage(new File(apkFile), new File(certFile), true, "-l")
-                        .contains("InstallException during package installation."));
-        verifyMockIDeviceAppOpsToPersist();
-
-        verify(mMockIDevice).removeRemotePackage(certFile);
-        verify(mMockIDevice).removeRemotePackage(apkFile);
     }
 
     /**
