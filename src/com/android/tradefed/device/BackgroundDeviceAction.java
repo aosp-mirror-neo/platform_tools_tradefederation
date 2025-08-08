@@ -50,7 +50,6 @@ public class BackgroundDeviceAction extends Thread {
     private String mDescriptor;
     private boolean mIsCancelled;
     private int mLogStartDelay;
-    private boolean mNoRepetitiveLogging;
 
     /**
      * Creates a {@link BackgroundDeviceAction}
@@ -60,24 +59,17 @@ public class BackgroundDeviceAction extends Thread {
      * @param device the device to run the command on
      * @param receiver the receiver for collecting the output of the command
      * @param startDelay the delay to wait after the device becomes online
-     * @param noRepetitiveLogging whether to suppress repetitive logging
      */
     public BackgroundDeviceAction(String command, String descriptor, ITestDevice device,
-            IShellOutputReceiver receiver, int startDelay, boolean noRepetitiveLogging) {
+            IShellOutputReceiver receiver, int startDelay) {
         super(BACKGROUND_DEVICE_ACTION + "-" + command);
         mCommand = command;
         mDescriptor = descriptor;
         mTestDevice = device;
         mReceiver = receiver;
         mLogStartDelay = startDelay;
-        mNoRepetitiveLogging = noRepetitiveLogging;
         // don't keep VM open if this thread is still running
         setDaemon(true);
-    }
-
-    public BackgroundDeviceAction(String command, String descriptor, ITestDevice device,
-            IShellOutputReceiver receiver, int startDelay) {
-        this(command, descriptor, device, receiver, startDelay, false);
     }
 
     /**
@@ -90,7 +82,6 @@ public class BackgroundDeviceAction extends Thread {
     public void run() {
         String separator = String.format(
                 "\n========== beginning of new [%s] output ==========\n", mDescriptor);
-        boolean loggedStarting = false;
         while (!isCancelled()) {
             try (CloseableTraceScope ignore = new CloseableTraceScope()) {
                 if (mLogStartDelay > 0) {
@@ -99,15 +90,12 @@ public class BackgroundDeviceAction extends Thread {
                             mLogStartDelay, mDescriptor, mTestDevice.getSerialNumber());
                     getRunUtil().sleep(mLogStartDelay);
                 }
-                blockUntilOnlineNoThrow(loggedStarting);
+                blockUntilOnlineNoThrow();
                 // check again if the operation has been cancelled after the wait for online
                 if (isCancelled()) {
                     break;
                 }
-                if (!mNoRepetitiveLogging || !loggedStarting) {
-                    CLog.d("Starting %s for %s.", mDescriptor, mTestDevice.getSerialNumber());
-                    loggedStarting = true;
-                }
+                CLog.d("Starting %s for %s.", mDescriptor, mTestDevice.getSerialNumber());
                 mReceiver.addOutput(separator.getBytes(), 0, separator.length());
                 try {
                     mTestDevice
@@ -132,7 +120,7 @@ public class BackgroundDeviceAction extends Thread {
     protected void waitForDeviceRecovery(String exceptionType) {
         CLog.d("%s while running %s on %s. May see duplicated content in log.", exceptionType,
                 mDescriptor, mTestDevice.getSerialNumber());
-        blockUntilOnlineNoThrow(false);
+        blockUntilOnlineNoThrow();
     }
 
     /**
@@ -159,20 +147,17 @@ public class BackgroundDeviceAction extends Thread {
         return RunUtil.getDefault();
     }
 
-    private void blockUntilOnlineNoThrow(boolean noLogging) {
-        boolean loggedWaiting = false;
+    private void blockUntilOnlineNoThrow() {
+        CLog.d("Waiting for device %s online before starting.", mTestDevice.getSerialNumber());
         while (!isCancelled()) {
-            if (TestDeviceState.ONLINE.equals(mTestDevice.getDeviceState()) && !noLogging) {
-                CLog.d("Device %s is now online.", mTestDevice.getSerialNumber());
+            // For stub device we wait no matter what to avoid flooding with logs.
+            if ((mTestDevice.getIDevice() instanceof StubDevice)
+                    || !TestDeviceState.ONLINE.equals(mTestDevice.getDeviceState())) {
+                getRunUtil().sleep(ONLINE_POLL_INTERVAL_MS);
+            } else {
+                CLog.d("Device %s now online.", mTestDevice.getSerialNumber());
                 break;
             }
-            if ((!mNoRepetitiveLogging || !loggedWaiting) && !noLogging) {
-                CLog.d(
-                        "Waiting for device %s online before starting.",
-                        mTestDevice.getSerialNumber());
-                loggedWaiting = true;
-            }
-            getRunUtil().sleep(ONLINE_POLL_INTERVAL_MS);
         }
     }
 }

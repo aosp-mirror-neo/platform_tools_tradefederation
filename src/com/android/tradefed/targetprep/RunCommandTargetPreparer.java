@@ -86,11 +86,6 @@ public class RunCommandTargetPreparer extends BaseTargetPreparer {
                         + " be written as something like 'cmd self-destruct --user %TEST_USER%'.")
     private String mTestUserToken = "";
 
-    @Option(
-            name = "no-repetitive-logging",
-            description = "Whether to suppress repetitive logging.")
-    private boolean mNoRepetitiveLogging = false;
-
     private Map<BackgroundDeviceAction, CollectingOutputReceiver> mBgDeviceActionsMap =
             new HashMap<>();
 
@@ -118,7 +113,7 @@ public class RunCommandTargetPreparer extends BaseTargetPreparer {
             mExecutedCommands.add(bgCmd);
             CollectingOutputReceiver receiver = new CollectingOutputReceiver();
             BackgroundDeviceAction mBgDeviceAction =
-                    new BackgroundDeviceAction(bgCmd, bgCmd, device, receiver, 0, mNoRepetitiveLogging);
+                    new BackgroundDeviceAction(bgCmd, bgCmd, device, receiver, 0);
             mBgDeviceAction.start();
             mBgDeviceActionsMap.put(mBgDeviceAction, receiver);
         }
