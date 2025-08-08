@@ -34,7 +34,7 @@ public enum AutoLogCollector {
     DEVICE_TRACE(DeviceTraceCollector.class),
     MODULE_PERFETTO_COLLECTOR(ModulePerfettoCollector.class);
 
-    public Class<?> mClass;
+    private Class<?> mClass;
 
     private AutoLogCollector(Class<? extends BaseDeviceMetricCollector> className) {
         mClass = className;
