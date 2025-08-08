@@ -26,6 +26,9 @@ public final class UserInfo {
     // From {@link android.os.UserHandle}
     public static final int USER_SYSTEM = 0;
     public static final int USER_NULL = -10000;
+    public static final int USER_ALL = -1;
+    public static final int USER_CURRENT = -2;
+    public static final int USER_CURRENT_OR_SELF = -3;
 
     // From {@link android.content.pm.UserInfo}
     public static final int FLAG_PRIMARY = 0x00000001;
