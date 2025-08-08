@@ -16,6 +16,7 @@
 package com.android.tradefed.invoker.logger;
 
 import com.android.tradefed.log.LogUtil.CLog;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -183,6 +184,7 @@ public class InvocationMetricLogger {
         CF_OXYGEN_SESSION_ID("cf_oxygen_session_id", false),
         CF_OXYGEN_VERSION("cf_oxygen_version", false),
         CF_OXYGENATION_VERSION("cf_oxygenation_version", false),
+        CF_LAUNCH_PERMISSION_LATENCY("cf_launch_permission_latency", false),
         CRASH_FAILURES("crash_failures", true),
         UNCAUGHT_CRASH_FAILURES("uncaught_crash_failures", true),
         TEST_CRASH_FAILURES("test_crash_failures", true),

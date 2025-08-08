@@ -134,6 +134,8 @@ public class AdbSshConnection extends AdbTcpConnection {
                             .getHostOptions()
                             .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
                     long queueTime = System.currentTimeMillis() - startTime;
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
                     CLog.v(
                             "Fetch and launch CVD permit obtained after %ds",
                             TimeUnit.MILLISECONDS.toSeconds(queueTime));
