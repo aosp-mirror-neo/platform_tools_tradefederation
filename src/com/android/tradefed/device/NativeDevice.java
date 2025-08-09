@@ -116,8 +116,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
@@ -209,6 +207,8 @@ public class NativeDevice
     /** Version number for a current development build */
     private static final int CUR_DEVELOPMENT_VERSION = 10000;
 
+    private static final long BATTERY_CACHE_DURATION_MS = TimeUnit.MINUTES.toMillis(5);
+
     /** The time in ms to wait for a 'long' command to complete. */
     private long mLongCmdTimeout = 25 * 60 * 1000L;
 
@@ -262,7 +262,7 @@ public class NativeDevice
 
     private DeviceDescriptor mCachedDeviceDescriptor = null;
     private final Object mCacheLock = new Object();
-
+    private final Object mBatteryCacheLock = new Object();
     private String mTrackingSerialNumber = null;
     private String mFastbootSerialNumber = null;
     private File mUnpackedFastbootDir = null;
@@ -284,6 +284,10 @@ public class NativeDevice
     private Process mMicrodroidProcess = null;
 
     private final LoadingCache<String, String> mPropertiesCache;
+
+    private Integer mBatteryLevel = null;
+
+    private long mBatteryFetchTimestamp = 0L;
 
     // If we increase the number of props, then increase the cache size of mPropertiesCache.
     private final Set<String> propsToPrefetch =
@@ -5546,6 +5550,7 @@ public class NativeDevice
         mFastbootSerialNumber = null;
         // Default implementation
         if (getIDevice() instanceof StubDevice) {
+            mTrackingSerialNumber = null;
             return;
         }
         // Reset the Content Provider bit.
@@ -6161,23 +6166,41 @@ public class NativeDevice
             return null;
         }
         try {
-            // Use default 5 minutes freshness
-            Future<Integer> batteryFuture = getIDevice().getBattery();
-            // Get cached value or wait up to 9100ms for battery level query.
-            // The computation can be inferred from BatteryFetcher#initiateBatteryQuery:
-            //  - Maximum time to get model property (INITIAL_GET_PROP_TIMEOUT_MS = 5s)
-            //  - Timeout of querying sysfs (BATTERY_TIMEOUT_MS = 2s)
-            //  - Timeout of querying dumpsys as backup (BATTERY_TIMEOUT_MS = 2s)
-            //  - 100ms of buffer to run additional processing
-            return batteryFuture.get(9100, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException
-                | ExecutionException
-                | java.util.concurrent.TimeoutException e) {
+            return internalGetBattery();
+        } catch (DeviceNotAvailableException e) {
             CLog.w(
                     "Failed to query battery level for %s: %s",
                     getIDevice().getSerialNumber(), e.toString());
         }
         return null;
+    }
+
+    private Integer internalGetBattery() throws DeviceNotAvailableException {
+        synchronized (mBatteryCacheLock) {
+            long now = System.currentTimeMillis();
+            if (mBatteryLevel != null
+                    && (now - mBatteryFetchTimestamp) < BATTERY_CACHE_DURATION_MS) {
+                return mBatteryLevel;
+            }
+            mBatteryLevel = null;
+            String cmd = "dumpsys battery";
+            CommandResult result = executeShellV2Command(cmd);
+            if (CommandStatus.SUCCESS.equals(result.getStatus())) {
+                final Pattern batteryLevelPattern =
+                        Pattern.compile("^\\s*level:\\s*(\\d+)", Pattern.MULTILINE);
+                Matcher matcher = batteryLevelPattern.matcher(result.getStdout());
+                if (matcher.find()) {
+                    mBatteryLevel = Integer.parseInt(matcher.group(1));
+                }
+            }
+            mBatteryFetchTimestamp = now;
+            if (mBatteryLevel == null) {
+                throw new DeviceNotAvailableException(
+                        String.format("Failed to get battery level: %s", result.getStderr()),
+                        getSerialNumber());
+            }
+            return mBatteryLevel;
+        }
     }
 
     /** {@inheritDoc} */
