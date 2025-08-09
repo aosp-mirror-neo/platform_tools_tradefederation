@@ -29,6 +29,8 @@ import com.google.common.base.Strings;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 /** A singleton class for converting a FastCDC-chunked directory to its original directory. */
@@ -101,31 +103,59 @@ public class CasConverterFactory {
      * Converts a FastCDC-chunked directory back to its source directory. The conversion is in-place
      * and the original directory will be overwritten.
      *
+     * @param chunkedDirectory The directory containing the FastCDC chunks. It becomes the converted
+     *     directory on return.
+     * @throws IOException If an I/O error occurs.
+     */
+    public void convert(Path chunkedDirectory) throws IOException {
+        convert(chunkedDirectory, chunkedDirectory);
+    }
+
+    /**
+     * Converts a FastCDC-chunked directory to its source directory at a destination path. If the
+     * destination path is null or the same as the source path, it will fallback to inplace
+     * conversion.
+     *
      * <p>The method is synchronized to prevent concurrent conversions from running at the same
      * time. This is rare in practice, but possible. For example, a DeviceBuildInfo and its clone
      * shares the same device image and may attempt to convert it at the same time and there can be
      * a race condition with unpredictable result.
      *
-     * @param chunkedDirectory The directory containing the FastCDC chunks and will become the
-     *     converted directory on return.
+     * @param chunkedDirectory The directory containing the FastCDC chunks.
+     * @param convertedDirectory The directory to convert to.
      * @throws IOException If an I/O error occurs.
      */
-    public synchronized void convert(Path chunkedDirectory) throws IOException {
+    public synchronized void convert(Path chunkedDirectory, Path convertedDirectory)
+            throws IOException {
+        if (convertedDirectory == null) {
+            convertedDirectory = chunkedDirectory;
+        }
+
         String pathString = chunkedDirectory.toAbsolutePath().toString();
+        String convertedPathString = convertedDirectory.toAbsolutePath().toString();
+        List<String> command = new ArrayList<>();
+        command.add(mCasConverterPath.toString());
+        command.add("--src-path");
+        command.add(pathString);
+        if (!convertedDirectory.normalize().equals(chunkedDirectory.normalize())) {
+            command.add("--dst-path");
+            command.add(convertedPathString);
+            command.add("--keep-chunks"); // keep the original directory untouched
+        }
         CommandResult cr =
-                mRunUtil.runTimedCmd(
-                        CONVERSION_TIMEOUT_IN_MS,
-                        mCasConverterPath.toString(), // already absolute path
-                        "--src-path",
-                        pathString);
+                mRunUtil.runTimedCmd(CONVERSION_TIMEOUT_IN_MS, command.toArray(new String[0]));
         if (cr.getStatus() != CommandStatus.SUCCESS) {
             addInvocationMetrics(InvocationMetricKey.CAS_CONVERTER_FAILURE_COUNT, 1);
             throw new IOException(
                     String.format(
-                            "Failed to convert chunked directory %s. Status: %s\n"
-                                    + "Stdout: %s\n"
-                                    + "Stderr: %s",
-                            pathString, cr.getStatus(), cr.getStdout(), cr.getStderr()));
+                            "Failed to convert chunked directory '%s' to '%s'. Status: %s\n"
+                                    + "Stdout:\n%s\n"
+                                    + "Stderr:\n%s",
+                            pathString,
+                            convertedPathString,
+                            cr.getStatus(),
+                            cr.getStdout(),
+                            cr.getStderr()));
         }
         addInvocationMetrics(InvocationMetricKey.CAS_CONVERTER_SUCCESS_COUNT, 1);
     }

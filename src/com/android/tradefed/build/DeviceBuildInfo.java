@@ -19,12 +19,14 @@ package com.android.tradefed.build;
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CasUtil;
+import com.android.tradefed.util.FileUtil;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * A {@link IBuildInfo} that represents a complete Android device build and (optionally) its tests.
@@ -80,7 +82,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
                         "Failed to get CAS converter factory, can't convert chunked device image to"
-                            + " uncompressed device image. Error: %s",
+                                + " uncompressed device image. Error: %s",
                         cause.getMessage());
                 mOptionalCasConverterFactory = Optional.empty();
             }
@@ -134,9 +136,10 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             return deviceImage;
         }
 
-        File image = getFuseMountManager()
-                .map(manager -> mountIfPossible(manager, deviceImage))
-                .orElse(deviceImage);
+        File image =
+                getFuseMountManager()
+                        .map(manager -> mountIfPossible(manager, deviceImage))
+                        .orElse(deviceImage);
 
         convertImageIfNeeded(image.toPath());
         return image;
@@ -164,9 +167,25 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                 CLog.e(e);
                 // No re-throw as this is infra implementation detail and should be transparent to
                 // getDeviceImageFile() callers.
+
+                // TODO(frankfeng): remove this once rollout is done.
+                collectConverterMetrics(deviceImage.toPath());
             }
         }
         return deviceImage;
+    }
+
+    /**
+     * Collect metrics on the CAS converter by converting the image and deleting it. Note that
+     * performance is not a concern here as this is done only when fuse mounting fails which is
+     * rare.
+     *
+     * @param image the device image to convert
+     */
+    private void collectConverterMetrics(Path image) {
+        Path convertedImage = image.getParent().resolve(UUID.randomUUID().toString());
+        convertImageIfNeeded(image, convertedImage);
+        FileUtil.recursiveDelete(convertedImage.toFile());
     }
 
     /**
@@ -174,26 +193,33 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
      * failure.
      *
      * @param image the device image to restore
+     * @param convertedImage the converted device image. If null, the conversion is in-place.
      */
-    private void convertImageIfNeeded(Path image) {
-        if (CasUtil.isUncompressedDeviceImage(image)) {
+    private void convertImageIfNeeded(Path image, Path convertedImage) {
+        if (convertedImage == null && CasUtil.isUncompressedDeviceImage(image)) {
             return; // No conversion needed.
         }
         if (!CasUtil.isChunkedDir(image)) {
             return; // Not convertible.
         }
 
-        getCasConverterFactory().ifPresent(converter -> convertNoThrow(converter, image));
+        getCasConverterFactory()
+                .ifPresent(converter -> convertNoThrow(converter, image, convertedImage));
+    }
+
+    private void convertImageIfNeeded(Path image) {
+        convertImageIfNeeded(image, null);
     }
 
     /**
      * Converts a chunked device image to an uncompressed device image. Log errors but do not throw.
      *
      * @param image the device image to convert
+     * @param convertedImage the converted device image. If null, the conversion is in-place.
      */
-    private void convertNoThrow(CasConverterFactory converter, Path image) {
+    private void convertNoThrow(CasConverterFactory converter, Path image, Path convertedImage) {
         try {
-            converter.convert(image);
+            converter.convert(image, convertedImage);
         } catch (IOException e) {
             CLog.e(e);
         }

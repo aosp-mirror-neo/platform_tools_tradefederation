@@ -142,6 +142,9 @@ public class AdbSshConnectionTest {
     public void tearDown() {
         if (mConnection.getGceTunnelMonitor() != null) {
             mConnection.getGceTunnelMonitor().shutdown();
+            if (mConnection.getGceTunnelMonitor() instanceof GceSshTunnelMonitor) {
+                ((GceSshTunnelMonitor) mConnection.getGceTunnelMonitor()).cleanUp();
+            }
         }
     }
 

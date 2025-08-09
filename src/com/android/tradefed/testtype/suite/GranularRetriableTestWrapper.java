@@ -44,7 +44,7 @@ import com.android.tradefed.result.TestStatus;
 import com.android.tradefed.result.error.ErrorIdentifier;
 import com.android.tradefed.retry.IRetryDecision;
 import com.android.tradefed.retry.MergeStrategy;
-import com.android.tradefed.retry.RetryResultAndLogForwarder;
+import com.android.tradefed.retry.RetryLogSaverResultForwarder;
 import com.android.tradefed.retry.RetryStatistics;
 import com.android.tradefed.testtype.IRemoteTest;
 import com.android.tradefed.testtype.ITestCollector;
@@ -94,7 +94,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private IConfiguration mModuleConfiguration;
     private ModuleListener mMainGranularRunListener;
     private ITestInvocationListener mAllListeners;
-    private RetryResultAndLogForwarder mRetryAttemptForwarder;
+    private RetryLogSaverResultForwarder mRetryAttemptForwarder;
     private ITestInvocationListener mRemoteTestTimeOutEnforcer;
     private ModuleResultsAndMetricsForwarder mListenerWithModuleMetricsForwarder;
     private ILogSaver mLogSaver;
@@ -290,9 +290,15 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
 
         if (mRemoveModuleBuffering) {
             mRetryAttemptForwarder =
-                    new RetryResultAndLogForwarder(currentTestListener, mTargetPreparerRetryCount);
+                    new RetryLogSaverResultForwarder(
+                            mLogSaver,
+                            currentTestListener,
+                            mModuleConfiguration,
+                            mTargetPreparerRetryCount);
         } else {
-            mRetryAttemptForwarder = new RetryResultAndLogForwarder(currentTestListener);
+            mRetryAttemptForwarder =
+                    new RetryLogSaverResultForwarder(
+                            mLogSaver, currentTestListener, mModuleConfiguration);
         }
         ITestInvocationListener runListener = mRetryAttemptForwarder;
 
