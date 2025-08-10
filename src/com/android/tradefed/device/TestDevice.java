@@ -619,6 +619,57 @@ public class TestDevice extends NativeDevice {
         return CommandStatus.SUCCESS.equals(res.getStatus()) ? null : res.getStdout();
     }
 
+    private String adbInstallPackages(
+            final List<File> packageFiles, final boolean reinstall, final List<String> extraArgs)
+            throws DeviceNotAvailableException {
+        long startTime = System.currentTimeMillis();
+        try {
+            // use array to store response, so it can be returned to caller
+            final String[] response = new String[1];
+            DeviceAction installAction =
+                    new DeviceAction() {
+                        @Override
+                        public boolean run() throws InstallException {
+                            try {
+                                List<String> adbCmd = new ArrayList<>();
+                                adbCmd.add("install-multiple");
+                                if (reinstall) {
+                                    adbCmd.add("-r");
+                                }
+                                adbCmd.addAll(extraArgs);
+                                for (File packageFile : packageFiles) {
+                                    adbCmd.add(packageFile.getAbsolutePath());
+                                }
+                                CommandResult res =
+                                        executeAdbV2Command(adbCmd.toArray(new String[0]));
+                                if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                                    CLog.e("Failed to install packages: '%s'", res.getStdout());
+                                    response[0] = res.getStderr();
+                                    return false;
+                                }
+                                response[0] = null;
+                                return true;
+                            } catch (DeviceNotAvailableException e) {
+                                response[0] = e.getMessage();
+                                return false;
+                            }
+                        }
+                    };
+            performDeviceAction(
+                    String.format("install %s", packageFiles.toString()),
+                    installAction,
+                    MAX_RETRY_ATTEMPTS);
+            allowLegacyStorageForApps(packageFiles);
+            return response[0];
+        } finally {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
+                    System.currentTimeMillis() - startTime);
+        }
+    }
+
     /**
      * Core implementation for installing application with split apk files {@link
      * IDevice#installPackages(List, boolean, List)} See
@@ -754,7 +805,7 @@ public class TestDevice extends NativeDevice {
             ensureRuntimePermissionSupported();
             args.add("-g");
         }
-        return internalInstallPackages(packageFiles, reinstall, args);
+        return adbInstallPackages(packageFiles, reinstall, args);
     }
 
     /** {@inheritDoc} */
@@ -783,7 +834,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackages(packageFiles, reinstall, args);
+        return adbInstallPackages(packageFiles, reinstall, args);
     }
 
     /** {@inheritDoc} */
