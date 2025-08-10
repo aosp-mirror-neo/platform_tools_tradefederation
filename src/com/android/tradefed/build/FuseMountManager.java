@@ -139,6 +139,11 @@ public class FuseMountManager {
                     mDriverProfile.buildMountCommand(sourceDataPath, mountPoint, logDir);
             casviewerPath = command.get(0);
 
+            // This shouldn't be needed. Log indicates the casviewer may lost the executable bit for
+            // unknown reason.
+            boolean logMetricsIfNotExecutable = true;
+            CasUtil.ensureCasClientExecutable(Path.of(casviewerPath), logMetricsIfNotExecutable);
+
             process = mRunUtil.runCmdInBackground(command, capturedOutput);
             if (process == null) { // Unlikely to happen.
                 throw new IOException("runCmdInBackground returned a null process.");

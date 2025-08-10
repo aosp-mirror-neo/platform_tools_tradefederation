@@ -21,7 +21,6 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CasUtil;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
-import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.google.common.annotations.VisibleForTesting;
@@ -59,7 +58,9 @@ public class CasConverterFactory {
         }
 
         // Ensure `casconverter` is executable. It can be distributed without the execute bit set.
-        FileUtil.ensureGroupRWX(casConverterPath.toFile());
+        boolean logMetricsIfNotExecutable = false; // Do not log as it's expected.
+        CasUtil.ensureCasClientExecutable(casConverterPath, logMetricsIfNotExecutable);
+
         logCasClientVersion(
                 casConverterPath,
                 version -> {
@@ -130,6 +131,11 @@ public class CasConverterFactory {
         if (convertedDirectory == null) {
             convertedDirectory = chunkedDirectory;
         }
+
+        // This shouldn't be needed. Log indicates the `casconverter` may lost the executable bit
+        // for unknown reason.
+        boolean logMetricsIfNotExecutable = true;
+        CasUtil.ensureCasClientExecutable(mCasConverterPath, logMetricsIfNotExecutable);
 
         String pathString = chunkedDirectory.toAbsolutePath().toString();
         String convertedPathString = convertedDirectory.toAbsolutePath().toString();

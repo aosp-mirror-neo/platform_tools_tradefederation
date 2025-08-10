@@ -20,7 +20,6 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CasUtil;
-import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.google.common.annotations.VisibleForTesting;
@@ -79,8 +78,10 @@ public class FuseMountManagerFactory {
             logAndThrow(String.format("Could not find '%s' in '%s'.", CAS_CLIENT_NAME, jarDir));
         }
 
-        // Ensure casviewer is executable. It can be distributed without the execute bit set.
-        FileUtil.ensureGroupRWX(casViewerPath.toFile());
+        // Ensure `casviewer` is executable. It can be distributed without the execute bit set.
+        boolean logMetricsIfNotExecutable = false;  // Do not log as it's expected.
+        CasUtil.ensureCasClientExecutable(casViewerPath, logMetricsIfNotExecutable);
+
         CasUtil.logCasClientVersion(
                 casViewerPath,
                 version -> {
