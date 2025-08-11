@@ -52,14 +52,21 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
 import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
@@ -85,6 +92,9 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.imageio.ImageIO;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 /**
  * Implementation of a {@link ITestDevice} for a full stack android device
@@ -128,6 +138,7 @@ public class TestDevice extends NativeDevice {
     static final String LIST_PACKAGES_CMD = "pm list packages -f";
     private static final Pattern PACKAGE_REGEX = Pattern.compile("package:(.*)=(.*)");
 
+    static final String CAT_APEX_INFO_LIST_CMD = "cat /apex/apex-info-list.xml";
     static final String LIST_APEXES_CMD = "pm list packages --apex-only --show-versioncode -f";
     private static final Pattern APEXES_WITH_PATH_REGEX =
             Pattern.compile("package:(.*)=(.*) versionCode:(.*)");
@@ -509,70 +520,6 @@ public class TestDevice extends NativeDevice {
         return internalInstallPackage(packageFile, reinstall, args);
     }
 
-    public String installPackage(final File packageFile, final File certFile,
-            final boolean reinstall, final String... extraArgs) throws DeviceNotAvailableException {
-        long startTime = System.currentTimeMillis();
-        try {
-            // use array to store response, so it can be returned to caller
-            final String[] response = new String[1];
-            DeviceAction installAction =
-                    new DeviceAction() {
-                        @Override
-                        public boolean run()
-                                throws InstallException, SyncException, IOException,
-                                        TimeoutException, AdbCommandRejectedException {
-                            // TODO: create a getIDevice().installPackage(File, File...) method when
-                            // the
-                            // dist cert functionality is ready to be open sourced
-                            String remotePackagePath =
-                                    getIDevice().syncPackageToDevice(packageFile.getAbsolutePath());
-                            String remoteCertPath =
-                                    getIDevice().syncPackageToDevice(certFile.getAbsolutePath());
-                            // trick installRemotePackage into issuing a 'pm install <apk> <cert>'
-                            // command, by adding apk path to extraArgs, and using cert as the
-                            // 'apk file'.
-                            String[] newExtraArgs = new String[extraArgs.length + 1];
-                            System.arraycopy(extraArgs, 0, newExtraArgs, 0, extraArgs.length);
-                            newExtraArgs[newExtraArgs.length - 1] =
-                                    String.format("\"%s\"", remotePackagePath);
-                            try {
-                                InstallReceiver receiver = createInstallReceiver();
-                                getIDevice()
-                                        .installRemotePackage(
-                                                remoteCertPath,
-                                                reinstall,
-                                                receiver,
-                                                INSTALL_TIMEOUT_MINUTES,
-                                                INSTALL_TIMEOUT_TO_OUTPUT_MINUTES,
-                                                TimeUnit.MINUTES,
-                                                newExtraArgs);
-                                response[0] = handleInstallReceiver(receiver, packageFile);
-                            } catch (InstallException e) {
-                                response[0] = handleInstallationError(e);
-                            } finally {
-                                getIDevice().removeRemotePackage(remotePackagePath);
-                                getIDevice().removeRemotePackage(remoteCertPath);
-                            }
-                            return true;
-                        }
-                    };
-            performDeviceAction(
-                    String.format("install %s", packageFile.getAbsolutePath()),
-                    installAction,
-                    MAX_RETRY_ATTEMPTS);
-            List<File> packageFiles = new ArrayList<>();
-            packageFiles.add(packageFile);
-            allowLegacyStorageForApps(packageFiles);
-            return response[0];
-        } finally {
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
-                    System.currentTimeMillis() - startTime);
-        }
-    }
-
     /**
      * {@inheritDoc}
      */
@@ -653,28 +600,6 @@ public class TestDevice extends NativeDevice {
         return adbUninstallPackage(packageName);
     }
 
-    private String uninstallPackage(String packageName, @Nullable String extraArgs)
-            throws DeviceNotAvailableException {
-        final String finalExtraArgs = (extraArgs == null) ? "" : extraArgs;
-
-        // use array to store response, so it can be returned to caller
-        final String[] response = new String[1];
-        DeviceAction uninstallAction =
-                () -> {
-                    CLog.d("Uninstalling %s with extra args %s", packageName, finalExtraArgs);
-
-                    String result = getIDevice().uninstallApp(packageName, finalExtraArgs);
-                    response[0] = result;
-                    return result == null;
-                };
-
-        performDeviceAction(
-                String.format("uninstall %s with extra args %s", packageName, finalExtraArgs),
-                uninstallAction,
-                MAX_RETRY_ATTEMPTS);
-        return response[0];
-    }
-
     /** {@inheritDoc} */
     @Override
     public String uninstallPackageForUser(final String packageName, int userId)
@@ -692,6 +617,57 @@ public class TestDevice extends NativeDevice {
         adbCmd.add(packageName);
         CommandResult res = executeAdbV2Command(adbCmd.toArray(new String[0]));
         return CommandStatus.SUCCESS.equals(res.getStatus()) ? null : res.getStdout();
+    }
+
+    private String adbInstallPackages(
+            final List<File> packageFiles, final boolean reinstall, final List<String> extraArgs)
+            throws DeviceNotAvailableException {
+        long startTime = System.currentTimeMillis();
+        try {
+            // use array to store response, so it can be returned to caller
+            final String[] response = new String[1];
+            DeviceAction installAction =
+                    new DeviceAction() {
+                        @Override
+                        public boolean run() throws InstallException {
+                            try {
+                                List<String> adbCmd = new ArrayList<>();
+                                adbCmd.add("install-multiple");
+                                if (reinstall) {
+                                    adbCmd.add("-r");
+                                }
+                                adbCmd.addAll(extraArgs);
+                                for (File packageFile : packageFiles) {
+                                    adbCmd.add(packageFile.getAbsolutePath());
+                                }
+                                CommandResult res =
+                                        executeAdbV2Command(adbCmd.toArray(new String[0]));
+                                if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                                    CLog.e("Failed to install packages: '%s'", res.getStdout());
+                                    response[0] = res.getStderr();
+                                    return false;
+                                }
+                                response[0] = null;
+                                return true;
+                            } catch (DeviceNotAvailableException e) {
+                                response[0] = e.getMessage();
+                                return false;
+                            }
+                        }
+                    };
+            performDeviceAction(
+                    String.format("install %s", packageFiles.toString()),
+                    installAction,
+                    MAX_RETRY_ATTEMPTS);
+            allowLegacyStorageForApps(packageFiles);
+            return response[0];
+        } finally {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
+                    System.currentTimeMillis() - startTime);
+        }
     }
 
     /**
@@ -829,7 +805,7 @@ public class TestDevice extends NativeDevice {
             ensureRuntimePermissionSupported();
             args.add("-g");
         }
-        return internalInstallPackages(packageFiles, reinstall, args);
+        return adbInstallPackages(packageFiles, reinstall, args);
     }
 
     /** {@inheritDoc} */
@@ -858,79 +834,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackages(packageFiles, reinstall, args);
-    }
-
-    /**
-     * Core implementation for split apk remote installation {@link IDevice#installPackage(String,
-     * boolean, String...)} See "https://developer.android.com/studio/build/configure-apk-splits" on
-     * how to split apk to several files.
-     *
-     * @param remoteApkPaths the remote apk file paths
-     * @param reinstall <code>true</code> if a reinstall should be performed
-     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
-     *     options.
-     * @return the response from the installation <code>null</code> if installation succeeds.
-     * @throws DeviceNotAvailableException
-     */
-    private String internalInstallRemotePackages(
-            final List<String> remoteApkPaths,
-            final boolean reinstall,
-            final List<String> extraArgs)
-            throws DeviceNotAvailableException {
-        // use array to store response, so it can be returned to caller
-        final String[] response = new String[1];
-        DeviceAction installAction =
-                new DeviceAction() {
-                    @Override
-                    public boolean run() throws InstallException {
-                        try {
-                            getIDevice()
-                                    .installRemotePackages(
-                                            remoteApkPaths,
-                                            reinstall,
-                                            extraArgs,
-                                            INSTALL_TIMEOUT_MINUTES,
-                                            TimeUnit.MINUTES);
-                            response[0] = null;
-                            return true;
-                        } catch (InstallException e) {
-                            response[0] = handleInstallationError(e);
-                            return false;
-                        }
-                    }
-                };
-        performDeviceAction(
-                String.format("install %s", remoteApkPaths.toString()),
-                installAction,
-                MAX_RETRY_ATTEMPTS);
-        return response[0];
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public String installRemotePackages(
-            final List<String> remoteApkPaths, final boolean reinstall, final String... extraArgs)
-            throws DeviceNotAvailableException {
-        // Grant all permissions by default if feature is supported
-        return installRemotePackages(
-                remoteApkPaths, reinstall, isRuntimePermissionSupported(), extraArgs);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public String installRemotePackages(
-            List<String> remoteApkPaths,
-            boolean reinstall,
-            boolean grantPermissions,
-            String... extraArgs)
-            throws DeviceNotAvailableException {
-        List<String> args = new ArrayList<>(Arrays.asList(extraArgs));
-        if (grantPermissions) {
-            ensureRuntimePermissionSupported();
-            args.add("-g");
-        }
-        return internalInstallRemotePackages(remoteApkPaths, reinstall, args);
+        return adbInstallPackages(packageFiles, reinstall, args);
     }
 
     /** {@inheritDoc} */
@@ -1043,22 +947,6 @@ public class TestDevice extends NativeDevice {
         } catch (IOException e) {
             CLog.e("I/O error occrred during convert screenshot");
             return null;
-        }
-    }
-
-    private class ScreenshotAction implements DeviceAction {
-
-        RawImage mRawScreenshot;
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public boolean run() throws IOException, TimeoutException, AdbCommandRejectedException,
-                ShellCommandUnresponsiveException, InstallException, SyncException {
-            mRawScreenshot =
-                    getIDevice().getScreenshot(MAX_SCREENSHOT_TIMEOUT, TimeUnit.MILLISECONDS);
-            return mRawScreenshot != null;
         }
     }
 
@@ -1463,10 +1351,16 @@ public class TestDevice extends NativeDevice {
     /** {@inheritDoc} */
     @Override
     public Set<ApexInfo> getActiveApexes() throws DeviceNotAvailableException {
+        String xml = executeShellCommand(CAT_APEX_INFO_LIST_CMD);
+        Set<ApexInfo> ret = parseApexInfoList(xml, true /* activeOnly */);
+        if (!ret.isEmpty()) {
+            return ret;
+        }
+        // Fallback to old method
         String output = executeShellCommand(LIST_APEXES_CMD);
         // Optimistically parse expecting platform to return paths. If it doesn't, empty set will
         // be returned.
-        Set<ApexInfo> ret = parseApexesFromOutput(output, true /* withPath */);
+        ret = parseApexesFromOutput(output, true /* withPath */);
         if (ret.isEmpty()) {
             ret = parseApexesFromOutput(output, false /* withPath */);
         }
@@ -1485,6 +1379,33 @@ public class TestDevice extends NativeDevice {
                 String packageName = m.group(2);
                 ret.add(packageName);
             }
+        }
+        return ret;
+    }
+
+    private Set<ApexInfo> parseApexInfoList(final String xml, boolean activeOnly) {
+        Set<ApexInfo> ret = new HashSet<>();
+        try (InputStream in = new ByteArrayInputStream(xml.getBytes())) {
+            final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            final DocumentBuilder builder = factory.newDocumentBuilder();
+            builder.setErrorHandler(new DefaultHandler()); // mute stderr logging
+            final Document doc = builder.parse(in);
+            // iterate over <apex-info> element in the doc
+            NodeList apexInfoList = doc.getElementsByTagName("apex-info");
+            for (int i = 0; i < apexInfoList.getLength(); i++) {
+                Element apexInfo = (Element) apexInfoList.item(i);
+                boolean isActive = apexInfo.getAttribute("isActive").equals("true");
+                if (activeOnly && !isActive) {
+                    continue;
+                }
+                boolean isFactory = apexInfo.getAttribute("isFactory").equals("true");
+                String name = apexInfo.getAttribute("moduleName");
+                long version = Long.valueOf(apexInfo.getAttribute("versionCode"));
+                String path = apexInfo.getAttribute("modulePath");
+                ret.add(new ApexInfo(name, version, path, isFactory));
+            }
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            CLog.e("Failed to parse /apex/apex-info-list.xml: " + e.toString());
         }
         return ret;
     }

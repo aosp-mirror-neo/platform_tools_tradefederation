@@ -94,11 +94,18 @@ public interface ITestDevice extends INativeDevice {
         public final String name;
         public final long versionCode;
         public final String sourceDir;
+        public final boolean isFactory;
 
-        public ApexInfo(String name, long versionCode, String sourceDir) {
+        public ApexInfo(String name, long versionCode, String sourceDir, boolean isFactory) {
             this.name = name;
             this.versionCode = versionCode;
             this.sourceDir = sourceDir;
+            this.isFactory = isFactory;
+        }
+
+        public ApexInfo(String name, long versionCode, String sourceDir) {
+            // To satisfy old devices where downloaded APEXes are installed in /data/active/apex
+            this(name, versionCode, sourceDir, !sourceDir.startsWith("/data"));
         }
 
         public ApexInfo(String name, long versionCode) {
@@ -109,7 +116,10 @@ public interface ITestDevice extends INativeDevice {
         public boolean equals(Object other) {
             if (other != null && other instanceof ApexInfo) {
                 ApexInfo ai = (ApexInfo) other;
-                return name.equals(ai.name) && versionCode == ai.versionCode;
+                return name.equals(ai.name)
+                        && versionCode == ai.versionCode
+                        && sourceDir.equals(ai.sourceDir)
+                        && isFactory == ai.isFactory;
             }
             return false;
         }
@@ -340,58 +350,6 @@ public interface ITestDevice extends INativeDevice {
             throws DeviceNotAvailableException {
         throw new UnsupportedOperationException("No support for Package Manager's features");
     }
-
-    /**
-     * Install an Android application made of several APK files (one main and extra split packages)
-     * that are sitting on the android device. See
-     * "https://developer.android.com/studio/build/configure-apk-splits" on how to split apk to
-     * several files.
-     *
-     * <p>Note: Only use cases that requires explicit control of granting runtime permission at
-     * install time should call this function.
-     *
-     * @param remoteApkPaths the remote apk file paths
-     * @param reinstall <code>true</code> if a reinstall should be performed
-     * @param grantPermissions if all runtime permissions should be granted at install time
-     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
-     *     options.
-     * @return a {@link String} with an error code, or <code>null</code> if success.
-     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
-     *     recovered.
-     * @throws UnsupportedOperationException if runtime permission is not supported by the platform
-     *     on device.
-     */
-    public default String installRemotePackages(
-            List<String> remoteApkPaths,
-            boolean reinstall,
-            boolean grantPermissions,
-            String... extraArgs)
-            throws DeviceNotAvailableException {
-        throw new UnsupportedOperationException("No support for Package Manager's features");
-    }
-
-    /**
-     * Install an Android application made of several APK files (one main and extra split packages)
-     * that are sitting on the android device. See
-     * "https://developer.android.com/studio/build/configure-apk-splits" on how to split apk to
-     * several files.
-     *
-     * @param remoteApkPaths the remote apk file paths
-     * @param reinstall <code>true</code> if a reinstall should be performed
-     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
-     *     options.
-     * @return a {@link String} with an error code, or <code>null</code> if success.
-     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
-     *     recovered.
-     * @throws UnsupportedOperationException if runtime permission is not supported by the platform
-     *     on device.
-     */
-    public default String installRemotePackages(
-            List<String> remoteApkPaths, boolean reinstall, String... extraArgs)
-            throws DeviceNotAvailableException {
-        throw new UnsupportedOperationException("No support for Package Manager's features");
-    }
-
 
     /**
      * Grabs a screenshot from the device.

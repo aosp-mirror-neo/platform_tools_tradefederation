@@ -1310,43 +1310,6 @@ public class TestDeviceTest {
         assertEquals("ip:5555", mTestDevice.switchToAdbTcp());
     }
 
-    /**
-     * Test simple success case for {@link TestDevice#installPackage(File, File, boolean,
-     * String...)}.
-     */
-    @Test
-    public void testInstallPackages() throws Exception {
-        mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    InstallReceiver createInstallReceiver() {
-                        InstallReceiver receiver = new InstallReceiver();
-                        receiver.processNewLines(new String[] {"Success"});
-                        return receiver;
-                    }
-                };
-        final String certFile = "foo.dc";
-        final String apkFile = "foo.apk";
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(certFile))).thenReturn(certFile);
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(apkFile))).thenReturn(apkFile);
-        // expect apk path to be passed as extra arg
-        mMockIDevice.installRemotePackage(
-                Mockito.eq(certFile),
-                Mockito.eq(true),
-                Mockito.any(),
-                Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                Mockito.eq(TestDevice.INSTALL_TIMEOUT_TO_OUTPUT_MINUTES),
-                Mockito.eq(TimeUnit.MINUTES),
-                Mockito.eq("-l"),
-                Mockito.contains(apkFile));
-        setMockIDeviceAppOpsToPersist();
-        mMockIDevice.removeRemotePackage(certFile);
-        mMockIDevice.removeRemotePackage(apkFile);
-
-        assertNull(mTestDevice.installPackage(new File(apkFile), new File(certFile), true, "-l"));
-        verifyMockIDeviceAppOpsToPersist();
-    }
-
     private void setMockIDeviceAppOpsToPersist() {
         when(mMockRunUtil.runTimedCmd(
                         Mockito.anyLong(),
@@ -1373,38 +1336,6 @@ public class TestDeviceTest {
                         Mockito.eq("shell"),
                         Mockito.eq("appops"),
                         Mockito.eq("write-settings"));
-    }
-
-    /** Test when a timeout during installation with certificat is thrown. */
-    @Test
-    public void testInstallPackages_timeout() throws Exception {
-        final String certFile = "foo.dc";
-        final String apkFile = "foo.apk";
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(certFile))).thenReturn(certFile);
-        when(mMockIDevice.syncPackageToDevice(Mockito.contains(apkFile))).thenReturn(apkFile);
-        setMockIDeviceAppOpsToPersist();
-
-        // expect apk path to be passed as extra arg
-        doThrow(new InstallException(new TimeoutException()))
-                .when(mMockIDevice)
-                .installRemotePackage(
-                        Mockito.eq(certFile),
-                        Mockito.eq(true),
-                        Mockito.any(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_TO_OUTPUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES),
-                        Mockito.eq("-l"),
-                        Mockito.contains(apkFile));
-
-        assertTrue(
-                mTestDevice
-                        .installPackage(new File(apkFile), new File(certFile), true, "-l")
-                        .contains("InstallException during package installation."));
-        verifyMockIDeviceAppOpsToPersist();
-
-        verify(mMockIDevice).removeRemotePackage(certFile);
-        verify(mMockIDevice).removeRemotePackage(apkFile);
     }
 
     /**
@@ -1962,29 +1893,43 @@ public class TestDeviceTest {
     @Test
     public void testInstallPackages_default_runtimePermissionNotSupported() throws Exception {
         List<File> mLocalApks = new ArrayList<File>();
+        List<String> mApkPaths = new ArrayList<String>();
         for (int i = 0; i < 3; i++) {
             File apkFile = File.createTempFile("test", ".apk");
+            mApkPaths.add(apkFile.getAbsolutePath());
             mLocalApks.add(apkFile);
         }
         setMockIDeviceRuntimePermissionNotSupported();
         setMockIDeviceAppOpsToPersist();
 
+        CommandResult adbSuccessResult = new CommandResult(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install-multiple"),
+                        Mockito.eq("-r"),
+                        Mockito.anyString(),
+                        Mockito.anyString(),
+                        Mockito.anyString()))
+                .thenReturn(adbSuccessResult);
         assertNull(mTestDevice.installPackages(mLocalApks, true));
 
         verifyMockIDeviceRuntimePermissionNotSupported();
         verifyMockIDeviceAppOpsToPersist();
-        ArgumentCaptor<List<File>> filesCapture = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-        verify(mMockIDevice, times(1))
-                .installPackages(
-                        filesCapture.capture(),
-                        Mockito.eq(true),
-                        optionsCapture.capture(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-        assertTrue(optionsCapture.getValue().size() == 0);
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install-multiple"),
+                        Mockito.eq("-r"),
+                        Mockito.eq(mApkPaths.get(0)),
+                        Mockito.eq(mApkPaths.get(1)),
+                        Mockito.eq(mApkPaths.get(2)));
         for (File apkFile : mLocalApks) {
-            assertTrue(filesCapture.getValue().contains(apkFile));
             apkFile.delete();
         }
     }
@@ -1997,29 +1942,46 @@ public class TestDeviceTest {
     @Test
     public void testInstallPackages_default_runtimePermissionSupported() throws Exception {
         List<File> mLocalApks = new ArrayList<File>();
+        List<String> mApkPaths = new ArrayList<String>();
         for (int i = 0; i < 3; i++) {
             File apkFile = File.createTempFile("test", ".apk");
+            mApkPaths.add(apkFile.getAbsolutePath());
             mLocalApks.add(apkFile);
         }
         setMockIDeviceRuntimePermissionSupported();
         setMockIDeviceAppOpsToPersist();
 
+        CommandResult adbSuccessResult = new CommandResult(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install-multiple"),
+                        Mockito.eq("-r"),
+                        Mockito.eq("-g"),
+                        Mockito.anyString(),
+                        Mockito.anyString(),
+                        Mockito.anyString()))
+                .thenReturn(adbSuccessResult);
+
         assertNull(mTestDevice.installPackages(mLocalApks, true));
 
         verifyMockIDeviceRuntimePermissionSupported(1);
         verifyMockIDeviceAppOpsToPersist();
-        ArgumentCaptor<List<File>> filesCapture = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-        verify(mMockIDevice, times(1))
-                .installPackages(
-                        filesCapture.capture(),
-                        Mockito.eq(true),
-                        optionsCapture.capture(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-        assertTrue(optionsCapture.getValue().contains("-g"));
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install-multiple"),
+                        Mockito.eq("-r"),
+                        Mockito.eq("-g"),
+                        Mockito.eq(mApkPaths.get(0)),
+                        Mockito.eq(mApkPaths.get(1)),
+                        Mockito.eq(mApkPaths.get(2)));
         for (File apkFile : mLocalApks) {
-            assertTrue(filesCapture.getValue().contains(apkFile));
             apkFile.delete();
         }
     }
@@ -2029,29 +1991,48 @@ public class TestDeviceTest {
     public void testInstallPackagesForUser_default_runtimePermissionNotSupported()
             throws Exception {
         List<File> mLocalApks = new ArrayList<File>();
+        List<String> mApkPaths = new ArrayList<String>();
         for (int i = 0; i < 3; i++) {
             File apkFile = File.createTempFile("test", ".apk");
+            mApkPaths.add(apkFile.getAbsolutePath());
             mLocalApks.add(apkFile);
         }
         try {
             setMockIDeviceRuntimePermissionNotSupported();
             setMockIDeviceAppOpsToPersist();
+            CommandResult adbSuccessResult = new CommandResult(CommandStatus.SUCCESS);
+            when(mMockRunUtil.runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq(MOCK_DEVICE_SERIAL),
+                            Mockito.eq("install-multiple"),
+                            Mockito.eq("-r"),
+                            Mockito.eq("--user"),
+                            Mockito.eq("1"),
+                            Mockito.anyString(),
+                            Mockito.anyString(),
+                            Mockito.anyString()))
+                    .thenReturn(adbSuccessResult);
 
             assertNull(mTestDevice.installPackagesForUser(mLocalApks, true, 1));
 
             verifyMockIDeviceRuntimePermissionNotSupported();
             verifyMockIDeviceAppOpsToPersist();
             ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-            verify(mMockIDevice, times(1))
-                    .installPackages(
-                            Mockito.eq(mLocalApks),
-                            Mockito.eq(true),
-                            optionsCapture.capture(),
-                            Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                            Mockito.eq(TimeUnit.MINUTES));
-            assertTrue(optionsCapture.getValue().contains("--user"));
-            assertTrue(optionsCapture.getValue().contains("1"));
-            assertFalse(optionsCapture.getValue().contains("-g"));
+            verify(mMockRunUtil)
+                    .runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq(MOCK_DEVICE_SERIAL),
+                            Mockito.eq("install-multiple"),
+                            Mockito.eq("-r"),
+                            Mockito.eq("--user"),
+                            Mockito.eq("1"),
+                            Mockito.eq(mApkPaths.get(0)),
+                            Mockito.eq(mApkPaths.get(1)),
+                            Mockito.eq(mApkPaths.get(2)));
         } finally {
             for (File apkFile : mLocalApks) {
                 FileUtil.deleteFile(apkFile);
@@ -2067,27 +2048,47 @@ public class TestDeviceTest {
     @Test
     public void testInstallPackagesForUser_default_runtimePermissionSupported() throws Exception {
         List<File> mLocalApks = new ArrayList<File>();
+        List<String> mApkPaths = new ArrayList<String>();
         for (int i = 0; i < 3; i++) {
             File apkFile = File.createTempFile("test", ".apk");
+            mApkPaths.add(apkFile.getAbsolutePath());
             mLocalApks.add(apkFile);
         }
         try {
             setMockIDeviceRuntimePermissionSupported();
             setMockIDeviceAppOpsToPersist();
 
-            assertNull(mTestDevice.installPackagesForUser(mLocalApks, true, 1));
+            CommandResult adbSuccessResult = new CommandResult(CommandStatus.SUCCESS);
+            when(mMockRunUtil.runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq(MOCK_DEVICE_SERIAL),
+                            Mockito.eq("install-multiple"),
+                            Mockito.eq("-r"),
+                            Mockito.eq("-g"),
+                            Mockito.eq("--user"),
+                            Mockito.eq("1"),
+                            Mockito.anyString(),
+                            Mockito.anyString(),
+                            Mockito.anyString()))
+                    .thenReturn(adbSuccessResult);
 
-            ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-            verify(mMockIDevice, times(1))
-                    .installPackages(
-                            Mockito.eq(mLocalApks),
-                            Mockito.eq(true),
-                            optionsCapture.capture(),
-                            Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                            Mockito.eq(TimeUnit.MINUTES));
-            assertTrue(optionsCapture.getValue().contains("--user"));
-            assertTrue(optionsCapture.getValue().contains("1"));
-            assertTrue(optionsCapture.getValue().contains("-g"));
+            assertNull(mTestDevice.installPackagesForUser(mLocalApks, true, 1));
+            verify(mMockRunUtil)
+                    .runTimedCmd(
+                            Mockito.anyLong(),
+                            Mockito.eq("adb"),
+                            Mockito.eq("-s"),
+                            Mockito.eq(MOCK_DEVICE_SERIAL),
+                            Mockito.eq("install-multiple"),
+                            Mockito.eq("-r"),
+                            Mockito.eq("-g"),
+                            Mockito.eq("--user"),
+                            Mockito.eq("1"),
+                            Mockito.eq(mApkPaths.get(0)),
+                            Mockito.eq(mApkPaths.get(1)),
+                            Mockito.eq(mApkPaths.get(2)));
             verifyMockIDeviceRuntimePermissionSupported(1);
             verifyMockIDeviceAppOpsToPersist();
         } finally {
@@ -2112,134 +2113,28 @@ public class TestDeviceTest {
         setMockIDeviceRuntimePermissionSupported();
         setMockIDeviceAppOpsToPersist();
 
-        doThrow(new InstallException(new TimeoutException()))
-                .when(mMockIDevice)
-                .installPackages(
-                        Mockito.any(),
-                        Mockito.eq(true),
-                        Mockito.any(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-
-        assertTrue(mTestDevice.installPackages(mLocalApks, true).contains("InstallException"));
-
-        ArgumentCaptor<List<File>> filesCapture = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-        verify(mMockIDevice)
-                .installPackages(
-                        filesCapture.capture(),
-                        Mockito.eq(true),
-                        optionsCapture.capture(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-        assertTrue(optionsCapture.getValue().contains("-g"));
-        verifyMockIDeviceRuntimePermissionSupported(1);
-        verifyMockIDeviceAppOpsToPersist();
-        for (File apkFile : mLocalApks) {
-            assertTrue(filesCapture.getValue().contains(apkFile));
-            FileUtil.deleteFile(apkFile);
-        }
-    }
-
-    /**
-     * Test default installRemotePackagses on device without runtime permission support list of args
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testInstallRemotePackages_default_runtimePermissionNotSupported() throws Exception {
-        List<String> mRemoteApkPaths = new ArrayList<String>();
-        mRemoteApkPaths.add("/data/local/tmp/foo.apk");
-        mRemoteApkPaths.add("/data/local/tmp/foo.dm");
-        setMockIDeviceRuntimePermissionNotSupported();
-
-        assertNull(mTestDevice.installRemotePackages(mRemoteApkPaths, true));
-
-        verifyMockIDeviceRuntimePermissionNotSupported();
-        ArgumentCaptor<List<String>> filePathsCapture = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-        verify(mMockIDevice, times(1))
-                .installRemotePackages(
-                        filePathsCapture.capture(),
-                        Mockito.eq(true),
-                        optionsCapture.capture(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-        assertTrue(optionsCapture.getValue().size() == 0);
-        for (String apkPath : mRemoteApkPaths) {
-            assertTrue(filePathsCapture.getValue().contains(apkPath));
-        }
-    }
-
-    /**
-     * Test default installRemotePackages on device with runtime permission support list of args
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testInstallRemotePackages_default_runtimePermissionSupported() throws Exception {
-        List<String> mRemoteApkPaths = new ArrayList<String>();
-        mRemoteApkPaths.add("/data/local/tmp/foo.apk");
-        mRemoteApkPaths.add("/data/local/tmp/foo.dm");
-        setMockIDeviceRuntimePermissionSupported();
-
-        assertNull(mTestDevice.installRemotePackages(mRemoteApkPaths, true));
-
-        verifyMockIDeviceRuntimePermissionSupported(1);
-        ArgumentCaptor<List<String>> filePathsCapture = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-        verify(mMockIDevice, times(1))
-                .installRemotePackages(
-                        filePathsCapture.capture(),
-                        Mockito.eq(true),
-                        optionsCapture.capture(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-        assertTrue(optionsCapture.getValue().contains("-g"));
-        for (String apkPath : mRemoteApkPaths) {
-            assertTrue(filePathsCapture.getValue().contains(apkPath));
-        }
-    }
-
-    /**
-     * Test installRemotePackages timeout on device with runtime permission support list of args
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testInstallRemotePackages_default_timeout() throws Exception {
-        List<String> mRemoteApkPaths = new ArrayList<String>();
-        mRemoteApkPaths.add("/data/local/tmp/foo.apk");
-        mRemoteApkPaths.add("/data/local/tmp/foo.dm");
-        setMockIDeviceRuntimePermissionSupported();
-
-        ArgumentCaptor<List<String>> filePathsCapture = ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<List<String>> optionsCapture = ArgumentCaptor.forClass(List.class);
-        doThrow(new InstallException(new TimeoutException()))
-                .when(mMockIDevice)
-                .installRemotePackages(
-                        Mockito.any(),
-                        Mockito.eq(true),
-                        Mockito.any(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
+        CommandResult adbResult = new CommandResult(CommandStatus.TIMED_OUT);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install-multiple"),
+                        Mockito.eq("-r"),
+                        Mockito.eq("-g"),
+                        Mockito.anyString(),
+                        Mockito.anyString(),
+                        Mockito.anyString()))
+                .thenReturn(adbResult);
 
         assertTrue(
                 mTestDevice
-                        .installRemotePackages(mRemoteApkPaths, true)
-                        .contains("InstallException during package installation."));
-
-        verify(mMockIDevice)
-                .installRemotePackages(
-                        filePathsCapture.capture(),
-                        Mockito.eq(true),
-                        optionsCapture.capture(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES));
-        assertTrue(optionsCapture.getValue().contains("-g"));
+                        .installPackages(mLocalApks, true)
+                        .contains("without communication success"));
         verifyMockIDeviceRuntimePermissionSupported(1);
-        for (String apkPath : mRemoteApkPaths) {
-            assertTrue(filePathsCapture.getValue().contains(apkPath));
+        verifyMockIDeviceAppOpsToPersist();
+        for (File apkFile : mLocalApks) {
+            FileUtil.deleteFile(apkFile);
         }
     }
 
@@ -2504,7 +2399,66 @@ public class TestDeviceTest {
 
     /** Unit test for {@link TestDevice#getActiveApexes()}. */
     @Test
+    public void testGetActiveApexesWithIsFactory() throws Exception {
+        String apexInfoListXml =
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                        + "<apex-info-list>\n"
+                        + "<apex-info moduleName=\"com.android.foo\""
+                        + "     modulePath=\"/system/apex/com.android.foo.apex\""
+                        + "     preinstalledModulePath=\"/system/apex/com.android.foo.apex\""
+                        + "     versionCode=\"100\""
+                        + "     versionName=\"\""
+                        + "     isFactory=\"true\""
+                        + "     isActive=\"true\""
+                        + "     lastUpdateMillis=\"1752834275\""
+                        + "     partition=\"SYSTEM\" />\n"
+                        + "<apex-info moduleName=\"com.android.bar\""
+                        + "     modulePath=\"/system/apex/com.android.bar.apex\""
+                        + "     preinstalledModulePath=\"/system/apex/com.android.bar.apex\""
+                        + "     versionCode=\"100\""
+                        + "     versionName=\"\""
+                        + "     isFactory=\"true\""
+                        + "     isActive=\"false\""
+                        + "     lastUpdateMillis=\"1752834275\""
+                        + "     partition=\"SYSTEM\" />\n"
+                        + "<apex-info moduleName=\"com.android.bar\""
+                        + "     modulePath=\"/data/apex/active/com.android.bar@200.apex\""
+                        + "     preinstalledModulePath=\"/system/apex/com.android.bar.apex\""
+                        + "     versionCode=\"200\""
+                        + "     versionName=\"\""
+                        + "     isFactory=\"false\""
+                        + "     isActive=\"true\""
+                        + "     lastUpdateMillis=\"1752834276\""
+                        + "     partition=\"SYSTEM\" />\n"
+                        + "</apex-info-list>";
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, apexInfoListXml);
+
+        Set<ApexInfo> actual = mTestDevice.getActiveApexes();
+        assertEquals(2, actual.size());
+
+        ApexInfo foo =
+                actual.stream()
+                        .filter(apex -> apex.name.equals("com.android.foo"))
+                        .findFirst()
+                        .get();
+        assertEquals(100, foo.versionCode);
+        assertEquals("/system/apex/com.android.foo.apex", foo.sourceDir);
+        assertTrue(foo.isFactory);
+
+        ApexInfo bar =
+                actual.stream()
+                        .filter(apex -> apex.name.equals("com.android.bar"))
+                        .findFirst()
+                        .get();
+        assertEquals(200, bar.versionCode);
+        assertEquals("/data/apex/active/com.android.bar@200.apex", bar.sourceDir);
+        assertFalse(bar.isFactory);
+    }
+
+    /** Unit test for {@link TestDevice#getActiveApexes()}. */
+    @Test
     public void testGetActiveApexesPlatformSupportsPath() throws Exception {
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, "invalid");
         final String output =
                 "package:/system/apex/com.android.foo.apex="
                         + "com.android.foo versionCode:100\n"
@@ -2533,6 +2487,7 @@ public class TestDeviceTest {
     /** Unit test for {@link TestDevice#getActiveApexes()}. */
     @Test
     public void testGetActiveApexesPlatformDoesNotSupportPath() throws Exception {
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, "invalid");
         final String output =
                 "package:com.android.foo versionCode:100\n"
                         + "package:com.android.bar versionCode:200";
@@ -2563,6 +2518,7 @@ public class TestDeviceTest {
      */
     @Test
     public void testGetActiveApexesForBadOutput() throws Exception {
+        injectShellResponse(TestDevice.CAT_APEX_INFO_LIST_CMD, "invalid");
         final String output = "junk output";
         injectShellResponse(TestDevice.LIST_APEXES_CMD, output);
 
