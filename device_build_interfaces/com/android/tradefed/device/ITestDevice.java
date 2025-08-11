@@ -94,18 +94,11 @@ public interface ITestDevice extends INativeDevice {
         public final String name;
         public final long versionCode;
         public final String sourceDir;
-        public final boolean isFactory;
 
-        public ApexInfo(String name, long versionCode, String sourceDir, boolean isFactory) {
+        public ApexInfo(String name, long versionCode, String sourceDir) {
             this.name = name;
             this.versionCode = versionCode;
             this.sourceDir = sourceDir;
-            this.isFactory = isFactory;
-        }
-
-        public ApexInfo(String name, long versionCode, String sourceDir) {
-            // To satisfy old devices where downloaded APEXes are installed in /data/active/apex
-            this(name, versionCode, sourceDir, !sourceDir.startsWith("/data"));
         }
 
         public ApexInfo(String name, long versionCode) {
@@ -116,10 +109,7 @@ public interface ITestDevice extends INativeDevice {
         public boolean equals(Object other) {
             if (other != null && other instanceof ApexInfo) {
                 ApexInfo ai = (ApexInfo) other;
-                return name.equals(ai.name)
-                        && versionCode == ai.versionCode
-                        && sourceDir.equals(ai.sourceDir)
-                        && isFactory == ai.isFactory;
+                return name.equals(ai.name) && versionCode == ai.versionCode;
             }
             return false;
         }
