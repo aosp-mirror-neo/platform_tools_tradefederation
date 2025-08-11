@@ -43,7 +43,6 @@ import com.android.tradefed.device.connection.DefaultConnection;
 import com.android.tradefed.device.connection.DefaultConnection.ConnectionBuilder;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
 import com.android.tradefed.device.server.CommandRejectedException;
-import com.android.tradefed.device.server.SyncService;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
@@ -2247,7 +2246,7 @@ public class NativeDevice
             return false;
         }
 
-        return syncFiles(localFileDir, remoteFileEntry);
+        return adbSyncFiles(localFileDir, remoteFileEntry);
     }
 
     /**
@@ -2258,60 +2257,17 @@ public class NativeDevice
      * @return <code>true</code> if files were synced successfully
      * @throws DeviceNotAvailableException
      */
-    private boolean syncFiles(File localFileDir, final IFileEntry remoteFileEntry)
+    private boolean adbSyncFiles(File localFileDir, final IFileEntry remoteFileEntry)
             throws DeviceNotAvailableException {
         CLog.d("Syncing %s to %s on %s", localFileDir.getAbsolutePath(),
                 remoteFileEntry.getFullPath(), getSerialNumber());
-        // find newer files to sync
-        File[] localFiles = localFileDir.listFiles(new NoHiddenFilesFilter());
-        ArrayList<String> filePathsToSync = new ArrayList<>();
-        for (File localFile : localFiles) {
-            IFileEntry entry = remoteFileEntry.findChild(localFile.getName());
-            if (entry == null) {
-                CLog.d("Detected missing file path %s", localFile.getAbsolutePath());
-                filePathsToSync.add(localFile.getAbsolutePath());
-            } else if (localFile.isDirectory()) {
-                // This directory exists remotely. recursively sync it to sync only its newer files
-                // contents
-                if (!syncFiles(localFile, entry)) {
-                    return false;
-                }
-            } else if (isNewer(localFile, entry)) {
-                CLog.d("Detected newer file %s", localFile.getAbsolutePath());
-                filePathsToSync.add(localFile.getAbsolutePath());
-            }
-        }
-
-        if (filePathsToSync.size() == 0) {
-            CLog.d("No files to sync");
-            return true;
-        }
-        final String files[] = filePathsToSync.toArray(new String[filePathsToSync.size()]);
-        DeviceAction syncAction = new DeviceAction() {
-            @Override
-            public boolean run() throws TimeoutException, IOException, AdbCommandRejectedException,
-                    SyncException {
-                SyncService syncService = null;
-                boolean status = false;
-                try {
-                    syncService = getIDevice().getSyncService();
-                    syncService.push(files, remoteFileEntry.getFileEntry(),
-                            SyncService.getNullProgressMonitor());
-                    status = true;
-                } catch (SyncException e) {
-                    CLog.w("Failed to sync files to %s on device %s. Message %s",
-                            remoteFileEntry.getFullPath(), getSerialNumber(), e.getMessage());
-                    throw e;
-                } finally {
-                    if (syncService != null) {
-                        syncService.close();
-                    }
-                }
-                return status;
-            }
-        };
-        return performDeviceAction(String.format("sync files %s", remoteFileEntry.getFullPath()),
-                syncAction, MAX_RETRY_ATTEMPTS);
+        List<String> adbPushFileCmd = new ArrayList<>();
+        adbPushFileCmd.add("push");
+        adbPushFileCmd.add("--sync");
+        adbPushFileCmd.add(localFileDir.getAbsolutePath());
+        adbPushFileCmd.add(remoteFileEntry.getFullPath());
+        CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
+        return CommandStatus.SUCCESS.equals(res.getStatus());
     }
 
     /**
