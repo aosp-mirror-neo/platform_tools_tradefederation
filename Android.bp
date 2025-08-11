@@ -475,7 +475,7 @@ java_genrule_host {
 // Note that this is incompatible with `make dist`.  If you want to make
 // the distribution, you must run `tapas` with the individual target names.
 phony_rule {
-    name: "tradefed-core",
+    name: "tradefed-core-src",
     phony_deps: [
         "tradefed",
         "tradefed-contrib",
@@ -487,7 +487,7 @@ phony_rule {
 }
 
 phony_rule {
-    name: "tradefed-all",
+    name: "tradefed-all-src",
     phony_deps: [
         "casuploader",
         "compatibility-host-util",
