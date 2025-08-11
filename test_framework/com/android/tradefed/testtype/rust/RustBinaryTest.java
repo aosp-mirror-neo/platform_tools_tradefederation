@@ -30,7 +30,9 @@ import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.ITestInvocationListener;
+import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.testtype.IDeviceTest;
+import com.android.tradefed.testtype.ITestCollector;
 
 import java.io.File;
 import java.util.HashMap;
@@ -42,7 +44,8 @@ import java.util.concurrent.TimeUnit;
 
 /** A Test that runs a rust binary on given device. */
 @OptionClass(alias = "rust-device")
-public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfigurationReceiver {
+public class RustBinaryTest extends RustTestBase
+        implements IDeviceTest, IConfigurationReceiver, ITestCollector {
 
     static final String DEFAULT_TEST_PATH = "/data/local/tmp";
 
@@ -60,6 +63,13 @@ public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfig
     private Set<String> mDoNotConsiderBinary = new LinkedHashSet<>();
 
     private ITestDevice mDevice = null;
+
+    @Option(
+            name = "collect-tests-only",
+            description =
+                    "Only invoke the instrumentation to collect list of applicable test "
+                            + "cases.")
+    private boolean mCollectTestsOnly = false;
 
     /** {@inheritDoc} */
     @Override
@@ -79,6 +89,12 @@ public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfig
 
     public String getTestModule() {
         return mTestModule;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void setCollectTestsOnly(boolean shouldCollectTest) {
+        mCollectTestsOnly = shouldCollectTest;
     }
 
     /**
@@ -227,21 +243,28 @@ public class RustBinaryTest extends RustTestBase implements IDeviceTest, IConfig
         long startTimeMs = System.currentTimeMillis();
         String name = new File(fullPath).getName();
         listener.testRunStarted(name, testCount, 0, startTimeMs);
-        for (Invocation invocation : invocations) {
-            if (isClangCoverageEnabled()) {
-                invocation.env.add(
-                        new EnvPair(
-                                "LLVM_PROFILE_FILE",
-                                "/data/local/tmp/clang-%m.profraw "));
+        if (mCollectTestsOnly) {
+            for (String test : foundTests) {
+                var desc = new TestDescription(name, test);
+                listener.testStarted(desc);
+                listener.testEnded(desc, new HashMap<String, Metric>());
             }
+        } else {
+            for (Invocation invocation : invocations) {
+                if (isClangCoverageEnabled()) {
+                    invocation.env.add(
+                            new EnvPair("LLVM_PROFILE_FILE", "/data/local/tmp/clang-%m.profraw "));
+                }
 
-            IShellOutputReceiver resultParser = createParser(listener, name);
-            try {
-                runInvocation(invocation, resultParser);
-            } catch (DeviceNotAvailableException e) {
-                listener.testRunFailed(String.format("Device not available: %s", e.getMessage()));
-            } finally {
-                resultParser.flush();
+                IShellOutputReceiver resultParser = createParser(listener, name);
+                try {
+                    runInvocation(invocation, resultParser);
+                } catch (DeviceNotAvailableException e) {
+                    listener.testRunFailed(
+                            String.format("Device not available: %s", e.getMessage()));
+                } finally {
+                    resultParser.flush();
+                }
             }
         }
         long testTimeMs = System.currentTimeMillis() - startTimeMs;
