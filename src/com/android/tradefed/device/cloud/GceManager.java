@@ -40,6 +40,8 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.GoogleApiClientUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.MultiMap;
+import com.android.tradefed.util.RemoteFileUtil;
+import com.android.tradefed.util.RemoteSshUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.avd.AcloudUtil;
 import com.android.tradefed.util.avd.HostOrchestratorUtil;
@@ -978,7 +980,13 @@ public class GceManager {
         String remoteFilePath = match.group(2);
         File localTmpFile = FileUtil.createTempFile("bugreport-ssh", ".zip");
         if (!RemoteFileUtil.fetchRemoteFile(
-                gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath, localTmpFile)) {
+                gceAvd.hostAndPort().getHost(),
+                options.getInstanceUser(),
+                options.getSshPrivateKeyPath(),
+                runUtil,
+                REMOTE_FILE_OP_TIMEOUT,
+                remoteFilePath,
+                localTmpFile)) {
             FileUtil.deleteFile(localTmpFile);
             return null;
         }
@@ -1065,7 +1073,13 @@ public class GceManager {
         String remoteFilePath = "./" + new File(deviceFilePath).getName();
         File localTmpFile = FileUtil.createTempFile("bugreport-ssh", ".zip");
         if (!RemoteFileUtil.fetchRemoteFile(
-                gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath, localTmpFile)) {
+                gceAvd.hostAndPort().getHost(),
+                options.getInstanceUser(),
+                options.getSshPrivateKeyPath(),
+                runUtil,
+                REMOTE_FILE_OP_TIMEOUT,
+                remoteFilePath,
+                localTmpFile)) {
             FileUtil.deleteFile(localTmpFile);
             return null;
         }
@@ -1120,7 +1134,12 @@ public class GceManager {
         if (type == LogDataType.DIR) {
             remoteFile =
                     RemoteFileUtil.fetchRemoteDir(
-                            gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath);
+                            gceAvd.hostAndPort().getHost(),
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
+                            runUtil,
+                            REMOTE_FILE_OP_TIMEOUT,
+                            remoteFilePath);
 
             if (remoteFile != null && remoteFile.listFiles().length == 0) {
                 // If the retrieved directory is empty, delete it as there is no file to log anyway
@@ -1167,7 +1186,12 @@ public class GceManager {
         } else {
             remoteFile =
                     RemoteFileUtil.fetchRemoteFile(
-                            gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath);
+                            gceAvd.hostAndPort().getHost(),
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
+                            runUtil,
+                            REMOTE_FILE_OP_TIMEOUT,
+                            remoteFilePath);
             if (remoteFile != null) {
                 if (InstanceType.GCE.equals(options.getInstanceType())
                         || InstanceType.CUTTLEFISH.equals(options.getInstanceType())) {
@@ -1236,7 +1260,13 @@ public class GceManager {
             IRunUtil runUtil,
             long timeoutMs,
             String... command) {
-        return RemoteSshUtil.remoteSshCommandExec(gceAvd, options, runUtil, timeoutMs, command);
+        return RemoteSshUtil.remoteSshCommandExec(
+                options.useOxygenationDevice() ? "localhost" : gceAvd.hostAndPort().getHost(),
+                options.getInstanceUser(),
+                options.getSshPrivateKeyPath(),
+                runUtil,
+                timeoutMs,
+                command);
     }
 
     private static String remoteSshCommandExec(

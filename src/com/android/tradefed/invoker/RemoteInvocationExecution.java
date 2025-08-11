@@ -39,7 +39,6 @@ import com.android.tradefed.device.TestDeviceOptions.InstanceType;
 import com.android.tradefed.device.cloud.GceAvdInfo;
 import com.android.tradefed.device.cloud.GceManager;
 import com.android.tradefed.device.cloud.ManagedRemoteDevice;
-import com.android.tradefed.device.cloud.RemoteFileUtil;
 import com.android.tradefed.device.connection.AdbSshConnection;
 import com.android.tradefed.error.IHarnessException;
 import com.android.tradefed.invoker.logger.CurrentInvocation;
@@ -64,6 +63,7 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
+import com.android.tradefed.util.RemoteFileUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.SerializationUtil;
 import com.android.tradefed.util.SubprocessExceptionParser;
@@ -202,8 +202,9 @@ public class RemoteInvocationExecution extends InvocationExecution {
         while (!result && attempt < MAX_PUSH_TF_ATTEMPTS) {
             result =
                     RemoteFileUtil.pushFileToRemote(
-                            gceInfo,
-                            options,
+                            gceInfo.hostAndPort().getHost(),
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
                             Arrays.asList("-r"),
                             runUtil,
                             PUSH_TF_TIMEOUT,
@@ -233,8 +234,9 @@ public class RemoteInvocationExecution extends InvocationExecution {
             CLog.d("Pushing Tradefed XML configuration to remote.");
             boolean resultPush =
                     RemoteFileUtil.pushFileToRemote(
-                            gceInfo,
-                            options,
+                            gceInfo.hostAndPort().getHost(),
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
                             null,
                             runUtil,
                             PUSH_TF_TIMEOUT,
@@ -273,8 +275,9 @@ public class RemoteInvocationExecution extends InvocationExecution {
             // Push the global configuration
             boolean resultPushGlobal =
                     RemoteFileUtil.pushFileToRemote(
-                            gceInfo,
-                            options,
+                            gceInfo.hostAndPort().getHost(),
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
                             null,
                             runUtil,
                             PUSH_TF_TIMEOUT,
@@ -296,8 +299,9 @@ public class RemoteInvocationExecution extends InvocationExecution {
                         fileTransformer.getRenamedFiles().entrySet()) {
                     boolean pushResult =
                             RemoteFileUtil.pushFileToRemote(
-                                    gceInfo,
-                                    options,
+                                    gceInfo.hostAndPort().getHost(),
+                                    options.getInstanceUser(),
+                                    options.getSshPrivateKeyPath(),
                                     null,
                                     runUtil,
                                     PUSH_TF_TIMEOUT,
@@ -473,8 +477,9 @@ public class RemoteInvocationExecution extends InvocationExecution {
             if (exceptionRemoteFilePath != null) {
                 File remoteSerialized =
                         RemoteFileUtil.fetchRemoteFile(
-                                info,
-                                options,
+                                info.hostAndPort().getHost(),
+                                options.getInstanceUser(),
+                                options.getSshPrivateKeyPath(),
                                 runUtil,
                                 PULL_RESULT_TIMEOUT,
                                 exceptionRemoteFilePath);
@@ -515,10 +520,20 @@ public class RemoteInvocationExecution extends InvocationExecution {
             if (config.getCommandOptions().shouldReportModuleProgression()) {
                 String remoteFilePath = mRemoteTradefedDir + PROTO_RESULT_NAME + currentIndex;
                 if (RemoteFileUtil.doesRemoteFileExist(
-                        info, options, runUtil, PULL_RESULT_TIMEOUT, remoteFilePath)) {
+                        info.hostAndPort().getHost(),
+                        options.getInstanceUser(),
+                        options.getSshPrivateKeyPath(),
+                        runUtil,
+                        PULL_RESULT_TIMEOUT,
+                        remoteFilePath)) {
                     File resultFile =
                             RemoteFileUtil.fetchRemoteFile(
-                                    info, options, runUtil, PULL_RESULT_TIMEOUT, remoteFilePath);
+                                    info.hostAndPort().getHost(),
+                                    options.getInstanceUser(),
+                                    options.getSshPrivateKeyPath(),
+                                    runUtil,
+                                    PULL_RESULT_TIMEOUT,
+                                    remoteFilePath);
                     if (resultFile != null) {
                         currentIndex++;
                         currentTimeOnProto = System.currentTimeMillis();
@@ -591,10 +606,20 @@ public class RemoteInvocationExecution extends InvocationExecution {
             do {
                 String remoteFilePath = mRemoteTradefedDir + PROTO_RESULT_NAME + currentIndex;
                 if (RemoteFileUtil.doesRemoteFileExist(
-                        info, options, runUtil, PULL_RESULT_TIMEOUT, remoteFilePath)) {
+                        info.hostAndPort().getHost(),
+                        options.getInstanceUser(),
+                        options.getSshPrivateKeyPath(),
+                        runUtil,
+                        PULL_RESULT_TIMEOUT,
+                        remoteFilePath)) {
                     resultFile =
                             RemoteFileUtil.fetchRemoteFile(
-                                    info, options, runUtil, PULL_RESULT_TIMEOUT, remoteFilePath);
+                                    info.hostAndPort().getHost(),
+                                    options.getInstanceUser(),
+                                    options.getSshPrivateKeyPath(),
+                                    runUtil,
+                                    PULL_RESULT_TIMEOUT,
+                                    remoteFilePath);
                     if (resultFile != null) {
                         currentIndex++;
                         try {
@@ -803,8 +828,9 @@ public class RemoteInvocationExecution extends InvocationExecution {
         }
         resultFile =
                 RemoteFileUtil.fetchRemoteFile(
-                        info,
-                        options,
+                        info.hostAndPort().getHost(),
+                        options.getInstanceUser(),
+                        options.getSshPrivateKeyPath(),
                         runUtil,
                         PULL_RESULT_TIMEOUT,
                         resultDirPath + PROTO_RESULT_NAME);
@@ -837,7 +863,12 @@ public class RemoteInvocationExecution extends InvocationExecution {
             IRunUtil runUtil) {
         File file =
                 RemoteFileUtil.fetchRemoteFile(
-                        info, options, runUtil, PULL_RESULT_TIMEOUT, mRemoteTradefedDir + fileName);
+                        info.hostAndPort().getHost(),
+                        options.getInstanceUser(),
+                        options.getSshPrivateKeyPath(),
+                        runUtil,
+                        PULL_RESULT_TIMEOUT,
+                        mRemoteTradefedDir + fileName);
         if (file != null) {
             try (InputStreamSource source = new FileInputStreamSource(file, false)) {
                 logger.testLog(logName, LogDataType.HARNESS_STD_LOG, source);

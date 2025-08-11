@@ -36,7 +36,6 @@ import com.android.tradefed.device.cloud.GceLHPTunnelMonitor;
 import com.android.tradefed.device.cloud.GceManager;
 import com.android.tradefed.device.cloud.GceSshTunnelMonitor;
 import com.android.tradefed.device.cloud.OxygenUtil;
-import com.android.tradefed.device.cloud.RemoteFileUtil;
 import com.android.tradefed.device.cloud.VmRemoteDevice;
 import com.android.tradefed.host.IHostOptions.PermitLimitType;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
@@ -56,6 +55,7 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.DeviceInspectionResult;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MultiMap;
+import com.android.tradefed.util.RemoteFileUtil;
 import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.avd.HostOrchestratorUtil;
 import com.android.tradefed.util.avd.InspectionUtil;
@@ -989,8 +989,9 @@ public class AdbSshConnection extends AdbTcpConnection {
     @VisibleForTesting
     boolean fetchRemoteDir(File localDir, String remotePath) {
         return RemoteFileUtil.fetchRemoteDir(
-                mGceAvd,
-                getDevice().getOptions(),
+                mGceAvd.hostAndPort().getHost(),
+                getDevice().getOptions().getInstanceUser(),
+                getDevice().getOptions().getSshPrivateKeyPath(),
                 getRunUtil(),
                 FETCH_TOMBSTONES_TIMEOUT_MS,
                 remotePath,
