@@ -613,7 +613,7 @@ public class TestDiscoveryInvoker {
         }
         for (File toolsFile : jarCtsPath.listFiles()) {
             // Skip ATS jars.
-            if (!toolsFile.getName().startsWith("ats") && toolsFile.getName().endsWith(".jar")) {
+            if (!toolsFile.getName().startsWith("ats_") && toolsFile.getName().endsWith(".jar")) {
                 classpathList.add(toolsFile);
             }
         }
