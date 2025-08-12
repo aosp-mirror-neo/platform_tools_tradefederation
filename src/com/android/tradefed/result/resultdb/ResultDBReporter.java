@@ -52,7 +52,6 @@ import com.android.tradefed.util.MultiMap;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
@@ -221,16 +220,20 @@ public class ResultDBReporter
                     resourceId);
             artifact = Artifact.newBuilder().setArtifactId(resourceId).build();
         }
-        if (storagePath.matches("^/bigstore/([^/]+)/.+$")) {
-            // The storage path is a valid bigstore path, set the artifact to with GCS URI.
-            String contentType = logFile.getType().getContentType();
-            // Convert storage path to GCS URI.
-            String gcsUri = storagePath.replaceFirst("^/bigstore/", "gs://");
-            artifact = artifact.toBuilder().setGcsUri(gcsUri).setContentType(contentType).build();
-        } else {
-            // The storage path is not a valid bigstore path, set the artifact with empty contents.
-            artifact = artifact.toBuilder().setContents(ByteString.EMPTY).build();
+        if (!storagePath.matches("^/bigstore/([^/]+)/.+$")) {
+            return;
         }
+        // The storage path is a valid bigstore path, set the artifact to with GCS URI.
+        String contentType = logFile.getType().getContentType();
+        // Convert storage path to GCS URI.
+        String gcsUri = storagePath.replaceFirst("^/bigstore/", "gs://");
+        artifact =
+                artifact.toBuilder()
+                        .setGcsUri(gcsUri)
+                        .setContentType(contentType)
+                        .setSizeBytes(logFile.getSize())
+                        .build();
+
         if (mUploadQueueFinalized) {
             // If the upload queue is finalized, make block call to upload the artifact directly.
             CLog.d("Upload queue is finalized, has been called, upload the artifact directly.");
