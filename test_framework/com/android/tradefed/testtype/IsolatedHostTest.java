@@ -68,6 +68,7 @@ import java.lang.ProcessBuilder.Redirect;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -80,8 +81,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -114,7 +113,7 @@ public class IsolatedHostTest
             name = "jar",
             description = "The jars containing the JUnit test class to run.",
             importance = Importance.IF_UNSET)
-    private Set<String> mJars = new LinkedHashSet<String>();
+    private Set<String> mJars = new LinkedHashSet<>();
 
     @Option(
             name = "socket-timeout",
@@ -568,7 +567,7 @@ public class IsolatedHostTest
     private String compileClassPath(Set<File> paths) {
         return String.join(
                 java.io.File.pathSeparator,
-                getClasspathFiles().stream()
+                paths.stream()
                         .map(f -> f.getAbsolutePath())
                         .collect(Collectors.toList()));
     }
@@ -590,70 +589,64 @@ public class IsolatedHostTest
         if (mClasspathOverride != null) {
             Arrays.asList(mClasspathOverride.split(java.io.File.pathSeparator)).stream()
                     .forEach(p -> paths.add(new File(p)));
+        } else if (mRobolectricResources) {
+            // This is contingent on the current android-all version.
+            File androidAllJar = FileUtil.findFile(testDir, mAndroidAllName);
+            if (androidAllJar == null) {
+                throw new HarnessRuntimeException(
+                        "Could not find android-all jar needed for test execution.",
+                        InfraErrorIdentifier.ARTIFACT_NOT_FOUND);
+            }
+            paths.add(androidAllJar);
+            addTestJars(paths, testDir);
+        } else if (mRavenwoodResources) {
+            final File ravenwoodDir = getRavenwoodRuntimeDir(testDir);
+            final File classPathConfig = FileUtil.findFile(ravenwoodDir, "ravenwood-classpath.txt");
+            if (classPathConfig == null) {
+                throw new HarnessRuntimeException(
+                        "Could not find ravenwood-classpath.txt needed for test execution.",
+                        InfraErrorIdentifier.ARTIFACT_NOT_FOUND);
+            }
+            try (var lines = Files.lines(classPathConfig.toPath())) {
+                lines.map(line -> line.strip().replaceAll("#.*", ""))
+                        .filter(line -> !line.isEmpty())
+                        .forEach(line -> {
+                            if ("{TEST_JARS}".equals(line)) {
+                                // Add the test JARs if we encounter the TEST_JARS placeholder
+                                addTestJars(paths, testDir);
+                            } else {
+                                // Or else we add the JAR file in the text file into classpath
+                                paths.add(FileUtil.findFile(ravenwoodDir, line));
+                            }
+                        });
+            } catch (IOException e) {
+                throw new HarnessRuntimeException(
+                        "Failed to read ravenwood-classpath.txt",
+                        e, InfraErrorIdentifier.ARTIFACT_NOT_FOUND);
+            }
         } else {
-            // The jar files that should be put after the test jar in the classpath.
-            List<File> jarsAfterTest = new ArrayList<>();
-
-            if (mRobolectricResources) {
-                // This is contingent on the current android-all version.
-                File androidAllJar = FileUtil.findFile(testDir, mAndroidAllName);
-                if (androidAllJar == null) {
-                    throw new HarnessRuntimeException(
-                            "Could not find android-all jar needed for test execution.",
-                            InfraErrorIdentifier.ARTIFACT_NOT_FOUND);
-                }
-                paths.add(androidAllJar);
-            } else if (mRavenwoodResources) {
-                // Find all the jars in the runtime dir.
-                Set<File> runtimeJars = getJarFilesUnder(getRavenwoodRuntimeDir(testDir));
-
-                // We have a lot of jar files in "ravenwood-runtime"
-                // (see frameworks/base/ravenwood/Android.bp), and almost all of them should
-                // be put before the test jar to prevent the test jar from overriding them.
-                // However, some of them are used as sort of "fallback", and we _do_ want to
-                // let the test jar to override them.
-                // We use this special naming prefix for them ("z" + digits) to control it.
-                var lowPrioJarMatcher = Pattern.compile("^z\\d+");
-
-                Predicate<File> lowPrioJarFilter =
-                        (file) -> lowPrioJarMatcher.matcher(file.getName()).find();
-
-                // Add the high-prio ones to the classpath.
-                paths.addAll(runtimeJars.stream().filter(lowPrioJarFilter.negate()).toList());
-
-                // Keep the low-prio ones here, so we'll add them later.
-                jarsAfterTest.addAll(runtimeJars.stream().filter(lowPrioJarFilter).toList());
-            }
-
-            for (String jar : mJars) {
-                File f = FileUtil.findFile(testDir, jar);
-                if (f != null && f.exists()) {
-                    paths.add(f);
-                    addJarFilesUnder(paths, f.getParentFile());
-                }
-            }
-
-            paths.addAll(jarsAfterTest);
+            addTestJars(paths, testDir);
         }
 
         return paths;
     }
 
-    /** Returns an ordered set containing all the jar files under a given directory. */
-    private static Set<File> getJarFilesUnder(File parentDirectory) {
-        Set<File> paths = new LinkedHashSet<>();
-        addJarFilesUnder(paths, parentDirectory);
-        return paths;
+    /** Add {@code mJars} into {@code paths} */
+    private void addTestJars(Set<File> paths, File testDir) {
+        for (String jar : mJars) {
+            File f = FileUtil.findFile(testDir, jar);
+            if (f != null && f.exists()) {
+                paths.add(f);
+                addJarFilesUnder(paths, f.getParentFile());
+            }
+        }
     }
 
     /** Add all files under {@code File} sorted by filename to {@code paths}. */
     private static void addJarFilesUnder(Set<File> paths, File parentDirectory) {
         var files = parentDirectory.listFiles((f) -> f.isFile() && f.getName().endsWith(".jar"));
         Arrays.sort(files, Comparator.comparing(File::getName));
-
-        for (File file : files) {
-            paths.add(file);
-        }
+        paths.addAll(Arrays.asList(files));
     }
 
     @VisibleForTesting

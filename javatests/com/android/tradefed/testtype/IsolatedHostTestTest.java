@@ -53,7 +53,9 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.util.ArrayList;
@@ -171,10 +173,22 @@ public class IsolatedHostTestTest {
 
         File runtimeDir = new File(mMockTestDir, "ravenwood-runtime");
         runtimeDir.mkdirs();
-        new File(runtimeDir, "runtime1.jar").createNewFile();
-        new File(runtimeDir, "runtime2.jar").createNewFile();
-        new File(runtimeDir, "z00-low-prio-1.jar").createNewFile();
-        new File(runtimeDir, "z10-low-prio-2.jar").createNewFile();
+
+        File dataDir = new File(runtimeDir, "ravenwood-data");
+        dataDir.mkdir();
+        File classPathConfig = new File(dataDir, "ravenwood-classpath.txt");
+
+        try (PrintStream ps = new PrintStream(new FileOutputStream(classPathConfig))) {
+            for (String jar : new String[] { "runtime1.jar", "runtime2.jar" }) {
+                new File(runtimeDir, jar).createNewFile();
+                ps.println(jar);
+            }
+            ps.println("{TEST_JARS}");
+            for (String jar : new String[] { "low-prio-1.jar", "low-prio-2.jar" }) {
+                new File(runtimeDir, jar).createNewFile();
+                ps.println(jar);
+            }
+        }
 
         // Create the JNI directories.
         makeDirAndAddToList(testDir, "lib64", expectedLdLibraryPath);
@@ -200,8 +214,8 @@ public class IsolatedHostTestTest {
                         "ravenwood-runtime/runtime1.jar",
                         "ravenwood-runtime/runtime2.jar",
                         "testdir/mytest.jar",
-                        "ravenwood-runtime/z00-low-prio-1.jar",
-                        "ravenwood-runtime/z10-low-prio-2.jar");
+                        "ravenwood-runtime/low-prio-1.jar",
+                        "ravenwood-runtime/low-prio-2.jar");
         assertEquals(String.join(":", expected), classpath);
 
         // Check LD_LIBRARY_PATH too
