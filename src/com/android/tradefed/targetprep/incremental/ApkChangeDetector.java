@@ -362,7 +362,7 @@ public class ApkChangeDetector {
     @VisibleForTesting
     boolean ensureIncrementalSetupSupported(ITestDevice device)
         throws DeviceNotAvailableException {
-        if (device.isVisibleBackgroundUsersSupported()) {
+        if (device.getApiLevel() >= 34 && device.isVisibleBackgroundUsersSupported()) {
             // Skip incremental setup in this case, otherwise when the test runs as a visible
             // background user and if the app is already installed for the current user, it will
             // skip the installation for the visible background user, causing the test to fail.
