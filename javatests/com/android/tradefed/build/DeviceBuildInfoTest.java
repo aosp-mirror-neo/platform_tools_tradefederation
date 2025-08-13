@@ -45,7 +45,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -201,7 +200,6 @@ public class DeviceBuildInfoTest {
 
     @Test
     public void getDeviceImageFile_mountFails_covertToUncompressedImage() throws Exception {
-        ArgumentCaptor<Path> captor = ArgumentCaptor.forClass(Path.class);
         DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
         File sourceDir = mTempFolder.newFolder("source-dir-fail");
         mTempFolder.newFolder("source-dir-fail/" + CasUtil.CHUNKS_DIR_NAME);
@@ -217,11 +215,9 @@ public class DeviceBuildInfoTest {
 
         File result = buildInfoSpy.getDeviceImageFile();
 
-        verify(mMockCasConverterFactory).convert(captor.capture(), any(Path.class));
-        Path capturedPath = captor.getValue();
-        assertEquals(capturedPath, sourceDir.toPath());
+        verify(mMockCasConverterFactory).convert(sourceDir.toPath(), null);
         assertEquals(
-                "Should fall back to the original source directory on mount failure.",
+                "Should return the original source directory (converted) on mount failure.",
                 sourceDir,
                 result);
     }
