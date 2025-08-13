@@ -3994,10 +3994,11 @@ public class TestDeviceTest {
                     }
 
                     @Override
-                    public String executeShellCommand(String command)
+                    public CommandResult executeShellV2Command(String cmd)
                             throws DeviceNotAvailableException {
                         ret = 10;
-                        return "";
+                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -4043,9 +4044,10 @@ public class TestDeviceTest {
                     }
 
                     @Override
-                    public String executeShellCommand(String command)
+                    public CommandResult executeShellV2Command(String command)
                             throws DeviceNotAvailableException {
-                        return "";
+                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -4096,10 +4098,11 @@ public class TestDeviceTest {
                     }
 
                     @Override
-                    public String executeShellCommand(String command)
+                    public CommandResult executeShellV2Command(String command)
                             throws DeviceNotAvailableException {
                         ret = 0;
-                        return "";
+                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -4150,11 +4153,12 @@ public class TestDeviceTest {
                     }
 
                     @Override
-                    public String executeShellCommand(String command)
+                    public CommandResult executeShellV2Command(String cmd)
                             throws DeviceNotAvailableException {
                         RunUtil.getDefault().sleep(100);
                         ret = 10;
-                        return "";
+                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -4198,9 +4202,10 @@ public class TestDeviceTest {
                     }
 
                     @Override
-                    public String executeShellCommand(String command)
+                    public CommandResult executeShellV2Command(String cmd)
                             throws DeviceNotAvailableException {
-                        return "";
+                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                        return res;
                     }
 
                     @Override
@@ -4257,6 +4262,13 @@ public class TestDeviceTest {
                             throws DeviceNotAvailableException {
                         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                         res.setStdout("Error:");
+                        return res;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String cmd)
+                            throws DeviceNotAvailableException {
+                        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
                         return res;
                     }
 

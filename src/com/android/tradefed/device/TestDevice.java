@@ -2147,22 +2147,28 @@ public class TestDevice extends NativeDevice {
 
         resetContentProviderSetup();
         long initialTime = getHostCurrentTime();
-        String output = executeShellCommand(switchCommand);
+        long timeoutDeadline = initialTime + timeout;
+        CommandResult res = executeShellV2Command(switchCommand);
+        boolean commandErr = !CommandStatus.SUCCESS.equals(res.getStatus());
         boolean success = userId == getCurrentUser();
-
-        while (!success && (getHostCurrentTime() - initialTime <= timeout)) {
+        while (!commandErr && !success && (getHostCurrentTime() <= timeoutDeadline)) {
             // retry
             RunUtil.getDefault().sleep(getCheckNewUserSleep());
-            output = executeShellCommand(String.format(switchCommand));
+            res = executeShellV2Command(switchCommand);
+            commandErr = !CommandStatus.SUCCESS.equals(res.getStatus());
             success = userId == getCurrentUser();
         }
 
+        if (commandErr) {
+            CLog.e("Faild to switch user due to error: %s", res.getStderr());
+            return false;
+        }
         CLog.d("switchUser took %d ms", getHostCurrentTime() - initialTime);
         if (success) {
             prePostBootSetup();
             return true;
         } else {
-            CLog.e("User did not switch in the given %d timeout: %s", timeout, output);
+            CLog.e("User did not switch in the given %d timeout: %s", timeout, res.getStdout());
             return false;
         }
     }
