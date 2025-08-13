@@ -1968,8 +1968,8 @@ public class NativeDevice
     public IFileEntry getFileEntry(String path) throws DeviceNotAvailableException {
         path = interpolatePathVariables(path);
         String[] pathComponents = path.split(FileListingService.FILE_SEPARATOR);
-        FileEntry root = getRootFile();
-        IFileEntry rootFile = new FileEntryWrapper(this, root);
+        FileListingService service = getFileListingService();
+        IFileEntry rootFile = new FileEntryWrapper(this, service.getRoot());
         return FileEntryWrapper.getDescendant(rootFile, Arrays.asList(pathComponents));
     }
 
@@ -2018,26 +2018,32 @@ public class NativeDevice
     }
 
     /**
-     * Retrieve the root {@link FileEntry} for the {@link IDevice}, making multiple attempts and
-     * recovery operations if necessary.
+     * Retrieve the {@link FileListingService} for the {@link IDevice}, making multiple attempts
+     * and recovery operations if necessary.
+     * <p/>
+     * This is necessary because {@link IDevice#getFileListingService()} can return
+     * <code>null</code> if device is in fastboot.  The symptom of this condition is that the
+     * current {@link #getIDevice()} is a {@link StubDevice}.
      *
-     * <p>This is necessary because it can return <code>null</code> if device is in fastboot. The
-     * symptom of this condition is that the current {@link #getIDevice()} is a {@link StubDevice}.
-     *
-     * @return the {@link FileEntry}
+     * @return the {@link FileListingService}
      * @throws DeviceNotAvailableException if device communication is lost.
      */
-    private FileEntry getRootFile() throws DeviceNotAvailableException {
-        CommandResult res = executeAdbV2Command("ls /");
-        if (CommandStatus.SUCCESS.equals(res.getStatus())) {
-            return new FileEntry(
-                    null /* parent */,
-                    "" /* name */,
-                    FileListingService.TYPE_DIRECTORY,
-                    true /* isRoot */);
-        }
-        throw new DeviceNotAvailableException(
-                "Could not get the file listing service and entry root file.", getSerialNumber());
+    private FileListingService getFileListingService() throws DeviceNotAvailableException  {
+        final FileListingService[] service = new FileListingService[1];
+        DeviceAction serviceAction = new DeviceAction() {
+            @Override
+            public boolean run() throws IOException, TimeoutException, AdbCommandRejectedException,
+                    ShellCommandUnresponsiveException, InstallException, SyncException {
+                service[0] = getIDevice().getFileListingService();
+                if (service[0] == null) {
+                    // could not get file listing service - must be a stub device - enter recovery
+                    throw new IOException("Could not get file listing service");
+                }
+                return true;
+            }
+        };
+        performDeviceAction("getFileListingService", serviceAction, MAX_RETRY_ATTEMPTS);
+        return service[0];
     }
 
     /**
