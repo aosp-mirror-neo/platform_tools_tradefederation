@@ -16,10 +16,12 @@
 
 package com.android.tradefed.targetprep;
 
-import static org.junit.Assert.fail;
+import static com.android.tradefed.device.UserInfo.USER_SYSTEM;
+import static com.android.tradefed.targetprep.SwitchUserTargetPreparer.PROPERTY_PREPARED_USER;
+
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,7 +35,10 @@ import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
 
+import com.google.common.truth.Expect;
+
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -43,9 +48,13 @@ import org.mockito.MockitoAnnotations;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 /** Unit tests for {@link SwitchUserTargetPreparer}. */
 @RunWith(JUnit4.class)
-public class SwitchUserTargetPreparerTest {
+public final class SwitchUserTargetPreparerTest {
+
+    @Rule public final Expect expect = Expect.create();
 
     @Mock private ITestDevice mMockDevice;
 
@@ -71,13 +80,13 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(11);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 11},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 11},
                 /* flags= */ new Integer[] {0, UserInfo.FLAG_PRIMARY});
 
         // act
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
-        // assert
+        expectPreparedUserId(11);
         verify(mMockDevice, never()).switchUser(anyInt());
     }
 
@@ -86,17 +95,18 @@ public class SwitchUserTargetPreparerTest {
         mOptionSetter.setOptionValue("user-type", "system");
 
         // setup
-        when(mMockDevice.getCurrentUser()).thenReturn(0);
+        when(mMockDevice.getCurrentUser()).thenReturn(USER_SYSTEM);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 11},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 11},
                 /* flags= */ new Integer[] {0, UserInfo.FLAG_PRIMARY});
 
         // act
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
         // assert
-        verify(mMockDevice, never()).switchUser(0);
+        expectPreparedUserId(USER_SYSTEM);
+        verify(mMockDevice, never()).switchUser(USER_SYSTEM);
     }
 
     @Test
@@ -107,7 +117,7 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(11);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 10, 11},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10, 11},
                 /* flags= */ new Integer[] {
                     UserInfo.FLAG_PRIMARY, UserInfo.FLAG_FULL, UserInfo.FLAG_GUEST
                 });
@@ -120,7 +130,8 @@ public class SwitchUserTargetPreparerTest {
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
         // assert
-        verify(mMockDevice, times(1)).switchUser(10);
+        expectPreparedUserId(10);
+        verify(mMockDevice).switchUser(10);
     }
 
     @Test
@@ -132,7 +143,7 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(10);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 10, 11},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10, 11},
                 /* flags= */ new Integer[] {
                     UserInfo.FLAG_PRIMARY, UserInfo.FLAG_FULL, UserInfo.FLAG_GUEST
                 });
@@ -144,6 +155,7 @@ public class SwitchUserTargetPreparerTest {
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
         // assert
+        expectPreparedUserId(10);
         verify(mMockDevice, never()).switchUser(10);
     }
 
@@ -155,7 +167,7 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(11);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 10, 11},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10, 11},
                 /* flags= */ new Integer[] {0, UserInfo.FLAG_PRIMARY, 0});
         when(mMockDevice.switchUser(10)).thenReturn(true);
 
@@ -163,7 +175,8 @@ public class SwitchUserTargetPreparerTest {
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
         // assert
-        verify(mMockDevice, times(1)).switchUser(10);
+        expectPreparedUserId(10);
+        verify(mMockDevice).switchUser(10);
     }
 
     @Test
@@ -174,7 +187,7 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(11);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 10, 11},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10, 11},
                 /* flags= */ new Integer[] {0, UserInfo.FLAG_GUEST, 0});
         when(mMockDevice.switchUser(10)).thenReturn(true);
 
@@ -182,7 +195,8 @@ public class SwitchUserTargetPreparerTest {
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
         // assert
-        verify(mMockDevice, times(1)).switchUser(10);
+        expectPreparedUserId(10);
+        verify(mMockDevice).switchUser(10);
     }
 
     @Test
@@ -193,7 +207,7 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(10);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 10},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10},
                 /* flags= */ new Integer[] {0, 0});
         when(mMockDevice.switchUser(0)).thenReturn(true);
 
@@ -201,7 +215,8 @@ public class SwitchUserTargetPreparerTest {
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
         // assert
-        verify(mMockDevice, times(1)).switchUser(0);
+        expectPreparedUserId(USER_SYSTEM);
+        verify(mMockDevice).switchUser(USER_SYSTEM);
     }
 
     @Test
@@ -219,12 +234,13 @@ public class SwitchUserTargetPreparerTest {
 
         // first switches to primary
         mSwitchUserTargetPreparer.setUp(mTestInformation);
-        verify(mMockDevice, times(1)).switchUser(0);
+        expectPreparedUserId(USER_SYSTEM);
+        verify(mMockDevice).switchUser(USER_SYSTEM);
 
         // then switches back to secondary
         mSwitchUserTargetPreparer.tearDown(mTestInformation, null);
-        verify(mMockDevice, times(1)).switchUser(10);
-
+        expectPreparedUserId(/* userId= */ null);
+        verify(mMockDevice).switchUser(10);
     }
 
     @Test
@@ -233,12 +249,13 @@ public class SwitchUserTargetPreparerTest {
         when(mMockDevice.getCurrentUser()).thenReturn(10);
         mockListUsersInfo(
                 mMockDevice,
-                /* userIds= */ new Integer[] {0, 10},
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10},
                 /* flags= */ new Integer[] {0, 0});
 
         // act
         mSwitchUserTargetPreparer.setUp(mTestInformation);
 
+        expectPreparedUserId(10);
         // assert
         verify(mMockDevice, never()).switchUser(anyInt());
     }
@@ -255,12 +272,33 @@ public class SwitchUserTargetPreparerTest {
                 /* flags= */ new Integer[] {UserInfo.FLAG_PRIMARY, 0});
         when(mMockDevice.switchUser(0)).thenReturn(false);
 
-        // act
-        try {
-            mSwitchUserTargetPreparer.setUp(mTestInformation);
-            fail("Should have thrown TargetSetupError exception.");
-        } catch (TargetSetupError e) {
-            // do nothing
+        // act / assert
+        assertThrows(
+                TargetSetupError.class, () -> mSwitchUserTargetPreparer.setUp(mTestInformation));
+        expectPreparedUserId(/* userId= */ null);
+    }
+
+    @Test
+    public void testGetExpectedUserId_beforeSetup() throws Exception {
+        expectPreparedUserId(/* userId= */ null);
+    }
+
+    private void expectPreparedUserId(@Nullable Integer userId) {
+        expect.withMessage("getPreparedUserId()")
+                .that(mSwitchUserTargetPreparer.getPreparedUserId())
+                .isEqualTo(userId);
+        var props = mTestInformation.properties();
+        if (userId == null) {
+            expect.withMessage("properties contains %s", PROPERTY_PREPARED_USER)
+                    .that(props.containsKey(PROPERTY_PREPARED_USER))
+                    .isFalse();
+        } else {
+            expect.withMessage("properties contains %s", PROPERTY_PREPARED_USER)
+                    .that(props.containsKey(PROPERTY_PREPARED_USER))
+                    .isTrue();
+            expect.withMessage("value of property %s", PROPERTY_PREPARED_USER)
+                    .that(props.get(PROPERTY_PREPARED_USER))
+                    .isEqualTo(Integer.toString(userId));
         }
     }
 
