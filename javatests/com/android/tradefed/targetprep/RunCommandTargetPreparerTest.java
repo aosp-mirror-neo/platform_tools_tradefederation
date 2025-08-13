@@ -214,7 +214,6 @@ public class RunCommandTargetPreparerTest {
         final String command = "mkdir test";
         OptionSetter setter = new OptionSetter(mPreparer);
         setter.setOptionValue("run-bg-command", command);
-        setter.setOptionValue("no-repetitive-logging", "true");
 
         IDevice mMockIDevice = mock(IDevice.class);
         when(mMockIDevice.getSerialNumber()).thenReturn("SERIAL");
@@ -268,7 +267,6 @@ public class RunCommandTargetPreparerTest {
         OptionSetter setter = new OptionSetter(mPreparer);
         setter.setOptionValue("run-bg-command", rawCommand);
         setter.setOptionValue("test-user-token", "%MAGIC_TOKEN%");
-        setter.setOptionValue("no-repetitive-logging", "true");
         when(mMockDevice.getCurrentUser()).thenReturn(42);
 
         IDevice mMockIDevice = mock(IDevice.class);
@@ -323,7 +321,6 @@ public class RunCommandTargetPreparerTest {
         OptionSetter setter = new OptionSetter(mPreparer);
         setter.setOptionValue("run-bg-command", rawCommand);
         setter.setOptionValue("test-user-token", "%MAGIC_TOKEN%");
-        setter.setOptionValue("no-repetitive-logging", "true");
         mTestInfo.properties().put(RUN_TESTS_AS_USER_KEY, "abracadabra");
 
         IDevice mMockIDevice = mock(IDevice.class);
