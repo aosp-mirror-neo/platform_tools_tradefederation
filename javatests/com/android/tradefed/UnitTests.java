@@ -279,6 +279,7 @@ import com.android.tradefed.suite.checker.baseline.SettingsBaselineSetterTest;
 import com.android.tradefed.targetprep.AllTestAppsInstallSetupTest;
 import com.android.tradefed.targetprep.AoaTargetPreparerTest;
 import com.android.tradefed.targetprep.AppSetupTest;
+import com.android.tradefed.targetprep.BaseSwitchUserTargetPreparerTest;
 import com.android.tradefed.targetprep.BaseTargetPreparerTest;
 import com.android.tradefed.targetprep.CompileBootImageWithSpeedTargetPreparerTest;
 import com.android.tradefed.targetprep.CreateUserPreparerTest;
@@ -864,6 +865,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AoaTargetPreparerTest.class,
     AppSetupTest.class,
     BaseTargetPreparerTest.class,
+    BaseSwitchUserTargetPreparerTest.class,
     CompileBootImageWithSpeedTargetPreparerTest.class,
     CreateUserPreparerTest.class,
     DefaultTestsZipInstallerTest.class,
