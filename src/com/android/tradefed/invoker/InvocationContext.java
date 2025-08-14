@@ -466,4 +466,10 @@ public class InvocationContext implements IInvocationContext {
         Set<String> abtdTrigger = ImmutableSet.of("TRYBOT", "ABTD");
         return abtdTrigger.contains(context.getAttribute("trigger"));
     }
+
+    /** Returns whether we detect API based test invocation based on trigger type. */
+    public static boolean isApiTrigger(IInvocationContext context) {
+        Set<String> apiTrigger = ImmutableSet.of("API");
+        return apiTrigger.contains(context.getAttribute("trigger"));
+    }
 }

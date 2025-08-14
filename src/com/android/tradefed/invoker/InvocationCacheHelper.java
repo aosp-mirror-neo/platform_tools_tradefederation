@@ -140,6 +140,10 @@ public class InvocationCacheHelper {
         if (testInfo.getDevices().size() > 1) {
             return null;
         }
+        if (InvocationContext.isOnDemand(testInfo.getContext())
+                || InvocationContext.isApiTrigger(testInfo.getContext())) {
+            return null;
+        }
         if (mainConfig.getSkipManager().getImageToDigest().containsValue(null)) {
             CLog.d("No digest for device.");
             return new CacheInvocationResultDescriptor(false, null);
