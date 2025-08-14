@@ -28,6 +28,7 @@ import com.android.tradefed.config.IConfigurationFactory;
 import com.android.tradefed.config.IDeviceConfiguration;
 import com.android.tradefed.config.IGlobalConfiguration;
 import com.android.tradefed.config.proxy.AutomatedReporters;
+import com.android.tradefed.config.proxy.TradefedDelegator;
 import com.android.tradefed.device.DeviceSelectionOptions;
 import com.android.tradefed.device.IDeviceSelection.BaseDeviceType;
 import com.android.tradefed.device.ManagedTestDeviceFactory;
@@ -78,7 +79,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -624,7 +624,7 @@ public class TradefedSandbox implements ISandbox {
         PrintWriter pw = null;
 
         try {
-            args = removeRolloutFlags(args);
+            args = removeIncompatibleFlags(args);
             if (options.dumpTestTemplate()) {
                 args = extractTestTemplate(args);
             }
@@ -723,32 +723,17 @@ public class TradefedSandbox implements ISandbox {
         return extraBuildTarget;
     }
 
-    private String[] removeRolloutFlags(String[] args) {
+    private String[] removeIncompatibleFlags(String[] args) {
         if (args == null) {
             return new String[0];
         }
-        List<String> remainingArgs = new LinkedList<>();
-        List<String> removedArgs = new LinkedList<>();
-        int i = 0;
-        while (i < args.length) {
-            String currentArg = args[i];
-            // Check if the current argument is the rollout flag we want to remove
-            if ("--rollout-flags".equals(currentArg)) {
-                // If it is, we skip this argument and its next value.
-                removedArgs.add(currentArg);
-                if ((i + 1) < args.length) {
-                    removedArgs.add(args[i + 1]);
-                }
-                i += 2;
-            } else {
-                remainingArgs.add(currentArg);
-                // Advance the index by 1 to move to the next argument.
-                i++;
-            }
+        try {
+            String[] commandArray = TradefedDelegator.clearCommandlineFromOneArg(args, "rollout-flags");
+            commandArray = TradefedDelegator.clearCommandlineFromOneArg(
+                    commandArray, "report-cache-invocation-results-postsubmit", true);
+            return commandArray;
+        } catch (ConfigurationException e) {
+            throw new RuntimeException(e);
         }
-        if (!removedArgs.isEmpty()) {
-            CLog.d("Removed rollout-flags: %s", removedArgs);
-        }
-        return remainingArgs.toArray(new String[0]);
     }
 }
