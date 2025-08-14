@@ -91,6 +91,11 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
     private Set<String> mIgnoreKeywords = new LinkedHashSet<>();
 
     @Option(
+            name = "test-mapping-exact-keyword-match",
+            description = "Match all keywords exactly instead of matching subsets of them.")
+    private boolean mExactKeywordMatch = false;
+
+    @Option(
             name = "force-test-mapping-module",
             description =
                     "Run the specified tests only. The tests loaded from all TEST_MAPPING files in"
@@ -216,6 +221,7 @@ public class TestMappingSuiteRunner extends BaseTestSuite {
                                 getPrioritizeHostConfig(),
                                 mKeywords,
                                 mIgnoreKeywords,
+                                mExactKeywordMatch,
                                 mAdditionalTestMappingZips,
                                 mMatchedPatternPaths);
                 if (!mTestModulesForced.isEmpty()) {

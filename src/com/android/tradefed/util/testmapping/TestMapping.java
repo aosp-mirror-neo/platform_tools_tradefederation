@@ -409,7 +409,8 @@ public class TestMapping {
             String testGroup,
             boolean hostOnly,
             Set<String> keywords,
-            Set<String> ignoreKeywords) {
+            Set<String> ignoreKeywords,
+            boolean exactKeywordMatch) {
         Set<TestInfo> tests = new LinkedHashSet<TestInfo>();
         for (TestInfo test : testCollection.getOrDefault(testGroup, new HashSet<>())) {
             if (test.getHostOnly() != hostOnly) {
@@ -422,15 +423,10 @@ public class TestMapping {
             }
             // Skip the test if any of the required keywords is not specified by the test.
             if (keywords != null) {
-                boolean allKeywordsFound = true;
-                for (String keyword : keywords) {
-                    if (!testKeywords.contains(keyword)) {
-                        allKeywordsFound = false;
-                        break;
-                    }
-                }
-                // The test should be skipped if any keyword is missing in the test configuration.
-                if (!allKeywordsFound) {
+                boolean matchesExactly = exactKeywordMatch && testKeywords.equals(keywords);
+                boolean matchesSubset = !exactKeywordMatch && testKeywords.containsAll(keywords);
+
+                if (!matchesExactly && !matchesSubset) {
                     continue;
                 }
             }
@@ -457,13 +453,15 @@ public class TestMapping {
             String testGroup,
             boolean hostOnly,
             Set<String> keywords,
-            Set<String> ignoreKeywords) {
+            Set<String> ignoreKeywords,
+            boolean exactKeywordMatch) {
         return getTests(
                 buildInfo,
                 testGroup,
                 hostOnly,
                 keywords,
                 ignoreKeywords,
+                exactKeywordMatch,
                 new ArrayList<>(),
                 new HashSet<>());
     }
@@ -491,6 +489,7 @@ public class TestMapping {
             boolean hostOnly,
             Set<String> keywords,
             Set<String> ignoreKeywords,
+            boolean exactKeywordMatch,
             List<String> extraZipNames,
             Set<String> matchedPatternPaths) {
         Set<TestInfo> tests = Collections.synchronizedSet(new LinkedHashSet<TestInfo>());
@@ -528,7 +527,8 @@ public class TestMapping {
                                                     testGroup,
                                                     hostOnly,
                                                     keywords,
-                                                    ignoreKeywords)));
+                                                    ignoreKeywords,
+                                                    exactKeywordMatch)));
 
         } catch (IOException e) {
             throw new RuntimeException(

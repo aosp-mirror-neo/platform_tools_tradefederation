@@ -1,0 +1,26 @@
+{
+  "presubmit": [
+    {
+      "name": "suite/aosp_cf"
+    },
+    {
+      "name": "suite/device_desktop",
+      "keywords": [
+        "device",
+        "desktop"
+      ]
+    },
+    {
+      "name": "suite/desktop",
+      "keywords": [
+        "desktop"
+      ]
+    },
+    {
+      "name": "suite/device",
+      "keywords": [
+        "device"
+      ]
+    }
+  ]
+}
