@@ -34,7 +34,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     private static final long serialVersionUID = BuildSerializedVersion.VERSION;
     private String mDeviceBuildFlavor = null;
     private transient Optional<FuseMountManager> mOptionalFuseMountManager = null;
-    private transient Optional<CasConverterFactory> mOptionalCasConverterFactory = null;
+    private transient Optional<CasConverter> mOptionalCasConverter = null;
 
     public DeviceBuildInfo() {
         super();
@@ -71,21 +71,20 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         return mOptionalFuseMountManager;
     }
 
-    Optional<CasConverterFactory> getCasConverterFactory() {
-        // Lazy-initialize the converter by calling the factory.
-        if (mOptionalCasConverterFactory == null) {
+    Optional<CasConverter> getCasConverter() {
+        if (mOptionalCasConverter == null) {
             try {
-                mOptionalCasConverterFactory = Optional.of(CasConverterFactory.getInstance());
+                mOptionalCasConverter = Optional.of(CasConverter.getInstance());
             } catch (ExceptionInInitializerError | NoClassDefFoundError e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
-                        "Failed to get CAS converter factory, can't convert chunked device image to"
+                        "Failed to get CAS converter, can't convert chunked device image to"
                                 + " uncompressed device image. Error: %s",
                         cause.getMessage());
-                mOptionalCasConverterFactory = Optional.empty();
+                mOptionalCasConverter = Optional.empty();
             }
         }
-        return mOptionalCasConverterFactory;
+        return mOptionalCasConverter;
     }
 
     /**
@@ -180,7 +179,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             return;
         }
 
-        getCasConverterFactory()
+        getCasConverter()
                 .ifPresentOrElse(
                         converter -> convertNoThrow(converter, image, convertedImage),
                         () -> CLog.e("UNEXPECTED: cas converter is not available."));
@@ -196,7 +195,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
      * @param image the device image to convert
      * @param convertedImage the converted device image. If null, the conversion is in-place.
      */
-    private void convertNoThrow(CasConverterFactory converter, Path image, Path convertedImage) {
+    private void convertNoThrow(CasConverter converter, Path image, Path convertedImage) {
         try {
             converter.convert(image, convertedImage);
         } catch (IOException e) {
