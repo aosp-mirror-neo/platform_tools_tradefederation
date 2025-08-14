@@ -19,7 +19,6 @@ package com.android.tradefed.util;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
-import com.android.tradefed.util.FileUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -258,20 +257,24 @@ public final class CasUtil {
     public static void ensureCasClientExecutable(
             Path casClientPath, boolean logMetricsIfNotExecutable) {
         if (!Files.isExecutable(casClientPath)) {
+            // Log before "chmod" for identifying the cause of losing execution bit.
+            CommandResult cr = mRunUtil.runTimedCmd(5000, "ls", "-li", casClientPath.toString());
+            CLog.d(
+                    "ls -li '%s': Status: %s\nStdout:\n%s\nStderr:\n%s",
+                    casClientPath, cr.getStatus(), cr.getStdout(), cr.getStderr());
+
             FileUtil.ensureGroupRWX(casClientPath.toFile());
-            CLog.w(
-                    "CAS client '%s' is not executable. Set execute bit (successful = %s)",
-                    casClientPath, Files.isExecutable(casClientPath));
+
+            // Log after "chmod" for comparing with the next "ls -li" results.
+            cr = mRunUtil.runTimedCmd(5000, "ls", "-li", casClientPath.toString());
+            CLog.d(
+                    "ls -li '%s': Status: %s\nStdout:\n%s\nStderr:\n%s",
+                    casClientPath, cr.getStatus(), cr.getStdout(), cr.getStderr());
 
             if (logMetricsIfNotExecutable) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.CAS_CLIENT_NOT_EXECUTABLE_COUNT, 1);
             }
-
-            CommandResult cr = mRunUtil.runTimedCmd(5000, "ls", "-l", casClientPath.toString());
-            CLog.d(
-                    "ls -l '%s': Status: %s\nStdout:\n%s\nStderr:\n%s",
-                    casClientPath, cr.getStatus(), cr.getStdout(), cr.getStderr());
         }
     }
 }
