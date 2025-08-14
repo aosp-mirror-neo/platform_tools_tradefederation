@@ -22,7 +22,6 @@ import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestIdentifier;
-import com.android.resultdb.proto.TestIdentifierBase;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.IBuildInfo;
@@ -163,7 +162,7 @@ public class ResultDBReporter
 
             artifactBuilder
                     .setTestIdStructured(
-                            TestIdentifierBase.newBuilder()
+                            TestIdentifier.newBuilder()
                                     .setModuleName(testId.getModuleName())
                                     .setModuleScheme(testId.getModuleScheme())
                                     .setCoarseName(testId.getCoarseName())

@@ -22,7 +22,6 @@ import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.TestIdentifier;
-import com.android.resultdb.proto.TestIdentifierBase;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.BuildInfo;
@@ -443,7 +442,7 @@ public class ResultDBReporterTest {
                                 .setArtifactId("18274/stub/inv_9000/test.log_9000.dat")
                                 .setContentType("text/plain")
                                 .setTestIdStructured(
-                                        TestIdentifierBase.newBuilder()
+                                        TestIdentifier.newBuilder()
                                                 .setModuleName("example-module")
                                                 .setModuleScheme("junit")
                                                 .setCoarseName("com.google")

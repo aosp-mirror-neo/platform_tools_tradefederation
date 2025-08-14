@@ -33,7 +33,7 @@ option java_multiple_files = true;
 // An invocation-level artifact might be related to tests, or it might not, for
 // example it may be used to store build step logs when streaming support is
 // added.
-// Next id: 15.
+// Next id: 16.
 message Artifact {
   // Can be used to refer to this artifact.
   // Format:
@@ -50,12 +50,12 @@ message Artifact {
     (google.api.field_behavior) = IMMUTABLE
   ];
 
-  // The structured test identifier. Uniquely identifies the test that was run, excluding variant.
+  // The structured test identifier. Uniquely identifies the test that was run.
   //
   // This field is only populated for test-result-level artifacts.
   // MUST set if result_id is set.
   // MUST NOT set for legacy uploader where test id should be specified in the parent.
-  TestIdentifierBase test_id_structured = 12 [(google.api.field_behavior) = IMMUTABLE];
+  TestIdentifier test_id_structured = 12 [(google.api.field_behavior) = IMMUTABLE];
 
   // A unique identifier of the test in a LUCI project, excluding variant.
   // Regex: ^[[::print::]]{1,512}$
@@ -67,7 +67,6 @@ message Artifact {
   //
   // Output only.
   string test_id = 13 [(google.api.field_behavior) = OUTPUT_ONLY, (google.api.field_behavior) = IMMUTABLE];
-
 
   // This field is only populated for test-result-level artifacts.
   // MUST set if test_id_structured is set.
@@ -82,6 +81,10 @@ message Artifact {
 
   // A signed short-lived URL to fetch the contents of the artifact.
   // See also fetch_url_expiration.
+  //
+  // While the fetch_url will be returned by default, in some cases it may introduce significantly
+  // higher latency and potentially trigger errors if quota limits are exceeded.
+  // Thus please mask fetch_url unless you are actually going to use it.
   string fetch_url = 3;
 
   // When fetch_url expires. If expired, re-request this Artifact.
@@ -105,7 +108,8 @@ message Artifact {
   // If specified, `gcs_uri` must be empty.
   bytes contents = 7 [ (google.api.field_behavior) = INPUT_ONLY ];
 
-  // The GCS URI of the artifact if it's stored in GCS.  If specified, `contents` must be empty.
+  // The GCS URI of the artifact if it's stored in GCS. If specified, `contents`
+  // and `rbe_uri` must be empty.
   string gcs_uri = 8;
 
   // Status of the test result that the artifact belongs to.
@@ -115,6 +119,10 @@ message Artifact {
 
   // Indicates whether ListArtifactLines RPC can be used with this artifact.
   bool has_lines = 11;
+
+  // The RBE URI of the artifact if it's stored in RBE. If specified, `contents`
+  // and `gcs_uri` must be empty.
+  string rbe_uri = 15;
 }
 
 message ArtifactLine {
