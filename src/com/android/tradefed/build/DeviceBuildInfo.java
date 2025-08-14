@@ -91,9 +91,8 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     /**
      * {@inheritDoc}
      *
-     * @return {@link #getDeviceImageVersion()} if not {@code null}, else
-     * {@link IBuildInfo#UNKNOWN_BUILD_ID}
-     *
+     * @return {@link #getDeviceImageVersion()} if not {@code null}, else {@link
+     *     IBuildInfo#UNKNOWN_BUILD_ID}
      * @see #getDeviceImageVersion()
      */
     @Override
@@ -102,9 +101,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         return buildId == null ? UNKNOWN_BUILD_ID : buildId;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getDeviceBuildFlavor() {
         return mDeviceBuildFlavor == null ? getBuildFlavor() : mDeviceBuildFlavor;
@@ -207,185 +204,139 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getDeviceImageVersion() {
         return getVersion(BuildInfoFileKey.DEVICE_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setDeviceImageFile(File deviceImageFile, String version) {
         setFile(BuildInfoFileKey.DEVICE_IMAGE, deviceImageFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getUserDataImageFile() {
         return getFile(BuildInfoFileKey.USERDATA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getUserDataImageVersion() {
         return getVersion(BuildInfoFileKey.USERDATA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setUserDataImageFile(File userDataFile, String version) {
         setFile(BuildInfoFileKey.USERDATA_IMAGE, userDataFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getTestsDir() {
         return getFile(BuildInfoFileKey.TESTDIR_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getTestsDirVersion() {
         return getVersion(BuildInfoFileKey.TESTDIR_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setTestsDir(File testsDir, String version) {
         setFile(BuildInfoFileKey.TESTDIR_IMAGE, testsDir, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getBasebandImageFile() {
         return getFile(BuildInfoFileKey.BASEBAND_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getBasebandVersion() {
         return getVersion(BuildInfoFileKey.BASEBAND_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setBasebandImage(File basebandFile, String version) {
         setFile(BuildInfoFileKey.BASEBAND_IMAGE, basebandFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getBootloaderImageFile() {
         return getFile(BuildInfoFileKey.BOOTLOADER_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getBootloaderVersion() {
         return getVersion(BuildInfoFileKey.BOOTLOADER_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setBootloaderImageFile(File bootloaderImgFile, String version) {
         setFile(BuildInfoFileKey.BOOTLOADER_IMAGE, bootloaderImgFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getOtaPackageFile() {
         return getFile(BuildInfoFileKey.OTA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getOtaPackageVersion() {
         return getVersion(BuildInfoFileKey.OTA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setOtaPackageFile(File otaFile, String version) {
         setFile(BuildInfoFileKey.OTA_IMAGE, otaFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getMkbootimgFile() {
         return getFile(BuildInfoFileKey.MKBOOTIMG_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getMkbootimgVersion() {
         return getVersion(BuildInfoFileKey.MKBOOTIMG_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setMkbootimgFile(File mkbootimg, String version) {
         setFile(BuildInfoFileKey.MKBOOTIMG_IMAGE, mkbootimg, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getRamdiskFile() {
         return getFile(BuildInfoFileKey.RAMDISK_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getRamdiskVersion() {
         return getVersion(BuildInfoFileKey.RAMDISK_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setRamdiskFile(File ramdisk, String version) {
         setFile(BuildInfoFileKey.RAMDISK_IMAGE, ramdisk, version);
