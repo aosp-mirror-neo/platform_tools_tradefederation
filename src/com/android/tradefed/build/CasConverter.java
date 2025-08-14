@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /** A singleton class for converting a FastCDC-chunked directory to its original directory. */
-public class CasConverterFactory {
+public class CasConverter {
 
     private final IRunUtil mRunUtil;
     private static final String CAS_CONVERTER_PATH = "casconverter";
@@ -41,12 +41,12 @@ public class CasConverterFactory {
     // The median conversion time is ~7 seconds. Allow extra long time as this is a fallback.
     protected static final long CONVERSION_TIMEOUT_IN_MS = 10 * 60 * 1000; // 10 minutes.
 
-    private CasConverterFactory() {
+    private CasConverter() {
         this(RunUtil.getDefault(), System.getProperty("TF_JAR_DIR"));
     }
 
     @VisibleForTesting
-    CasConverterFactory(IRunUtil runUtil, String jarDir) {
+    CasConverter(IRunUtil runUtil, String jarDir) {
         this.mRunUtil = runUtil;
         if (Strings.isNullOrEmpty(jarDir)) {
             logAndThrow("TF_JAR_DIR system property is not set.");
@@ -71,7 +71,7 @@ public class CasConverterFactory {
     }
 
     @VisibleForTesting
-    CasConverterFactory(Path casConverterPath, IRunUtil runUtil) {
+    CasConverter(Path casConverterPath, IRunUtil runUtil) {
         this.mRunUtil = runUtil;
         this.mCasConverterPath = casConverterPath;
     }
@@ -93,10 +93,10 @@ public class CasConverterFactory {
     }
 
     private static class LazyHolder {
-        static final CasConverterFactory INSTANCE = new CasConverterFactory();
+        static final CasConverter INSTANCE = new CasConverter();
     }
 
-    public static CasConverterFactory getInstance() {
+    public static CasConverter getInstance() {
         return LazyHolder.INSTANCE;
     }
 

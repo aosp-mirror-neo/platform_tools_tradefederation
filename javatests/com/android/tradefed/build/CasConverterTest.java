@@ -49,15 +49,15 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
-public class CasConverterFactoryTest {
+public class CasConverterTest {
 
     @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
     private Path tempTestDir; // Will store the Path to the temporary folder
 
     @Mock private IRunUtil mockRunUtil;
 
-    // We will spy on CasConverterFactory to verify calls to its instance methods
-    private CasConverterFactory spyCasConverterFactory;
+    // We will spy on CasConverter to verify calls to its instance methods
+    private CasConverter spyCasConverter;
 
     @Before
     public void setUp() throws IOException {
@@ -100,7 +100,7 @@ public class CasConverterFactoryTest {
 
         try {
             String nullJarDir = null;
-            new CasConverterFactory(mockRunUtil, nullJarDir);
+            new CasConverter(mockRunUtil, nullJarDir);
             fail("Expected IllegalStateException but none was thrown.");
         } catch (IllegalStateException e) {
             assertEquals("TF_JAR_DIR system property is not set.", e.getMessage());
@@ -114,7 +114,7 @@ public class CasConverterFactoryTest {
         Files.createDirectories(fakeJarDir);
 
         try {
-            new CasConverterFactory(mockRunUtil, fakeJarDir.toString());
+            new CasConverter(mockRunUtil, fakeJarDir.toString());
             fail("Expected IllegalStateException but none was thrown.");
         } catch (IllegalStateException e) {
             assertTrue(e.getMessage().contains("Could not find 'casconverter'"));
@@ -128,8 +128,7 @@ public class CasConverterFactoryTest {
         Files.createDirectories(fakeJarDir);
         Path fakeCasConverter = createFakeConverterScript(fakeJarDir, "casconverter", 0);
 
-        CasConverterFactory factoryInstance =
-                new CasConverterFactory(mockRunUtil, fakeJarDir.toString());
+        CasConverter factoryInstance = new CasConverter(mockRunUtil, fakeJarDir.toString());
 
         // No throws expected.
     }
@@ -145,11 +144,10 @@ public class CasConverterFactoryTest {
         Path fakeCasConverter = createFakeConverterScript(tempTestDir, "success_converter", 0);
 
         // Use the test-only constructor to inject mockRunUtil and a valid converter path
-        CasConverterFactory factoryInstance =
-                new CasConverterFactory(fakeCasConverter, mockRunUtil);
-        spyCasConverterFactory = spy(factoryInstance); // Spy on the instance
+        CasConverter factoryInstance = new CasConverter(fakeCasConverter, mockRunUtil);
+        spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
-                .when(spyCasConverterFactory)
+                .when(spyCasConverter)
                 .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
@@ -159,27 +157,27 @@ public class CasConverterFactoryTest {
         successResult.setStderr("");
 
         when(mockRunUtil.runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString())))
                 .thenReturn(successResult);
 
         // Perform the conversion - no exception expected
-        spyCasConverterFactory.convert(mockChunkedDirectory);
+        spyCasConverter.convert(mockChunkedDirectory);
 
         // Verify runTimedCmd was called
         verify(mockRunUtil)
                 .runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString()));
 
         // Verify metrics call
-        verify(spyCasConverterFactory)
+        verify(spyCasConverter)
                 .addInvocationMetrics(InvocationMetricKey.CAS_CONVERTER_SUCCESS_COUNT, 1);
-        verify(spyCasConverterFactory, never())
+        verify(spyCasConverter, never())
                 .addInvocationMetrics(
                         eq(InvocationMetricKey.CAS_CONVERTER_FAILURE_COUNT), anyInt());
     }
@@ -193,11 +191,10 @@ public class CasConverterFactoryTest {
         Path fakeCasConverter = createFakeConverterScript(tempTestDir, "failure_converter", 1);
 
         // Use the test-only constructor to inject mockRunUtil and a valid converter path
-        CasConverterFactory factoryInstance =
-                new CasConverterFactory(fakeCasConverter, mockRunUtil);
-        spyCasConverterFactory = spy(factoryInstance); // Spy on the instance
+        CasConverter factoryInstance = new CasConverter(fakeCasConverter, mockRunUtil);
+        spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
-                .when(spyCasConverterFactory)
+                .when(spyCasConverter)
                 .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
 
         // Mock the CommandResult for a failed conversion
@@ -215,7 +212,7 @@ public class CasConverterFactoryTest {
 
         // Expect an IOException on failure
         try {
-            spyCasConverterFactory.convert(mockChunkedDirectory);
+            spyCasConverter.convert(mockChunkedDirectory);
             fail("Expected IOException but none was thrown.");
         } catch (IOException thrown) {
             assertTrue(thrown.getMessage().contains("Failed to convert chunked directory"));
@@ -225,15 +222,15 @@ public class CasConverterFactoryTest {
         // Verify runTimedCmd was called
         verify(mockRunUtil)
                 .runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString()));
 
         // Verify metrics call
-        verify(spyCasConverterFactory)
+        verify(spyCasConverter)
                 .addInvocationMetrics(InvocationMetricKey.CAS_CONVERTER_FAILURE_COUNT, 1);
-        verify(spyCasConverterFactory, never())
+        verify(spyCasConverter, never())
                 .addInvocationMetrics(
                         eq(InvocationMetricKey.CAS_CONVERTER_SUCCESS_COUNT), anyInt());
     }
@@ -247,11 +244,10 @@ public class CasConverterFactoryTest {
         Path fakeCasConverter = createFakeConverterScript(tempTestDir, "success_converter", 0);
 
         // Use the test-only constructor to inject mockRunUtil and a valid converter path
-        CasConverterFactory factoryInstance =
-                new CasConverterFactory(fakeCasConverter, mockRunUtil);
-        spyCasConverterFactory = spy(factoryInstance); // Spy on the instance
+        CasConverter factoryInstance = new CasConverter(fakeCasConverter, mockRunUtil);
+        spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
-                .when(spyCasConverterFactory)
+                .when(spyCasConverter)
                 .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
@@ -261,27 +257,27 @@ public class CasConverterFactoryTest {
         successResult.setStderr("");
 
         when(mockRunUtil.runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString())))
                 .thenReturn(successResult);
 
         // Perform the conversion, with null destination path - no exception expected
-        spyCasConverterFactory.convert(mockChunkedDirectory, null);
+        spyCasConverter.convert(mockChunkedDirectory, null);
 
         // Verify runTimedCmd was called
         verify(mockRunUtil)
                 .runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString()));
 
         // Verify metrics call
-        verify(spyCasConverterFactory)
+        verify(spyCasConverter)
                 .addInvocationMetrics(InvocationMetricKey.CAS_CONVERTER_SUCCESS_COUNT, 1);
-        verify(spyCasConverterFactory, never())
+        verify(spyCasConverter, never())
                 .addInvocationMetrics(
                         eq(InvocationMetricKey.CAS_CONVERTER_FAILURE_COUNT), anyInt());
     }
@@ -296,11 +292,10 @@ public class CasConverterFactoryTest {
         Path fakeCasConverter = createFakeConverterScript(tempTestDir, "success_converter", 0);
 
         // Use the test-only constructor to inject mockRunUtil and a valid converter path
-        CasConverterFactory factoryInstance =
-                new CasConverterFactory(fakeCasConverter, mockRunUtil);
-        spyCasConverterFactory = spy(factoryInstance); // Spy on the instance
+        CasConverter factoryInstance = new CasConverter(fakeCasConverter, mockRunUtil);
+        spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
-                .when(spyCasConverterFactory)
+                .when(spyCasConverter)
                 .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
@@ -310,7 +305,7 @@ public class CasConverterFactoryTest {
         successResult.setStderr("");
 
         when(mockRunUtil.runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString()),
@@ -320,12 +315,12 @@ public class CasConverterFactoryTest {
                 .thenReturn(successResult);
 
         // Perform the conversion, with a destination path - no exception expected
-        spyCasConverterFactory.convert(mockChunkedDirectory, mockConvertedDirectory);
+        spyCasConverter.convert(mockChunkedDirectory, mockConvertedDirectory);
 
         // Verify runTimedCmd was called with the correct arguments
         verify(mockRunUtil)
                 .runTimedCmd(
-                        eq(CasConverterFactory.CONVERSION_TIMEOUT_IN_MS),
+                        eq(CasConverter.CONVERSION_TIMEOUT_IN_MS),
                         eq(fakeCasConverter.toString()),
                         eq("--src-path"),
                         eq(mockChunkedDirectory.toAbsolutePath().toString()),
@@ -334,9 +329,9 @@ public class CasConverterFactoryTest {
                         eq("--keep-chunks"));
 
         // Verify metrics call
-        verify(spyCasConverterFactory)
+        verify(spyCasConverter)
                 .addInvocationMetrics(InvocationMetricKey.CAS_CONVERTER_SUCCESS_COUNT, 1);
-        verify(spyCasConverterFactory, never())
+        verify(spyCasConverter, never())
                 .addInvocationMetrics(
                         eq(InvocationMetricKey.CAS_CONVERTER_FAILURE_COUNT), anyInt());
     }

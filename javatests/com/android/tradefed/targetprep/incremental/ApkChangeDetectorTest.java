@@ -461,6 +461,7 @@ public final class ApkChangeDetectorTest {
     public void ensureIncrementalSetupSupported_returnsFalse_visibleBackgroundUsersSupported()
             throws Exception {
         ApkChangeDetector apkChangeDetector = spy(new ApkChangeDetector());
+        doReturn(34).when(mMockDevice).getApiLevel();
         doReturn(true).when(mMockDevice).isVisibleBackgroundUsersSupported();
 
         boolean incrementalSetupSupported =

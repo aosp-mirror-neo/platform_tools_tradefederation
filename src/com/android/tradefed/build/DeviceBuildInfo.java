@@ -19,14 +19,12 @@ package com.android.tradefed.build;
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CasUtil;
-import com.android.tradefed.util.FileUtil;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * A {@link IBuildInfo} that represents a complete Android device build and (optionally) its tests.
@@ -36,7 +34,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     private static final long serialVersionUID = BuildSerializedVersion.VERSION;
     private String mDeviceBuildFlavor = null;
     private transient Optional<FuseMountManager> mOptionalFuseMountManager = null;
-    private transient Optional<CasConverterFactory> mOptionalCasConverterFactory = null;
+    private transient Optional<CasConverter> mOptionalCasConverter = null;
 
     public DeviceBuildInfo() {
         super();
@@ -73,29 +71,27 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         return mOptionalFuseMountManager;
     }
 
-    Optional<CasConverterFactory> getCasConverterFactory() {
-        // Lazy-initialize the converter by calling the factory.
-        if (mOptionalCasConverterFactory == null) {
+    Optional<CasConverter> getCasConverter() {
+        if (mOptionalCasConverter == null) {
             try {
-                mOptionalCasConverterFactory = Optional.of(CasConverterFactory.getInstance());
+                mOptionalCasConverter = Optional.of(CasConverter.getInstance());
             } catch (ExceptionInInitializerError | NoClassDefFoundError e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
-                        "Failed to get CAS converter factory, can't convert chunked device image to"
+                        "Failed to get CAS converter, can't convert chunked device image to"
                                 + " uncompressed device image. Error: %s",
                         cause.getMessage());
-                mOptionalCasConverterFactory = Optional.empty();
+                mOptionalCasConverter = Optional.empty();
             }
         }
-        return mOptionalCasConverterFactory;
+        return mOptionalCasConverter;
     }
 
     /**
      * {@inheritDoc}
      *
-     * @return {@link #getDeviceImageVersion()} if not {@code null}, else
-     * {@link IBuildInfo#UNKNOWN_BUILD_ID}
-     *
+     * @return {@link #getDeviceImageVersion()} if not {@code null}, else {@link
+     *     IBuildInfo#UNKNOWN_BUILD_ID}
      * @see #getDeviceImageVersion()
      */
     @Override
@@ -104,9 +100,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         return buildId == null ? UNKNOWN_BUILD_ID : buildId;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getDeviceBuildFlavor() {
         return mDeviceBuildFlavor == null ? getBuildFlavor() : mDeviceBuildFlavor;
@@ -136,13 +130,9 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             return deviceImage;
         }
 
-        File image =
-                getFuseMountManager()
-                        .map(manager -> mountIfPossible(manager, deviceImage))
-                        .orElse(deviceImage);
-
-        convertImageIfNeeded(image.toPath());
-        return image;
+        return getFuseMountManager()
+                .map(manager -> mountIfPossible(manager, deviceImage))
+                .orElse(deviceImage);
     }
 
     /**
@@ -157,10 +147,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     private File mountIfPossible(FuseMountManager manager, File deviceImage) {
         if (CasUtil.isChunkedDir(deviceImage.toPath())) {
             try {
-                // TODO(frankfeng): change to return the mount point when done collecting metrics.
-                manager.mount(deviceImage.toPath()).toFile();
-                manager.unmount(deviceImage.toPath());
-                return deviceImage;
+                return manager.mount(deviceImage.toPath()).toFile();
 
             } catch (IOException | InterruptedException e) {
                 CLog.i("Failed to mount '%s'.", deviceImage);
@@ -168,24 +155,11 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                 // No re-throw as this is infra implementation detail and should be transparent to
                 // getDeviceImageFile() callers.
 
-                // TODO(frankfeng): remove this once rollout is done.
-                collectConverterMetrics(deviceImage.toPath());
+                // Fallback: convert to an uncompressed device image.
+                convertImageIfNeeded(deviceImage.toPath());
             }
         }
         return deviceImage;
-    }
-
-    /**
-     * Collect metrics on the CAS converter by converting the image and deleting it. Note that
-     * performance is not a concern here as this is done only when fuse mounting fails which is
-     * rare.
-     *
-     * @param image the device image to convert
-     */
-    private void collectConverterMetrics(Path image) {
-        Path convertedImage = image.getParent().resolve(UUID.randomUUID().toString());
-        convertImageIfNeeded(image, convertedImage);
-        FileUtil.recursiveDelete(convertedImage.toFile());
     }
 
     /**
@@ -197,14 +171,18 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
      */
     private void convertImageIfNeeded(Path image, Path convertedImage) {
         if (convertedImage == null && CasUtil.isUncompressedDeviceImage(image)) {
-            return; // No conversion needed.
+            CLog.e("Device image is already uncompressed: '%s', skip conversion.", image);
+            return;
         }
         if (!CasUtil.isChunkedDir(image)) {
-            return; // Not convertible.
+            CLog.e("Device image is not chunked: `%s`, can't be converted.", image);
+            return;
         }
 
-        getCasConverterFactory()
-                .ifPresent(converter -> convertNoThrow(converter, image, convertedImage));
+        getCasConverter()
+                .ifPresentOrElse(
+                        converter -> convertNoThrow(converter, image, convertedImage),
+                        () -> CLog.e("UNEXPECTED: cas converter is not available."));
     }
 
     private void convertImageIfNeeded(Path image) {
@@ -217,7 +195,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
      * @param image the device image to convert
      * @param convertedImage the converted device image. If null, the conversion is in-place.
      */
-    private void convertNoThrow(CasConverterFactory converter, Path image, Path convertedImage) {
+    private void convertNoThrow(CasConverter converter, Path image, Path convertedImage) {
         try {
             converter.convert(image, convertedImage);
         } catch (IOException e) {
@@ -225,185 +203,139 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getDeviceImageVersion() {
         return getVersion(BuildInfoFileKey.DEVICE_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setDeviceImageFile(File deviceImageFile, String version) {
         setFile(BuildInfoFileKey.DEVICE_IMAGE, deviceImageFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getUserDataImageFile() {
         return getFile(BuildInfoFileKey.USERDATA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getUserDataImageVersion() {
         return getVersion(BuildInfoFileKey.USERDATA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setUserDataImageFile(File userDataFile, String version) {
         setFile(BuildInfoFileKey.USERDATA_IMAGE, userDataFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getTestsDir() {
         return getFile(BuildInfoFileKey.TESTDIR_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getTestsDirVersion() {
         return getVersion(BuildInfoFileKey.TESTDIR_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setTestsDir(File testsDir, String version) {
         setFile(BuildInfoFileKey.TESTDIR_IMAGE, testsDir, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getBasebandImageFile() {
         return getFile(BuildInfoFileKey.BASEBAND_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getBasebandVersion() {
         return getVersion(BuildInfoFileKey.BASEBAND_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setBasebandImage(File basebandFile, String version) {
         setFile(BuildInfoFileKey.BASEBAND_IMAGE, basebandFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getBootloaderImageFile() {
         return getFile(BuildInfoFileKey.BOOTLOADER_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getBootloaderVersion() {
         return getVersion(BuildInfoFileKey.BOOTLOADER_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setBootloaderImageFile(File bootloaderImgFile, String version) {
         setFile(BuildInfoFileKey.BOOTLOADER_IMAGE, bootloaderImgFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getOtaPackageFile() {
         return getFile(BuildInfoFileKey.OTA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getOtaPackageVersion() {
         return getVersion(BuildInfoFileKey.OTA_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setOtaPackageFile(File otaFile, String version) {
         setFile(BuildInfoFileKey.OTA_IMAGE, otaFile, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getMkbootimgFile() {
         return getFile(BuildInfoFileKey.MKBOOTIMG_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getMkbootimgVersion() {
         return getVersion(BuildInfoFileKey.MKBOOTIMG_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setMkbootimgFile(File mkbootimg, String version) {
         setFile(BuildInfoFileKey.MKBOOTIMG_IMAGE, mkbootimg, version);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public File getRamdiskFile() {
         return getFile(BuildInfoFileKey.RAMDISK_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String getRamdiskVersion() {
         return getVersion(BuildInfoFileKey.RAMDISK_IMAGE);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void setRamdiskFile(File ramdisk, String version) {
         setFile(BuildInfoFileKey.RAMDISK_IMAGE, ramdisk, version);

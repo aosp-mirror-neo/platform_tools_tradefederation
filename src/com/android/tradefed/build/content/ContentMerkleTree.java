@@ -56,10 +56,10 @@ public class ContentMerkleTree {
                                     })
                             .collect(Collectors.toList());
             // Remove ignored files
-            allFiles.removeIf(d -> context.ignoredChanges().contains(d.path));
+            commonFiles.removeIf(d -> context.ignoredChanges().contains(d.path));
             // Remove xTS style version
             String rootPackage = context.contentEntry().replaceAll(".zip", "");
-            allFiles.removeIf(d -> d.path.equals(rootPackage + "/tools/version.txt"));
+            commonFiles.removeIf(d -> d.path.equals(rootPackage + "/tools/version.txt"));
             // Sort to ensure final messages are identical
             Collections.sort(
                     commonFiles,

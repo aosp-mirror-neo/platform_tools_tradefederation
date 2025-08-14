@@ -45,7 +45,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -56,7 +55,7 @@ public class DeviceBuildInfoTest {
     @Rule public TemporaryFolder mTempFolder = new TemporaryFolder();
 
     @Mock private FuseMountManager mMockFuseManager;
-    @Mock private CasConverterFactory mMockCasConverterFactory;
+    @Mock private CasConverter mMockCasConverter;
 
     private static final String VERSION = "1";
     private DeviceBuildInfo mBuildInfo;
@@ -190,18 +189,17 @@ public class DeviceBuildInfoTest {
         mTempFolder.newFile("mount-point/" + CasUtil.BOOT_IMAGE_FILENAME);
 
         doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
-        doReturn(Optional.of(mMockCasConverterFactory)).when(buildInfoSpy).getCasConverterFactory();
+        doReturn(Optional.of(mMockCasConverter)).when(buildInfoSpy).getCasConverter();
         when(mMockFuseManager.mount(sourceDir.toPath())).thenReturn(mountPointDir.toPath());
 
         File result = buildInfoSpy.getDeviceImageFile();
 
         verify(mMockFuseManager).mount(sourceDir.toPath());
-        verify(mMockCasConverterFactory, never()).convert(any(Path.class), any(Path.class));
+        verify(mMockCasConverter, never()).convert(any(Path.class), any(Path.class));
     }
 
     @Test
     public void getDeviceImageFile_mountFails_covertToUncompressedImage() throws Exception {
-        ArgumentCaptor<Path> captor = ArgumentCaptor.forClass(Path.class);
         DeviceBuildInfo buildInfoSpy = spy(mBuildInfo);
         File sourceDir = mTempFolder.newFolder("source-dir-fail");
         mTempFolder.newFolder("source-dir-fail/" + CasUtil.CHUNKS_DIR_NAME);
@@ -210,18 +208,16 @@ public class DeviceBuildInfoTest {
         buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
 
         doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
-        doReturn(Optional.of(mMockCasConverterFactory)).when(buildInfoSpy).getCasConverterFactory();
+        doReturn(Optional.of(mMockCasConverter)).when(buildInfoSpy).getCasConverter();
         doThrow(new IOException("FUSE mount failed!"))
                 .when(mMockFuseManager)
                 .mount(sourceDir.toPath());
 
         File result = buildInfoSpy.getDeviceImageFile();
 
-        verify(mMockCasConverterFactory).convert(captor.capture(), any(Path.class));
-        Path capturedPath = captor.getValue();
-        assertEquals(capturedPath, sourceDir.toPath());
+        verify(mMockCasConverter).convert(sourceDir.toPath(), null);
         assertEquals(
-                "Should fall back to the original source directory on mount failure.",
+                "Should return the original source directory (converted) on mount failure.",
                 sourceDir,
                 result);
     }

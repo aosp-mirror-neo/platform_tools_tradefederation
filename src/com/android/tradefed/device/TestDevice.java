@@ -44,6 +44,7 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.KeyguardControllerState;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.TimeUtil;
 import com.android.tradefed.util.ZipUtil2;
@@ -231,6 +232,71 @@ public class TestDevice extends NativeDevice {
             return false;
         }
         return hasFeature("android.software.app_enumeration");
+    }
+
+    /**
+     * Core implementation of package installation, with retries around {@link
+     * IDevice#installPackage(String, boolean, String...)}
+     *
+     * @param packageFile
+     * @param reinstall
+     * @param extraArgs
+     * @return the response from the installation
+     * @throws DeviceNotAvailableException
+     */
+    private String adbInstallPackage(
+            final File packageFile, final boolean reinstall, final List<String> extraArgs)
+            throws DeviceNotAvailableException {
+        long startTime = System.currentTimeMillis();
+        try {
+            List<String> adbCmd = new ArrayList<>();
+            if (packageFile.getName().endsWith(APEX_SUFFIX)) {
+                adbCmd.add("install-multiple");
+            } else {
+                adbCmd.add("install");
+            }
+            if (reinstall) {
+                adbCmd.add("-r");
+            }
+            adbCmd.addAll(extraArgs);
+            adbCmd.add(packageFile.getAbsolutePath());
+            long maxTimeoutMs = TimeUnit.MINUTES.toMillis(INSTALL_TIMEOUT_MINUTES);
+            final String[] response = new String[1];
+            DeviceAction installAction =
+                    new DeviceAction() {
+                        @Override
+                        public boolean run() throws InstallException {
+                            try {
+                                CommandResult res =
+                                        executeAdbV2Command(
+                                                maxTimeoutMs,
+                                                new HashMap<>(),
+                                                adbCmd.toArray(new String[0]));
+                                response[0] = handleInstallationResult(res);
+                            } catch (DeviceNotAvailableException e) {
+                                response[0] = e.getMessage();
+                            }
+                            return response[0] == null;
+                        }
+                    };
+            CLog.v(
+                    "Installing package file %s with args %s on %s",
+                    packageFile.getAbsolutePath(), extraArgs.toString(), getSerialNumber());
+            performDeviceAction(
+                    String.format("install %s", packageFile.getAbsolutePath()),
+                    installAction,
+                    MAX_RETRY_ATTEMPTS);
+            List<File> packageFiles = new ArrayList<>();
+            packageFiles.add(packageFile);
+            allowLegacyStorageForApps(packageFiles);
+            return response[0];
+        } finally {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
+                    System.currentTimeMillis() - startTime);
+        }
     }
 
     /**
@@ -492,7 +558,7 @@ public class TestDevice extends NativeDevice {
         if (runtimePermissionSupported) {
             args.add("-g");
         }
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -506,7 +572,7 @@ public class TestDevice extends NativeDevice {
         if (grantPermissions) {
             args.add("-g");
         }
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -523,7 +589,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -540,7 +606,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /** {@inheritDoc} */
@@ -660,7 +726,7 @@ public class TestDevice extends NativeDevice {
     }
 
     /**
-     * Core implementation for installing application with split apk files {@link
+     * Core implementation for installing application with sfplit apk files {@link
      * IDevice#installPackages(List, boolean, List)} See
      * "https://developer.android.com/studio/build/configure-apk-splits" on how to split apk to
      * several files.
@@ -1400,10 +1466,25 @@ public class TestDevice extends NativeDevice {
         }
 
         @Override
-        public boolean run() throws IOException, TimeoutException, AdbCommandRejectedException,
-                ShellCommandUnresponsiveException, InstallException, SyncException {
+        public boolean run()
+                throws IOException,
+                        TimeoutException,
+                        AdbCommandRejectedException,
+                        ShellCommandUnresponsiveException,
+                        InstallException,
+                        SyncException,
+                        DeviceNotAvailableException {
             DumpsysPackageReceiver receiver = new DumpsysPackageReceiver();
-            getIDevice().executeShellCommand("dumpsys package p", receiver);
+            ShellOutputReceiverStream outputReceiverStream =
+                    new ShellOutputReceiverStream(receiver);
+            CommandResult res = executeShellV2Command("dumpsys package p", outputReceiverStream);
+            if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                CLog.e("Faild to get dump pakgs: %s", res);
+                throw new DeviceNotAvailableException(
+                        String.format(
+                                "Failed to run `adb shell dumpsys package p`: %s", res.getStderr()),
+                        getSerialNumber());
+            }
             mPkgInfoMap = receiver.getPackages();
             if (mPkgInfoMap.size() == 0) {
                 // Package parsing can fail if package manager is currently down. throw exception
@@ -2782,7 +2863,7 @@ public class TestDevice extends NativeDevice {
             getRunUtil().allowInterrupt(true);
             // Manually execute the adb action to avoid any kind of recovery
             // since it hard to interrupt the forwarding
-            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false);
+            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false, false);
             AdbShellAction adbActionV2 =
                     new AdbShellAction(
                             fullCmd,
@@ -3512,7 +3593,20 @@ public class TestDevice extends NativeDevice {
         }
     }
 
-    private String handleInstallationError(InstallException e) {
+    private String handleInstallationResult(CommandResult res) {
+        if (res.getStatus() == CommandStatus.SUCCESS) {
+            return null;
+        }
+        // For ADB client side error it show in stderr
+        if (res.getStderr() != null) {
+            return res.getStderr();
+        }
+
+        // For device side error eg.INSTALL_FAILED_ALREADY_EXISTS it will show in stdout.
+        return res.getStdout();
+    }
+
+    private String handleInstallationError(Exception e) {
         String message = e.getMessage();
         if (message == null) {
             message =
