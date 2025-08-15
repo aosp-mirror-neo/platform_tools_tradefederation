@@ -44,6 +44,7 @@ import com.android.tradefed.util.IRunUtil.EnvPriority;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.TestRunnerUtil;
+import com.android.tradefed.util.ZipUtil;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -219,11 +220,15 @@ public class HostGTest extends GTestBase implements IBuildReceiver {
 
             if (isClangCoverageEnabled()) {
                 File profdata = null;
+                File profileTool = null;
                 try {
                     Set<String> profraws = FileUtil.findFiles(coverageDir, ".*\\.profraw");
-                    ClangProfileIndexer indexer =
-                            new ClangProfileIndexer(
-                                    getConfiguration().getCoverageOptions().getLlvmProfdataPath());
+                    profileTool = getConfiguration().getCoverageOptions().getLlvmProfdataPath();
+                    if (profileTool == null && mBuildInfo.getFile("llvm-profdata.zip") != null) {
+                        File profileToolZip = mBuildInfo.getFile("llvm-profdata.zip");
+                        profileTool = ZipUtil.extractZipToTemp(profileToolZip, "llvm-profdata");
+                    }
+                    ClangProfileIndexer indexer = new ClangProfileIndexer(profileTool);
                     profdata = FileUtil.createTempFile(gtestFile.getName(), ".profdata");
                     indexer.index(profraws, profdata);
 
@@ -235,6 +240,7 @@ public class HostGTest extends GTestBase implements IBuildReceiver {
                 } finally {
                     FileUtil.deleteFile(profdata);
                     FileUtil.recursiveDelete(coverageDir);
+                    FileUtil.recursiveDelete(profileTool);
                 }
             }
         }
