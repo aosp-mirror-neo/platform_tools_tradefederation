@@ -52,7 +52,6 @@ import java.util.stream.Stream;
 public class FuseMountManager {
     // Root directory for all CAS log dirs (one per mount) for easy checking of failed cleanups.
     private static final Path CAS_LOG_ROOT = Path.of("/tmp/tf-cas-fuse-log-root");
-    private static final String CAS_VIEWER_NAME = "casviewer";
     private final IFuseDriverProfile mDriverProfile;
     private final IRunUtil mRunUtil;
     // Map to associate a source data path with its corresponding mount information (mount point and
@@ -214,7 +213,7 @@ public class FuseMountManager {
 
     private void logTimeout(Path sourceDataPath, String output, Path logDir) {
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
-        String log = CasUtil.getCasLogFromDir(logDir, CAS_VIEWER_NAME);
+        String log = CasUtil.getCasLogFromDir(logDir);
         CLog.i("Mounting of '%s' timed out. Output:\n%s\nLog:\n%s", sourceDataPath, output, log);
     }
 

@@ -22,12 +22,15 @@ import com.android.tradefed.log.LogUtil.CLog;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class CasUtil {
 
@@ -208,6 +211,37 @@ public final class CasUtil {
             CLog.e(e);
             return null;
         }
+    }
+
+    /**
+     * Reads the CAS log file "<clientName>.INFO" from the given directory. It assumes the log dir
+     * is for a single CAS client and deduces the `clientName` from the log file name.
+     *
+     * @param logDirPath The directory path to read the CAS log file from.
+     * @return The CAS log file content or null if the log file cannot be read.
+     */
+    public static String getCasLogFromDir(Path logDirPath) {
+        List<Path> logFiles = new ArrayList<>();
+        try (Stream<Path> files = Files.list(logDirPath)) {
+            logFiles =
+                    files.filter(Files::isRegularFile) // Only consider regular files
+                            .filter(p -> p.getFileName().toString().endsWith(".INFO"))
+                            .collect(Collectors.toList()); // Collect matching paths into a list
+        } catch (IOException e) {
+            CLog.e(e);
+            return null;
+        }
+        if (logFiles.isEmpty()) {
+            CLog.w("No CAS log files found in directory: %s", logDirPath);
+            return null;
+        }
+        Path logFilePath = logFiles.get(0);
+        if (logFiles.size() > 1) {
+            CLog.w("Multiple CAS log files found in directory: %s", logDirPath);
+        }
+        // CAS log files are named "<clientName>.INFO"
+        String clientName = logFilePath.getFileName().toString().split("\\.")[0];
+        return getCasLogFromDir(logDirPath, clientName);
     }
 
     /**
