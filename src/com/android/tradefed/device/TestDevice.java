@@ -2801,7 +2801,7 @@ public class TestDevice extends NativeDevice {
             getRunUtil().allowInterrupt(true);
             // Manually execute the adb action to avoid any kind of recovery
             // since it hard to interrupt the forwarding
-            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false);
+            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false, false);
             AdbShellAction adbActionV2 =
                     new AdbShellAction(
                             fullCmd,
