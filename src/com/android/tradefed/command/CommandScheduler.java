@@ -74,7 +74,6 @@ import com.android.tradefed.log.LogRegistry;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.ConsoleResultReporter;
 import com.android.tradefed.result.FileInputStreamSource;
-import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ILogSaverListener;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogDataType;
@@ -83,6 +82,7 @@ import com.android.tradefed.result.LogSaverResultForwarder;
 import com.android.tradefed.result.ResultForwarder;
 import com.android.tradefed.result.error.ErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
+import com.android.tradefed.result.resultdb.ResultDBReporter;
 import com.android.tradefed.result.suite.SuiteResultReporter;
 import com.android.tradefed.sandbox.ISandbox;
 import com.android.tradefed.service.TradefedFeatureServer;
@@ -107,6 +107,9 @@ import com.android.tradefed.util.hostmetric.IHostMonitor.HostMetricType;
 import com.android.tradefed.util.keystore.IKeyStoreClient;
 import com.android.tradefed.util.keystore.IKeyStoreFactory;
 import com.android.tradefed.util.keystore.KeyStoreException;
+
+import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
+import com.google.android.tradefed.result.teststorage.ResultReporter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
@@ -1605,23 +1608,10 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
         // For debugging in the console, add a printer
         delegateReporters.add(new ConsoleResultReporter());
         delegateReporters.add(new SuiteResultReporter());
-        try {
-            Class<?> objectClass =
-                    Class.forName("com.google.android.tradefed.result.teststorage.ResultReporter");
-            Object infraReporter = objectClass.getDeclaredConstructor().newInstance();
-            delegateReporters.add((ITestInvocationListener) infraReporter);
-        } catch (Exception e) {
-            CLog.e(e);
-        }
+        delegateReporters.add(new ResultReporter());
+        delegateReporters.add(new ResultDBReporter());
         config.setTestInvocationListeners(delegateReporters);
-        try {
-            Class<?> objectClass =
-                    Class.forName("com.google.android.tradefed.result.AndroidBuildApiLogSaver");
-            Object infraLogger = objectClass.getDeclaredConstructor().newInstance();
-            config.setLogSaver((ILogSaver) infraLogger);
-        } catch (Exception e) {
-            CLog.e(e);
-        }
+        config.setLogSaver(new AndroidBuildApiLogSaver());
     }
 
     /**
