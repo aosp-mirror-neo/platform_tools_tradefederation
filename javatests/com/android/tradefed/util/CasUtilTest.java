@@ -189,4 +189,35 @@ public class CasUtilTest {
         assertThat(log).isEqualTo(expectedlog);
         assertThat(Files.exists(logDir)).isFalse();
     }
+
+    @Test
+    public void getCasLogFromDir_noClientName_success() throws IOException {
+        String header =
+                "Log file created at: 2025/07/22 09:20:29\n"
+                    + "Running on machine: hostname\n"
+                    + "Binary: Built on Jul 22 2025 09:14:44 -0700 (1753200884)\n"
+                    + "Binary: Built at"
+                    + " username@hostname.c.googlers.com:/google/src/cloud/username/clientname\n"
+                    + "Binary: Built with gc go1.25-20250720-RC00 cl/785045014 +2363897932"
+                    + " X:fieldtrack,boringcrypto for linux/amd64\n"
+                    + "Previous log: <none>\n"
+                    + "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg\n";
+        String expectedlog =
+                "I0722 09:20:29.592478      1 main.go:79] Log directory: /tmp/logs/inv_2\n"
+                    + "I0722 09:20:29.592910      1 main.go:45] Use default index file:"
+                    + " /usr/local/google/home/username/cas/download/d29199/_chunks/_chunks_index.json\n"
+                    + "I0722 09:20:29.683595      1 main.go:104] FastCDC-FUSE mounted at"
+                    + " /usr/local/google/home/username/mnt\n"
+                    + "I0722 09:20:29.683654      1 main.go:105] To unmount, press Ctrl-C or run"
+                    + " 'fusermount -u <mount_point>'\n"
+                    + "I0722 09:21:59.925268      51 main.go:113] Received signal, unmounting...\n"
+                    + "I0722 09:21:59.929269      1 main.go:128] Successfully unmounted"
+                    + " FastCDC-FUSE at: /usr/local/google/home/username/mnt";
+        Path logDir = tempFolder.newFolder("cas_log_dir").toPath();
+        Files.writeString(logDir.resolve("cas_client.INFO"), header + expectedlog);
+        String log = CasUtil.getCasLogFromDir(logDir);
+        assertThat(log).isEqualTo(expectedlog);
+        assertThat(Files.exists(logDir)).isFalse();
+    }
+
 }

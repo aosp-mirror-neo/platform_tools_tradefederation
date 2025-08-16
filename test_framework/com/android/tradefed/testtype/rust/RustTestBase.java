@@ -190,7 +190,7 @@ public abstract class RustTestBase
         for (String line : testList) {
             if (line.endsWith(tag)) {
                 counter++;
-                foundTests.add(line);
+                foundTests.add(line.substring(0, line.length() - tag.length()));
             }
         }
         CLog.d("Found %d tests", counter);
