@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -179,14 +180,18 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
         try {
             String fileContent = FileUtil.readStringFromFile(basebandBuildInfoFile);
             // Regex to extract baseband version from build info file.
-            // Example: g5400I-250721-250723-B-13820602,g5400I-250609-0715-P100516012
-            Pattern pattern = Pattern.compile("g[a-zA-Z0-9]+-\\d+-\\d+(-[a-zA-Z0-9]+)?-(P?\\d+)");
-            Matcher versionMatcher = pattern.matcher(fileContent);
-            if (versionMatcher.find()) {
-                return versionMatcher.group(0);
-            } else {
-                throw new TargetSetupError("Could not read baseband version from build info file");
+            // Lassen Example: g5400I-250721-250723-B-13820602,g5400I-250609-0715-P100516012
+            // Alcedo Example: a900a-ES2_250408-250414-MC-13351752
+            List<Pattern> patterns = new ArrayList<>();
+            patterns.add(Pattern.compile("g[a-zA-Z0-9]+-\\d+-\\d+(-[a-zA-Z0-9]+)?-(P?\\d+)"));
+            patterns.add(Pattern.compile("[a-zA-Z0-9]+-[a-zA-Z0-9_]+-[0-9]+-[A-Z]-P?[0-9]+"));
+            for (Pattern pattern : patterns) {
+                Matcher versionMatcher = pattern.matcher(fileContent);
+                if (versionMatcher.find()) {
+                    return versionMatcher.group(0);
+                }
             }
+            throw new TargetSetupError("Could not read baseband version from build info file");
         } catch (IOException e) {
             throw new TargetSetupError("Could not read baseband version from build info file", e);
         }
