@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.util.FileUtil;
+import com.android.tradefed.util.Pair;
 import com.android.tradefed.util.ZipUtil;
 
 import com.google.common.collect.Sets;
@@ -37,6 +38,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -45,6 +47,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -88,7 +91,8 @@ public class TestMappingTest {
                             "presubmit",
                             true,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(1, tests.size());
             Set<String> names = new HashSet<String>();
             for (TestInfo test : tests) {
@@ -105,7 +109,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(1, tests.size());
             names = new HashSet<String>();
             for (TestInfo test : tests) {
@@ -122,7 +127,8 @@ public class TestMappingTest {
                             "postsubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(2, tests.size());
             TestOption testOption =
                     new TestOption(
@@ -147,7 +153,8 @@ public class TestMappingTest {
                             "othertype",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(1, tests.size());
             names = new HashSet<String>();
             testOptions = new HashSet<TestOption>();
@@ -182,7 +189,8 @@ public class TestMappingTest {
                     "presubmit",
                     false,
                     null,
-                    new HashSet<String>());
+                    new HashSet<>(),
+                    false);
         } finally {
             FileUtil.recursiveDelete(tempDir);
         }
@@ -213,12 +221,12 @@ public class TestMappingTest {
             // Ensure the static variable doesn't have any relative path configured.
             Set<TestInfo> tests =
                     mTestMapping.getTests(
-                            mockBuildInfo, "presubmit", false, null, new HashSet<String>());
+                            mockBuildInfo, "presubmit", false, null, new HashSet<String>(), false);
             assertEquals(2, tests.size());
 
             tests =
                     mTestMapping.getTests(
-                            mockBuildInfo, "presubmit", true, null, new HashSet<String>());
+                            mockBuildInfo, "presubmit", true, null, new HashSet<String>(), false);
             assertEquals(2, tests.size());
             Set<String> names = new HashSet<String>();
             for (TestInfo test : tests) {
@@ -268,10 +276,274 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             Sets.newHashSet("key_1"),
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(1, tests.size());
             assertEquals("suite/stub2", tests.iterator().next().getName());
             verify(mockBuildInfo, times(1)).getFile(TEST_MAPPINGS_ZIP);
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    private Pair<File, IBuildInfo> setUpTestMappingsExactMatch() throws IOException {
+        IBuildInfo mockBuildInfo = mock(IBuildInfo.class);
+        File tempDir = FileUtil.createTempDir("test_mapping");
+
+        File srcDir = FileUtil.createTempDir("src", tempDir);
+        String srcFile =
+                File.separator + TEST_DATA_DIR + File.separator + "test_mapping_exact_match";
+        InputStream resourceStream = this.getClass().getResourceAsStream(srcFile);
+        FileUtil.saveResourceFile(resourceStream, srcDir, TEST_MAPPING);
+        File subDir = FileUtil.createTempDir("sub_dir", srcDir);
+        srcFile = File.separator + TEST_DATA_DIR + File.separator + "test_mapping_2";
+        resourceStream = this.getClass().getResourceAsStream(srcFile);
+        FileUtil.saveResourceFile(resourceStream, subDir, TEST_MAPPING);
+        List<File> filesToZip = List.of(srcDir);
+
+        File zipFile = Paths.get(tempDir.getAbsolutePath(), TEST_MAPPINGS_ZIP).toFile();
+        ZipUtil.createZip(filesToZip, zipFile);
+        when(mockBuildInfo.getFile(TEST_MAPPINGS_ZIP)).thenReturn(zipFile);
+
+        return new Pair<>(tempDir, mockBuildInfo);
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_singleKeyword_noIgnoreKeywords()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=[device], ignoreKeywords=[] -> [device]
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet("device"),
+                            new HashSet<>(),
+                            true);
+            assertEquals(1, tests.size());
+            assertEquals("suite/device", tests.iterator().next().getName());
+
+            // keywords=[desktop], ignoreKeywords=[] -> [desktop]
+            tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet("desktop"),
+                            new HashSet<>(),
+                            true);
+            assertEquals(1, tests.size());
+            assertEquals("suite/desktop", tests.iterator().next().getName());
+
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_twoKeywords_noIgnoreKeywords()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=[device, desktop], ignoreKeywords=[] -> [device, desktop]
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet("device", "desktop"),
+                            new HashSet<>(),
+                            true);
+            assertEquals(1, tests.size());
+            assertEquals("suite/device_desktop", tests.iterator().next().getName());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_oneKeyword_oneIgnoreKeyword()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=[device], ignoreKeywords=[desktop] -> [device], [device, desktop]
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet("device"),
+                            Sets.newHashSet("desktop"),
+                            true);
+            Iterator<String> testsIterator =
+                    tests.stream().map(TestInfo::getName).sorted().iterator();
+            assertEquals(2, tests.size());
+            assertEquals("suite/device", testsIterator.next());
+            assertEquals("suite/device_desktop", testsIterator.next());
+
+            // keywords=[desktop], ignoreKeywords=[device] -> [desktop], [device, desktop]
+            tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet("desktop"),
+                            Sets.newHashSet("device"),
+                            true);
+            testsIterator = tests.stream().map(TestInfo::getName).sorted().iterator();
+            assertEquals(2, tests.size());
+            assertEquals("suite/desktop", testsIterator.next());
+            assertEquals("suite/device_desktop", testsIterator.next());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_noKeyword_notIgnoreKeywords()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=[], ignoreKeywords=[] -> []
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet(),
+                            new HashSet<>(),
+                            true);
+            Iterator<String> testsIterator =
+                    tests.stream().map(TestInfo::getName).sorted().iterator();
+            assertEquals(2, tests.size());
+            assertEquals("suite/aosp_cf", testsIterator.next());
+            assertEquals("suite/stub1", testsIterator.next());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_noKeyword_oneIgnoreKeyword()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=[], ignoreKeywords=[device] -> [device], []
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet(),
+                            Sets.newHashSet("device"),
+                            true);
+            Iterator<String> testsIterator =
+                    tests.stream().map(TestInfo::getName).sorted().iterator();
+            assertEquals(3, tests.size());
+            assertEquals("suite/aosp_cf", testsIterator.next());
+            assertEquals("suite/device", testsIterator.next());
+            assertEquals("suite/stub1", testsIterator.next());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_noKeyword_twoIgnoreKeywords()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=[], ignoreKeywords=[device, desktop] -> [device], [desktop], [device,
+            // desktop], []
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            Sets.newHashSet(),
+                            Sets.newHashSet("device", "desktop"),
+                            true);
+            Iterator<String> testsIterator =
+                    tests.stream().map(TestInfo::getName).sorted().iterator();
+            assertEquals(5, tests.size());
+            assertEquals("suite/aosp_cf", testsIterator.next());
+            assertEquals("suite/desktop", testsIterator.next());
+            assertEquals("suite/device", testsIterator.next());
+            assertEquals("suite/device_desktop", testsIterator.next());
+            assertEquals("suite/stub1", testsIterator.next());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    /**
+     * Test for {@link TestMapping#getTests()} for loading tests from test_mappings.zip for matching
+     * keywords.
+     */
+    @Test
+    public void testGetTests_matchKeywords_exactMatch_nullKeyword_twoIgnoreKeywords()
+            throws Exception {
+        Pair<File, IBuildInfo> setup = setUpTestMappingsExactMatch();
+        File tempDir = setup.first;
+        IBuildInfo mockBuildInfo = setup.second;
+        try {
+            // keywords=null, ignoreKeywords=[device, desktop] -> [device], [desktop], [device,
+            // desktop], []
+            Set<TestInfo> tests =
+                    mTestMapping.getTests(
+                            mockBuildInfo,
+                            "presubmit",
+                            false,
+                            null,
+                            Sets.newHashSet("device", "desktop"),
+                            true);
+            Iterator<String> testsIterator =
+                    tests.stream().map(TestInfo::getName).sorted().iterator();
+            assertEquals(5, tests.size());
+            assertEquals("suite/aosp_cf", testsIterator.next());
+            assertEquals("suite/desktop", testsIterator.next());
+            assertEquals("suite/device", testsIterator.next());
+            assertEquals("suite/device_desktop", testsIterator.next());
+            assertEquals("suite/stub1", testsIterator.next());
+
         } finally {
             FileUtil.recursiveDelete(tempDir);
         }
@@ -308,7 +580,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             new HashSet<String>(),
-                            Sets.newHashSet("key_1"));
+                            Sets.newHashSet("key_1"),
+                            false);
             assertEquals(3, tests.size());
             verify(mockBuildInfo, times(1)).getFile(TEST_MAPPINGS_ZIP);
         } finally {
@@ -732,7 +1005,8 @@ public class TestMappingTest {
                             "presubmit",
                             true,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(3, testInfos.size());
             for (TestInfo test : testInfos) {
                 names.add(test.getName());
@@ -755,7 +1029,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             names.clear();
             for (TestInfo test : testInfos) {
                 names.add(test.getName());
@@ -823,7 +1098,8 @@ public class TestMappingTest {
                             "presubmit",
                             true,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(1, testInfos.size());
             for (TestInfo test : testInfos) {
                 names.add(test.getName());
@@ -1055,6 +1331,7 @@ public class TestMappingTest {
                             false,
                             null,
                             new HashSet<String>(),
+                            false,
                             Arrays.asList("extra-zip"),
                             new HashSet<>());
             assertEquals(2, results.size());
@@ -1110,6 +1387,7 @@ public class TestMappingTest {
                             false,
                             null,
                             new HashSet<String>(),
+                            false,
                             Arrays.asList("extra-zip"),
                             new HashSet<>());
             assertEquals(2, results.size());
@@ -1163,7 +1441,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             Set<String> names = new HashSet<String>();
             for (TestInfo test : tests) {
                 names.add(test.getName());
@@ -1182,7 +1461,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(2, tests.size());
 
             // test with no matched file.
@@ -1197,7 +1477,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(0, tests.size());
 
             // Test with no test mapping path passed from TMSR, skip the file patterns checking.
@@ -1211,7 +1492,8 @@ public class TestMappingTest {
                             "presubmit",
                             false,
                             null,
-                            new HashSet<String>());
+                            new HashSet<>(),
+                            false);
             assertEquals(2, tests.size());
         } finally {
             FileUtil.recursiveDelete(tempDir);

@@ -201,7 +201,8 @@ public class HostUnitTestsConfigValidation implements IBuildReceiver {
                         group, /* host */
                         true, /* keywords */
                         new HashSet<>(), /* ignoreKeywords */
-                        new HashSet<>());
+                        new HashSet<>(),
+                        false /* exact keyword match */);
 
         List<String> errors = new ArrayList<>();
         List<String> configs = new ArrayList<>();
