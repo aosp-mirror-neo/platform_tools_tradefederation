@@ -2399,6 +2399,36 @@ public class TestDeviceTest {
 
     /** Unit test for {@link TestDevice#getActiveApexes()}. */
     @Test
+    public void testGetActiveApexesWithIsFactory() throws Exception {
+        final String output =
+                "package:/system/apex/com.android.foo.apex=com.android.foo versionCode:100\n"
+                        + "package:/dev/block/dm-12=com.android.bar versionCode:200\n"
+                        + "package:/data/apex/active/com.android.baz@200.apex=com.android.baz"
+                        + " versionCode:300";
+        injectShellResponse(TestDevice.LIST_APEXES_CMD, output);
+
+        assertThat(mTestDevice.getActiveApexes())
+                .isEqualTo(
+                        Set.of(
+                                new ApexInfo(
+                                        "com.android.foo",
+                                        100,
+                                        "/system/apex/com.android.foo.apex", /*isFactory*/
+                                        true),
+                                new ApexInfo(
+                                        "com.android.bar",
+                                        200,
+                                        "/dev/block/dm-12", /*isFactory*/
+                                        false),
+                                new ApexInfo(
+                                        "com.android.baz",
+                                        300,
+                                        "/data/apex/active/com.android.baz@200.apex", /*isFactory*/
+                                        false)));
+    }
+
+    /** Unit test for {@link TestDevice#getActiveApexes()}. */
+    @Test
     public void testGetActiveApexesPlatformSupportsPath() throws Exception {
         final String output =
                 "package:/system/apex/com.android.foo.apex="

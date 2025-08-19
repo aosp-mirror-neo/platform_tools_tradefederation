@@ -91,14 +91,28 @@ public interface ITestDevice extends INativeDevice {
 
     /** A simple struct class to store information about a single APEX */
     public static class ApexInfo {
+        // NOTE: this is the package name, specified in AndroidManifest.xml, not the APEX name.
         public final String name;
         public final long versionCode;
         public final String sourceDir;
+        public final boolean isFactory;
 
-        public ApexInfo(String name, long versionCode, String sourceDir) {
+        public ApexInfo(String name, long versionCode, String sourceDir, boolean isFactory) {
             this.name = name;
             this.versionCode = versionCode;
             this.sourceDir = sourceDir;
+            this.isFactory = isFactory;
+        }
+
+        public ApexInfo(String name, long versionCode, String sourceDir) {
+            // installed APEXes are located in /data/active/apex
+            // or /dev/block/dm-NNN (with the mount_before_data feature)
+            this(
+                    name,
+                    versionCode,
+                    sourceDir,
+                    !sourceDir.startsWith("/data/apex/active/")
+                            && !sourceDir.startsWith("/dev/block/dm-"));
         }
 
         public ApexInfo(String name, long versionCode) {
@@ -109,7 +123,10 @@ public interface ITestDevice extends INativeDevice {
         public boolean equals(Object other) {
             if (other != null && other instanceof ApexInfo) {
                 ApexInfo ai = (ApexInfo) other;
-                return name.equals(ai.name) && versionCode == ai.versionCode;
+                return name.equals(ai.name)
+                        && versionCode == ai.versionCode
+                        && sourceDir.equals(ai.sourceDir)
+                        && isFactory == ai.isFactory;
             }
             return false;
         }

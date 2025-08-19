@@ -43,7 +43,7 @@ public class FuseMountManagerFactory {
 
     private final IRunUtil mRunUtil;
     private static final String CAS_CLIENT_NAME = "casviewer";
-    private static final long MOUNT_TIMEOUT_IN_MS = 10_000; // Allow 10 seconds for mounting.
+    private static final long MOUNT_TIMEOUT_IN_MS = 20_000; // Allow 20 seconds for mounting.
     private final CasFuseDriverProfile mCasFuseDriverProfile;
     private static final List<WeakReference<FuseMountManager>> mManagers =
             Collections.synchronizedList(new ArrayList<>());
