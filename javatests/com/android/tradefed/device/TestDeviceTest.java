@@ -180,6 +180,11 @@ public class TestDeviceTest {
         protected AaptParser createParser(File appFile) {
             return null;
         }
+
+        @Override
+        public boolean isShellV2Support() throws DeviceNotAvailableException {
+            return true;
+        }
     }
 
     // TODO: merge TestableTestDeviceV2 with TestableTestDevice, as it's easier to use:
@@ -282,6 +287,11 @@ public class TestDeviceTest {
             }
             return this;
         }
+
+        @Override
+        public boolean isShellV2Support() throws DeviceNotAvailableException {
+            return true;
+        }
     }
 
     private TestableTestDeviceV2 newTestDeviceForDevelopmentApiLevel(int apiLevel) {
@@ -297,7 +307,6 @@ public class TestDeviceTest {
         MockitoAnnotations.initMocks(this);
 
         when(mMockIDevice.getSerialNumber()).thenReturn(MOCK_DEVICE_SERIAL);
-        when(mMockIDevice.supportsFeature(IDevice.Feature.SHELL_V2)).thenReturn(true);
 
         // A TestDevice with a no-op recoverDevice() implementation
         mTestDevice =

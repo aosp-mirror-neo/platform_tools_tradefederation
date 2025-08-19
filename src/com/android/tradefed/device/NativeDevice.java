@@ -108,10 +108,12 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
@@ -119,6 +121,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -290,6 +293,9 @@ public class NativeDevice
 
     private long mBatteryFetchTimestamp = 0L;
 
+    private Set<String> mDeviceSupportedFeatures = null;
+
+    private Integer mHostAdbMajorVersion = null;
     // If we increase the number of props, then increase the cache size of mPropertiesCache.
     private final Set<String> propsToPrefetch =
             ImmutableSet.of("ro.build.version.sdk", "ro.build.version.codename", "ro.build.id");
@@ -1217,9 +1223,7 @@ public class NativeDevice
         //
         // Note that this does *not* call `adb features` on each invocation. ddmlib caches all the
         // adb features on the first query.
-        boolean parseExitStatus =
-                !getIDevice().supportsFeature(IDevice.Feature.SHELL_V2)
-                        && getOptions().useExitStatusWorkaround();
+        boolean parseExitStatus = !isShellV2Support() && getOptions().useExitStatusWorkaround();
 
         final String[] fullCmd = buildAdbShellCommand(cmd, parseExitStatus);
         AdbShellAction adbActionV2 =
@@ -1234,6 +1238,60 @@ public class NativeDevice
             postProcessExitStatus(adbActionV2.mResult);
         }
         return adbActionV2.mResult;
+    }
+
+    public boolean isShellV2Support() throws DeviceNotAvailableException {
+        return getHostAdbMajorVersion() >= 29 && getDeviceSupportedFeatures().contains("shell_v2");
+    }
+
+    private int getHostAdbMajorVersion() throws DeviceNotAvailableException {
+        if (mHostAdbMajorVersion != null) {
+            return mHostAdbMajorVersion.intValue();
+        }
+        CommandResult res = executeAdbV2Command("--version");
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            CLog.e("Failed to get host version: %s", res.getStderr());
+            throw new DeviceNotAvailableException(
+                    String.format("Failed to get host version: %s", res.getStderr()),
+                    getSerialNumber());
+        }
+        String output = res.getStdout();
+        Optional<String> versionLine =
+                output.lines().filter(line -> line.trim().startsWith("Version ")).findFirst();
+        if (versionLine.isEmpty()) {
+            throw new DeviceNotAvailableException(
+                    String.format("Could not parse ADB version from output: %s", output),
+                    getSerialNumber());
+        }
+
+        try {
+            String[] parts = versionLine.get().split(" ")[1].split("\\.");
+            mHostAdbMajorVersion = Integer.valueOf(Integer.parseInt(parts[0]));
+        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            throw new DeviceNotAvailableException(
+                    String.format("Failed to parse major version from line: %s", versionLine.get()),
+                    getSerialNumber());
+        }
+        return mHostAdbMajorVersion.intValue();
+    }
+
+    private Set<String> getDeviceSupportedFeatures() throws DeviceNotAvailableException {
+        if (mDeviceSupportedFeatures != null) {
+            return mDeviceSupportedFeatures;
+        }
+        CommandResult res = executeAdbV2Command("features");
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            // likely be in fastboot mode
+            CLog.e("Failed to run adb features (likely be in fastboot mode): %s", res.getStderr());
+        }
+        String output = res.getStdout();
+        List<String> lineList =
+                output.lines()
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .collect(Collectors.toList());
+        mDeviceSupportedFeatures = new LinkedHashSet<>(lineList);
+        return mDeviceSupportedFeatures;
     }
 
     private void postProcessExitStatus(@Nonnull CommandResult result) {
@@ -5502,6 +5560,7 @@ public class NativeDevice
         inRebootCallback = false;
         mRebootStartNotified = false;
         mFastbootSerialNumber = null;
+        mDeviceSupportedFeatures = null;
         // Default implementation
         if (getIDevice() instanceof StubDevice) {
             mTrackingSerialNumber = null;
