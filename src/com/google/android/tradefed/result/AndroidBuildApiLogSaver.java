@@ -261,6 +261,21 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
         fakeBuildMetadata.setBuildId(buildId);
         fakeBuildMetadata.setBuildFlavor(flavor);
         initLogSaver(fakeBuildMetadata);
+        if (mTestResultIdentity == null) {
+            try {
+                mTestResultIdentity = fetchTestResultId(context, mUseStubBuild);
+                // Propagate the test_result_id for log saving
+                if (mTestResultIdentity != null
+                        && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
+                    context.addInvocationAttribute(
+                            TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
+                }
+            } catch (RuntimeException e) {
+                CLog.e("Failed to init the test result id:");
+                CLog.e(e);
+                return;
+            }
+        }
     }
 
     /** {@inheritDoc} */
@@ -302,18 +317,20 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
 
             setBuildInfo(build);
             initLogSaver(getBuildInfo());
-            try {
-                mTestResultIdentity = fetchTestResultId(context, mUseStubBuild);
-                // Propagate the test_result_id for log saving
-                if (mTestResultIdentity != null
-                        && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
-                    context.addInvocationAttribute(
-                            TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
+            if (mTestResultIdentity == null) {
+                try {
+                    mTestResultIdentity = fetchTestResultId(context, mUseStubBuild);
+                    // Propagate the test_result_id for log saving
+                    if (mTestResultIdentity != null
+                            && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
+                        context.addInvocationAttribute(
+                                TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
+                    }
+                } catch (RuntimeException e) {
+                    CLog.e("Failed to init the test result id:");
+                    CLog.e(e);
+                    return;
                 }
-            } catch (RuntimeException e) {
-                CLog.e("Failed to init the test result id:");
-                CLog.e(e);
-                return;
             }
 
             if (mPeriodicUpload) {
