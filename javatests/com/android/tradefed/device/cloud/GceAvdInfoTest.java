@@ -790,19 +790,14 @@ public class GceAvdInfoTest {
         OptionSetter setter = new OptionSetter(mOptions);
         setter.setOptionValue("use-oxygenation-device", "true");
         String output =
-                "INFO: session_id: \"f549fcec-5246-4ef1-ba57-392af67bc2e9\""
-                        + "\nserver_url: \"oxy-gto2.us-central1-b.c.omnilab-oxygen-01.internal\""
-                        + "\ndebug_info {"
-                        + "\n  region: \"region\""
-                        + "\n  environment: \"env\""
-                        + "\n  cluster_name: \"somecluster\""
-                        + "\n  oxygen_version:\"someversion\""
-                        + "\n}"
-                        + "\ndevice_info {"
-                        + "\n  omnilab_device_info {"
-                        + "\n    device_id: \"0.0.0.0:6520\""
-                        + "\n  }"
-                        + "\n}";
+                "\n some\nINFO: session_id: \t \"f549fcec-5246-4ef1-ba57-392af67bc2e9\" server_url:"
+                        + " \"oxy-gto2.us-central1-b.c.omnilab-oxygen-01.internal\" ports {   type:"
+                        + " NETSIM_GRPC   value: 11000   name: \"NETSIM_GRPC_1\" } debug_info {  "
+                        + " region: \"us-east1\"   environment: \"prod\"   oxygen_version:"
+                        + " \"cloud-testservice-oxygen-host-container_20250811.00_RC00\"  "
+                        + " cluster_name: \"ANDROID_VIRTUAL_OXYGEN_POOL\" } device_info {  "
+                        + " omnilab_device_info {     device_id: \"0.0.0.0:6520\"     port_name:"
+                        + " \"NETSIM_GRPC_1\"   } } ";
         CommandResult res = Mockito.mock(CommandResult.class);
         Mockito.doAnswer(
                         new Answer<Object>() {
@@ -851,8 +846,8 @@ public class GceAvdInfoTest {
         OptionSetter setter = new OptionSetter(mOptions);
         setter.setOptionValue("use-oxygenation-device", "true");
         String output =
-                "INFO: session_id: \"f549fcec-5246-4ef1-ba57-392af67bc2e9\""
-                        + " server_url: \"oxy-gto2.us-central1-b.c.omnilab-oxygen-01.internal\""
+                "INFO: session_id: \t \"f549fcec-5246-4ef1-ba57-392af67bc2e9\""
+                        + " server_url: \t \"oxy-gto2.us-central1-b.c.omnilab-oxygen-01.internal\""
                         + "  debug_info {"
                         + "   region: \"region\""
                         + "   environment: \"env\""
@@ -864,8 +859,8 @@ public class GceAvdInfoTest {
                         + "     device_id: \"0.0.0.0:6520\""
                         + "   }"
                         + " }"
-                        + "session_id: \"f549fcec-5246-4ef1-ba57-392af67bc2e9-1\""
-                        + " server_url: \"oxy-gto2.us-central1-b.c.omnilab-oxygen-02.internal\""
+                        + "session_id: \t \"f549fcec-5246-4ef1-ba57-392af67bc2e9-1\""
+                        + " server_url: \t \"oxy-gto2.us-central1-b.c.omnilab-oxygen-02.internal\""
                         + "  debug_info {"
                         + "   region: \"region\""
                         + "   environment: \"env\""
