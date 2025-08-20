@@ -189,10 +189,28 @@ public final class CasUtil {
             throws IOException {
         Path logFilePath = logDirPath.resolve(clientName + "." + tag);
         if (!Files.exists(logFilePath)) {
-            CLog.w("CAS log file not found: %s", logFilePath);
+            String filesInDir = getFilesInDir(logDirPath.getParent());
+            CLog.w("CAS log file not found: %s (found: %s)", logFilePath, filesInDir);
             throw new IOException(String.format("CAS log file not found: %s", logFilePath));
         }
         return removeLogHeader(Files.readString(logFilePath));
+    }
+
+    /**
+     * Returns a comma-separated list of files in the given directory.
+     *
+     * @param dirPath The directory path to list the files from.
+     * @return A comma-separated list of files in the given directory. Returns null on error.
+     */
+    private static String getFilesInDir(Path dirPath) {
+        String filesFound = null;
+        try (Stream<Path> files = Files.list(dirPath)) {
+            filesFound =
+                    files.map(p -> p.getFileName().toString()).collect(Collectors.joining(", "));
+        } catch (IOException e) {
+            CLog.e(e);
+        }
+        return filesFound;
     }
 
     /**

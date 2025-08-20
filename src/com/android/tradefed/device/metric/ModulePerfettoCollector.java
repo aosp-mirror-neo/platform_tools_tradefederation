@@ -24,6 +24,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.FileInputStreamSource;
 import com.android.tradefed.result.LogDataType;
+import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.util.PerfettoTraceRecorder;
 
 import java.io.File;
@@ -63,43 +64,51 @@ public class ModulePerfettoCollector extends BaseDeviceMetricCollector {
         setDisableReceiver(false);
     }
 
-    public void setModuleLevelFlag(boolean levelFlag) {
-        mModuleLevelFlag = levelFlag;
-    }
-
     public boolean isOnModuleLevel() {
-        return mModuleLevelFlag;
+        return getModuleName() != null;
     }
 
     @Override
     public void onTestModuleStarted() throws DeviceNotAvailableException {
-        CLog.d("ModulePerfettoCollector: onTestModuleStarted");
-        setModuleLevelFlag(true);
-        startCollecting();
+        if (isOnModuleLevel()) {
+            CLog.d("ModulePerfettoCollector: onTestModuleStarted");
+            startCollecting("onTestModuleStarted");
+        }
     }
 
     @Override
     public void onTestRunStart(DeviceMetricData runData) {
-        CLog.d("ModulePerfettoCollector: onTestRunStart");
-        if (!isOnModuleLevel()) {
-            startCollecting();
+        if (isOnModuleLevel()) {
+            return;
         }
+        CLog.d("ModulePerfettoCollector: onTestRunStart");
+        startCollecting("onTestRunStart");
     }
 
     @Override
     public void onTestRunEnd(
             DeviceMetricData runData, final Map<String, Metric> currentRunMetrics) {
+        if (isOnModuleLevel()) {
+            return;
+        }
         CLog.d("ModulePerfettoCollector: onTestRunEnd");
+        stopCollecting("onTestRunEnd");
+    }
+
+    @Override
+    public void onTestRunFailed(DeviceMetricData runData, FailureDescription failure)
+            throws DeviceNotAvailableException {
         if (!isOnModuleLevel()) {
-            stopCollecting("onTestRunEnd");
+            stopCollecting("onTestRunFailed");
         }
     }
 
     @Override
     public void onTestModuleEnded() throws DeviceNotAvailableException {
-        CLog.d("ModulePerfettoCollector: onTestModuleEnded");
-        setModuleLevelFlag(false);
-        stopCollecting("onTestModuleEnded");
+        if (isOnModuleLevel()) {
+            CLog.d("ModulePerfettoCollector: onTestModuleEnded");
+            stopCollecting("onTestModuleEnded");
+        }
     }
 
     @Override
@@ -119,8 +128,8 @@ public class ModulePerfettoCollector extends BaseDeviceMetricCollector {
         startTraceOnDevice(device);
     }
 
-    private void startCollecting() {
-        CLog.d("ModulePerfettoCollector: startCollecting");
+    private void startCollecting(String eventName) {
+        CLog.d("ModulePerfettoCollector: startCollecting on event: %s", eventName);
         for (ITestDevice device : getRealDevices()) {
             startTraceOnDevice(device);
         }

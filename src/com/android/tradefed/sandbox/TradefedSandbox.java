@@ -475,6 +475,7 @@ public class TradefedSandbox implements ISandbox {
             }
             String[] args =
                     QuotationAwareTokenizer.tokenizeLine(commandLine, /* No Logging */ false);
+            args = removeIncompatibleFlags(args);
 
             mGlobalConfig = dumpGlobalConfig(config, new HashSet<>());
             try (InputStreamSource source = new FileInputStreamSource(mGlobalConfig)) {
@@ -624,7 +625,6 @@ public class TradefedSandbox implements ISandbox {
         PrintWriter pw = null;
 
         try {
-            args = removeIncompatibleFlags(args);
             if (options.dumpTestTemplate()) {
                 args = extractTestTemplate(args);
             }
@@ -728,7 +728,8 @@ public class TradefedSandbox implements ISandbox {
             return new String[0];
         }
         try {
-            String[] commandArray = TradefedDelegator.clearCommandlineFromOneArg(args, "rollout-flags");
+            String[] commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(args, "rollout-flags");
             commandArray = TradefedDelegator.clearCommandlineFromOneArg(
                     commandArray, "report-cache-invocation-results-postsubmit", true);
             return commandArray;

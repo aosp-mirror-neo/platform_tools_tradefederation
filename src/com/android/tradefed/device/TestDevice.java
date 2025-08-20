@@ -48,6 +48,7 @@ import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.TimeUtil;
 import com.android.tradefed.util.ZipUtil2;
+import com.android.tradefed.util.QuotationAwareTokenizer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -232,6 +233,97 @@ public class TestDevice extends NativeDevice {
             return false;
         }
         return hasFeature("android.software.app_enumeration");
+    }
+
+    /**
+     * Core implementation of package installation, with retries around {@link
+     * IDevice#installPackage(String, boolean, String...)}
+     *
+     * @param packageFile
+     * @param reinstall
+     * @param extraArgs
+     * @return the response from the installation
+     * @throws DeviceNotAvailableException
+     */
+    private String adbInstallPackage(
+            final File packageFile, final boolean reinstall, final List<String> extraArgs)
+            throws DeviceNotAvailableException {
+        long startTime = System.currentTimeMillis();
+        File tmpAPKFile = null;
+        try {
+            List<String> adbCmd = new ArrayList<>();
+            adbCmd.add("install");
+            if (packageFile.getName().endsWith(APEX_SUFFIX)) {
+                adbCmd.add(APEX_ARG);
+            }
+
+            if (reinstall) {
+                adbCmd.add("-r");
+            }
+            for (String arg: extraArgs) {
+                String[] commandArgs =
+                        QuotationAwareTokenizer.tokenizeLine(arg, false);
+                adbCmd.addAll(Arrays.asList(commandArgs));
+            }
+
+            if (packageFile.getName().endsWith(".tmp")) {
+                tmpAPKFile = FileUtil.createTempFile("tmpapkfile", ".apk");
+                boolean success = packageFile.renameTo(tmpAPKFile);
+                if (success) {
+                    adbCmd.add(tmpAPKFile.getAbsolutePath());
+                } else {
+                    throw new DeviceNotAvailableException(
+                            String.format(
+                                    "Failed to convert .tmp file to .apk file: %s",
+                                    packageFile.getAbsolutePath()),
+                            getSerialNumber()
+                    );
+                }
+            } else {
+                adbCmd.add(packageFile.getAbsolutePath());
+            }
+            long maxTimeoutMs = TimeUnit.MINUTES.toMillis(INSTALL_TIMEOUT_MINUTES);
+            final String[] response = new String[1];
+            DeviceAction installAction =
+                    new DeviceAction() {
+                        @Override
+                        public boolean run() throws InstallException {
+                            try {
+                                CommandResult res =
+                                        executeAdbV2Command(
+                                                maxTimeoutMs,
+                                                new HashMap<>(),
+                                                adbCmd.toArray(new String[0]));
+                                response[0] = handleInstallationResult(res);
+                            } catch (DeviceNotAvailableException e) {
+                                response[0] = e.getMessage();
+                            }
+                            return response[0] == null;
+                        }
+                    };
+            CLog.v(
+                    "Installing package file %s with args %s on %s",
+                    packageFile.getAbsolutePath(), extraArgs.toString(), getSerialNumber());
+            performDeviceAction(
+                    String.format("install %s", packageFile.getAbsolutePath()),
+                    installAction,
+                    MAX_RETRY_ATTEMPTS);
+            List<File> packageFiles = new ArrayList<>();
+            packageFiles.add(packageFile);
+            allowLegacyStorageForApps(packageFiles);
+            return response[0];
+        } catch (IOException e) {
+            CLog.e("Faild to create temp apk file: %s", packageFile.getAbsolutePath());
+            return e.getMessage();
+        }
+        finally {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
+                    System.currentTimeMillis() - startTime);
+            FileUtil.deleteFile(tmpAPKFile);
+        }
     }
 
     /**
@@ -493,7 +585,7 @@ public class TestDevice extends NativeDevice {
         if (runtimePermissionSupported) {
             args.add("-g");
         }
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -507,7 +599,7 @@ public class TestDevice extends NativeDevice {
         if (grantPermissions) {
             args.add("-g");
         }
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -524,7 +616,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -541,7 +633,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInstallPackage(packageFile, reinstall, args);
     }
 
     /** {@inheritDoc} */
@@ -2147,22 +2239,28 @@ public class TestDevice extends NativeDevice {
 
         resetContentProviderSetup();
         long initialTime = getHostCurrentTime();
-        String output = executeShellCommand(switchCommand);
+        long timeoutDeadline = initialTime + timeout;
+        CommandResult res = executeShellV2Command(switchCommand);
+        boolean commandErr = !CommandStatus.SUCCESS.equals(res.getStatus());
         boolean success = userId == getCurrentUser();
-
-        while (!success && (getHostCurrentTime() - initialTime <= timeout)) {
+        while (!commandErr && !success && (getHostCurrentTime() <= timeoutDeadline)) {
             // retry
             RunUtil.getDefault().sleep(getCheckNewUserSleep());
-            output = executeShellCommand(String.format(switchCommand));
+            res = executeShellV2Command(switchCommand);
+            commandErr = !CommandStatus.SUCCESS.equals(res.getStatus());
             success = userId == getCurrentUser();
         }
 
+        if (commandErr) {
+            CLog.e("Faild to switch user due to error: %s", res.getStderr());
+            return false;
+        }
         CLog.d("switchUser took %d ms", getHostCurrentTime() - initialTime);
         if (success) {
             prePostBootSetup();
             return true;
         } else {
-            CLog.e("User did not switch in the given %d timeout: %s", timeout, output);
+            CLog.e("User did not switch in the given %d timeout: %s", timeout, res.getStdout());
             return false;
         }
     }
@@ -3528,7 +3626,20 @@ public class TestDevice extends NativeDevice {
         }
     }
 
-    private String handleInstallationError(InstallException e) {
+    private String handleInstallationResult(CommandResult res) {
+        if (res.getStatus() == CommandStatus.SUCCESS) {
+            return null;
+        }
+        // For ADB client side error it show in stderr
+        if (res.getStderr() != null) {
+            return res.getStderr();
+        }
+
+        // For device side error eg.INSTALL_FAILED_ALREADY_EXISTS it will show in stdout.
+        return res.getStdout();
+    }
+
+    private String handleInstallationError(Exception e) {
         String message = e.getMessage();
         if (message == null) {
             message =

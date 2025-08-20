@@ -69,7 +69,6 @@ public class InstallApexModuleTargetPreparer extends SuiteApkInstaller {
     private static final String TRAIN_WITH_APEX_INSTALL_OPTION = "install-multi-package";
     private static final String ENABLE_ROLLBACK_INSTALL_OPTION = "--enable-rollback";
     private static final String STAGED_INSTALL_OPTION = "--staged";
-    private static final String ACTIVATED_APEX_SOURCEDIR_PREFIX = "data";
     private static final int R_SDK_INT = 30;
     // Pattern used to identify the package names from adb shell pm path.
     private static final Pattern PACKAGE_REGEX = Pattern.compile("package:(.*)");
@@ -411,9 +410,10 @@ public class InstallApexModuleTargetPreparer extends SuiteApkInstaller {
     Set<String> getApexInData(Set<ApexInfo> activatedApexes) {
         Set<String> apexInData = new HashSet<>();
         for (ApexInfo apex : activatedApexes) {
-            if (apex.sourceDir.startsWith(APEX_DATA_DIR, 0) ||
-                apex.sourceDir.startsWith(STAGING_DATA_DIR, 0) ||
-                apex.sourceDir.startsWith(SESSION_DATA_DIR, 0)) {
+            if (!apex.isFactory
+                    || apex.sourceDir.startsWith(APEX_DATA_DIR, 0)
+                    || apex.sourceDir.startsWith(STAGING_DATA_DIR, 0)
+                    || apex.sourceDir.startsWith(SESSION_DATA_DIR, 0)) {
                 apexInData.add(apex.name);
             }
         }
@@ -1202,6 +1202,12 @@ public class InstallApexModuleTargetPreparer extends SuiteApkInstaller {
     private void cleanUpStagedAndActiveSession(ITestDevice device)
             throws DeviceNotAvailableException {
         boolean reboot = false;
+        for (ApexInfo apex : device.getActiveApexes()) {
+            if (!apex.isFactory) {
+                device.uninstallPackage(apex.name);
+                reboot = true;
+            }
+        }
         if (!mTestApexInfoList.isEmpty()) {
             device.deleteFile(APEX_DATA_DIR + "*");
             device.deleteFile(STAGING_DATA_DIR + "*");
@@ -1299,10 +1305,9 @@ public class InstallApexModuleTargetPreparer extends SuiteApkInstaller {
                     != testApexInfo.versionCode) {
                 failToActivateApex.add(testApexInfo);
             } else {
-                String sourceDir = activatedApexInfo.get(testApexInfo.name).sourceDir;
-                // Activated apex sourceDir starts with "/data"
+                // Activated apex should be an updated one.
                 if (getDevice().checkApiLevelAgainstNextRelease(R_SDK_INT)
-                        && !sourceDir.startsWith(ACTIVATED_APEX_SOURCEDIR_PREFIX, 1)) {
+                        && activatedApexInfo.get(testApexInfo.name).isFactory) {
                     failToActivateApex.add(testApexInfo);
                 }
             }
