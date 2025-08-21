@@ -28,6 +28,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -87,7 +88,7 @@ public class FuseMountManagerFactoryIntegrationTest {
     }
 
     @Test
-    public void testCreateCasManager_makesClientExecutable() throws Exception {
+    public void createCasManager_makesClientExecutable() throws Exception {
         // 1. Create a fake casviewer file in our temporary directory.
         File casClientFile = tempFolder.newFile("casviewer");
 
@@ -113,6 +114,25 @@ public class FuseMountManagerFactoryIntegrationTest {
                                 + " new perms: %s).",
                         oldPerms, newPerms);
         assertTrue(message, Files.isExecutable(casClientFile.toPath()));
+    }
+
+    @Test
+    public void removeStaleMountPoints_removesOldMountPoints() throws Exception {
+        // The tempFolder will act as our controlled mount root for this test.
+        File staleMountPoint = tempFolder.newFolder("stale_mount");
+        File recebtMountPoint = tempFolder.newFolder("recent_mount");
+        // Set the modification time to 25 hours ago.
+        staleMountPoint.setLastModified(System.currentTimeMillis() - TimeUnit.HOURS.toMillis(25));
+
+        assertTrue("Pre-condition: stale mount point should exist.", staleMountPoint.exists());
+        assertTrue("Pre-condition: recent mount point should exist.", recebtMountPoint.exists());
+
+        // Invoke the static method directly and pass our temporary test directory.
+        FuseMountManagerFactory.removeStaleMountPoints(tempFolder.getRoot().toPath());
+
+        // Verify that only the stale file was removed.
+        assertFalse("Stale mount point should have been deleted.", staleMountPoint.exists());
+        assertTrue("Recent mount point should not have been deleted.", recebtMountPoint.exists());
     }
 
     private String getFilePermissions(File file) {

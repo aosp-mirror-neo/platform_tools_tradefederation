@@ -21,15 +21,12 @@ import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
-import com.android.tradefed.device.UserInfo;
 import com.android.tradefed.device.UserInfo.UserType;
-import com.android.tradefed.error.HarnessRuntimeException;
+import com.android.tradefed.device.UserSwitcher;
 import com.android.tradefed.invoker.ExecutionProperties;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.testmapping.TestInfo;
-
-import java.util.Locale;
 
 import javax.annotation.Nullable;
 
@@ -41,7 +38,6 @@ import javax.annotation.Nullable;
  */
 @OptionClass(alias = "switch-user-target-preparer")
 public class SwitchUserTargetPreparer extends BaseTargetPreparer {
-
     public static final String OPTION_USER_TYPE = "user-type";
 
     /**
@@ -62,57 +58,22 @@ public class SwitchUserTargetPreparer extends BaseTargetPreparer {
             description = "The type of user to switch to before the module run.")
     private UserType mUserType = UserType.CURRENT;
 
-    private int mPreExecutionCurrentUser;
+    private @Nullable UserSwitcher mUserSwitcher; // instantiate on setUp
+
     private @Nullable Integer mPreparedUserId;
 
     @Override
     public void setUp(TestInformation testInformation)
             throws TargetSetupError, DeviceNotAvailableException {
-        ITestDevice device = testInformation.getDevice();
-        setUserType(device);
-
-        mPreExecutionCurrentUser = device.getCurrentUser();
-        CLog.d(
-                "on setUp(): mPreExecutionCurrentUser=%d, mUserType=%s",
-                mPreExecutionCurrentUser, mUserType);
-
-        int userIdToSwitch = getUserIdOfType(device, mUserType);
-        if (userIdToSwitch == UserInfo.USER_NULL) {
-            throw new TargetSetupError(
-                    String.format(
-                            Locale.ENGLISH,
-                            "Failed to switch to user type %s: No user of this type was found on"
-                                    + " the device.",
-                            mUserType),
-                    device.getDeviceDescriptor());
-        }
-
-        if (userIdToSwitch == mPreExecutionCurrentUser) {
-            CLog.i(
-                    "Current user %d is already the target user; no switch required.",
-                    mPreExecutionCurrentUser);
-            setPreparedUser(testInformation, userIdToSwitch);
-            return;
-        }
-
-        if (!device.switchUser(userIdToSwitch)) {
-            throw new TargetSetupError(
-                    String.format(
-                            Locale.ENGLISH, "Device failed to switch to user %d.", userIdToSwitch),
-                    device.getDeviceDescriptor());
-        }
-        setPreparedUser(testInformation, userIdToSwitch);
+        mUserSwitcher = new UserSwitcher(testInformation.getDevice(), mUserType);
+        int switchedUser = mUserSwitcher.switchUser();
+        setPreparedUser(testInformation, switchedUser);
     }
 
     @Override
     public void tearDown(TestInformation testInformation, Throwable e)
             throws DeviceNotAvailableException {
-        // Restore the previous user as the foreground.
-        if (testInformation.getDevice().switchUser(mPreExecutionCurrentUser)) {
-            CLog.d("Successfully switched back to user id: %d", mPreExecutionCurrentUser);
-        } else {
-            CLog.w("Could not switch back to the user id: %d", mPreExecutionCurrentUser);
-        }
+        mUserSwitcher.switchBack();
         setPreparedUser(testInformation, /* userId= */ null);
     }
 
@@ -147,42 +108,5 @@ public class SwitchUserTargetPreparer extends BaseTargetPreparer {
             CLog.d("Removing property %s", PROPERTY_PREPARED_USER);
             props.remove(PROPERTY_PREPARED_USER);
         }
-    }
-
-    /**
-     * In some form factors running on headless system user mode, it is restricted to switch to the
-     * {@link UserType#SYSTEM SYSTEM} user. In such cases, change the {@link #mUserType} to the
-     * first {@link UserType#FULL FULL} user.
-     */
-    private void setUserType(ITestDevice device) throws DeviceNotAvailableException {
-        try {
-            if (UserType.SYSTEM.equals(mUserType)
-                    && device.isHeadlessSystemUserMode()
-                    && !device.canSwitchToHeadlessSystemUser()) {
-                mUserType = UserType.FULL;
-                CLog.i("SwitchUserTargetPreparer is configured to switch to a FULL user.");
-            }
-        } catch (HarnessRuntimeException e) {
-            CLog.w("Unable to get the main user switch-ability. Error: ", e);
-        }
-    }
-
-    /**
-     * Returns the ID of the first user matching the specified {@link UserType}. Returns {@code
-     * UserInfo.USER_NULL} if no such user is found.
-     */
-    private int getUserIdOfType(ITestDevice device, UserType userType)
-            throws DeviceNotAvailableException {
-        int currentUser = device.getCurrentUser();
-        for (UserInfo userInfo : device.getUserInfos().values()) {
-            if (userInfo.isUserType(userType, currentUser)) {
-                CLog.i(
-                        "Found user %d (type: %s) as the target for switching.",
-                        userInfo.userId(), userType.toString());
-                return userInfo.userId();
-            }
-        }
-        CLog.w("No user found matching the type: %s.", userType.toString());
-        return UserInfo.USER_NULL;
     }
 }
