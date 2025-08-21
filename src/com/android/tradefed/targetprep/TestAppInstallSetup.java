@@ -572,7 +572,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
         String result = installPackage(testDevice, apkFiles);
 
         if (result != null) {
-            if (result.contains(INSTALL_FAILED_UPDATE_INCOMPATIBLE)) {
+            if (result.startsWith(INSTALL_FAILED_UPDATE_INCOMPATIBLE)) {
                 // Try to uninstall package and reinstall.
                 uninstallPackage(testDevice, packageName);
                 result = installPackage(testDevice, apkFiles);
@@ -580,7 +580,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
         }
 
         if (result != null) {
-            if (result.contains(INSTALL_FAILED_CONFLICTING_PROVIDER)) {
+            if (result.startsWith(INSTALL_FAILED_CONFLICTING_PROVIDER)) {
                 // Try to uninstall the conflicting package and reinstall this package.
                 Matcher matcher = CONFLICTING_PROVIDER_PATTERN.matcher(result);
                 if (matcher.find()) {
