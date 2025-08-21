@@ -78,7 +78,6 @@ import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.ProcessInfo;
 import com.android.tradefed.util.QuotationAwareTokenizer;
 import com.android.tradefed.util.RunUtil;
-import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.SizeLimitedOutputStream;
 import com.android.tradefed.util.StringEscapeUtils;
 import com.android.tradefed.util.SystemUtil;
@@ -1134,22 +1133,6 @@ public class NativeDevice
     public CommandResult executeShellV2Command(String cmd) throws DeviceNotAvailableException {
         return executeShellV2Command(cmd, getCommandTimeout(), TimeUnit.MILLISECONDS);
     }
-
-    /** {@inheritDoc} */
-    @Override
-    public CommandResult executeShellV2Command(String cmd, IShellOutputReceiver receiver)
-            throws DeviceNotAvailableException {
-        ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
-        return executeShellV2Command(
-                cmd,
-                null,
-                outputReceiverStream,
-                outputReceiverStream,
-                getCommandTimeout(),
-                TimeUnit.MILLISECONDS,
-                MAX_RETRY_ATTEMPTS);
-    }
-    ;
 
     /** {@inheritDoc} */
     @Override
@@ -2290,7 +2273,8 @@ public class NativeDevice
     FileEntry[] getFileChildren(final FileEntry remoteFileEntry)
             throws DeviceNotAvailableException {
         // time this operation because its known to hang
-        FileQueryAction action = new FileQueryAction(remoteFileEntry, this);
+        FileQueryAction action = new FileQueryAction(remoteFileEntry,
+                getIDevice().getFileListingService());
         performDeviceAction("buildFileCache", action, 1 /* one retry */);
         return action.mFileContents;
     }
@@ -2299,23 +2283,19 @@ public class NativeDevice
 
         FileEntry[] mFileContents = null;
         private final FileEntry mRemoteFileEntry;
-        private final INativeDevice mDevice;
+        private final FileListingService mService;
 
-        FileQueryAction(FileEntry remoteFileEntry, INativeDevice device) {
+        FileQueryAction(FileEntry remoteFileEntry, FileListingService service) {
             throwIfNull(remoteFileEntry);
-            throwIfNull(device);
+            throwIfNull(service);
             mRemoteFileEntry = remoteFileEntry;
-            mDevice = device;
+            mService = service;
         }
 
         @Override
-        public boolean run()
-                throws TimeoutException,
-                        IOException,
-                        AdbCommandRejectedException,
-                        ShellCommandUnresponsiveException,
-                        DeviceNotAvailableException {
-            mFileContents = FileListingService.getChildrenSync(mRemoteFileEntry, mDevice);
+        public boolean run() throws TimeoutException, IOException, AdbCommandRejectedException,
+                ShellCommandUnresponsiveException {
+            mFileContents = mService.getChildrenSync(mRemoteFileEntry);
             return true;
         }
     }

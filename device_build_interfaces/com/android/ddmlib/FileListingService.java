@@ -17,13 +17,12 @@
 package com.android.ddmlib;
 
 import com.android.annotations.NonNull;
-import com.android.tradefed.device.DeviceNotAvailableException;
-import com.android.tradefed.device.INativeDevice;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -597,12 +596,11 @@ public final class FileListingService {
          * Determine if any symlinks in the <code entries> list are links-to-directories, and if so
          * mark them as such.  This allows us to traverse them properly later on.
          */
-        public void finishLinks(INativeDevice device, ArrayList<FileEntry> entries)
+        public void finishLinks(IDevice device, ArrayList<FileEntry> entries)
                 throws TimeoutException,
                         AdbCommandRejectedException,
                         ShellCommandUnresponsiveException,
-                        IOException,
-                        DeviceNotAvailableException {
+                        IOException {
             final int[] nLines = {0};
             MultiLineReceiver receiver =
                     new MultiLineReceiver() {
@@ -634,7 +632,7 @@ public final class FileListingService {
                 final String command =
                         String.format("ls -l -d %s%s", entry.getFullEscapedPath(), FILE_SEPARATOR);
 
-                device.executeShellV2Command(command, receiver);
+                device.executeShellCommand(command, receiver);
 
                 if (nLines[0] > 0) {
                     // We saw lines matching the directory pattern, so it's a directory!
@@ -715,7 +713,101 @@ public final class FileListingService {
      */
     public FileEntry[] getChildren(
             final FileEntry entry, boolean useCache, final IListingReceiver receiver) {
-        // TODO: remove all the reference.
+        // first thing we do is check the cache, and if we already have a recent
+        // enough children list, we just return that.
+        if (useCache && !entry.needFetch()) {
+            return entry.getCachedChildren();
+        }
+
+        // if there's no receiver, then this is a synchronous call, and we
+        // return the result of ls
+        if (receiver == null) {
+            doLs(entry);
+            return entry.getCachedChildren();
+        }
+
+        // this is a asynchronous call.
+        // we launch a thread that will do ls and give the listing
+        // to the receiver
+        Thread t = new Thread("ls " + entry.getFullPath()) { // $NON-NLS-1$
+                    @Override
+                    public void run() {
+                        doLs(entry);
+
+                        receiver.setChildren(entry, entry.getCachedChildren());
+
+                        final FileEntry[] children = entry.getCachedChildren();
+                        if (children.length > 0 && children[0].isApplicationPackage()) {
+                            final HashMap<String, FileEntry> map = new HashMap<String, FileEntry>();
+
+                            for (FileEntry child : children) {
+                                String path = child.getFullPath();
+                                map.put(path, child);
+                            }
+
+                            // call pm.
+                            String command = PM_FULL_LISTING;
+                            try {
+                                mDevice.executeShellCommand(
+                                        command,
+                                        new MultiLineReceiver() {
+                                            @Override
+                                            public void processNewLines(@NonNull String[] lines) {
+                                                for (String line : lines) {
+                                                    if (!line.isEmpty()) {
+                                                        // get the filepath and package from the
+                                                        // line
+                                                        Matcher m = sPmPattern.matcher(line);
+                                                        if (m.matches()) {
+                                                            // get the children with that path
+                                                            FileEntry entry = map.get(m.group(1));
+                                                            if (entry != null) {
+                                                                entry.info = m.group(2);
+                                                                receiver.refreshEntry(entry);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            @Override
+                                            public boolean isCancelled() {
+                                                return false;
+                                            }
+                                        });
+                            } catch (Exception e) {
+                                // adb failed somehow, we do nothing.
+                            }
+                        }
+
+                        // if another thread is pending, launch it
+                        synchronized (mThreadList) {
+                            // first remove ourselves from the list
+                            mThreadList.remove(this);
+
+                            // then launch the next one if applicable.
+                            if (!mThreadList.isEmpty()) {
+                                Thread t = mThreadList.get(0);
+                                t.start();
+                            }
+                        }
+                    }
+                };
+
+        // we don't want to run multiple ls on the device at the same time, so we
+        // store the thread in a list and launch it only if there's no other thread running.
+        // the thread will launch the next one once it's done.
+        synchronized (mThreadList) {
+            // add to the list
+            mThreadList.add(t);
+
+            // if it's the only one, launch it.
+            if (mThreadList.size() == 1) {
+                t.start();
+            }
+        }
+
+        // and we return null.
         return null;
     }
 
@@ -733,22 +825,28 @@ public final class FileListingService {
      *     for a period longer than <var>maxTimeToOutputResponse</var>.
      * @throws IOException in case of I/O error on the connection.
      */
-    public static FileEntry[] getChildrenSync(final FileEntry entry, INativeDevice device)
+    public FileEntry[] getChildrenSync(final FileEntry entry)
             throws TimeoutException,
                     AdbCommandRejectedException,
                     ShellCommandUnresponsiveException,
-                    IOException,
-                    DeviceNotAvailableException {
-        doLsAndThrow(entry, device);
+                    IOException {
+        doLsAndThrow(entry);
         return entry.getCachedChildren();
     }
 
-    private static void doLsAndThrow(FileEntry entry, INativeDevice device)
+    private void doLs(FileEntry entry) {
+        try {
+            doLsAndThrow(entry);
+        } catch (Exception e) {
+            // do nothing
+        }
+    }
+
+    private void doLsAndThrow(FileEntry entry)
             throws TimeoutException,
                     AdbCommandRejectedException,
                     ShellCommandUnresponsiveException,
-                    IOException,
-                    DeviceNotAvailableException {
+                    IOException {
         // create a list that will receive the list of the entries
         ArrayList<FileEntry> entryList = new ArrayList<FileEntry>();
 
@@ -769,10 +867,10 @@ public final class FileListingService {
             LsReceiver receiver = new LsReceiver(entry, entryList, linkList);
 
             // call ls.
-            device.executeShellV2Command(command, receiver);
+            mDevice.executeShellCommand(command, receiver);
 
             // finish the process of the receiver to handle links
-            receiver.finishLinks(device, entryList);
+            receiver.finishLinks(mDevice, entryList);
         } finally {
             // at this point we need to refresh the viewer
             entry.fetchTime = System.currentTimeMillis();
