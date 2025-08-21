@@ -305,6 +305,8 @@ public class InvocationMetricLogger {
         CAS_UNMOUNT_SIGKILL_FAILURE_COUNT("cas_unmount_sigkill_failure_count", true),
         CAS_UNMOUNT_LAZZY_UNMOUNT_FAILURE_COUNT("cas_unmount_lazy_unmount_failure_count", true),
         CAS_UNMOUNT_CLEANUP_FAILURE_COUNT("cas_unmount_cleanup_failure_count", true),
+        CAS_UNMOUNT_DEFENSIC_CLEANUP_STALE_COUNT(
+                "cas_unmount_defensive_cleanup_stale_count", true),
         CAS_UNMOUNT_DEFENSIC_CLEANUP_FAILURE_COUNT(
                 "cas_unmount_defensive_cleanup_failure_count", true),
         // Records CAS converter metrics

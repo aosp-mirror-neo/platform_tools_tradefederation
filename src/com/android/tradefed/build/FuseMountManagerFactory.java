@@ -32,7 +32,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -121,7 +122,7 @@ public class FuseMountManagerFactory {
         // A physical TF host typically has 14 devices and runs at most that many tests in parallel.
         // Allow for 2x that many concurrent tests.
         if (count > 30) {
-            removeStaleMountPoints();
+            removeStaleMountPoints(mMountRoot);
         }
     }
 
@@ -129,28 +130,48 @@ public class FuseMountManagerFactory {
      * Removes stale mount points older than 24 hours.
      *
      * <p>TF invocations don't last more than 24 hours. Remove any mount points older than that.
+     *
+     * @param mountRoot The mount root directory to scan for stale mount points.
      */
     @VisibleForTesting
-    private static void removeStaleMountPoints() {
-        long twentyFourHoursAgo = System.currentTimeMillis() - 1000 * 24 * 60 * 60;
-        try (Stream<Path> files = Files.list(mMountRoot)) {
-            AtomicInteger attempted = new AtomicInteger(0);
-            AtomicInteger failed = new AtomicInteger(0);
-            files.filter(p -> p.toFile().lastModified() < twentyFourHoursAgo)
-                    .forEach(
-                            p -> {
-                                attempted.incrementAndGet();
-                                if (!deleteMountPointNoThrow(p)) {
-                                    failed.incrementAndGet();
-                                }
-                            });
-            if (attempted.get() > 0) {
+    protected static void removeStaleMountPoints(Path mountRoot) {
+        long twentyFourHoursAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(24);
+
+        try (Stream<Path> files = Files.list(mountRoot)) {
+            // Create a map to functionally count the successes and failures
+            // We'll collect a Map<Boolean, Long> where true=success, false=failure
+            Map<Boolean, Long> results =
+                files.filter(p -> {
+                        try {
+                            // Use Files.getLastModifiedTime directly on the Path for efficiency
+                            return Files.getLastModifiedTime(p).toMillis() < twentyFourHoursAgo;
+                        } catch (IOException e) {
+                            // Log error and leave it alone (stay on the safe side).
+                            CLog.e(
+                                "Could not get last modified time for '%s'", p, e);
+                            return false;
+                        }
+                    })
+                    .collect(
+                        Collectors.partitioningBy(
+                            FuseMountManagerFactory::deleteMountPointNoThrow,
+                            Collectors.counting()));
+
+            long failed = results.getOrDefault(false, 0L);
+            long stale = results.getOrDefault(true, 0L) + failed;
+
+            if (stale > 0) {
                 CLog.d(
-                        "Attempted to remove %d stale mount points. %d failed.",
-                        attempted.get(), failed.get());
+                    "Attempted to remove %d stale mount points. %d failed.",
+                    stale, failed);
                 InvocationMetricLogger.addInvocationMetrics(
-                        InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_FAILURE_COUNT,
-                        failed.get());
+                    InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_STALE_COUNT, stale);
+                if (failed > 0) {
+                    InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_FAILURE_COUNT, failed);
+                }
+            } else {
+                CLog.d("No stale mount points (not modified in the last 24 hours) found.");
             }
         } catch (IOException e) {
             CLog.e("Failed to remove stale mount points: %s", e.getMessage());
@@ -162,12 +183,12 @@ public class FuseMountManagerFactory {
      *
      * @return {@code true} if the mount point was deleted, {@code false} otherwise.
      */
-    private static boolean deleteMountPointNoThrow(Path mountPoint) {
+    private static boolean deleteMountPointNoThrow(Path p) {
         try {
-            Files.delete(mountPoint);
+            Files.delete(p);
             return true;
-        } catch (IOException e) {
-            CLog.e("Failed to delete stale mount point %s: %s", mountPoint, e.getMessage());
+        } catch (IOException | SecurityException e) {
+            CLog.e("Failed to delete mount point: '%s'", p, e);
             return false;
         }
     }
