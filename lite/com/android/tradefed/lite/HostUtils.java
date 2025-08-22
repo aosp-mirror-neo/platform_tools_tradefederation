@@ -183,13 +183,15 @@ public final class HostUtils {
         } catch (ClassNotFoundException cnfe) {
             throw new IllegalArgumentException(
                     String.format("Cannot find test class %s", className), cnfe);
-        } catch (IllegalAccessError | NoClassDefFoundError | VerifyError err) {
+        } catch (IncompatibleClassChangeError | NoClassDefFoundError | VerifyError err) {
             // NOTE: If we get these errors, we assume it's not a test class.
             // However, unfortunately, that's not always true. See: b/437397316
             //
-            // IllegalAccessError can happen when the class or one of its super
-            // class/interfaces are package-private. We can't load such class from
-            // here (= outside of the package). Since our intention is not to load
+            // IncompatibleClassChangeError encompasses several different errors that can occur
+            // when loading a class without having full access to its dependencies.
+            // This includes IllegalAccessError, which can happen when the class or one of its
+            // super class/interfaces are package-private. In such cases, we can't load such
+            // a class from here (= outside of the package). Since our intention is not to load
             // all classes in the jar, but to find our the main test classes, this
             // can be safely skipped.
             //
