@@ -254,21 +254,30 @@ public final class ClangCodeCoverageCollector extends BaseDeviceMetricCollector
         // locally since the parent process is responsible for cleaning it up.
         File configurationTool = mConfiguration.getCoverageOptions().getLlvmProfdataPath();
         if (configurationTool != null) {
+            CLog.i(
+                    "Using llvm-profdata from configuration: %s",
+                    configurationTool.getAbsolutePath());
             return configurationTool;
         }
         if (mLlvmProfileTool != null && mLlvmProfileTool.exists()) {
+            CLog.i("Using cached llvm-profdata: %s", mLlvmProfileTool.getAbsolutePath());
             return mLlvmProfileTool;
         }
 
         // Otherwise, try to download llvm-profdata.zip from the build and cache it.
         File profileToolZip = null;
         for (IBuildInfo info : getBuildInfos()) {
+            CLog.i("Trying to find llvm-profdata.zip in build info: %s", info.getBuildId());
             if (info.getFile("llvm-profdata.zip") != null) {
+                CLog.i("Using llvm-profdata from build: %s", info.getBuildId());
                 profileToolZip = info.getFile("llvm-profdata.zip");
                 mLlvmProfileTool = ZipUtil.extractZipToTemp(profileToolZip, "llvm-profdata");
                 return mLlvmProfileTool;
+            } else {
+                CLog.i("Failed to find llvm-profdata.zip in build info: %s", info.getBuildId());
             }
         }
+        CLog.w("Failed to find llvm-profdata.zip in build artifacts.");
         return mLlvmProfileTool;
     }
 
