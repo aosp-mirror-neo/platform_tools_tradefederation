@@ -222,7 +222,7 @@ public final class JavaCodeCoverageCollector extends BaseDeviceMetricCollector
             }
             try {
                 mExecFileLoader.load(coverageFile);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 CLog.w("Failed to load coverage measurement %s.", coverageFile);
                 CLog.w(e);
             }
