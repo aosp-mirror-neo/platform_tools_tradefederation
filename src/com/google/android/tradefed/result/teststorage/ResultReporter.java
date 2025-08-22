@@ -1971,6 +1971,10 @@ public class ResultReporter
                 CLog.v("ResultDB reporter is null, skipping reporting storage path.");
                 return;
             }
+            if (rdbReporter.isDisabled()) {
+                CLog.v("ResultDB reporter is disabled, skipping reporting storage path.");
+                return;
+            }
             // Temporary solution to sent AnTS test artifact storage path to ResultDB, as part of
             // the migration from AnTS to ResultDB (go/convergence-tr).
             // TODO(beining): Remove this method once we can properly migrate AnTS artifacts to

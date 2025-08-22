@@ -823,6 +823,10 @@ public class ResultDBReporter
         return true;
     }
 
+    public boolean isDisabled() {
+        return mDisable;
+    }
+
     /**
      * Extract the first line of the stack trace as the error message, and truncate the string to
      * the given max bytes.
