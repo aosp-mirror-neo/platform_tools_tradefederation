@@ -220,9 +220,14 @@ public final class HostUtils {
      * @return whether the class object has the JUnit4 test annotation
      */
     public static boolean hasJUnitAnnotation(Class<?> classObj) {
-        if (classObj.isAnnotationPresent(org.junit.runner.RunWith.class)
-                && org.junit.runner.Runner.class.isAssignableFrom(
-                        classObj.getAnnotation(org.junit.runner.RunWith.class).value())) {
+        var runWith = classObj.getAnnotation(org.junit.runner.RunWith.class);
+        if (runWith != null && org.junit.runner.Runner.class.isAssignableFrom(runWith.value())) {
+            // TODO(b/440649479): Remove this once we find a better way to handle this.
+            if ("android.platform.test.ravenwood.RavenwoodAwareTestRunner"
+                    .equals(runWith.value().getName())) {
+                // Always include classes modified by Ravenizer
+                return true;
+            }
             for (Method m : classObj.getMethods()) {
                 if (m.isAnnotationPresent(org.junit.Test.class)) {
                     return true;
