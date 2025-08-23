@@ -46,6 +46,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.TestRunnerUtil;
+import com.android.tradefed.util.ZipUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -200,15 +201,18 @@ public class RustBinaryHostTest extends RustTestBase implements IBuildReceiver {
         if (testCount > 0) {
             for (Invocation invocation : invocations) {
                 File profdata = null;
+                File profileTool = null;
                 try {
                     runTest(listener, invocation, runName);
                     if (isClangCoverageEnabled()) {
                         Set<String> profraws = FileUtil.findFiles(mCoverageDir, ".*\\.profraw");
-                        ClangProfileIndexer indexer =
-                                new ClangProfileIndexer(
-                                        getConfiguration()
-                                                .getCoverageOptions()
-                                                .getLlvmProfdataPath());
+                        profileTool = getConfiguration().getCoverageOptions().getLlvmProfdataPath();
+                        if (profileTool == null
+                                && mBuildInfo.getFile("llvm-profdata.zip") != null) {
+                            File profileToolZip = mBuildInfo.getFile("llvm-profdata.zip");
+                            profileTool = ZipUtil.extractZipToTemp(profileToolZip, "llvm-profdata");
+                        }
+                        ClangProfileIndexer indexer = new ClangProfileIndexer(profileTool);
                         profdata = FileUtil.createTempFile(runName, ".profdata");
                         indexer.index(profraws, profdata);
 
@@ -226,6 +230,7 @@ public class RustBinaryHostTest extends RustTestBase implements IBuildReceiver {
                     if (isClangCoverageEnabled()) {
                         FileUtil.deleteFile(profdata);
                         FileUtil.recursiveDelete(mCoverageDir);
+                        FileUtil.recursiveDelete(profileTool);
                         mCoverageDir = null;
                     }
                     profdata = null;
@@ -256,9 +261,7 @@ public class RustBinaryHostTest extends RustTestBase implements IBuildReceiver {
     }
 
     private CommandResult runInvocation(
-            final Invocation invocation,
-            IRunUtil runUtil,
-            final String... extraArgs) {
+            final Invocation invocation, IRunUtil runUtil, final String... extraArgs) {
         runUtil.setWorkingDir(invocation.workingDir);
         runUtil.unsetEnvVariable(
                 "TERM"); // Environment TERM can affect output format and fail parser

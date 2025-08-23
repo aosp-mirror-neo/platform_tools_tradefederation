@@ -13,16 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.tradefed.device.cloud;
+package com.android.tradefed.util;
 
-import com.android.tradefed.device.TestDeviceOptions;
 import com.android.tradefed.log.LogUtil.CLog;
-import com.android.tradefed.util.CommandResult;
-import com.android.tradefed.util.CommandStatus;
-import com.android.tradefed.util.FileUtil;
-import com.android.tradefed.util.GceRemoteCmdFormatter;
-import com.android.tradefed.util.GceRemoteCmdFormatter.ScpMode;
-import com.android.tradefed.util.IRunUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,7 +28,9 @@ public class RemoteFileUtil {
     /**
      * Fetch a remote file in the container instance.
      *
-     * @param remoteInstance The {@link GceAvdInfo} that describe the device.
+     * @param host The remote host.
+     * @param user The user on the remote host
+     * @param sshPrivateKeyPath The file containing the ssh key to use.
      * @param options a {@link TestDeviceOptions} describing the device options to be used for the
      *     GCE device.
      * @param runUtil a {@link IRunUtil} to execute commands.
@@ -44,8 +39,9 @@ public class RemoteFileUtil {
      * @return The pulled filed if successful, null otherwise
      */
     public static File fetchRemoteFile(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeout,
             String remoteFilePath) {
@@ -56,7 +52,7 @@ public class RemoteFileUtil {
                     FileUtil.createTempFile(
                             FileUtil.getBaseName(fileName) + "_", FileUtil.getExtension(fileName));
             if (fetchRemoteFile(
-                    remoteInstance, options, runUtil, timeout, remoteFilePath, localFile)) {
+                    host, user, sshPrivateKey, runUtil, timeout, remoteFilePath, localFile)) {
                 return localFile;
             }
         } catch (IOException e) {
@@ -69,9 +65,9 @@ public class RemoteFileUtil {
     /**
      * Fetch a remote file in the device or container instance.
      *
-     * @param remoteInstance The {@link GceAvdInfo} that describe the device.
-     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
-     *     GCE device.
+     * @param host The remote host.
+     * @param user The user on the remote host
+     * @param sshPrivateKeyPath The file containing the ssh key to use.
      * @param runUtil a {@link IRunUtil} to execute commands.
      * @param timeout in millisecond for the fetch to complete
      * @param remoteFilePath The remote path where to find the file.
@@ -79,29 +75,31 @@ public class RemoteFileUtil {
      * @return True if successful, False otherwise
      */
     public static boolean fetchRemoteFile(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeout,
             String remoteFilePath,
             File localFile) {
         return internalScpExec(
-                remoteInstance,
-                options,
+                host,
+                user,
+                sshPrivateKey,
                 null,
                 runUtil,
                 timeout,
                 remoteFilePath,
                 localFile,
-                ScpMode.PULL);
+                GceRemoteCmdFormatter.ScpMode.PULL);
     }
 
     /**
      * Fetch a remote directory from the remote host.
      *
-     * @param remoteInstance The {@link GceAvdInfo} that describe the device.
-     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
-     *     GCE device.
+     * @param host The remote host.
+     * @param user The user on the remote host
+     * @param sshPrivateKeyPath The file containing the ssh key to use.
      * @param runUtil a {@link IRunUtil} to execute commands.
      * @param timeout in millisecond for the fetch to complete
      * @param remoteDirPath The remote path where to find the directory.
@@ -109,37 +107,40 @@ public class RemoteFileUtil {
      * @return True if successful, False otherwise
      */
     public static boolean fetchRemoteDir(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeout,
             String remoteDirPath,
             File localDir) {
         return internalScpExec(
-                remoteInstance,
-                options,
+                host,
+                user,
+                sshPrivateKey,
                 Arrays.asList("-r"),
                 runUtil,
                 timeout,
                 remoteDirPath,
                 localDir,
-                ScpMode.PULL);
+                GceRemoteCmdFormatter.ScpMode.PULL);
     }
 
     /**
      * Fetch a remote directory from the remote host.
      *
-     * @param remoteInstance The {@link GceAvdInfo} that describe the device.
-     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
-     *     GCE device.
+     * @param host The remote host.
+     * @param user The user on the remote host
+     * @param sshPrivateKeyPath The file containing the ssh key to use.
      * @param runUtil a {@link IRunUtil} to execute commands.
      * @param timeout in millisecond for the fetch to complete
      * @param remoteDirPath The remote path where to find the directory.
      * @return The pulled directory {@link File} if successful, null otherwise
      */
     public static File fetchRemoteDir(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeout,
             String remoteDirPath) {
@@ -148,14 +149,15 @@ public class RemoteFileUtil {
         try {
             localFile = FileUtil.createTempDir(dirName);
             if (internalScpExec(
-                    remoteInstance,
-                    options,
+                    host,
+                    user,
+                    sshPrivateKey,
                     Arrays.asList("-r"),
                     runUtil,
                     timeout,
                     remoteDirPath,
                     localFile,
-                    ScpMode.PULL)) {
+                    GceRemoteCmdFormatter.ScpMode.PULL)) {
                 return localFile;
             }
         } catch (IOException e) {
@@ -168,28 +170,24 @@ public class RemoteFileUtil {
     /**
      * Check if a file (or directory) exists on the remote instance
      *
-     * @param remoteInstance The {@link GceAvdInfo} that describe the device.
-     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
-     *     GCE device.
+     * @param host The remote host.
+     * @param user The user on the remote host
+     * @param sshPrivateKeyPath The file containing the ssh key to use.
      * @param runUtil a {@link IRunUtil} to execute commands.
      * @param timeout in millisecond for the fetch to complete
      * @param remotePath The remote path where to find the file.
      * @return whether the file exists or not
      */
     public static boolean doesRemoteFileExist(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeout,
             String remotePath) {
         List<String> sshCmd =
                 GceRemoteCmdFormatter.getSshCommand(
-                        options.getSshPrivateKeyPath(),
-                        null,
-                        options.getInstanceUser(),
-                        remoteInstance.hostAndPort().getHost(),
-                        "ls",
-                        remotePath);
+                        sshPrivateKey, null, user, host, "ls", remotePath);
         CommandResult resSsh = runUtil.runTimedCmd(timeout, sshCmd.toArray(new String[0]));
         return resSsh != null && CommandStatus.SUCCESS.equals(resSsh.getStatus());
     }
@@ -197,9 +195,9 @@ public class RemoteFileUtil {
     /**
      * Push a {@link File} from the local host to the remote instance
      *
-     * @param remoteInstance The {@link GceAvdInfo} that describe the device.
-     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
-     *     GCE device.
+     * @param host The remote host.
+     * @param user The user on the remote host
+     * @param sshPrivateKeyPath The file containing the ssh key to use.
      * @param scpArgs extra args to be passed to the scp command
      * @param runUtil a {@link IRunUtil} to execute commands.
      * @param timeout in millisecond for the fetch to complete
@@ -208,39 +206,42 @@ public class RemoteFileUtil {
      * @return True if successful, False otherwise
      */
     public static boolean pushFileToRemote(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             List<String> scpArgs,
             IRunUtil runUtil,
             long timeout,
             String remoteFilePath,
             File localFile) {
         return internalScpExec(
-                remoteInstance,
-                options,
+                host,
+                user,
+                sshPrivateKey,
                 scpArgs,
                 runUtil,
                 timeout,
                 remoteFilePath,
                 localFile,
-                ScpMode.PUSH);
+                GceRemoteCmdFormatter.ScpMode.PUSH);
     }
 
     private static boolean internalScpExec(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             List<String> scpArgs,
             IRunUtil runUtil,
             long timeout,
             String remoteFilePath,
             File localFile,
-            ScpMode mode) {
+            GceRemoteCmdFormatter.ScpMode mode) {
         List<String> scpCmd =
                 GceRemoteCmdFormatter.getScpCommand(
-                        options.getSshPrivateKeyPath(),
+                        sshPrivateKey,
                         scpArgs,
-                        options.getInstanceUser(),
-                        remoteInstance.hostAndPort().getHost(),
+                        user,
+                        host,
                         remoteFilePath,
                         localFile.getAbsolutePath(),
                         mode);
@@ -248,7 +249,7 @@ public class RemoteFileUtil {
         if (!CommandStatus.SUCCESS.equals(resScp.getStatus())) {
             StringBuilder builder = new StringBuilder();
             builder.append("Issue when ");
-            if (ScpMode.PULL.equals(mode)) {
+            if (GceRemoteCmdFormatter.ScpMode.PULL.equals(mode)) {
                 builder.append("pulling ");
             } else {
                 builder.append("pushing ");

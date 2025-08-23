@@ -112,7 +112,6 @@ import com.android.tradefed.device.cloud.GceSshTunnelMonitorTest;
 import com.android.tradefed.device.cloud.NestedRemoteDeviceTest;
 import com.android.tradefed.device.cloud.OxygenUtilTest;
 import com.android.tradefed.device.cloud.RemoteAndroidVirtualDeviceTest;
-import com.android.tradefed.device.cloud.RemoteFileUtilTest;
 import com.android.tradefed.device.connection.AdbSshConnectionTest;
 import com.android.tradefed.device.connection.AdbTcpConnectionTest;
 import com.android.tradefed.device.contentprovider.ContentProviderHandlerTest;
@@ -477,6 +476,7 @@ import com.android.tradefed.util.PsParserTest;
 import com.android.tradefed.util.PythonVirtualenvHelperTest;
 import com.android.tradefed.util.QuotationAwareTokenizerTest;
 import com.android.tradefed.util.RegexTrieTest;
+import com.android.tradefed.util.RemoteFileUtilTest;
 import com.android.tradefed.util.RemoteZipTest;
 import com.android.tradefed.util.RequestUtilTest;
 import com.android.tradefed.util.ResourceUtilTest;
@@ -667,7 +667,6 @@ import org.junit.runners.Suite.SuiteClasses;
     NestedRemoteDeviceTest.class,
     OxygenUtilTest.class,
     RemoteAndroidVirtualDeviceTest.class,
-    RemoteFileUtilTest.class,
 
     // device.connection
     AdbSshConnectionTest.class,
@@ -1125,6 +1124,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PythonVirtualenvHelperTest.class,
     QuotationAwareTokenizerTest.class,
     RegexTrieTest.class,
+    RemoteFileUtilTest.class,
     RemoteZipTest.class,
     ResourceUtilTest.class,
     RestApiHelperTest.class,

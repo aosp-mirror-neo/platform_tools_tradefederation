@@ -655,6 +655,19 @@ public class InvocationExecution implements IInvocationExecution {
         }
         long start = System.currentTimeMillis();
         customizeDevicePreInvocation(config, context);
+        // Under some circumstances, we account toward the test rather than the common setup.
+        boolean reportAsTestSetup = false;
+        if (config.getCoverageOptions().isCoverageEnabled()) {
+            reportAsTestSetup = true;
+        }
+        for (ITestDevice device : context.getDevices()) {
+            for (String option : device.getOptions().getGceDriverParams()) {
+                if (option.contains("--kernel")) {
+                    reportAsTestSetup = true;
+                    break;
+                }
+            }
+        }
 
         // Multi-device test scenario
         Integer multiDeviceCount = config.getCommandOptions().getMultiDeviceCount();
@@ -668,6 +681,7 @@ public class InvocationExecution implements IInvocationExecution {
         if (multiDeviceCount != null && multiDeviceCount != 1 && allVirtualDevices) {
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope("runMultiVirtualDevicesPreInvocationSetup")) {
+                reportAsTestSetup = true;
                 runMultiVirtualDevicesPreInvocationSetup(context, config, logger);
             } catch (TargetSetupError e) {
                 // TODO(b/353826394): Refactor when avd_util wrapping is ready.
@@ -729,8 +743,13 @@ public class InvocationExecution implements IInvocationExecution {
             }
         }
         // Also report device pre invocation into setup
-        InvocationMetricLogger.addInvocationPairMetrics(
-                InvocationMetricKey.SETUP_PAIR, start, System.currentTimeMillis());
+        if (reportAsTestSetup) {
+            InvocationMetricLogger.addInvocationPairMetrics(
+                    InvocationMetricKey.TEST_SETUP_PAIR, start, System.currentTimeMillis());
+        } else {
+            InvocationMetricLogger.addInvocationPairMetrics(
+                    InvocationMetricKey.SETUP_PAIR, start, System.currentTimeMillis());
+        }
     }
 
     /**

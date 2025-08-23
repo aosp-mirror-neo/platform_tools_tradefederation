@@ -13,20 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.tradefed.device.cloud;
+package com.android.tradefed.util;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
-
-import com.android.tradefed.device.TestDeviceOptions;
-import com.android.tradefed.util.CommandResult;
-import com.android.tradefed.util.CommandStatus;
-import com.android.tradefed.util.FileUtil;
-import com.android.tradefed.util.IRunUtil;
-
-import com.google.common.net.HostAndPort;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -41,24 +33,16 @@ import java.util.Arrays;
 @RunWith(JUnit4.class)
 public class RemoteFileUtilTest {
 
-    private TestDeviceOptions mOptions;
     private IRunUtil mMockRunUtil;
-    private GceAvdInfo mMockGceAvdInfo;
-    private File mMockFile;
 
     @Before
     public void setUp() {
         mMockRunUtil = Mockito.mock(IRunUtil.class);
-        mMockGceAvdInfo = Mockito.mock(GceAvdInfo.class);
-        mMockFile = Mockito.mock(File.class);
-        mOptions = new TestDeviceOptions();
-        mOptions.setAvdDriverBinary(mMockFile);
     }
 
     /** Test fetching a remote file via scp. */
     @Test
     public void testFetchRemoteFile() throws Exception {
-        GceAvdInfo fakeInfo = new GceAvdInfo("ins-gce", HostAndPort.fromHost("127.0.0.1"));
         String remotePath = "/home/vsoc-01/cuttlefish_runtime/kernel.log";
         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
         when(mMockRunUtil.runTimedCmd(
@@ -82,7 +66,12 @@ public class RemoteFileUtilTest {
         try {
             resFile =
                     RemoteFileUtil.fetchRemoteFile(
-                            fakeInfo, mOptions, mMockRunUtil, 500L, remotePath);
+                            "127.0.0.1",
+                            "root",
+                            new File("/tmp/fake-ssh-key-path"),
+                            mMockRunUtil,
+                            500L,
+                            remotePath);
             // The original remote name is used.
             assertTrue(resFile.getName().startsWith("kernel"));
         } finally {
@@ -93,7 +82,6 @@ public class RemoteFileUtilTest {
     /** Test when fetching a remote file fails. */
     @Test
     public void testFetchRemoteFile_fail() throws Exception {
-        GceAvdInfo fakeInfo = new GceAvdInfo("ins-gce", HostAndPort.fromHost("127.0.0.1"));
         String remotePath = "/home/vsoc-01/cuttlefish_runtime/kernel.log";
         CommandResult res = new CommandResult(CommandStatus.FAILED);
         res.setStderr("Failed to fetch file.");
@@ -115,14 +103,19 @@ public class RemoteFileUtilTest {
                 .thenReturn(res);
 
         File resFile =
-                RemoteFileUtil.fetchRemoteFile(fakeInfo, mOptions, mMockRunUtil, 500L, remotePath);
+                RemoteFileUtil.fetchRemoteFile(
+                        "127.0.0.1",
+                        "root",
+                        new File("/tmp/fake-ssh-key-path"),
+                        mMockRunUtil,
+                        500L,
+                        remotePath);
         assertNull(resFile);
     }
 
     /** Test pulling a directory from the remote hosts. */
     @Test
     public void testFetchRemoteDir() throws Exception {
-        GceAvdInfo fakeInfo = new GceAvdInfo("ins-gce", HostAndPort.fromHost("127.0.0.1"));
         String remotePath = "/home/vsoc-01/cuttlefish_runtime/tombstones";
         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
         when(mMockRunUtil.runTimedCmd(
@@ -146,7 +139,12 @@ public class RemoteFileUtilTest {
         try {
             resDir =
                     RemoteFileUtil.fetchRemoteDir(
-                            fakeInfo, mOptions, mMockRunUtil, 500L, remotePath);
+                            "127.0.0.1",
+                            "root",
+                            new File("/tmp/fake-ssh-key-path"),
+                            mMockRunUtil,
+                            500L,
+                            remotePath);
             // The original remote name is used.
             assertTrue(resDir.isDirectory());
         } finally {
@@ -157,7 +155,6 @@ public class RemoteFileUtilTest {
     /** Test pushing a file to a remote instance via scp. */
     @Test
     public void testPushFileToRemote() throws Exception {
-        GceAvdInfo fakeInfo = new GceAvdInfo("ins-gce", HostAndPort.fromHost("127.0.0.1"));
         String remotePath = "/home/vsoc-01/cuttlefish_runtime/kernel.log";
         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
         File localFile = FileUtil.createTempDir("test-remote-push-dir");
@@ -182,8 +179,9 @@ public class RemoteFileUtilTest {
         try {
             boolean result =
                     RemoteFileUtil.pushFileToRemote(
-                            fakeInfo,
-                            mOptions,
+                            "127.0.0.1",
+                            "root",
+                            new File("/tmp/fake-ssh-key-path"),
                             Arrays.asList("-R"),
                             mMockRunUtil,
                             500L,
@@ -198,7 +196,6 @@ public class RemoteFileUtilTest {
     /** Test pushing a file to a remote instance via scp when it fails */
     @Test
     public void testPushFileToRemote_fail() throws Exception {
-        GceAvdInfo fakeInfo = new GceAvdInfo("ins-gce", HostAndPort.fromHost("127.0.0.1"));
         String remotePath = "/home/vsoc-01/cuttlefish_runtime/kernel.log";
         CommandResult res = new CommandResult(CommandStatus.FAILED);
         res.setStderr("failed to push to remote.");
@@ -224,8 +221,9 @@ public class RemoteFileUtilTest {
         try {
             boolean result =
                     RemoteFileUtil.pushFileToRemote(
-                            fakeInfo,
-                            mOptions,
+                            "127.0.0.1",
+                            "root",
+                            new File("/tmp/fake-ssh-key-path"),
                             Arrays.asList("-R"),
                             mMockRunUtil,
                             500L,

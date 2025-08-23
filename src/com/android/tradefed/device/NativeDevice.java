@@ -108,10 +108,12 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
@@ -119,6 +121,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -279,6 +282,8 @@ public class NativeDevice
      */
     private boolean inRebootCallback = false;
 
+    private boolean mRebootStartNotified = false;
+
     /** If the device is a Microdroid, this refers to the VM process. Otherwise, it is null. */
     private Process mMicrodroidProcess = null;
 
@@ -288,6 +293,9 @@ public class NativeDevice
 
     private long mBatteryFetchTimestamp = 0L;
 
+    private Set<String> mDeviceSupportedFeatures = null;
+
+    private Integer mHostAdbMajorVersion = null;
     // If we increase the number of props, then increase the cache size of mPropertiesCache.
     private final Set<String> propsToPrefetch =
             ImmutableSet.of("ro.build.version.sdk", "ro.build.version.codename", "ro.build.id");
@@ -450,8 +458,6 @@ public class NativeDevice
         // TODO: return more detail AdbCommandRejectedException instead of IOException only,
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
-            // Notify of reboot started for all modes
-            notifyRebootStarted();
             return super.run();
         }
     }
@@ -1217,9 +1223,7 @@ public class NativeDevice
         //
         // Note that this does *not* call `adb features` on each invocation. ddmlib caches all the
         // adb features on the first query.
-        boolean parseExitStatus =
-                !getIDevice().supportsFeature(IDevice.Feature.SHELL_V2)
-                        && getOptions().useExitStatusWorkaround();
+        boolean parseExitStatus = !isShellV2Support() && getOptions().useExitStatusWorkaround();
 
         final String[] fullCmd = buildAdbShellCommand(cmd, parseExitStatus);
         AdbShellAction adbActionV2 =
@@ -1234,6 +1238,60 @@ public class NativeDevice
             postProcessExitStatus(adbActionV2.mResult);
         }
         return adbActionV2.mResult;
+    }
+
+    public boolean isShellV2Support() throws DeviceNotAvailableException {
+        return getHostAdbMajorVersion() >= 29 && getDeviceSupportedFeatures().contains("shell_v2");
+    }
+
+    private int getHostAdbMajorVersion() throws DeviceNotAvailableException {
+        if (mHostAdbMajorVersion != null) {
+            return mHostAdbMajorVersion.intValue();
+        }
+        CommandResult res = executeAdbV2Command("--version");
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            CLog.e("Failed to get host version: %s", res.getStderr());
+            throw new DeviceNotAvailableException(
+                    String.format("Failed to get host version: %s", res.getStderr()),
+                    getSerialNumber());
+        }
+        String output = res.getStdout();
+        Optional<String> versionLine =
+                output.lines().filter(line -> line.trim().startsWith("Version ")).findFirst();
+        if (versionLine.isEmpty()) {
+            throw new DeviceNotAvailableException(
+                    String.format("Could not parse ADB version from output: %s", output),
+                    getSerialNumber());
+        }
+
+        try {
+            String[] parts = versionLine.get().split(" ")[1].split("\\.");
+            mHostAdbMajorVersion = Integer.valueOf(Integer.parseInt(parts[0]));
+        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            throw new DeviceNotAvailableException(
+                    String.format("Failed to parse major version from line: %s", versionLine.get()),
+                    getSerialNumber());
+        }
+        return mHostAdbMajorVersion.intValue();
+    }
+
+    private Set<String> getDeviceSupportedFeatures() throws DeviceNotAvailableException {
+        if (mDeviceSupportedFeatures != null) {
+            return mDeviceSupportedFeatures;
+        }
+        CommandResult res = executeAdbV2Command("features");
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            // likely be in fastboot mode
+            CLog.e("Failed to run adb features (likely be in fastboot mode): %s", res.getStderr());
+        }
+        String output = res.getStdout();
+        List<String> lineList =
+                output.lines()
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .collect(Collectors.toList());
+        mDeviceSupportedFeatures = new LinkedHashSet<>(lineList);
+        return mDeviceSupportedFeatures;
     }
 
     private void postProcessExitStatus(@Nonnull CommandResult result) {
@@ -3641,7 +3699,9 @@ public class NativeDevice
                     "Reboot into Bootloader");
             return;
         }
+        notifyRebootStarted();
         rebootIntoFastbootInternal(true);
+        notifyRebootEnded();
     }
 
     /** {@inheritDoc} */
@@ -3654,7 +3714,9 @@ public class NativeDevice
                     "Reboot into Fastbootd");
             return;
         }
+        notifyRebootStarted();
         rebootIntoFastbootInternal(false);
+        notifyRebootEnded();
     }
 
     /**
@@ -3757,6 +3819,7 @@ public class NativeDevice
             CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot");
             return;
         }
+        notifyRebootStarted();
         internalRebootUntilOnline(reason);
 
         RecoveryMode cachedRecoveryMode = getRecoveryMode();
@@ -3774,8 +3837,6 @@ public class NativeDevice
         }
         postBootSetup();
         postBootWifiSetup();
-        // notify of reboot end here. Full reboots will end here as well as reboots from Bootloader
-        // or Fastboot mode.
         notifyRebootEnded();
     }
 
@@ -3785,6 +3846,7 @@ public class NativeDevice
             CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot Userspace");
             return;
         }
+        notifyRebootStarted();
         rebootUserspaceUntilOnline();
 
         RecoveryMode cachedRecoveryMode = getRecoveryMode();
@@ -3802,6 +3864,7 @@ public class NativeDevice
         waitForDeviceAvailable(mOptions.getRebootTimeout());
         postBootSetup();
         postBootWifiSetup();
+        notifyRebootEnded();
     }
 
     @Override
@@ -3813,13 +3876,10 @@ public class NativeDevice
             return;
         }
         try {
+            notifyRebootStarted();
             internalRebootUntilOnline(null);
         } finally {
-            if (!mDeviceActionReceivers.isEmpty()) {
-                CLog.d(
-                        "DeviceActionReceivers were not notified after rebootUntilOnline on %s.",
-                        getSerialNumber());
-            }
+            notifyRebootEnded();
         }
     }
 
@@ -3833,13 +3893,10 @@ public class NativeDevice
             return;
         }
         try {
+            notifyRebootStarted();
             internalRebootUntilOnline(reason);
         } finally {
-            if (!mDeviceActionReceivers.isEmpty()) {
-                CLog.d(
-                        "DeviceActionReceivers were not notified after rebootUntilOnline on %s.",
-                        getSerialNumber());
-            }
+            notifyRebootEnded();
         }
     }
 
@@ -3873,12 +3930,14 @@ public class NativeDevice
                     "Reboot Userspace Until Online");
             return;
         }
+        notifyRebootStarted();
         doReboot(RebootMode.REBOOT_USERSPACE, null);
         RecoveryMode cachedRecoveryMode = getRecoveryMode();
         setRecoveryMode(RecoveryMode.ONLINE);
         waitForDeviceOnline();
         enableAdbRoot();
         setRecoveryMode(cachedRecoveryMode);
+        notifyRebootEnded();
     }
 
     /**
@@ -3892,6 +3951,7 @@ public class NativeDevice
                     "Reboot into Recovery");
             return;
         }
+        notifyRebootStarted();
         if (isStateBootloaderOrFastbootd()) {
             CLog.w("device %s in fastboot when requesting boot to recovery. " +
                     "Rebooting to userspace first.", getSerialNumber());
@@ -3901,6 +3961,7 @@ public class NativeDevice
         if (!waitForDeviceInRecovery(mOptions.getAdbRecoveryTimeout())) {
             recoverDeviceInRecovery();
         }
+        notifyRebootEnded();
     }
 
 
@@ -3918,6 +3979,7 @@ public class NativeDevice
                     "Reboot into Sideload");
             return;
         }
+        notifyRebootStarted();
         if (isStateBootloaderOrFastbootd()) {
             CLog.w(
                     "device %s in fastboot when requesting boot to sideload. "
@@ -3936,6 +3998,7 @@ public class NativeDevice
             // using recovery mode because sideload is a sub-mode under recovery
             recoverDeviceInRecovery();
         }
+        notifyRebootEnded();
     }
 
     /**
@@ -3950,13 +4013,10 @@ public class NativeDevice
             return;
         }
         try {
+            notifyRebootStarted();
             doReboot(RebootMode.REBOOT_FULL, null);
         } finally {
-            if (!mDeviceActionReceivers.isEmpty()) {
-                CLog.d(
-                        "DeviceActionReceivers were not notified after nonBlockingReboot on %s.",
-                        getSerialNumber());
-            }
+            notifyRebootEnded();
         }
     }
 
@@ -5497,7 +5557,10 @@ public class NativeDevice
         getMonitor().clearTcpFastbootMonitor();
         mConnectionAvd = null;
         mDeviceActionReceivers.clear();
+        inRebootCallback = false;
+        mRebootStartNotified = false;
         mFastbootSerialNumber = null;
+        mDeviceSupportedFeatures = null;
         // Default implementation
         if (getIDevice() instanceof StubDevice) {
             mTrackingSerialNumber = null;
@@ -6441,18 +6504,22 @@ public class NativeDevice
      * @throws DeviceNotAvailableException
      */
     protected void notifyRebootStarted() throws DeviceNotAvailableException {
-        try (CloseableTraceScope ignored = new CloseableTraceScope("rebootStartedCallbacks")) {
-            for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
-                try {
-                    inRebootCallback = true;
-                    dar.rebootStarted(this);
-                } catch (DeviceNotAvailableException dnae) {
-                    inRebootCallback = false;
-                    throw dnae;
-                } catch (Exception e) {
-                    logDeviceActionException("notifyRebootStarted", e, true);
-                } finally {
-                    inRebootCallback = false;
+        // we should only notify when the device is going from user mode to other modes.
+        if (!isStateBootloaderOrFastbootd() && !mRebootStartNotified) {
+            try (CloseableTraceScope ignored = new CloseableTraceScope("rebootStartedCallbacks")) {
+                for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
+                    try {
+                        inRebootCallback = true;
+                        dar.rebootStarted(this);
+                    } catch (DeviceNotAvailableException dnae) {
+                        inRebootCallback = false;
+                        throw dnae;
+                    } catch (Exception e) {
+                        logDeviceActionException("notifyRebootStarted", e, true);
+                    } finally {
+                        inRebootCallback = false;
+                        mRebootStartNotified = true;
+                    }
                 }
             }
         }
@@ -6464,18 +6531,22 @@ public class NativeDevice
      * @throws DeviceNotAvailableException
      */
     protected void notifyRebootEnded() throws DeviceNotAvailableException {
-        try (CloseableTraceScope ignored = new CloseableTraceScope("rebootEndedCallbacks")) {
-            for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
-                try {
-                    inRebootCallback = true;
-                    dar.rebootEnded(this);
-                } catch (DeviceNotAvailableException dnae) {
-                    inRebootCallback = false;
-                    throw dnae;
-                } catch (Exception e) {
-                    logDeviceActionException("notifyRebootEnded", e, true);
-                } finally {
-                    inRebootCallback = false;
+        // we should only notify when the devices current state is not fastbootd or bootloader.
+        if (!isStateBootloaderOrFastbootd() && mRebootStartNotified) {
+            try (CloseableTraceScope ignored = new CloseableTraceScope("rebootEndedCallbacks")) {
+                for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
+                    try {
+                        inRebootCallback = true;
+                        dar.rebootEnded(this);
+                    } catch (DeviceNotAvailableException dnae) {
+                        inRebootCallback = false;
+                        throw dnae;
+                    } catch (Exception e) {
+                        logDeviceActionException("notifyRebootEnded", e, true);
+                    } finally {
+                        inRebootCallback = false;
+                        mRebootStartNotified = false;
+                    }
                 }
             }
         }

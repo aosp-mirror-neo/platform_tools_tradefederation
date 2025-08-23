@@ -130,6 +130,11 @@ public class NativeDeviceTest {
             when(mMockContentProviderHandler.getUserId()).thenReturn(userId);
             return mMockContentProviderHandler;
         }
+
+        @Override
+        public boolean isShellV2Support() throws DeviceNotAvailableException {
+            return true;
+        }
     }
 
     @Before
@@ -139,7 +144,6 @@ public class NativeDeviceTest {
         mHostOptions = new HostOptions();
 
         when(mMockIDevice.getSerialNumber()).thenReturn(MOCK_DEVICE_SERIAL);
-        when(mMockIDevice.supportsFeature(IDevice.Feature.SHELL_V2)).thenReturn(true);
 
         // A TestDevice with a no-op recoverDevice() implementation
         mTestDevice =
@@ -3582,7 +3586,22 @@ public class NativeDeviceTest {
     public void testExecuteShellV2Command_exit_status_workaround() throws Exception {
         OutputStream stdout = null;
         OutputStream stderr = null;
-        when(mMockIDevice.supportsFeature(IDevice.Feature.SHELL_V2)).thenReturn(false);
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean isShellV2Support() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean recoverDevice() throws DeviceNotAvailableException {
+                        // ignore
+                        return true;
+                    }
+                };
+        mTestDevice.setRecovery(mMockRecovery);
+        mTestDevice.setCommandTimeout(100);
+        mTestDevice.setLogStartDelay(-1);
         OptionSetter deviceOptionSetter = new OptionSetter(mTestDevice.getOptions());
         deviceOptionSetter.setOptionValue("exit-status-workaround", "true");
         CommandResult res = new CommandResult();
