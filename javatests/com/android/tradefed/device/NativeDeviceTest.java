@@ -3394,16 +3394,33 @@ public class NativeDeviceTest {
 
         SimpleDateFormat format = new SimpleDateFormat("MM-dd HH:mm:ss.SSS");
         String dateFormatted = format.format(new Date(date));
+        String cmd = String.format("logcat -b all -v threadtime -t '%s'", dateFormatted);
+        CommandResult res = new CommandResult();
+        res.setStatus(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq(cmd)))
+                .thenReturn(res);
 
-        InputStreamSource res = mTestDevice.getLogcatSince(date);
-        StreamUtil.close(res);
+        InputStreamSource result = mTestDevice.getLogcatSince(date);
+        StreamUtil.close(result);
 
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq(
-                                String.format(
-                                        "logcat -b all -v threadtime -t '%s'", dateFormatted)),
-                        Mockito.any());
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq(cmd));
     }
 
     /**
@@ -3414,14 +3431,30 @@ public class NativeDeviceTest {
     public void testGetLogcatSinceOnSdkOver24() throws Exception {
         long date = 1512990942012L;
         setGetPropertyExpectation("ro.build.version.sdk", "24");
-
-        InputStreamSource res = mTestDevice.getLogcatSince(date);
-        StreamUtil.close(res);
-
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq("logcat -b all -v threadtime,uid -t '1512990942.012'"),
-                        Mockito.any());
+        CommandResult res = new CommandResult();
+        res.setStatus(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq("logcat -b all -v threadtime,uid -t '1512990942.012'")))
+                .thenReturn(res);
+        InputStreamSource result = mTestDevice.getLogcatSince(date);
+        StreamUtil.close(result);
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq("logcat -b all -v threadtime,uid -t '1512990942.012'"));
     }
 
     @Test

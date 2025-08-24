@@ -3128,11 +3128,21 @@ public class NativeDevice
                             getOptions().getMaxLogcatDataSize());
             String command =
                     String.format(
-                            "%s -t '%s'", LogcatReceiver.getDefaultLogcatCmd(this), dateFormatted);
-            getIDevice().executeShellCommand(command, largeReceiver);
+                            "\"%s -t '%s'\"",
+                            LogcatReceiver.getDefaultLogcatCmd(this), dateFormatted);
+            ShellOutputReceiverStream outputReceiverStream =
+                    new ShellOutputReceiverStream(largeReceiver);
+
+            executeShellV2Command(
+                    command,
+                    null,
+                    outputReceiverStream,
+                    getCommandTimeout(),
+                    TimeUnit.MILLISECONDS,
+                    0);
+            largeReceiver.flush();
             return largeReceiver.getData();
-        } catch (IOException|AdbCommandRejectedException|
-                ShellCommandUnresponsiveException|TimeoutException e) {
+        } catch (DeviceNotAvailableException e) {
             CLog.w("Failed to get logcat dump from %s: %s", getSerialNumber(), e.getMessage());
             CLog.e(e);
         } finally {
@@ -3159,22 +3169,20 @@ public class NativeDevice
                             "getLogcatDump",
                             getSerialNumber(),
                             getOptions().getMaxLogcatDataSize());
+            ShellOutputReceiverStream outputReceiverStream =
+                    new ShellOutputReceiverStream(largeReceiver);
             // add -d parameter to make this a non blocking call
-            getIDevice()
-                    .executeShellCommand(
-                            LogcatReceiver.getDefaultLogcatCmd(this) + " -d",
-                            largeReceiver,
-                            LOGCAT_DUMP_TIMEOUT,
-                            LOGCAT_DUMP_TIMEOUT,
-                            TimeUnit.MILLISECONDS);
+            String command = LogcatReceiver.getDefaultLogcatCmd(this) + " -d";
+            executeShellV2Command(
+                    command,
+                    null,
+                    outputReceiverStream,
+                    LOGCAT_DUMP_TIMEOUT,
+                    TimeUnit.MILLISECONDS,
+                    0);
+            largeReceiver.flush();
             return largeReceiver.getData();
-        } catch (IOException e) {
-            CLog.w("Failed to get logcat dump from %s: ", getSerialNumber(), e.getMessage());
-        } catch (TimeoutException e) {
-            CLog.w("Failed to get logcat dump from %s: timeout", getSerialNumber());
-        } catch (AdbCommandRejectedException e) {
-            CLog.w("Failed to get logcat dump from %s: ", getSerialNumber(), e.getMessage());
-        } catch (ShellCommandUnresponsiveException e) {
+        } catch (DeviceNotAvailableException e) {
             CLog.w("Failed to get logcat dump from %s: ", getSerialNumber(), e.getMessage());
         } finally {
             if (largeReceiver != null) {
