@@ -79,8 +79,7 @@ public class FuseMountManagerTest {
 
         // Default mock behaviors for success cases
         doNothing().when(mMockDriverProfile).validateSourceDataPath(any(Path.class));
-        when(mMockDriverProfile.buildMountCommand(
-                        any(Path.class), any(Path.class), any(Path.class)))
+        when(mMockDriverProfile.buildMountCommand(any(Path.class), any(Path.class)))
                 .thenReturn(Arrays.asList("fuse-driver", "arg1"));
         when(mMockDriverProfile.getMountTimeoutInMs()).thenReturn(500L);
         when(mMockRunUtil.runCmdInBackground(anyList(), any(OutputStream.class)))
