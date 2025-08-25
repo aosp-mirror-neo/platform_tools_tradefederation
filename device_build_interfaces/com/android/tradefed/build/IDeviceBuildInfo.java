@@ -150,6 +150,15 @@ public interface IDeviceBuildInfo extends IBuildInfo {
     /** Gets the ramdisk file used to create the kernel image. */
     public void setRamdiskFile(File ramdisk, String version);
 
+    /**
+     * Unmounts mounted device images.
+     *
+     * <p>This is useful to unmount device images before the DeviceBuildInfo object is destroyed,
+     * for scenarios where cleanUp() can't be called due to file sharing, like copyAllFileFrom() has
+     * been called on this.
+     */
+    public void unmountAll();
+
     /** Removes all temporary files. */
     @Override
     public void cleanUp();

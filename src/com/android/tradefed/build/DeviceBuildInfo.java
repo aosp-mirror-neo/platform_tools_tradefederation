@@ -67,6 +67,10 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
                         cause.getMessage());
                 mOptionalFuseMountManager = Optional.empty();
             }
+        } else {
+            CLog.d(
+                    "Reusing FuseMountManager for DeviceBuildInfo(0x%s).",
+                    Integer.toHexString(System.identityHashCode(this)));
         }
         return mOptionalFuseMountManager;
     }
@@ -343,10 +347,20 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
 
     /** {@inheritDoc} */
     @Override
-    public void cleanUp() {
-        // It is not adequate to call manager.unMount(getDeviceImageFile()) as setDeviceImageFile()
-        // could have been called multiple times with different image files.
+    public final void unmountAll() {
+        CLog.i(
+                "DeviceBuildInfo.unmountAll() for 0x%s",
+                Integer.toHexString(System.identityHashCode(this)));
         getFuseMountManager().ifPresent(manager -> manager.unmountAll());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void cleanUp() {
+        getFuseMountManager()
+                .ifPresentOrElse(
+                        manager -> manager.unmountAll(),
+                        () -> CLog.e("UNEXPECTED: fuse mount manager is not available."));
         super.cleanUp();
     }
 
@@ -354,7 +368,10 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     public void cleanUp(List<File> doNotClean) {
         File deviceImage = getFile(BuildInfoFileKey.DEVICE_IMAGE);
         if (deviceImage != null && doNotClean != null && !doNotClean.contains(deviceImage)) {
-            getFuseMountManager().ifPresent(manager -> manager.unmount(deviceImage.toPath()));
+            getFuseMountManager()
+                    .ifPresentOrElse(
+                            manager -> manager.unmount(deviceImage.toPath()),
+                            () -> CLog.e("UNEXPECTED: fuse mount manager is not available."));
         }
         super.cleanUp(doNotClean);
     }
