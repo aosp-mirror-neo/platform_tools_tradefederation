@@ -6058,10 +6058,11 @@ public class NativeDevice
             return null;
         }
         CollectingOutputReceiver receiver = new CollectingOutputReceiver();
+        ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
         try {
-            mIDevice.executeShellCommand(command, receiver);
-        } catch (IOException | TimeoutException | AdbCommandRejectedException |
-                ShellCommandUnresponsiveException e) {
+            executeShellV2Command(command, outputReceiverStream);
+            receiver.flush();
+        } catch (DeviceNotAvailableException e) {
             CLog.w(
                     "Failed to query MAC address for %s by '%s'",
                     mIDevice.getSerialNumber(), command);
