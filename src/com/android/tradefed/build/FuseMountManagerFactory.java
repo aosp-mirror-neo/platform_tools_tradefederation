@@ -183,14 +183,13 @@ public class FuseMountManagerFactory {
      *
      * @return {@code true} if the mount point was deleted, {@code false} otherwise.
      */
-    private static boolean deleteMountPointNoThrow(Path p) {
-        try {
-            Files.delete(p);
-            return true;
-        } catch (IOException | SecurityException e) {
-            CLog.e("Failed to delete mount point: '%s'", p, e);
-            return false;
-        }
+    private static boolean deleteMountPointNoThrow(Path mountPoint) {
+        IRunUtil runUtil = RunUtil.getDefault();
+        // A mount point becomes stale if it was never unmounted or failed to unmount.
+        // Unmount it before deleting it.
+        FuseMountManager.lazyUnmount(mountPoint, runUtil);
+        FuseMountManager.cleanUp(mountPoint, runUtil);
+        return !Files.exists(mountPoint);
     }
 
     /**
