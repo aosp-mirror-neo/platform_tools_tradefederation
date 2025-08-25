@@ -238,6 +238,8 @@ public class FuseMountManager {
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
             cleanUp(mountPoint); // Best-effort directory cleanup
 
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_UNMOUNT_COUNT, 1);
             CLog.d(
                     "Done unmounting '%s' (dir count: %d), took %d ms",
                     sourceDataPathString,
