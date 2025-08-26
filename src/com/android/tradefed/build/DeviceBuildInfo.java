@@ -52,6 +52,12 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     Optional<FuseMountManager> getFuseMountManager() {
         // Lazy-initialize the manager by calling the factory.
         if (mOptionalFuseMountManager == null) {
+            if (!FuseMountManagerFactory.isFuseAvailable()) {
+                CLog.w("FUSE is not available, FUSE mounting will be disabled.");
+                mOptionalFuseMountManager = Optional.empty();
+                return mOptionalFuseMountManager;
+            }
+
             try {
                 mOptionalFuseMountManager =
                         Optional.of(
@@ -62,7 +68,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             } catch (IOException | ExceptionInInitializerError | NoClassDefFoundError e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
-                        "Failed to get FUSE mount manager, FUSE mounting will be disabled. Error:"
+                        "Failed to get FUSE mount manager, can't fuse mount device image. Error:"
                                 + " %s",
                         cause.getMessage());
                 mOptionalFuseMountManager = Optional.empty();

@@ -48,6 +48,7 @@ public class FuseMountManagerFactory {
     private final CasFuseDriverProfile mCasFuseDriverProfile;
     private static final List<WeakReference<FuseMountManager>> mManagers =
             Collections.synchronizedList(new ArrayList<>());
+    private static Boolean mIsFuseAvailable = null;
 
     private static class LazyHolder {
         private static final FuseMountManagerFactory INSTANCE = new FuseMountManagerFactory();
@@ -80,7 +81,7 @@ public class FuseMountManagerFactory {
         }
 
         // Ensure `casviewer` is executable. It can be distributed without the execute bit set.
-        boolean logMetricsIfNotExecutable = false;  // Do not log as it's expected.
+        boolean logMetricsIfNotExecutable = false; // Do not log as it's expected.
         CasUtil.ensureCasClientExecutable(casViewerPath, logMetricsIfNotExecutable);
 
         CasUtil.logCasClientVersion(
@@ -141,34 +142,36 @@ public class FuseMountManagerFactory {
             // Create a map to functionally count the successes and failures
             // We'll collect a Map<Boolean, Long> where true=success, false=failure
             Map<Boolean, Long> results =
-                files.filter(p -> {
-                        try {
-                            // Use Files.getLastModifiedTime directly on the Path for efficiency
-                            return Files.getLastModifiedTime(p).toMillis() < twentyFourHoursAgo;
-                        } catch (IOException e) {
-                            // Log error and leave it alone (stay on the safe side).
-                            CLog.e(
-                                "Could not get last modified time for '%s'", p, e);
-                            return false;
-                        }
-                    })
-                    .collect(
-                        Collectors.partitioningBy(
-                            FuseMountManagerFactory::deleteMountPointNoThrow,
-                            Collectors.counting()));
+                    files.filter(
+                                    p -> {
+                                        try {
+                                            // Use Files.getLastModifiedTime directly on the Path
+                                            // for efficiency
+                                            return Files.getLastModifiedTime(p).toMillis()
+                                                    < twentyFourHoursAgo;
+                                        } catch (IOException e) {
+                                            // Log error and leave it alone (stay on the safe side).
+                                            CLog.e(
+                                                    "Could not get last modified time for '%s'",
+                                                    p, e);
+                                            return false;
+                                        }
+                                    })
+                            .collect(
+                                    Collectors.partitioningBy(
+                                            FuseMountManagerFactory::deleteMountPointNoThrow,
+                                            Collectors.counting()));
 
             long failed = results.getOrDefault(false, 0L);
             long stale = results.getOrDefault(true, 0L) + failed;
 
             if (stale > 0) {
-                CLog.d(
-                    "Attempted to remove %d stale mount points. %d failed.",
-                    stale, failed);
+                CLog.d("Attempted to remove %d stale mount points. %d failed.", stale, failed);
                 InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_STALE_COUNT, stale);
+                        InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_STALE_COUNT, stale);
                 if (failed > 0) {
                     InvocationMetricLogger.addInvocationMetrics(
-                        InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_FAILURE_COUNT, failed);
+                            InvocationMetricKey.CAS_UNMOUNT_DEFENSIC_CLEANUP_FAILURE_COUNT, failed);
                 }
             } else {
                 CLog.d("No stale mount points (not modified in the last 24 hours) found.");
@@ -197,10 +200,12 @@ public class FuseMountManagerFactory {
      *
      * @return {@code true} if /dev/fuse exists, {@code false} otherwise.
      */
-    @VisibleForTesting
-    protected boolean isFuseAvailable() {
-        File fuseDevice = new File("/dev/fuse");
-        return fuseDevice.exists();
+    public static boolean isFuseAvailable() {
+        if (mIsFuseAvailable == null) {
+            File fuseDevice = new File("/dev/fuse");
+            mIsFuseAvailable = fuseDevice.exists();
+        }
+        return mIsFuseAvailable;
     }
 
     /** Gets the singleton instance of the factory. */

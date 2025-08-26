@@ -49,22 +49,6 @@ public class FuseMountManagerFactoryIntegrationTest {
 
     private String mOriginalTfJarDir;
 
-    /**
-     * A test-specific subclass of the factory that overrides environmental checks to allow for
-     * isolated testing.
-     */
-    public static class TestableFuseMountManagerFactory extends FuseMountManagerFactory {
-        public TestableFuseMountManagerFactory() throws IOException {
-            super();
-        }
-
-        @Override
-        protected boolean isFuseAvailable() {
-            // For this test, always pretend the FUSE kernel module is available.
-            return true;
-        }
-    }
-
     @Before
     public void setUp() throws Exception {
         // Reset the singleton from any previous test runs to ensure a clean slate.
@@ -102,8 +86,8 @@ public class FuseMountManagerFactoryIntegrationTest {
         // 3. Point the system property to our temporary directory.
         System.setProperty("TF_JAR_DIR", tempFolder.getRoot().getAbsolutePath());
 
-        // 4. Instantiate our TESTABLE subclass, which bypasses the /dev/fuse check.
-        FuseMountManagerFactory factory = new TestableFuseMountManagerFactory();
+        // 4. Instantiate FuseMountManagerFactory;
+        FuseMountManagerFactory factory = new FuseMountManagerFactory();
         FuseMountManager manager = factory.createCasFuseMountManager();
 
         assertNotNull(manager);
@@ -149,9 +133,16 @@ public class FuseMountManagerFactoryIntegrationTest {
      * ensuring tests are isolated.
      */
     private void resetFactorySingleton() throws Exception {
+        // Clear the list of live managers to ensure no stale mounts from previous tests persist.
         Field managersField = FuseMountManagerFactory.class.getDeclaredField("mManagers");
         managersField.setAccessible(true);
         List<?> managersList = (List<?>) managersField.get(null);
-        managersList.clear(); // Clear the contents of the list
+        managersList.clear();
+
+        // Set the fuse availability field to true to avoid the check (ensure tests are isolated).
+        Field isFuseAvailableField =
+                FuseMountManagerFactory.class.getDeclaredField("mIsFuseAvailable");
+        isFuseAvailableField.setAccessible(true);
+        isFuseAvailableField.set(null, Boolean.TRUE);
     }
 }
