@@ -29,6 +29,7 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.SearchArtifactUtil;
 import com.android.tradefed.util.TarUtil;
+import com.android.tradefed.util.ZipUtil;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -47,6 +48,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.zip.ZipFile;
 
 /* Generic test runner for ART.
  *  - It receives all needed data as one tarball(produced as build step of ART).
@@ -97,6 +99,7 @@ public class ArtTest implements IRemoteTest, IShardableTest {
             try {
                 tmp_dir = FileUtil.createTempDir("art-tf-");
                 mRunnerDir = extractTarBall(tmp_dir);
+                extractZipApex(tmp_dir);
                 mTests = loadTests();
             } catch (IOException | JSONException e) {
                 throw new RuntimeException(e);
@@ -127,6 +130,13 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         File archive = SearchArtifactUtil.searchFile("art-test-target.tgz", false);
         TarUtil.unTar(TarUtil.unGzip(archive, dst_dir), dst_dir);
         return new File(dst_dir, "runner");
+    }
+
+    void extractZipApex(File dst_dir) throws IOException {
+        File archive = SearchArtifactUtil.searchFile("art-test-target-apex.zip", false);
+        if (archive != null) {
+            ZipUtil.extractZip(new ZipFile(archive), dst_dir);
+        }
     }
 
     TreeMap<String, JSONObject> loadTests() throws IOException, JSONException {
