@@ -5703,7 +5703,7 @@ public class NativeDevice
             if (shortDescriptor) {
                 // Return only info that do not require device inspection
                 return new DeviceDescriptor(
-                        idevice.getSerialNumber(),
+                        getSerialNumber(),
                         null,
                         idevice instanceof StubDevice,
                         idevice.getState(),
@@ -5735,9 +5735,9 @@ public class NativeDevice
                 hardwareRev = getPropertyWithRecovery(DeviceProperties.HARDWARE_REVISION, false);
             }
             return new DeviceDescriptor(
-                    idevice.getSerialNumber(),
+                    getSerialNumber(),
                     (mTrackingSerialNumber != null)
-                            ? idevice.getSerialNumber() + "[" + mTrackingSerialNumber + "]"
+                            ? getSerialNumber() + "[" + mTrackingSerialNumber + "]"
                             : null,
                     idevice instanceof StubDevice,
                     idevice.getState(),
@@ -6032,18 +6032,14 @@ public class NativeDevice
             executeShellV2Command(command, outputReceiverStream);
             receiver.flush();
         } catch (DeviceNotAvailableException e) {
-            CLog.w(
-                    "Failed to query MAC address for %s by '%s'",
-                    mIDevice.getSerialNumber(), command);
+            CLog.w("Failed to query MAC address for %s by '%s'", getSerialNumber(), command);
             CLog.w(e);
         }
         String output = receiver.getOutput().trim();
         if (isMacAddress(output)) {
             return output;
         }
-        CLog.d(
-                "No valid MAC address queried from device %s by '%s'",
-                mIDevice.getSerialNumber(), command);
+        CLog.d("No valid MAC address queried from device %s by '%s'", getSerialNumber(), command);
         return null;
     }
 
@@ -6229,9 +6225,7 @@ public class NativeDevice
         try {
             return internalGetBattery();
         } catch (DeviceNotAvailableException e) {
-            CLog.w(
-                    "Failed to query battery level for %s: %s",
-                    getIDevice().getSerialNumber(), e.toString());
+            CLog.w("Failed to query battery level for %s: %s", getSerialNumber(), e.toString());
         }
         return null;
     }
