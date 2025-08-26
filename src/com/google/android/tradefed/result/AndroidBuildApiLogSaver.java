@@ -459,6 +459,10 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
      * @return test result identify
      */
     TestResultIdentity fetchTestResultIdFromLocalBuild() throws GoogleJsonResponseException {
+        // In case of early init, build info is not set yet.
+        if (getBuildInfo() == null) {
+            return null;
+        }
         String buildId = getBuildInfo().getBuildId();
         String buildTarget = getBuildTarget();
         String attemptId = getBuildAttemptId();
@@ -540,7 +544,11 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                 "Creating new test result from build (%s %s %s)",
                 buildId, buildTarget, buildAttemptId);
         TestResult testResult = new TestResult();
-        testResult.setTestTag(getBuildInfo().getTestTag());
+        if (getBuildInfo() == null) {
+            testResult.setTestTag("stub");
+        } else {
+            testResult.setTestTag(getBuildInfo().getTestTag());
+        }
         try {
             testResult =
                     getClient()

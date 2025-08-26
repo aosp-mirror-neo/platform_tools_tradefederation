@@ -56,7 +56,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.AdditionalAnswers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -2693,7 +2692,14 @@ public class NativeDeviceTest {
     public void testDeleteFile_withUserId() throws Exception {
         int testUserId = 99;
         String remotePath = NativeDevice.SD_CARD + "deleteTest";
-
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public String executeShellCommand(String command)
+                            throws DeviceNotAvailableException {
+                        return "delete file";
+                    }
+                };
         mTestDevice.deleteFile(remotePath, testUserId);
 
         assertEquals(mMockContentProviderHandler.getUserId().intValue(), testUserId);
@@ -2708,6 +2714,12 @@ public class NativeDeviceTest {
                     @Override
                     public int getCurrentUser() throws DeviceNotAvailableException {
                         return currentUserId;
+                    }
+
+                    @Override
+                    public String executeShellCommand(String command)
+                            throws DeviceNotAvailableException {
+                        return "delete file";
                     }
                 };
         String remotePath = NativeDevice.SD_CARD + "deleteTest";
@@ -3196,16 +3208,6 @@ public class NativeDeviceTest {
     @Test
     public void testGetMacAddress() throws Exception {
         String address = "58:a2:b5:7d:49:24";
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        receiver.addOutput(address.getBytes(), 0, address.length());
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3226,6 +3228,17 @@ public class NativeDeviceTest {
                     @Override
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        try {
+                            output.write(address.getBytes(), 0, address.length());
+                        } catch (IOException e) {
+                            return null;
+                        }
+                        return null;
                     }
                 };
 
@@ -3243,16 +3256,6 @@ public class NativeDeviceTest {
     /** Test querying a device MAC address but failing to do so */
     @Test
     public void testGetMacAddress_failure() throws Exception {
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        throw new IOException();
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3273,6 +3276,12 @@ public class NativeDeviceTest {
                     @Override
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        throw new DeviceNotAvailableException();
                     }
                 };
 
@@ -3844,16 +3853,6 @@ public class NativeDeviceTest {
     @Test
     public void testGetFastbootSerialNumber_non_root_tcp_adb() throws Exception {
         String address = "00:30:1b:ba:81:28";
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        receiver.addOutput(address.getBytes(), 0, address.length());
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3885,6 +3884,17 @@ public class NativeDeviceTest {
                     public boolean disableAdbRoot() throws DeviceNotAvailableException {
                         return true;
                     }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        try {
+                            output.write(address.getBytes(), 0, address.length());
+                        } catch (IOException e) {
+                            return null;
+                        }
+                        return null;
+                    }
                 };
         assertEquals(
                 "tcp:fe80:0:0:0:230:1bff:feba:8128%en0", mTestDevice.getFastbootSerialNumber());
@@ -3894,16 +3904,6 @@ public class NativeDeviceTest {
     @Test
     public void testGetFastbootSerialNumber_root_tcp_adb() throws Exception {
         String address = "00:30:1b:ba:81:28";
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        receiver.addOutput(address.getBytes(), 0, address.length());
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3924,6 +3924,17 @@ public class NativeDeviceTest {
                     @Override
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        try {
+                            output.write(address.getBytes(), 0, address.length());
+                        } catch (IOException e) {
+                            return null;
+                        }
+                        return null;
                     }
                 };
         assertEquals(

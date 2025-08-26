@@ -221,6 +221,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
 
     private IAbi mAbi = null;
     private Integer mUserId = null;
+    private Integer mSetterUserId = null;
     private Boolean mGrantPermission = null;
     // TODO: b/367468564 - Remove this flag once we have fixed the tests so that installation
     // for the system user is no longer required when conducting tests for
@@ -284,7 +285,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
      * If the apk should be installed for a particular user, sets the id of the user to install for.
      */
     public void setUserId(int userId) {
-        mUserId = userId;
+        mSetterUserId = userId;
     }
 
     /** If a userId is provided, grantPermission can be set for the apk installation. */
@@ -357,6 +358,8 @@ public class TestAppInstallSetup extends BaseTargetPreparer
     public void setUp(TestInformation testInfo)
             throws TargetSetupError, BuildError, DeviceNotAvailableException {
         mTestInfo = testInfo;
+        // Always reset tracked user
+        mUserId = null;
         if (mTestFiles.isEmpty() && mSplitApkFileNames.isEmpty()) {
             CLog.i("No test apps to install, skipping");
             return;
@@ -400,8 +403,9 @@ public class TestAppInstallSetup extends BaseTargetPreparer
                 mInstallArgs.add("--instant");
             }
         }
-
-        if (mUserId == null && testInfo.properties().get(RUN_TESTS_AS_USER_KEY) != null) {
+        if (mSetterUserId != null) {
+            mUserId = mSetterUserId;
+        } else if (testInfo.properties().get(RUN_TESTS_AS_USER_KEY) != null) {
             mUserId = Integer.parseInt(testInfo.properties().get(RUN_TESTS_AS_USER_KEY));
             if (!testInfo.getDevice().getUserInfos().containsKey(mUserId)) {
                 CLog.w("User requested: %s doesn't exist on device. Ignoring it.", mUserId);
