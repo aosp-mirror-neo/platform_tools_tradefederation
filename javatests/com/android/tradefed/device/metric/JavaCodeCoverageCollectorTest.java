@@ -569,6 +569,45 @@ public class JavaCodeCoverageCollectorTest {
     }
 
     @Test
+    public void testMerge_onlyInvalidFiles_logsEmptyCoverage() throws Exception {
+        // Verifies that when merging a set of only invalid coverage files, the process completes
+        // without crashing and logs a single, empty merged coverage file.
+        enableJavaCoverage();
+        mCoverageOptionsSetter.setOptionValue("merge-coverage", "true");
+
+        doReturn("").when(mMockDevice).executeShellCommand(anyString());
+
+        // Create a tarball with only invalid measurements.
+        ByteString invalidMeasurement1 =
+                ByteString.copyFromUtf8("This is not a coverage measurement.");
+        ByteString invalidMeasurement2 = ByteString.EMPTY; // An empty file
+        File tarGz =
+                createTarGz(
+                        ImmutableMap.of(
+                                "InvalidMeasurement1.ec",
+                                invalidMeasurement1,
+                                "InvalidMeasurement2.ec",
+                                invalidMeasurement2));
+        returnFileContentsOnShellCommand(mMockDevice, tarGz);
+
+        // Simulate a test run.
+        mCodeCoverageCollector.init(mMockContext, mFakeListener);
+        mCodeCoverageCollector.testRunStarted(RUN_NAME, TEST_COUNT);
+        mCodeCoverageCollector.testRunEnded(ELAPSED_TIME, new HashMap<String, Metric>());
+
+        // Verify that a single, empty merged file is logged.
+        ArgumentCaptor<ByteString> stream = ArgumentCaptor.forClass(ByteString.class);
+        verify(mFakeListener).testLog(anyString(), eq(LogDataType.COVERAGE), stream.capture());
+
+        // Validate the logged coverage data is empty.
+        ExecFileLoader execFileLoader = new ExecFileLoader();
+        execFileLoader.load(stream.getValue().newInput());
+
+        ExecutionDataStore execData = execFileLoader.getExecutionDataStore();
+        assertThat(execData.getContents()).isEmpty();
+    }
+
+    @Test
     public void javaCodeCoverageCollector_rootAndUnrootDeviceTwice() throws Exception {
         enableJavaCoverage();
         HashMap<String, Metric> runMetrics = createMetricsWithCoverageMeasurement(DEVICE_PATH);
