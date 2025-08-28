@@ -421,6 +421,12 @@ public class NativeDevice
             mOutputTimeout = outputTimeout;
         }
 
+        private void logExceptionAndOutput(CommandResult result) {
+            CLog.w("Adb Shell Command exited with status: %s", result.getStatus().toString());
+            CLog.w("Adb Shell Command shell stdout:\n%s\n", result.getStdout());
+            CLog.w("Adb Shell Command shell stderr:\n%s\n", result.getStderr());
+        }
+
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
             if (mPipeAsInput != null) {
@@ -438,12 +444,17 @@ public class NativeDevice
                 mResult = getRunUtil().runTimedCmd(mTimeout, mPipeToOutput, mPipeToError, mCmd);
             }
             if (mResult.getStatus() == CommandStatus.EXCEPTION) {
+                logExceptionAndOutput(mResult);
                 throw new IOException(mResult.getStderr());
             } else if (mResult.getStatus() == CommandStatus.TIMED_OUT) {
+                logExceptionAndOutput(mResult);
                 String message =
                         String.format(
                                 "Stdout: %s\nStderr: %s", mResult.getStdout(), mResult.getStderr());
                 throw new TimeoutException(message);
+            }
+            if (mResult.getStatus() != CommandStatus.SUCCESS) {
+                logExceptionAndOutput(mResult);
             }
             String stdErr = mResult.getStderr();
             if (stdErr != null) {
