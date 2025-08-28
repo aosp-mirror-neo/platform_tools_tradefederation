@@ -72,7 +72,9 @@ public class CuttlefishDisplayFeatureTest {
 
         FeatureResponse response = mFeature.execute(request.build());
         assertTrue(response.hasErrorInfo());
-        assertEquals("No device_name args specified.", response.getErrorInfo().getErrorTrace());
+        assertEquals(
+                "CuttlefishDisplayFeature: missing device_name arg.",
+                response.getErrorInfo().getErrorTrace());
     }
 
     @Test
@@ -95,10 +97,10 @@ public class CuttlefishDisplayFeatureTest {
                                 CuttlefishDisplayFeature.ARG_DISPLAY_REQUEST_PROTO,
                                 getDisplayRequestString(displayRequest));
         FeatureResponse response = mFeature.execute(request.build());
-        assertTrue(
-                response.getErrorInfo()
-                        .getErrorTrace()
-                        .contains("with connection type [null] doesn't support snapshotting"));
+        assertTrue(response.hasErrorInfo());
+        assertEquals(
+                "CuttlefishDisplayFeature: null connection, no CuttlefishControl available.",
+                response.getErrorInfo().getErrorTrace());
     }
 
     @Test
@@ -117,10 +119,10 @@ public class CuttlefishDisplayFeatureTest {
                                 getDisplayRequestString(displayRequest));
 
         FeatureResponse response = mFeature.execute(request.build());
-        assertTrue(
-                response.getErrorInfo()
-                        .getErrorTrace()
-                        .contains("with connection type [null] doesn't support snapshotting"));
+        assertTrue(response.hasErrorInfo());
+        assertEquals(
+                "CuttlefishDisplayFeature: null connection, no CuttlefishControl available.",
+                response.getErrorInfo().getErrorTrace());
     }
 
     @Test
@@ -139,9 +141,9 @@ public class CuttlefishDisplayFeatureTest {
                                 getDisplayRequestString(displayRequest));
 
         FeatureResponse response = mFeature.execute(request.build());
-        assertTrue(
-                response.getErrorInfo()
-                        .getErrorTrace()
-                        .contains("with connection type [null] doesn't support snapshotting"));
+        assertTrue(response.hasErrorInfo());
+        assertEquals(
+                "CuttlefishDisplayFeature: null connection, no CuttlefishControl available.",
+                response.getErrorInfo().getErrorTrace());
     }
 }

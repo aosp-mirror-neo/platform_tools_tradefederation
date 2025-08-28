@@ -190,6 +190,11 @@ public class CuttlefishDisplayFeature
 
     private CuttlefishControl getCuttlefishControl(ITestDevice device) {
         AbstractConnection deviceConnection = device.getConnection();
+        if (deviceConnection == null) {
+            CLog.d("CuttlefishDisplayFeature: device connection is null.");
+            return null;
+        }
+
         if (deviceConnection instanceof AdbSshConnection) {
             AdbSshConnection adbShhConnection = (AdbSshConnection) deviceConnection;
             return adbShhConnection.getCuttlefishControl();
@@ -241,6 +246,12 @@ public class CuttlefishDisplayFeature
         mTestInformation.setActiveDeviceIndex(index);
 
         CuttlefishControl cuttlefishControl = getCuttlefishControl(mTestInformation.getDevice());
+        if (cuttlefishControl == null) {
+            return buildErrorResponse(
+                    String.format(
+                            "CuttlefishDisplayFeature: null connection, no CuttlefishControl"
+                                    + " available."));
+        }
 
         switch (displayRequest.getDisplayRequestOneofCase()) {
             case ADD_DISPLAY:

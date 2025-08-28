@@ -24,6 +24,9 @@ import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.service.TradefedFeatureClient;
 
 import com.proto.tradefed.feature.FeatureResponse;
+import com.proto.tradefed.feature.internal.CuttlefishDisplay;
+import com.proto.tradefed.feature.internal.CuttlefishDisplayFeatureResponse;
+import com.proto.tradefed.feature.internal.CuttlefishDisplayListResponse;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -31,6 +34,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import java.util.Base64;
 
 /** Unit tests for {@link CuttlefishDisplayHandler}. */
 @RunWith(JUnit4.class)
@@ -50,9 +55,26 @@ public class CuttlefishDisplayHandlerTest {
 
     @Test
     public void testListDisplays() throws Exception {
+        CuttlefishDisplayFeatureResponse.Builder displayResponseBuilder =
+                CuttlefishDisplayFeatureResponse.newBuilder();
+        CuttlefishDisplayListResponse.Builder displayListResponseBuilder =
+                displayResponseBuilder
+                        .getListDisplaysBuilder()
+                        .putDisplays(
+                                1,
+                                CuttlefishDisplay.newBuilder()
+                                        .setWidth(1)
+                                        .setHeight(1)
+                                        .setDpi(1)
+                                        .setRefreshRateHz(1)
+                                        .build());
+        CuttlefishDisplayFeatureResponse displayResponse = displayResponseBuilder.build();
+
         FeatureResponse.Builder responseBuilder = FeatureResponse.newBuilder();
+
         responseBuilder.setResponse(
-                "Attempting snapshot device on device-1.  Snapshot finished in 999 ms.");
+                Base64.getEncoder().encodeToString(displayResponse.toByteArray()));
+
         when(mMockClient.triggerFeature(any(), any())).thenReturn(responseBuilder.build());
 
         mHandler.listDisplays(mMockDevice);

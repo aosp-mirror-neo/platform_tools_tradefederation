@@ -80,7 +80,9 @@ public class CuttlefishDisplayHandler {
             response =
                     mClient.triggerFeature(
                             CuttlefishDisplayFeature.CUTTLEFISH_DISPLAY_FEATURE_NAME, args);
-            CLog.d("CuttlefishDisplayHandler: add display response: %s", response.getResponse());
+            CLog.d(
+                    "CuttlefishDisplayHandler: received display response: %s",
+                    response.getResponse());
         } finally {
             mClient.close();
         }
@@ -209,7 +211,7 @@ public class CuttlefishDisplayHandler {
         Map<Integer, Display> displays = new HashMap<>();
         displayResponse
                 .getListDisplays()
-                .getDisplays()
+                .getDisplaysMap()
                 .forEach(
                         (displayNumber, display) -> {
                             displays.put(
