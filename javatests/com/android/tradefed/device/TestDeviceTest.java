@@ -6406,6 +6406,11 @@ public class TestDeviceTest {
                     public int getApiLevel() throws DeviceNotAvailableException {
                         return 23;
                     }
+
+                    @Override
+                    public InputStreamSource getLogcatDump() {
+                        return new ByteArrayInputStreamSource(new byte[0]);
+                    }
                 };
         ITestLogger listener = mock(ITestLogger.class);
 
