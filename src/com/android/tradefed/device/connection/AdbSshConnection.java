@@ -133,15 +133,17 @@ public class AdbSshConnection extends AdbTcpConnection {
                                 .getHostOptions()
                                 .getConcurrentVirtualDeviceStartupLimit()
                         != null) {
-                    GlobalConfiguration.getInstance()
-                            .getHostOptions()
-                            .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
-                    long queueTime = System.currentTimeMillis() - startTime;
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
-                    CLog.v(
-                            "Fetch and launch CVD permit obtained after %ds",
-                            TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                    try (CloseableTraceScope ignored = new CloseableTraceScope("fetch_cvd_permit")) {
+                        GlobalConfiguration.getInstance()
+                                .getHostOptions()
+                                .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
+                        long queueTime = System.currentTimeMillis() - startTime;
+                        InvocationMetricLogger.addInvocationMetrics(
+                                InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
+                        CLog.v(
+                                "Fetch and launch CVD permit obtained after %ds",
+                                TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                    }
                 }
                 // Reset start time for device launch time calculation.
                 startTime = getCurrentTime();
