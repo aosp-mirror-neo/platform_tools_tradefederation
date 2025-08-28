@@ -371,8 +371,24 @@ public class InvocationExecution implements IInvocationExecution {
             } finally {
                 long end = System.currentTimeMillis();
                 InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.SETUP_END, end);
-                InvocationMetricLogger.addInvocationPairMetrics(
-                        InvocationMetricKey.SETUP_PAIR, start, end);
+                // In some cases categorize the metric for actionability
+                boolean recategorize =
+                        testInfo.getContext().getBuildInfos().size() > 0
+                                && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildFlavor())
+                                && (testInfo.getBuildInfo().getBuildFlavor().contains("sdv_core")
+                                        || !testInfo.getBuildInfo()
+                                                .getBuildFlavor()
+                                                .contains("userdebug"));
+                if (recategorize) {
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.TEST_SETUP_PAIR, start, end);
+                    // Keep a 0 pair to avoid empty field.
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.SETUP_PAIR, end, end);
+                } else {
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.SETUP_PAIR, start, end);
+                }
             }
             long startPreparer = System.currentTimeMillis();
             try (CloseableTraceScope ignored =
