@@ -1590,6 +1590,14 @@ public class NativeDevice
     @Override
     public boolean pullFile(final String remoteFilePath, final File localFile, int userId)
             throws DeviceNotAvailableException {
+        return pullFile(remoteFilePath, localFile, userId, getCommandTimeout());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean pullFile(
+            final String remoteFilePath, final File localFile, int userId, long timeout)
+            throws DeviceNotAvailableException {
         long startTime = System.currentTimeMillis();
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.PULL_FILE_COUNT, 1);
 
@@ -1600,7 +1608,7 @@ public class NativeDevice
                     return handler.pullFile(remoteFilePath, localFile);
                 }
             }
-            return pullFileWithAdbCommand(remoteFilePath, localFile);
+            return pullFileWithAdbCommand(remoteFilePath, localFile, timeout);
         } finally {
             long totalTime = System.currentTimeMillis() - startTime;
             InvocationMetricLogger.addInvocationMetrics(
@@ -1673,13 +1681,13 @@ public class NativeDevice
         return pullFile(fullPath);
     }
 
-    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile, long timeout)
             throws DeviceNotAvailableException {
         List<String> adbPushFileCmd = new ArrayList<>();
         adbPushFileCmd.add("pull");
         adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
         adbPushFileCmd.add(localFile.getAbsolutePath());
-        CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
+        CommandResult res = executeAdbV2Command(timeout, adbPushFileCmd.toArray(new String[0]));
         return CommandStatus.SUCCESS.equals(res.getStatus());
     }
 
@@ -2232,6 +2240,13 @@ public class NativeDevice
     @Override
     public boolean pullDir(String deviceFilePath, File localDir, int userId)
             throws DeviceNotAvailableException {
+        return pullDir(deviceFilePath, localDir, userId, getCommandTimeout());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean pullDir(String deviceFilePath, File localDir, int userId, long timeout)
+            throws DeviceNotAvailableException {
         long startTime = System.currentTimeMillis();
         try {
             if (isSdcardOrEmulated(deviceFilePath)) {
@@ -2243,7 +2258,7 @@ public class NativeDevice
                 }
             }
 
-            return pullDirInternal(deviceFilePath, localDir, userId);
+            return pullDirInternal(deviceFilePath, localDir, userId, timeout);
         } finally {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.PULL_DIR_TIME, System.currentTimeMillis() - startTime);
@@ -2251,7 +2266,7 @@ public class NativeDevice
         }
     }
 
-    private boolean pullDirInternal(String deviceFilePath, File localDir, int userId)
+    private boolean pullDirInternal(String deviceFilePath, File localDir, int userId, long timeout)
             throws DeviceNotAvailableException {
         if (!localDir.isDirectory()) {
             CLog.e("Local path %s is not a directory", localDir.getAbsolutePath());
@@ -2284,7 +2299,7 @@ public class NativeDevice
                     return false;
                 }
                 String deviceSubDir = item.getFullPath();
-                if (!pullDirInternal(deviceSubDir, subDir, userId)) {
+                if (!pullDirInternal(deviceSubDir, subDir, userId, timeout)) {
                     CLog.w("Failed to pull sub directory %s from device, aborting", deviceSubDir);
                     return false;
                 }
@@ -2292,7 +2307,7 @@ public class NativeDevice
                 // handle regular file
                 File localFile = new File(localDir, item.getName());
                 String fullPath = item.getFullPath();
-                if (!pullFileWithAdbCommand(fullPath, localFile)) {
+                if (!pullFileWithAdbCommand(fullPath, localFile, timeout)) {
                     CLog.w("Failed to pull file %s from device, aborting", fullPath);
                     return false;
                 }
