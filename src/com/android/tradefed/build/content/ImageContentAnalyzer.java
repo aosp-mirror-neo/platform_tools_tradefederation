@@ -193,7 +193,7 @@ public class ImageContentAnalyzer {
     private long deviceImageAnalysis(ContentAnalysisContext context) {
         if (context.abortAnalysis()) {
             CLog.w(
-                    "Analysis was aborted for build key %s: %s",
+                    "Analysis was aborted for device image %s: %s",
                     context.contentEntry(), context.abortReason());
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.ABORT_CONTENT_ANALYSIS, 1);
