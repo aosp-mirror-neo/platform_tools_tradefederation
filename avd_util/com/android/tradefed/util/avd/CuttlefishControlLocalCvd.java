@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -102,6 +103,7 @@ public class CuttlefishControlLocalCvd implements CuttlefishControl {
         CLog.d("`cvd display list` stdout: %s", listDisplaysResult.getStdout());
 
         CuttlefishDisplays cuttlefishDisplays = new CuttlefishDisplays();
+        cuttlefishDisplays.displays = new HashMap<>();
         try {
             JSONObject json = new JSONObject(listDisplaysResult.getStdout());
             JSONObject jsonDisplays = json.getJSONObject("displays");
@@ -111,7 +113,7 @@ public class CuttlefishControlLocalCvd implements CuttlefishControl {
                 JSONObject jsonDisplay = jsonDisplays.getJSONObject(displayNumberString);
                 JSONObject jsonDisplayMode = jsonDisplay.getJSONObject("mode");
                 JSONArray jsonDisplayModeWindowed = jsonDisplayMode.getJSONArray("windowed");
-                JSONArray jsonDisplayDpi = jsonDisplayMode.getJSONArray("dpi");
+                JSONArray jsonDisplayDpi = jsonDisplay.getJSONArray("dpi");
 
                 int id = Integer.parseInt(displayNumberString);
                 int w = jsonDisplayModeWindowed.getInt(0);
@@ -129,8 +131,8 @@ public class CuttlefishControlLocalCvd implements CuttlefishControl {
         } catch (JSONException e) {
             return CommandResultWith.errorString(
                     String.format(
-                            "Failed to parse Cuttlefish displays from json: %s",
-                            listDisplaysResult.getStdout()));
+                            "Failed to parse Cuttlefish displays from json: %s . Error: %s",
+                            listDisplaysResult.getStdout(), e.toString()));
         }
 
         return CommandResultWith.success(cuttlefishDisplays, listDisplaysResult);
