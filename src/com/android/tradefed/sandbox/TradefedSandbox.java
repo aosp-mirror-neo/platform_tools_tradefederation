@@ -723,7 +723,7 @@ public class TradefedSandbox implements ISandbox {
         return extraBuildTarget;
     }
 
-    private String[] removeIncompatibleFlags(String[] args) {
+    public static String[] removeIncompatibleFlags(String[] args) {
         if (args == null) {
             return new String[0];
         }
@@ -732,6 +732,8 @@ public class TradefedSandbox implements ISandbox {
                     TradefedDelegator.clearCommandlineFromOneArg(args, "rollout-flags");
             commandArray = TradefedDelegator.clearCommandlineFromOneArg(
                     commandArray, "report-cache-invocation-results-postsubmit", true);
+            commandArray = TradefedDelegator.clearCommandlineFromOneArg(
+                    commandArray, "report-cache-invocation-results-presubmit", true);
             return commandArray;
         } catch (ConfigurationException e) {
             throw new RuntimeException(e);

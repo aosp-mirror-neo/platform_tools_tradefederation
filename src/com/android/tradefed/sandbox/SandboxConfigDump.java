@@ -26,7 +26,6 @@ import com.android.tradefed.device.IDeviceSelection;
 import com.android.tradefed.log.FileLogger;
 import com.android.tradefed.log.ILeveledLogOutput;
 import com.android.tradefed.log.Log.LogLevel;
-import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.FileSystemLogSaver;
 import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ITestInvocationListener;
@@ -43,8 +42,6 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -109,12 +106,11 @@ public class SandboxConfigDump {
      * Parse the args and creates a {@link IConfiguration} from it then dumps it to the result file.
      */
     public int parse(String[] args) {
-        // TODO: add some more checking
+        // remove roll-out flags from the commandline as they are meant for the parent process only.
+        args = TradefedSandbox.removeIncompatibleFlags(args);
         List<String> argList = new ArrayList<>(Arrays.asList(args));
         DumpCmd cmd = DumpCmd.valueOf(argList.remove(0));
         File resFile = new File(argList.remove(0));
-        // remove roll-out flags from the commandline as they are meant for the parent process only.
-        removeRolloutFlags(argList);
         SandboxConfigurationFactory factory = SandboxConfigurationFactory.getInstance();
         PrintWriter pw = null;
         try {
@@ -247,27 +243,6 @@ public class SandboxConfigDump {
             requirements.setBaseDeviceTypeRequested(null);
             // In sandbox it's pointless to check again for battery for allocation
             requirements.setRequireBatteryCheck(false);
-        }
-    }
-
-    private void removeRolloutFlags(List<String> argsList) {
-        Iterator<String> iterator = argsList.iterator();
-        List<String> removedArgs = new LinkedList<>();
-        while (iterator.hasNext()) {
-            final String arg = iterator.next();
-            if (arg.equals("--rollout-flags")) {
-                iterator.remove();
-                removedArgs.add(arg);
-                // go over the next item and remove the value of this flag
-                if (iterator.hasNext()) {
-                    String value = iterator.next();
-                    iterator.remove();
-                    removedArgs.add(value);
-                }
-            }
-        }
-        if (!removedArgs.isEmpty()) {
-            CLog.d("Removed rollout-flags: %s", removedArgs);
         }
     }
 }

@@ -57,6 +57,9 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.RemoteFileUtil;
 import com.android.tradefed.util.StreamUtil;
+import com.android.tradefed.util.avd.CuttlefishControl;
+import com.android.tradefed.util.avd.CuttlefishControlHostOrchestrator;
+import com.android.tradefed.util.avd.CuttlefishControlRemoteCvd;
 import com.android.tradefed.util.avd.HostOrchestratorUtil;
 import com.android.tradefed.util.avd.InspectionUtil;
 import com.android.tradefed.util.avd.OxygenClient;
@@ -130,15 +133,17 @@ public class AdbSshConnection extends AdbTcpConnection {
                                 .getHostOptions()
                                 .getConcurrentVirtualDeviceStartupLimit()
                         != null) {
-                    GlobalConfiguration.getInstance()
-                            .getHostOptions()
-                            .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
-                    long queueTime = System.currentTimeMillis() - startTime;
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
-                    CLog.v(
-                            "Fetch and launch CVD permit obtained after %ds",
-                            TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                    try (CloseableTraceScope ignored = new CloseableTraceScope("fetch_cvd_permit")) {
+                        GlobalConfiguration.getInstance()
+                                .getHostOptions()
+                                .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
+                        long queueTime = System.currentTimeMillis() - startTime;
+                        InvocationMetricLogger.addInvocationMetrics(
+                                InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
+                        CLog.v(
+                                "Fetch and launch CVD permit obtained after %ds",
+                                TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                    }
                 }
                 // Reset start time for device launch time calculation.
                 startTime = getCurrentTime();
@@ -1303,5 +1308,29 @@ public class AdbSshConnection extends AdbTcpConnection {
     @VisibleForTesting
     OxygenClient createOxygenClient() {
         return OxygenUtil.createOxygenClient(getDevice().getOptions().getAvdDriverBinary());
+    }
+
+    public CuttlefishControl getCuttlefishControl() {
+        boolean hasHostOrchestrator =
+                // Oxygenation always uses HO:
+                getDevice().getOptions().useOxygenationDevice()
+                        ||
+                        // Oxygen uses HO when "use-cvd" is set:
+                        (getDevice().getOptions().useOxygen()
+                                && getDevice().getOptions().useCvdCF());
+
+        if (hasHostOrchestrator) {
+            return new CuttlefishControlHostOrchestrator(createHostOrchestratorUtil(getAvdInfo()));
+        } else {
+            return new CuttlefishControlRemoteCvd(
+                    getDevice().getOptions().useOxygenationDevice()
+                            ? "localhost"
+                            : getAvdInfo().hostAndPort().getHost(),
+                    getDevice().getOptions().getInstanceUser(),
+                    getDevice().getOptions().getSshPrivateKeyPath(),
+                    getAvdInfo().getDeviceOffset(),
+                    getDevice().getOptions().useOxygen(),
+                    getRunUtil());
+        }
     }
 }

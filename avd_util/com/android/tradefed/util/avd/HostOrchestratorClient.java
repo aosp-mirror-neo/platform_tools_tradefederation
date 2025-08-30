@@ -27,6 +27,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Java implementation of Cuttlefish Host Orchestator API.
@@ -70,6 +71,51 @@ public class HostOrchestratorClient {
         StartCVDRequest(String id) {
             snapshot_id = id;
         }
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/api/v1/messages.go#L176
+    public static final class DisplayAddRequest {
+
+        public int width;
+        public int height;
+        public int dpi;
+        public int refresh_rate_hz;
+
+        DisplayAddRequest(int width, int height, int dpi, int refreshRateHz) {
+            this.width = width;
+            this.height = height;
+            this.dpi = dpi;
+            this.refresh_rate_hz = refreshRateHz;
+        }
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/api/v1/messages.go#L183
+    public static final class DisplayAddResponse {
+
+        public int display_number;
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/api/v1/messages.go#L187
+    public static final class DisplayMode {
+        public List<Integer> windowed;
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/api/v1/messages.go#L191
+    public static final class Display {
+        public List<Integer> dpi;
+        public DisplayMode mode;
+        public int refresh_rate_hz;
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/api/v1/messages.go#L197
+    public static final class DisplayListResponse {
+        public Map<Integer, Display> displays;
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/api/v1/messages.go#L207
+    public static final class DisplayScreenshotResponse {
+        public String screenshot_bytes;
+        public String screenshot_mime_type;
     }
 
     public static HttpRequest buildListCvdsRequest(String baseURL) {
@@ -146,6 +192,47 @@ public class HostOrchestratorClient {
         return HttpRequest.newBuilder()
                 .uri(URI.create(String.format("%s/cvds/%s/%s/:start", baseURL, group, name)))
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(new Gson().toJson(request)))
+                .build();
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/orchestrator/controller.go#L91
+    public static HttpRequest buildDisplayAddRequest(
+            String baseURL, String group, String name, DisplayAddRequest request) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds/%s/%s/displays", baseURL, group, name)))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(new Gson().toJson(request)))
+                .build();
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/orchestrator/controller.go#L93
+    public static HttpRequest buildDisplayListRequest(String baseURL, String group, String name) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds/%s/%s/displays", baseURL, group, name)))
+                .build();
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/orchestrator/controller.go#L95
+    public static HttpRequest buildDisplayRemoveRequest(
+            String baseURL, String group, String name, int displayNumber) {
+        return HttpRequest.newBuilder()
+                .uri(
+                        URI.create(
+                                String.format(
+                                        "%s/cvds/%s/%s/displays/%d",
+                                        baseURL, group, name, displayNumber)))
+                .DELETE()
+                .build();
+    }
+
+    // https://github.com/google/android-cuttlefish/blob/613f81afb382cf7fb8b0d8793b9a4f0ab0986981/frontend/src/host_orchestrator/orchestrator/controller.go#L97
+    public static HttpRequest buildDisplayScreenshotRequest(
+            String baseURL, String group, String name, int displayNumber) {
+        return HttpRequest.newBuilder()
+                .uri(
+                        URI.create(
+                                String.format(
+                                        "%s/cvds/%s/%s/displays/%d/:screenshot",
+                                        baseURL, group, name, displayNumber)))
                 .build();
     }
 

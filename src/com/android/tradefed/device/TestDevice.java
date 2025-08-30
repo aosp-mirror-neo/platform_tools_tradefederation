@@ -363,6 +363,9 @@ public class TestDevice extends NativeDevice {
         } finally {
             StreamUtil.cancel(bugreport);
         }
+        try (InputStreamSource source = getLogcatDump()) {
+            listener.testLog(dataName + "_logcat", LogDataType.LOGCAT, source);
+        }
         CLog.d(
                 "logBugreport() was not successful in collecting and logging the bugreport "
                         + "for device %s",
@@ -451,6 +454,7 @@ public class TestDevice extends NativeDevice {
                 CLog.e(
                         "Something went went wrong during bugreportz collection: '%s'",
                         res.getStdout());
+                getDetailLogInfoForBugreportFailed();
                 FileUtil.deleteFile(zipFile);
                 return null;
             }
@@ -478,6 +482,23 @@ public class TestDevice extends NativeDevice {
             // if the device goes away
             CLog.e("Device %s became unresponsive while retrieving bugreport", getSerialNumber());
             return null;
+        }
+    }
+
+    private void getDetailLogInfoForBugreportFailed() {
+        if (getDeviceState() == TestDeviceState.NOT_AVAILABLE) {
+            CLog.w("Device %s is currently not avliable");
+        }
+        CLog.w("Device %s is currently on status: %s", getSerialNumber(), getDeviceState());
+        try {
+            CommandResult res =
+                    executeShellV2Command(
+                            "dumpsys usb", BUGREPORT_TIMEOUT, TimeUnit.MILLISECONDS, 0);
+            CLog.w(
+                    "USB connection info between host and device %s: %s",
+                    getSerialNumber(), res.getStdout());
+        } catch (DeviceNotAvailableException e) {
+            CLog.e("Failed to get usb informaciton for device %s. ", getSerialNumber());
         }
     }
 
@@ -2801,7 +2822,7 @@ public class TestDevice extends NativeDevice {
             getRunUtil().allowInterrupt(true);
             // Manually execute the adb action to avoid any kind of recovery
             // since it hard to interrupt the forwarding
-            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false, false);
+            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false);
             AdbShellAction adbActionV2 =
                     new AdbShellAction(
                             fullCmd,
