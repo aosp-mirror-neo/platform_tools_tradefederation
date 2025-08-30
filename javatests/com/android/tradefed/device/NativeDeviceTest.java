@@ -532,7 +532,8 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+                    protected boolean pullFileWithAdbCommand(
+                            String remoteFilePath, File localFile, long timeout)
                             throws DeviceNotAvailableException {
                         try {
                             // Just touch the file to make it appear.
@@ -610,7 +611,8 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+                    protected boolean pullFileWithAdbCommand(
+                            String remoteFilePath, File localFile, long timeout)
                             throws DeviceNotAvailableException {
                         if (mFirstPull) {
                             mFirstPull = false;
