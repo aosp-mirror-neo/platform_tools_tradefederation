@@ -184,7 +184,7 @@ public class MixRadioTargetPreparer extends BaseTargetPreparer
             // Alcedo Example: a900a-ES2_250408-250414-MC-13351752
             List<Pattern> patterns = new ArrayList<>();
             patterns.add(Pattern.compile("g[a-zA-Z0-9]+-\\d+-\\d+(-[a-zA-Z0-9]+)?-(P?\\d+)"));
-            patterns.add(Pattern.compile("[a-zA-Z0-9]+-[a-zA-Z0-9_]+-[0-9]+-[A-Z]-P?[0-9]+"));
+            patterns.add(Pattern.compile("[a-zA-Z0-9]+-[a-zA-Z0-9_]+-[0-9]+-[a-zA-Z]+-P?[0-9]+"));
             for (Pattern pattern : patterns) {
                 Matcher versionMatcher = pattern.matcher(fileContent);
                 if (versionMatcher.find()) {
