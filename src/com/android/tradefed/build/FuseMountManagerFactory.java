@@ -159,7 +159,7 @@ public class FuseMountManagerFactory {
                                     })
                             .collect(
                                     Collectors.partitioningBy(
-                                            FuseMountManagerFactory::deleteMountPointNoThrow,
+                                            p -> FuseMountManager.cleanUp(p, RunUtil.getDefault()),
                                             Collectors.counting()));
 
             long failed = results.getOrDefault(false, 0L);
@@ -179,20 +179,6 @@ public class FuseMountManagerFactory {
         } catch (IOException e) {
             CLog.e("Failed to remove stale mount points: %s", e.getMessage());
         }
-    }
-
-    /**
-     * Deletes the mount point, logging any errors.
-     *
-     * @return {@code true} if the mount point was deleted, {@code false} otherwise.
-     */
-    private static boolean deleteMountPointNoThrow(Path mountPoint) {
-        IRunUtil runUtil = RunUtil.getDefault();
-        // A mount point becomes stale if it was never unmounted or failed to unmount.
-        // Unmount it before deleting it.
-        FuseMountManager.lazyUnmount(mountPoint, runUtil);
-        FuseMountManager.cleanUp(mountPoint, runUtil);
-        return !Files.exists(mountPoint);
     }
 
     /**
