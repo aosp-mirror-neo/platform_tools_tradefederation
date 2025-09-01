@@ -34,7 +34,6 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.VersionParser;
-
 import com.google.android.tradefed.build.AndroidBuildArtifactHelper;
 import com.google.android.tradefed.build.AndroidBuildDownloader;
 import com.google.android.tradefed.build.DeviceLaunchControlProvider;
@@ -48,7 +47,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableSet;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.AbstractMap;
@@ -69,7 +67,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import javax.annotation.Nonnull;
 
 /**
@@ -492,6 +489,12 @@ public class AndroidBuildRemoteFileResolver implements IRemoteFileResolver {
                     mCasBatchUpdateBlobsTimeout,
                     mCasBatchReadBlobsTimeout,
                     mCasGetTreeTimeout);
+            CLog.d(
+                    "[%s] setCasChunksOptions(%s, %s) (mForceDisableCasFuseMount: %s)",
+                    Integer.toHexString(System.identityHashCode(cas)),
+                    mCasKeepChunks && !mForceDisableCasFuseMount,
+                    mCasChunksOnly && !mForceDisableCasFuseMount,
+                    mForceDisableCasFuseMount);
             cas.setCasChunksOptions(
                     mCasKeepChunks && !mForceDisableCasFuseMount,
                     mCasChunksOnly && !mForceDisableCasFuseMount);

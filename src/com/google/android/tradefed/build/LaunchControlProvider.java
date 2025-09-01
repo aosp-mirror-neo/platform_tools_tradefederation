@@ -70,7 +70,6 @@ import com.android.tradefed.util.executor.ParallelDeviceExecutor;
 import com.android.tradefed.util.net.HttpHelper;
 import com.android.tradefed.util.net.IHttpHelper;
 import com.android.tradefed.util.net.IHttpHelper.DataSizeException;
-
 import com.google.android.tradefed.build.RemoteBuildInfo.BuildAttributeKey;
 import com.google.android.tradefed.build.RemoteBuildInfo.InvalidResponseException;
 import com.google.android.tradefed.build.content.ContentBasedHelper;
@@ -80,7 +79,6 @@ import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.client.util.Strings;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -95,7 +93,6 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -1451,6 +1448,12 @@ public class LaunchControlProvider
                 mCasBatchUpdateBlobsTimeout,
                 mCasBatchReadBlobsTimeout,
                 mCasGetTreeTimeout);
+        CLog.d(
+                "[%s] setCasChunksOptions(%s, %s) (mForceDisableCasFuseMount: %s)",
+                Integer.toHexString(System.identityHashCode(cas)),
+                mCasKeepChunks && !mForceDisableCasFuseMount,
+                mCasChunksOnly && !mForceDisableCasFuseMount,
+                mForceDisableCasFuseMount);
         cas.setCasChunksOptions(
                 mCasKeepChunks && !mForceDisableCasFuseMount,
                 mCasChunksOnly && !mForceDisableCasFuseMount);
