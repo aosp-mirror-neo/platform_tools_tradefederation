@@ -22,6 +22,7 @@ import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.postprocessor.AutoLogProcessor;
+import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.UniqueMultiMap;
 
 import java.io.File;
@@ -279,14 +280,14 @@ public class CommandOptions implements ICommandOptions {
     @Option(
             name = "experimental-flags",
             description = "Map of experimental flags that can be used for feature gating projects.")
-    private Map<String, String> mExperimentalFlags = new LinkedHashMap<>();
+    private MultiMap<String, String> mExperimentalFlags = new MultiMap<>();
 
     @Option(
             name = "rollout-flags",
             description =
                     "Map of rollout flags to enable features completely. Rollout flags are ignored"
                             + " when TF objects are not present.")
-    private Map<String, String> mRolloutFlags = new LinkedHashMap<>();
+    private MultiMap<String, String> mRolloutFlags = new MultiMap<>();
 
     @Option(
             name = "skip-trybot-experiment",
@@ -755,13 +756,13 @@ public class CommandOptions implements ICommandOptions {
 
     /** {@inheritDoc} */
     @Override
-    public Map<String, String> getExperimentalFlags() {
+    public MultiMap<String, String> getExperimentalFlags() {
         return mExperimentalFlags;
     }
 
     /** {@inheritDoc} */
     @Override
-    public Map<String, String> getRolloutFlags() {
+    public MultiMap<String, String> getRolloutFlags() {
         return mRolloutFlags;
     }
 
