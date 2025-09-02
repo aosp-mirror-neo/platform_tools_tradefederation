@@ -375,7 +375,9 @@ public class InvocationExecution implements IInvocationExecution {
                 boolean recategorize =
                         testInfo.getContext().getBuildInfos().size() > 0
                                 && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildFlavor())
+                                && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildBranch())
                                 && (testInfo.getBuildInfo().getBuildFlavor().contains("sdv_core")
+                                        || testInfo.getBuildInfo().getBuildBranch().contains("release")
                                         || !testInfo.getBuildInfo()
                                                 .getBuildFlavor()
                                                 .contains("userdebug"));
