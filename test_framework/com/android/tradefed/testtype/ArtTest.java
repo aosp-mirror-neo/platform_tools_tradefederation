@@ -42,11 +42,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.zip.ZipFile;
 
@@ -86,7 +84,7 @@ public class ArtTest implements IRemoteTest, IShardableTest {
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
     protected Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
-    protected Set<String> mExecutedTestNames = new HashSet<String>();
+    protected Map<String, Boolean> mTestResults = new TreeMap<String, Boolean>();
     protected int mShardIndex = 0;
     protected int mShardCount = 1;
 
@@ -181,33 +179,40 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         return shardedTests;
     }
 
-    void runTest(String name, JSONObject test, ITestInvocationListener listener)
+    Boolean runTest(String name, JSONObject test, ITestInvocationListener listener)
             throws JSONException, DeviceNotAvailableException {
-        if (mExecutedTestNames.contains(name)) {
-            return;
+        if (mTestResults.containsKey(name)) {
+            return mTestResults.get(name);
         }
-        mExecutedTestNames.add(name);
 
+        String error = null;
         JSONArray dependencies = test.optJSONArray("dependencies");
         for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
             String dep = dependencies.getString(i);
-            runTest(dep, mTests.get(dep), listener);
+            if (!runTest(dep, mTests.get(dep), listener)) {
+                error = "Dependency '" + dep + "' failed";
+                break;
+            }
         }
 
         TestDescription testId = TestDescription.fromString(name);
         try {
             listener.testStarted(testId);
-            adbPush(test);
-            String error = adbShell(test);
+            if (error == null) {
+                adbPush(test);
+                error = adbShell(test);
+            }
+        } catch (JSONException | DeviceNotAvailableException e) {
+            error = e.toString();
+            throw e;
+        } finally {
             if (error != null) {
                 listener.testFailed(testId, error);
             }
-        } catch (JSONException | DeviceNotAvailableException e) {
-            listener.testFailed(testId, e.toString());
-            throw e;
-        } finally {
             listener.testEnded(testId, Collections.emptyMap());
+            mTestResults.put(name, (error == null));
         }
+        return error == null;
     }
 
     void clean() throws DeviceNotAvailableException {
