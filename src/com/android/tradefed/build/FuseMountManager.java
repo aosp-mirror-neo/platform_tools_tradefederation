@@ -25,6 +25,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CasUtil;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import java.io.ByteArrayOutputStream;
@@ -58,8 +59,10 @@ public class FuseMountManager {
     // Timeouts for unmount operations. The process may still alive after a fuse command is done.
     // Wait for the process to terminate before the next step.
     private static final long FUSEMOUNT_TIMEOUT_MS = 4 * 1000; // For 'fusermount -u' to complete.
-    private static final long UMOUNT_LAZY_TIMEOUT_MS = 5 * 1000; // For 'umount -l' to complete.
+    private static final long UMOUNT_LAZY_TIMEOUT_MS = 2 * 1000; // For 'umount -l' to complete.
     private static final long PROCESS_WAIT_TIMEOUT_MS = 5 * 1000; // For fuse process to terminate.
+    private static final long CLEANUP_TIMEOUT_MS = 5 * 1000;
+    private static final long CLEANUP_INTERVAL_MS = 200;
 
     /** MountInfo is a class that holds information about a mounted FUSE filesystem. */
     private static class MountInfo {
@@ -126,8 +129,7 @@ public class FuseMountManager {
         String casviewerPath = null;
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             mountPoint = createUniqueMountPoint(sourceDataPath);
-            List<String> command =
-                    mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
+            List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
             casviewerPath = command.get(0);
 
             // This shouldn't be needed. Log indicates the casviewer may lost the executable bit for
@@ -238,8 +240,7 @@ public class FuseMountManager {
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
             cleanUp(mountPoint); // Best-effort directory cleanup
 
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.CAS_UNMOUNT_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.CAS_UNMOUNT_COUNT, 1);
             CLog.d(
                     "Done unmounting '%s' (dir count: %d), took %d ms",
                     sourceDataPathString,
@@ -329,7 +330,7 @@ public class FuseMountManager {
      * @param mountPoint The mount point to unmount.
      * @param runUtil The IRunUtil to use for running commands.
      */
-    public static void lazyUnmount(Path mountPoint, IRunUtil runUtil) {
+    private static void lazyUnmount(Path mountPoint, IRunUtil runUtil) {
         try {
             CLog.d("Performing lazy unmount for '%s' to ensure cleanup.", mountPoint);
             CommandResult lazyUnmountResult =
@@ -451,45 +452,54 @@ public class FuseMountManager {
     }
 
     /**
-     * Deletes the mount point directory. This method logs any exceptions but does not throw, as
+     * Cleans up the mount point directory. This method logs any exceptions but does not throw, as
      * this is a best-effort cleanup.
+     *
+     * <p>This method retries the lazy unmount and deletion of the mount point directory. If the
+     * directory still exists, it retries the lazy unmount and deletion until the deadline is
+     * reached.
      *
      * @param mountPoint The mount point to delete.
      * @param runUtil The IRunUtil to use for running commands.
      */
-    public static void cleanUp(Path mountPoint, IRunUtil runUtil) {
-        final long timeoutMs = 1000;
-        final long deadline = System.currentTimeMillis() + timeoutMs;
-        final long intervalMs = 100;
+    public static boolean cleanUp(Path mountPoint, IRunUtil runUtil) {
+        if (!Files.exists(mountPoint)) {
+            return true;
+        }
 
         long start = System.currentTimeMillis();
+        final long deadline = start + CLEANUP_TIMEOUT_MS;
         do {
-            try {
-                Files.deleteIfExists(mountPoint);
-                if (!Files.exists(mountPoint)) {
-                    return;
-                }
-            } catch (IOException e) {
-                // This is expected if the kernel hasn't released the mount yet.
-                CLog.v(
-                        "Deletion of mount point '%s' failed, will retry. Error: %s",
-                        mountPoint, e.getMessage());
+            // The mount point is empty for a successful graceful unmount. If the fuse driver is
+            // terminated with SIGTERM or SIGKILL, the directory may contain dangling links which
+            // should also be removed too.
+            FileUtil.recursiveDelete(mountPoint.toFile());
+            if (!Files.exists(mountPoint)) {
+                return true;
             }
+
+            // The directory is still busy. do a lazy unmount to ensure that the system's intent to
+            // unmount is clear and maximizes the chances of success.
+            lazyUnmount(mountPoint, runUtil);
 
             if (System.currentTimeMillis() >= deadline) {
                 break;
             }
 
-            runUtil.sleep(intervalMs);
+            // Wait for a short interval before the next retry.
+            runUtil.sleep(CLEANUP_INTERVAL_MS);
         } while (System.currentTimeMillis() < deadline);
 
-        if (Files.exists(mountPoint)) {
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.CAS_UNMOUNT_CLEANUP_FAILURE_COUNT, 1);
-            CLog.w(
-                    "Failed to delete mount point: %s, took %d ms",
-                    mountPoint.toString(), System.currentTimeMillis() - start);
+        if (!Files.exists(mountPoint)) {
+            return true;
         }
+
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_UNMOUNT_CLEANUP_FAILURE_COUNT, 1);
+        CLog.w(
+                "Failed to clean up mount point '%s', took %d ms",
+                mountPoint.toString(), System.currentTimeMillis() - start);
+        return false;
     }
 
     /**

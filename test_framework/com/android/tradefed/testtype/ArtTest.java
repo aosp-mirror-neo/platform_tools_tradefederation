@@ -107,10 +107,12 @@ public class ArtTest implements IRemoteTest, IShardableTest {
 
             long startTime = System.currentTimeMillis();
             try {
+                clean();
                 listener.testRunStarted("ArtTest", mTests.size());
                 for (Map.Entry<String, JSONObject> entry : mTests.entrySet()) {
                     runTest(entry.getKey(), entry.getValue(), listener);
                 }
+                clean();
             } catch (JSONException e) {
                 listener.testRunFailed(e.toString());
                 throw new RuntimeException(e);
@@ -195,13 +197,11 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         TestDescription testId = TestDescription.fromString(name);
         try {
             listener.testStarted(testId);
-            clean(test);
             adbPush(test);
             String error = adbShell(test);
             if (error != null) {
                 listener.testFailed(testId, error);
             }
-            clean(test);
         } catch (JSONException | DeviceNotAvailableException e) {
             listener.testFailed(testId, e.toString());
             throw e;
@@ -210,18 +210,9 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         }
     }
 
-    void clean(JSONObject test) throws JSONException, DeviceNotAvailableException {
-        JSONArray cmds = test.optJSONArray("adb push");
-        for (int i = 0; cmds != null && i < cmds.length(); i++) {
-            JSONArray cmd = cmds.getJSONArray(i);
-            if (cmd.length() != 2) {
-                throw new RuntimeException("Invalid adb push command: " + cmd.toString());
-            }
-            String dst = cmd.getString(1);
-
-            ITestDevice device = mTestInfo.getDevice();
-            device.deleteFile(dst);
-        }
+    void clean() throws DeviceNotAvailableException {
+        ITestDevice device = mTestInfo.getDevice();
+        device.deleteFile("/data/local/tmp/art");
     }
 
     void adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
