@@ -80,7 +80,7 @@ import java.util.zip.ZipFile;
  *    }
  *  }
  */
-public class ArtTest implements IRemoteTest, IShardableTest {
+public class ArtTest implements IShardableTest {
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
     protected Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
@@ -143,8 +143,8 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         TreeMap<String, JSONObject> allTests = new TreeMap<String, JSONObject>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
             JSONObject jsonData = new JSONObject(FileUtil.readStringFromFile(jsonFile));
-            for (Iterator<String> it = jsonData.keys(); it.hasNext(); ) {
-                String name = it.next();
+            for (Iterator<?> it = jsonData.keys(); it.hasNext(); ) {
+                String name = (String) it.next();
                 allTests.put(name, jsonData.getJSONObject(name));
             }
         }
@@ -199,7 +199,9 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         try {
             listener.testStarted(testId);
             if (error == null) {
-                adbPush(test);
+                error = adbPush(test);
+            }
+            if (error == null) {
                 error = adbShell(test);
             }
         } catch (JSONException | DeviceNotAvailableException e) {
@@ -220,7 +222,7 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         device.deleteFile("/data/local/tmp/art");
     }
 
-    void adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
+    String adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
         JSONArray cmds = test.optJSONArray("adb push");
         for (int i = 0; cmds != null && i < cmds.length(); i++) {
             JSONArray cmd = cmds.getJSONArray(i);
@@ -232,11 +234,16 @@ public class ArtTest implements IRemoteTest, IShardableTest {
 
             ITestDevice device = mTestInfo.getDevice();
             if (src.isDirectory()) {
-                device.pushDir(src, dst);
+                if (!device.pushDir(src, dst)) {
+                    return "Failed to push directory '" + src + "'";
+                }
             } else {
-                device.pushFile(src, dst);
+                if (!device.pushFile(src, dst)) {
+                    return "Failed to push file '" + src + "'";
+                }
             }
         }
+        return null;
     }
 
     String adbShell(JSONObject test) throws JSONException, DeviceNotAvailableException {
