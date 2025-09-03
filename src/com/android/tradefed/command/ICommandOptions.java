@@ -18,6 +18,7 @@ package com.android.tradefed.command;
 
 import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.postprocessor.AutoLogProcessor;
+import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.UniqueMultiMap;
 
 import java.io.File;
@@ -200,13 +201,13 @@ public interface ICommandOptions {
     public boolean isExperimentEnabled();
 
     /** Returns the experimental flags map, that can be used to feature gate projects. */
-    public Map<String, String> getExperimentalFlags();
+    public MultiMap<String, String> getExperimentalFlags();
 
     /**
      * Returns the rollout flags map. Rollout flags are different from experimental flags, as they
      * are intended to be used for every invocation.
      */
-    public Map<String, String> getRolloutFlags();
+    public MultiMap<String, String> getRolloutFlags();
 
     /** Whether to skip experiments for TRYBOT runs. */
     public boolean skipTrybotExperiment();

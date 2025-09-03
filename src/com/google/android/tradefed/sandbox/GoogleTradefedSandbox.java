@@ -614,7 +614,7 @@ public class GoogleTradefedSandbox extends TradefedSandbox {
         // TODO: Find a better way to determine if a branch is AOSP or not.
         if (branch != null
                 && (branch.contains("aosp")
-                        || branch.contains("-partner")
+                        || branch.contains("partner")
                         || branch.contains("-qcom"))) {
             mIsAosp = true;
         }

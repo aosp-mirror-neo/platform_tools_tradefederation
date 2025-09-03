@@ -55,6 +55,7 @@ import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.UniqueMultiMap;
 import com.android.tradefed.util.VersionParser;
+import com.android.tradefed.util.executor.ParallelDeviceExecutor;
 
 import com.google.android.tradefed.build.AbLocalBuildProvider;
 import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
@@ -102,7 +103,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -1979,17 +1982,72 @@ public class ResultReporter
             // the migration from AnTS to ResultDB (go/convergence-tr).
             // TODO(beining): Remove this method once we can properly migrate AnTS artifacts to
             // ResultDB.
-            for (LogAssociation association : logAssociations) {
-                if (!association.isSupported()) {
-                    continue;
-                }
-                BuildArtifactMetadata artifact =
-                        mClient.getTestArtifact(
-                                mInvocation.getInvocationId(), association.getResourceId());
-                String storagePath = artifact.getStoragePath();
-                rdbReporter.uploadStoragePath(
-                        association.getResourceId(), storagePath, association.getLog());
+            reportLogToResultDB(logAssociations, rdbReporter);
+        }
+    }
+
+    public void reportLogToResultDB(
+            List<LogAssociation> logAssociations, ResultDBReporter rdbReporter) throws IOException {
+        List<Callable<Void>> tasks = new ArrayList<>();
+        for (LogAssociation association : logAssociations) {
+            if (!association.isSupported()) {
+                continue;
             }
+            ResultDBLogReportTask oneTask =
+                    new ResultDBLogReportTask(
+                            association, mInvocation.getInvocationId(), mClient, rdbReporter);
+            tasks.add(oneTask);
+        }
+
+        if (tasks.isEmpty()) {
+            return;
+        }
+        if (mParallelLogUploadPool > 0) {
+            int effectivePoolSize = Math.min(mParallelLogUploadPool, tasks.size());
+            ParallelDeviceExecutor<Void> executor = new ParallelDeviceExecutor<>(effectivePoolSize);
+            // The invokeAll method will block until all tasks are completed.
+            executor.invokeAll(tasks, 0, TimeUnit.MILLISECONDS);
+        } else {
+            // Call sequentially with blocking call.
+            for (Callable<Void> callable : tasks) {
+                ((ResultDBLogReportTask) callable).call();
+            }
+        }
+    }
+
+    /**
+     * A Callable class that encapsulates the logic for reporting a single log association to
+     * ResultDB.
+     */
+    private class ResultDBLogReportTask implements Callable<Void> {
+        private final LogAssociation mAssociation;
+        private final ITestStorageClient mClient;
+        private final ResultDBReporter rdbReporter;
+        private final String mInvocationId;
+
+        private ResultDBLogReportTask(
+                LogAssociation association,
+                String invocationId,
+                ITestStorageClient mClient,
+                ResultDBReporter rdbReporter) {
+            this.mAssociation = association;
+            this.mClient = mClient;
+            this.rdbReporter = rdbReporter;
+            this.mInvocationId = invocationId;
+        }
+
+        @Override
+        public Void call() throws IOException {
+            CLog.v(
+                    "Reporting log association to ResultDB %s name: %s:",
+                    mAssociation, mAssociation.getResourceId());
+
+            BuildArtifactMetadata artifact =
+                    mClient.getTestArtifact(mInvocationId, mAssociation.getResourceId());
+            String storagePath = artifact.getStoragePath();
+            rdbReporter.uploadStoragePath(
+                    mAssociation.getResourceId(), storagePath, mAssociation.getLog());
+            return null;
         }
     }
 

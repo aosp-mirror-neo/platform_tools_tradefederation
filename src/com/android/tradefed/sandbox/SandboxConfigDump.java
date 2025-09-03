@@ -106,10 +106,13 @@ public class SandboxConfigDump {
      * Parse the args and creates a {@link IConfiguration} from it then dumps it to the result file.
      */
     public int parse(String[] args) {
-        // remove roll-out flags from the commandline as they are meant for the parent process only.
-        args = TradefedSandbox.removeIncompatibleFlags(args);
+    	DumpCmd cmd = DumpCmd.valueOf(Arrays.asList(args).get(0));
+    	if (!cmd.equals(DumpCmd.NON_VERSIONED_CONFIG)) {
+	        // remove roll-out flags from the commandline as they are meant for the parent process only.
+	        args = TradefedSandbox.removeIncompatibleFlags(args);
+    	}
         List<String> argList = new ArrayList<>(Arrays.asList(args));
-        DumpCmd cmd = DumpCmd.valueOf(argList.remove(0));
+        cmd = DumpCmd.valueOf(argList.remove(0));
         File resFile = new File(argList.remove(0));
         SandboxConfigurationFactory factory = SandboxConfigurationFactory.getInstance();
         PrintWriter pw = null;

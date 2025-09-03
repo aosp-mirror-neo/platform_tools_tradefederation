@@ -1300,12 +1300,25 @@ public class NativeDevice
                     getSerialNumber());
         }
 
-        try {
-            String[] parts = versionLine.get().split(" ")[1].split("\\.");
-            mHostAdbMajorVersion = Integer.valueOf(Integer.parseInt(parts[0]));
-        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+        final Pattern majorVersionPattern = Pattern.compile("^Version\\s+(?:[0-9]+:)?(\\d+)\\..*");
+        Matcher matcher = majorVersionPattern.matcher(versionLine.get());
+        if (matcher.find()) {
+            // The first capturing group '(\d+)' contains our major version
+            String majorVersionStr = matcher.group(1);
+            try {
+                mHostAdbMajorVersion = Integer.valueOf(majorVersionStr);
+            } catch (NumberFormatException e) {
+                // This case is highly unlikely if the regex matches, but it's safe to keep
+                throw new DeviceNotAvailableException(
+                        String.format(
+                                "Failed to parse major version '%s' from line: %s",
+                                majorVersionStr, versionLine.get()),
+                        getSerialNumber());
+            }
+        } else {
+            // The line started with "Version " but didn't match our expected pattern
             throw new DeviceNotAvailableException(
-                    String.format("Failed to parse major version from line: %s", versionLine.get()),
+                    String.format("Could not parse ADB version from line: %s", versionLine.get()),
                     getSerialNumber());
         }
         return mHostAdbMajorVersion.intValue();

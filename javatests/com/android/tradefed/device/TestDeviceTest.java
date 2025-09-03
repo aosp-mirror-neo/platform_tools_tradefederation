@@ -5213,9 +5213,7 @@ public class TestDeviceTest {
                 .thenReturn(res);
         InputStreamSource data = mTestDevice.getScreenshot();
         assertNotNull(data);
-        assertEquals(
-                "Error: device reported null for screenshot.",
-                StreamUtil.getStringFromStream(data.createInputStream()));
+        assertEquals("", StreamUtil.getStringFromStream(data.createInputStream()));
     }
 
     /** Test for {@link TestDevice#getScreenshot()} when action succeed. */

@@ -1015,6 +1015,7 @@ public abstract class ITestSuite
                     }
                     if (!shouldSkipModule
                             && mMainConfiguration.getCommandOptions().shouldUploadCacheResults()
+                            && moduleConfig != null
                             && moduleDir != null
                             && mMainConfiguration.getCommandOptions().getRemoteCacheInstanceName()
                                     != null) {
@@ -1060,12 +1061,8 @@ public abstract class ITestSuite
                         // TODO(b/372243975): report logs even while applying caching
                         try (InputStreamSource source =
                                 new FileInputStreamSource(moduleConfig, deleteRightAway)) {
-                            if (mInLocalRetry) {
-                                CLog.v("Skip module-configuration logging in local retry.");
-                            } else {
-                                allListenersWithLogSaver.testLog(
-                                        "module-configuration", LogDataType.HARNESS_CONFIG, source);
-                            }
+                            allListenersWithLogSaver.testLog(
+                                    "module-configuration", LogDataType.HARNESS_CONFIG, source);
                         }
                     }
                     TestInformation moduleInfo =
@@ -1105,7 +1102,7 @@ public abstract class ITestSuite
                         if (mMainConfiguration.getCommandOptions().shouldUploadCacheResults()
                                 && moduleReporter != null) {
                             File protoResults = moduleReporter.getOutputFile();
-                            if (!moduleReporter.stopCaching()) {
+                            if (!moduleReporter.stopCaching() && moduleConfig != null) {
                                 SuiteResultCacheUtil.uploadModuleResults(
                                         mMainConfiguration,
                                         testInfo,
@@ -1228,6 +1225,10 @@ public abstract class ITestSuite
 
     /** Log the module configuration. */
     private File dumpModuleConfig(ModuleDefinition module) {
+        if (mInLocalRetry) {
+            CLog.v("Skip module-configuration dumping in local retry.");
+            return null;
+        }
         boolean restore = false;
         try {
             File configFile =

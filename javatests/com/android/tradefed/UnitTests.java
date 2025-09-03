@@ -94,6 +94,7 @@ import com.android.tradefed.device.DeviceSelectionOptionsTest;
 import com.android.tradefed.device.DeviceStateMonitorTest;
 import com.android.tradefed.device.DumpsysPackageReceiverTest;
 import com.android.tradefed.device.FastbootHelperTest;
+import com.android.tradefed.device.HsumHelperTest;
 import com.android.tradefed.device.LocalAndroidVirtualDeviceTest;
 import com.android.tradefed.device.ManagedDeviceListTest;
 import com.android.tradefed.device.ManagedTestDeviceFactoryTest;
@@ -278,6 +279,7 @@ import com.android.tradefed.suite.checker.baseline.SettingsBaselineSetterTest;
 import com.android.tradefed.targetprep.AllTestAppsInstallSetupTest;
 import com.android.tradefed.targetprep.AoaTargetPreparerTest;
 import com.android.tradefed.targetprep.AppSetupTest;
+import com.android.tradefed.targetprep.BaseSwitchUserTargetPreparerTest;
 import com.android.tradefed.targetprep.BaseTargetPreparerTest;
 import com.android.tradefed.targetprep.CompileBootImageWithSpeedTargetPreparerTest;
 import com.android.tradefed.targetprep.CreateUserPreparerTest;
@@ -645,6 +647,7 @@ import org.junit.runners.Suite.SuiteClasses;
     DeviceStateMonitorTest.class,
     DumpsysPackageReceiverTest.class,
     FastbootHelperTest.class,
+    HsumHelperTest.class,
     LocalAndroidVirtualDeviceTest.class,
     ManagedDeviceListTest.class,
     ManagedTestDeviceFactoryTest.class,
@@ -862,6 +865,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AoaTargetPreparerTest.class,
     AppSetupTest.class,
     BaseTargetPreparerTest.class,
+    BaseSwitchUserTargetPreparerTest.class,
     CompileBootImageWithSpeedTargetPreparerTest.class,
     CreateUserPreparerTest.class,
     DefaultTestsZipInstallerTest.class,

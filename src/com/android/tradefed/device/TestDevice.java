@@ -898,8 +898,7 @@ public class TestDevice extends NativeDevice {
             // Return an error in the buffer
             CLog.e("Error: device reported error for screenshot:");
             CLog.e("stdout: %s\nstderr: %s", result.getStdout(), result.getStderr());
-            return new ByteArrayInputStreamSource(
-                    "Error: device reported null for screenshot.".getBytes());
+            return new ByteArrayInputStreamSource("".getBytes());
         }
         try {
             File tmpScreenshot = pullFile(tmpDevicePath);
@@ -916,8 +915,7 @@ public class TestDevice extends NativeDevice {
         } finally {
             deleteFile(tmpDevicePath);
         }
-        return new ByteArrayInputStreamSource(
-                "Error: device reported null for screenshot.".getBytes());
+        return new ByteArrayInputStreamSource("".getBytes());
     }
 
     @VisibleForTesting

@@ -94,6 +94,7 @@ import com.android.tradefed.testtype.SubprocessTfLauncher;
 import com.android.tradefed.testtype.suite.retry.RetryRescheduler;
 import com.android.tradefed.util.ArrayUtil;
 import com.android.tradefed.util.FileUtil;
+import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.Pair;
 import com.android.tradefed.util.QuotationAwareTokenizer;
 import com.android.tradefed.util.RunUtil;
@@ -110,7 +111,6 @@ import com.android.tradefed.util.keystore.KeyStoreException;
 
 import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
 import com.google.android.tradefed.result.teststorage.ResultReporter;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 
@@ -672,22 +672,24 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 // Set experimental flags
                 if (config.getCommandOptions().isExperimentEnabled()
                         && !skipExperiment(config, mInvocationContext)) {
-                    for (Map.Entry<String, String> entry :
-                            config.getCommandOptions().getExperimentalFlags().entrySet()) {
+                    MultiMap<String, String> experimentalFlags =
+                            config.getCommandOptions().getExperimentalFlags();
+                    for (String optionName : experimentalFlags.keySet()) {
                         try {
-                            String optionName = entry.getKey();
-                            String optionValue = entry.getValue();
+                            List<String> optionValues = experimentalFlags.get(optionName);
                             // Support map experiments, where optionValue is a key=value pair
-                            int equalsIndex = optionValue.indexOf('=');
-                            if (equalsIndex != -1) {
-                                String mapKey = optionValue.substring(0, equalsIndex);
-                                String mapValue = optionValue.substring(equalsIndex + 1);
-                                config.injectOptionValue(optionName, mapKey, mapValue);
-                            } else {
-                                config.injectOptionValue(optionName, optionValue);
+                            for (String optionValue : optionValues) {
+                                int equalsIndex = optionValue.indexOf('=');
+                                if (equalsIndex != -1) {
+                                    String mapKey = optionValue.substring(0, equalsIndex);
+                                    String mapValue = optionValue.substring(equalsIndex + 1);
+                                    config.injectOptionValue(optionName, mapKey, mapValue);
+                                } else {
+                                    config.injectOptionValue(optionName, optionValue);
+                                }
+                                mInvocationContext.addInvocationAttribute(
+                                        "experiment:" + optionName, optionValue);
                             }
-                            mInvocationContext.addInvocationAttribute(
-                                    "experiment:" + optionName, optionValue);
                         } catch (ConfigurationException e) {
                             CLog.e(
                                     "Configuration Exception caught while setting experimental"
@@ -698,22 +700,24 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                 }
                 // Set TF rollout flags
                 List<String> ignoredFlags = new LinkedList<>();
-                for (Map.Entry<String, String> entry :
-                        config.getCommandOptions().getRolloutFlags().entrySet()) {
+                MultiMap<String, String> rolloutFlags =
+                        config.getCommandOptions().getRolloutFlags();
+                for (String optionName : rolloutFlags.keySet()) {
                     try {
-                        String optionName = entry.getKey();
-                        String optionValue = entry.getValue();
-                        // Support map flags, where optionValue is a key=value pair
-                        int equalsIndex = optionValue.indexOf('=');
-                        if (equalsIndex != -1) {
-                            String mapKey = optionValue.substring(0, equalsIndex);
-                            String mapValue = optionValue.substring(equalsIndex + 1);
-                            config.injectOptionValue(optionName, mapKey, mapValue);
-                        } else {
-                            config.injectOptionValue(optionName, optionValue);
+                        List<String> optionValues = rolloutFlags.get(optionName);
+                        for (String optionValue : optionValues) {
+                            // Support map flags, where optionValue is a key=value pair
+                            int equalsIndex = optionValue.indexOf('=');
+                            if (equalsIndex != -1) {
+                                String mapKey = optionValue.substring(0, equalsIndex);
+                                String mapValue = optionValue.substring(equalsIndex + 1);
+                                config.injectOptionValue(optionName, mapKey, mapValue);
+                            } else {
+                                config.injectOptionValue(optionName, optionValue);
+                            }
                         }
                     } catch (ConfigurationException e) {
-                        ignoredFlags.add(entry.getKey());
+                        ignoredFlags.add(optionName);
                     }
                 }
                 // report the ignored rollout flags
