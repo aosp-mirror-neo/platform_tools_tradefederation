@@ -20,6 +20,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
@@ -2471,6 +2472,7 @@ public class NativeDeviceTest {
 
         CommandResult commandRes = new CommandResult();
         commandRes.setStatus(CommandStatus.FAILED);
+        commandRes.setStderr("device offline");
         when(mMockRunUtil.runTimedCmd(
                         Mockito.anyLong(),
                         Mockito.eq("adb"),
@@ -2481,7 +2483,9 @@ public class NativeDeviceTest {
                         Mockito.anyString()))
                 .thenReturn(commandRes);
         try {
-            boolean res = mTestDevice.pullFile(fakeRemotePath, tmpFile);
+            assertThrows(
+                    DeviceNotAvailableException.class,
+                    () -> mTestDevice.pullFile(fakeRemotePath, tmpFile));
             verify(mMockRunUtil, times(1))
                     .runTimedCmd(
                             Mockito.anyLong(),
@@ -2491,7 +2495,6 @@ public class NativeDeviceTest {
                             Mockito.eq("pull"),
                             Mockito.eq("/test/"),
                             Mockito.anyString());
-            assertFalse(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
         }
@@ -2664,6 +2667,7 @@ public class NativeDeviceTest {
         File tmpFile = FileUtil.createTempFile("push", ".test");
         CommandResult commandRes = new CommandResult();
         commandRes.setStatus(CommandStatus.FAILED);
+        commandRes.setStderr("device offline");
         when(mMockRunUtil.runTimedCmd(
                         Mockito.anyLong(),
                         Mockito.eq("adb"),
@@ -2674,7 +2678,9 @@ public class NativeDeviceTest {
                         Mockito.eq("/test/")))
                 .thenReturn(commandRes);
         try {
-            boolean res = mTestDevice.pushFile(tmpFile, fakeRemotePath);
+            assertThrows(
+                    DeviceNotAvailableException.class,
+                    () -> mTestDevice.pushFile(tmpFile, fakeRemotePath));
             verify(mMockRunUtil, times(1))
                     .runTimedCmd(
                             Mockito.anyLong(),
@@ -2684,7 +2690,6 @@ public class NativeDeviceTest {
                             Mockito.eq("push"),
                             Mockito.anyString(),
                             Mockito.eq("/test/"));
-            assertFalse(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
         }
