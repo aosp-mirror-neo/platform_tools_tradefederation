@@ -22,6 +22,7 @@ import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.CommandResult;
@@ -46,6 +47,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
 
 /* Generic test runner for ART.
@@ -197,6 +199,9 @@ public class ArtTest implements IShardableTest {
 
         TestDescription testId = TestDescription.fromString(name);
         try {
+            if (error == null) {
+                CLog.i("Running ART test %s", name);
+            }
             listener.testStarted(testId);
             if (error == null) {
                 error = adbPush(test);
@@ -208,9 +213,24 @@ public class ArtTest implements IShardableTest {
             error = e.toString();
             throw e;
         } finally {
+            // Check if it might be an issue with the device.
             if (error != null) {
-                listener.testFailed(testId, error);
+                if (!adbPing()) {
+                    error = "Device unavailable\n---\n" + error;
+                    CLog.e("Device unavailable, sleep...");
+                    try {
+                        TimeUnit.SECONDS.sleep(100);
+                    } catch (InterruptedException e) {
+                        CLog.e("InterruptedException");
+                    }
+                    if (!adbPing()) {
+                        // Still unavailable, give up on remaining tests.
+                        throw new DeviceNotAvailableException();
+                    }
+                }
+                listener.testFailed(testId, FailureDescription.create(error));
             }
+
             listener.testEnded(testId, Collections.emptyMap());
             mTestResults.put(name, (error == null));
         }
@@ -220,6 +240,18 @@ public class ArtTest implements IShardableTest {
     void clean() throws DeviceNotAvailableException {
         ITestDevice device = mTestInfo.getDevice();
         device.deleteFile("/data/local/tmp/art");
+    }
+
+    // Check device health by executing trivial shell command.
+    Boolean adbPing() {
+        try {
+            String cmd = "echo ping";
+            CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
+            String stdout = res.getStdout().strip();
+            return res.getStatus() == CommandStatus.SUCCESS && stdout.equals("ping");
+        } catch (DeviceNotAvailableException e) {
+            return false;
+        }
     }
 
     String adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
@@ -258,13 +290,9 @@ public class ArtTest implements IShardableTest {
                 cmdBuilder.append(args.getString(j));
             }
             String cmd = cmdBuilder.toString();
-            CLog.i("Executing adb shell command: %s", cmd);
             CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
             if (res.getStatus() != CommandStatus.SUCCESS) {
-                CLog.i("Stdout from failed command '%s': %s", cmd, res.getStdout());
-                CLog.e("Stderr from failed command '%s': %s", cmd, res.getStderr());
-                CLog.e("Failed adb shell command: %s", cmd);
-                return res.getStderr();
+                return String.format("stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
             }
         }
         return null;
