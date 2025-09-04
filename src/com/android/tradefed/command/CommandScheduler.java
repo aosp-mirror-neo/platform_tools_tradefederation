@@ -20,6 +20,7 @@ import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.Log.LogLevel;
 import com.android.tradefed.build.BuildInfo;
 import com.android.tradefed.build.BuildRetrievalError;
+import com.android.tradefed.build.FuseMountManagerFactory;
 import com.android.tradefed.clearcut.ClearcutClient;
 import com.android.tradefed.command.CommandFileParser.CommandLine;
 import com.android.tradefed.command.CommandFileWatcher.ICommandFileListener;
@@ -35,7 +36,6 @@ import com.android.tradefed.config.GlobalConfiguration;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationFactory;
 import com.android.tradefed.config.IDeviceConfiguration;
-import com.android.tradefed.config.IGlobalConfiguration;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.RetryConfigurationFactory;
 import com.android.tradefed.config.SandboxConfigurationFactory;
@@ -108,12 +108,10 @@ import com.android.tradefed.util.hostmetric.IHostMonitor.HostMetricType;
 import com.android.tradefed.util.keystore.IKeyStoreClient;
 import com.android.tradefed.util.keystore.IKeyStoreFactory;
 import com.android.tradefed.util.keystore.KeyStoreException;
-
 import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
 import com.google.android.tradefed.result.teststorage.ResultReporter;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -2307,6 +2305,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
         } else {
             getDeviceManager().terminate();
         }
+        FuseMountManagerFactory.shutdownCleanupExecutor();
     }
 
     /** {@inheritDoc} */
