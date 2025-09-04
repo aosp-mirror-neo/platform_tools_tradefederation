@@ -378,9 +378,8 @@ public class InvocationExecution implements IInvocationExecution {
                                 && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildBranch())
                                 && (testInfo.getBuildInfo().getBuildFlavor().contains("sdv_core")
                                         || testInfo.getBuildInfo().getBuildBranch().contains("release")
-                                        || !testInfo.getBuildInfo()
-                                                .getBuildFlavor()
-                                                .contains("userdebug"));
+                                        || testInfo.getBuildInfo().getBuildFlavor().endsWith("-user")
+                                        || testInfo.getBuildInfo().getBuildFlavor().endsWith("coverage"));
                 if (recategorize) {
                     InvocationMetricLogger.addInvocationPairMetrics(
                             InvocationMetricKey.TEST_SETUP_PAIR, start, end);

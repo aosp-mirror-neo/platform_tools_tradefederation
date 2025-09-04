@@ -22,6 +22,7 @@ import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.CommandResult;
@@ -46,6 +47,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
 
 /* Generic test runner for ART.
@@ -80,7 +82,7 @@ import java.util.zip.ZipFile;
  *    }
  *  }
  */
-public class ArtTest implements IRemoteTest, IShardableTest {
+public class ArtTest implements IShardableTest {
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
     protected Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
@@ -143,8 +145,8 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         TreeMap<String, JSONObject> allTests = new TreeMap<String, JSONObject>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
             JSONObject jsonData = new JSONObject(FileUtil.readStringFromFile(jsonFile));
-            for (Iterator<String> it = jsonData.keys(); it.hasNext(); ) {
-                String name = it.next();
+            for (Iterator<?> it = jsonData.keys(); it.hasNext(); ) {
+                String name = (String) it.next();
                 allTests.put(name, jsonData.getJSONObject(name));
             }
         }
@@ -197,18 +199,38 @@ public class ArtTest implements IRemoteTest, IShardableTest {
 
         TestDescription testId = TestDescription.fromString(name);
         try {
+            if (error == null) {
+                CLog.i("Running ART test %s", name);
+            }
             listener.testStarted(testId);
             if (error == null) {
-                adbPush(test);
+                error = adbPush(test);
+            }
+            if (error == null) {
                 error = adbShell(test);
             }
         } catch (JSONException | DeviceNotAvailableException e) {
             error = e.toString();
             throw e;
         } finally {
+            // Check if it might be an issue with the device.
             if (error != null) {
-                listener.testFailed(testId, error);
+                if (!adbPing()) {
+                    error = "Device unavailable\n---\n" + error;
+                    CLog.e("Device unavailable, sleep...");
+                    try {
+                        TimeUnit.SECONDS.sleep(100);
+                    } catch (InterruptedException e) {
+                        CLog.e("InterruptedException");
+                    }
+                    if (!adbPing()) {
+                        // Still unavailable, give up on remaining tests.
+                        throw new DeviceNotAvailableException();
+                    }
+                }
+                listener.testFailed(testId, FailureDescription.create(error));
             }
+
             listener.testEnded(testId, Collections.emptyMap());
             mTestResults.put(name, (error == null));
         }
@@ -220,7 +242,19 @@ public class ArtTest implements IRemoteTest, IShardableTest {
         device.deleteFile("/data/local/tmp/art");
     }
 
-    void adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
+    // Check device health by executing trivial shell command.
+    Boolean adbPing() {
+        try {
+            String cmd = "echo ping";
+            CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
+            String stdout = res.getStdout().strip();
+            return res.getStatus() == CommandStatus.SUCCESS && stdout.equals("ping");
+        } catch (DeviceNotAvailableException e) {
+            return false;
+        }
+    }
+
+    String adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
         JSONArray cmds = test.optJSONArray("adb push");
         for (int i = 0; cmds != null && i < cmds.length(); i++) {
             JSONArray cmd = cmds.getJSONArray(i);
@@ -232,11 +266,16 @@ public class ArtTest implements IRemoteTest, IShardableTest {
 
             ITestDevice device = mTestInfo.getDevice();
             if (src.isDirectory()) {
-                device.pushDir(src, dst);
+                if (!device.pushDir(src, dst)) {
+                    return "Failed to push directory '" + src + "'";
+                }
             } else {
-                device.pushFile(src, dst);
+                if (!device.pushFile(src, dst)) {
+                    return "Failed to push file '" + src + "'";
+                }
             }
         }
+        return null;
     }
 
     String adbShell(JSONObject test) throws JSONException, DeviceNotAvailableException {
@@ -251,13 +290,9 @@ public class ArtTest implements IRemoteTest, IShardableTest {
                 cmdBuilder.append(args.getString(j));
             }
             String cmd = cmdBuilder.toString();
-            CLog.i("Executing adb shell command: %s", cmd);
             CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
             if (res.getStatus() != CommandStatus.SUCCESS) {
-                CLog.i("Stdout from failed command '%s': %s", cmd, res.getStdout());
-                CLog.e("Stderr from failed command '%s': %s", cmd, res.getStderr());
-                CLog.e("Failed adb shell command: %s", cmd);
-                return res.getStderr();
+                return String.format("stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
             }
         }
         return null;

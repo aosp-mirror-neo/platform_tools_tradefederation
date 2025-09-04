@@ -778,7 +778,10 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
             com.google.api.services.androidbuildinternal.v3.Androidbuildinternal client =
                     getV3Client();
             String contentType = FileUtil.getContentType(filePath);
-            String md5 = FileUtil.calculateMd5(f);
+            String md5;
+            try (CloseableTraceScope ignored = new CloseableTraceScope("md5:" + f.getName())) {
+                md5 = FileUtil.calculateMd5(f);
+            }
             LogDataType type = getFilePathToLogDataTypeMap().get(filePath);
             String resourceId = getRemoteFilePath(f.getName());
             FileContent fileContent = new FileContent(contentType, f);

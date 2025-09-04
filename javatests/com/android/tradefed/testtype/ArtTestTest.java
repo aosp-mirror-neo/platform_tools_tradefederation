@@ -115,6 +115,8 @@ public class ArtTestTest {
 
         // Implement mocked methods by just always returning SUCCESS (no device is needed).
         CommandResult success = new CommandResult(CommandStatus.SUCCESS);
+        when(mDevice.pushFile(any(), any())).thenReturn(true);
+        when(mDevice.pushDir(any(), any())).thenReturn(true);
         when(mDevice.executeShellV2Command(any())).thenReturn(success);
 
         // Run the test.
