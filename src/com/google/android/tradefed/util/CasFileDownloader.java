@@ -684,7 +684,11 @@ public class CasFileDownloader implements IFileDownloader {
                             .collect(Collectors.joining("&"));
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_FILES,
-                    String.format("%s:partial-download?%s&%s", fileName, includes, excludes));
+                    // String metric values are separated with ',' internally. Replace ',' with ';'
+                    // to replace(",", " ") to avoid parsing mistakes.
+                    String.format(
+                            "%s:partial-download?%s&%s",
+                            fileName, includes.replace(",", ";"), excludes.replace(",", ";")));
         } else {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_FILES, fileName);
