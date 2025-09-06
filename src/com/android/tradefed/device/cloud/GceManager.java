@@ -979,8 +979,10 @@ public class GceManager {
         }
         String remoteFilePath = match.group(2);
         File localTmpFile = FileUtil.createTempFile("bugreport-ssh", ".zip");
+        String hostname =
+                options.useOxygenationDevice() ? "localhost" : gceAvd.hostAndPort().getHost();
         if (!RemoteFileUtil.fetchRemoteFile(
-                gceAvd.hostAndPort().getHost(),
+                hostname,
                 options.getInstanceUser(),
                 options.getSshPrivateKeyPath(),
                 runUtil,
@@ -1130,13 +1132,44 @@ public class GceManager {
             String remoteFilePath,
             LogDataType type,
             String baseName) {
+        return logNestedRemoteFile(
+                logger, gceAvd, options, runUtil, remoteFilePath, type, baseName, null);
+    }
+
+    /**
+     * Fetch a remote file from a nested instance and log it.
+     *
+     * @param logger The {@link ITestLogger} where to log the file.
+     * @param gceAvd The {@link GceAvdInfo} that describe the device.
+     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
+     *     GCE device.
+     * @param runUtil a {@link IRunUtil} to execute commands.
+     * @param remoteFilePath The remote path where to find the file.
+     * @param type the {@link LogDataType} of the logged file.
+     * @param baseName The base name to use to log the file. If null the actual file name will be
+     *     used.
+     * @param scpArgs extra args to be passed to the scp command
+     * @return whether the file is logged successfully.
+     */
+    public static boolean logNestedRemoteFile(
+            ITestLogger logger,
+            GceAvdInfo gceAvd,
+            TestDeviceOptions options,
+            IRunUtil runUtil,
+            String remoteFilePath,
+            LogDataType type,
+            String baseName,
+            List<String> scpArgs) {
         File remoteFile;
+        String hostname =
+                options.useOxygenationDevice() ? "localhost" : gceAvd.hostAndPort().getHost();
         if (type == LogDataType.DIR) {
             remoteFile =
                     RemoteFileUtil.fetchRemoteDir(
-                            gceAvd.hostAndPort().getHost(),
+                            hostname,
                             options.getInstanceUser(),
                             options.getSshPrivateKeyPath(),
+                            scpArgs,
                             runUtil,
                             REMOTE_FILE_OP_TIMEOUT,
                             remoteFilePath);
@@ -1186,9 +1219,10 @@ public class GceManager {
         } else {
             remoteFile =
                     RemoteFileUtil.fetchRemoteFile(
-                            gceAvd.hostAndPort().getHost(),
+                            hostname,
                             options.getInstanceUser(),
                             options.getSshPrivateKeyPath(),
+                            scpArgs,
                             runUtil,
                             REMOTE_FILE_OP_TIMEOUT,
                             remoteFilePath);

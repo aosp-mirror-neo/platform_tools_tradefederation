@@ -940,21 +940,7 @@ public abstract class ITestSuite
                         }
                         stageTestArtifacts(mDevice, moduleNames);
                     }
-                    // Populate the module context with devices and builds
-                    for (String deviceName : mContext.getDeviceConfigNames()) {
-                        module.getModuleInvocationContext()
-                                .addAllocatedDevice(deviceName, mContext.getDevice(deviceName));
-                        module.getModuleInvocationContext()
-                                .addDeviceBuildInfo(deviceName, mContext.getBuildInfo(deviceName));
-                    }
-                    // Add isolation status before module start for reporting
-                    if (!IsolationGrade.NOT_ISOLATED.equals(
-                            CurrentInvocation.moduleCurrentIsolation())) {
-                        module.getModuleInvocationContext()
-                                .addInvocationAttribute(
-                                        ModuleDefinition.MODULE_ISOLATED,
-                                        CurrentInvocation.moduleCurrentIsolation().toString());
-                    }
+                    populateModuleContextWithDeviceBuildAndIsolation(module);
                     // Unify invocation level listeners, module listeners and module post-processors
                     ITestInvocationListener allListenersWithoutLogSaver =
                             listenerWithPostProcessors(module, listener, moduleListeners);
@@ -1324,7 +1310,6 @@ public abstract class ITestSuite
      * @param module The {@link ModuleDefinition} to be ran.
      * @param moduleInfo The {@link TestInformation} for the module.
      * @param allListeners The {@link ITestInvocationListener} where to report results
-     * @param failureListener special listener that we add to collect information on failures.
      * @throws DeviceNotAvailableException
      */
     private void runSingleModule(
@@ -1621,6 +1606,7 @@ public abstract class ITestSuite
                 suite.mIsSharded = true;
                 suite.mDirectModule = m;
                 suite.setSkipContext(skipContext);
+                suite.setInvocationContext(testInfo.getContext());
                 splitTests.add(suite);
             }
             // return the list of ITestSuite with their ModuleDefinition assigned
@@ -1793,7 +1779,25 @@ public abstract class ITestSuite
 
         while (!runModules.isEmpty()) {
             ModuleDefinition module = runModules.remove(0);
+            populateModuleContextWithDeviceBuildAndIsolation(module);
             module.reportNotExecuted(listener, message);
+        }
+    }
+
+    private void populateModuleContextWithDeviceBuildAndIsolation(ModuleDefinition module) {
+        // Populate the module context with devices and builds
+        for (String deviceName : mContext.getDeviceConfigNames()) {
+            module.getModuleInvocationContext()
+                    .addAllocatedDevice(deviceName, mContext.getDevice(deviceName));
+            module.getModuleInvocationContext()
+                    .addDeviceBuildInfo(deviceName, mContext.getBuildInfo(deviceName));
+        }
+        // Add isolation status before module start for reporting
+        if (!IsolationGrade.NOT_ISOLATED.equals(CurrentInvocation.moduleCurrentIsolation())) {
+            module.getModuleInvocationContext()
+                    .addInvocationAttribute(
+                            ModuleDefinition.MODULE_ISOLATED,
+                            CurrentInvocation.moduleCurrentIsolation().toString());
         }
     }
 

@@ -15,7 +15,6 @@
  */
 package com.android.tradefed.invoker;
 
-import com.android.annotations.VisibleForTesting;
 import com.android.tradefed.build.BuildRetrievalError;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.StubBuildProvider;
@@ -39,6 +38,7 @@ import com.android.tradefed.device.TestDeviceOptions.InstanceType;
 import com.android.tradefed.device.cloud.GceAvdInfo;
 import com.android.tradefed.device.cloud.GceManager;
 import com.android.tradefed.device.cloud.ManagedRemoteDevice;
+import com.android.tradefed.device.cloud.OxygenUtil;
 import com.android.tradefed.device.connection.AdbSshConnection;
 import com.android.tradefed.error.IHarnessException;
 import com.android.tradefed.invoker.logger.CurrentInvocation;
@@ -69,12 +69,15 @@ import com.android.tradefed.util.SerializationUtil;
 import com.android.tradefed.util.SubprocessExceptionParser;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.TimeUtil;
+import com.android.tradefed.util.avd.OxygenClient;
 import com.android.tradefed.util.proto.TestRecordProtoUtil;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -119,6 +122,11 @@ public class RemoteInvocationExecution extends InvocationExecution {
     private String mRemoteAdbPath = null;
     private ProtoResultParser mProtoParser = null;
     private String mRemoteConsoleStdErr = null;
+
+    // ssh port number. When proxy is used, the port number may not be default.
+    private String mSshPortNumber = "22";
+    // Hostname of the remote host, for oxygenation, it needs to be localhost
+    private String mHostname = null;
 
     @Override
     public boolean fetchBuild(
@@ -168,17 +176,85 @@ public class RemoteInvocationExecution extends InvocationExecution {
         ManagedRemoteDevice device = (ManagedRemoteDevice) info.getDevice();
         GceAvdInfo gceInfo = ((AdbSshConnection) device.getConnection()).getAvdInfo();
 
-        // Run remote TF (new tests?)
-        IRunUtil runUtil = new RunUtil();
-
         TestDeviceOptions options = device.getOptions();
-        String mainRemoteDir = getRemoteMainDir(options);
         mRemoteAdbPath = String.format("/home/%s/bin/adb", options.getInstanceUser());
+        if (options.useOxygenationDevice()) {
+            mRemoteAdbPath = "/usr/lib/cuttlefish-common/bin/adb";
+        }
         // Select the TF version that should be pushed to the remote VM
         File tfToPush = getLocalTradefedPath(listener, options.getRemoteTf());
         if (tfToPush == null) {
             return;
         }
+
+        OxygenClient oxygenClient = null;
+        Process sshTunnel = null;
+        File sshTunnelLog = null;
+        mHostname = gceInfo.hostAndPort() != null ? gceInfo.hostAndPort().getHost() : null;
+        if (options.useOxygenationDevice()) {
+            oxygenClient = createOxygenClient(device.getOptions().getAvdDriverBinary());
+            mSshPortNumber = Integer.toString(oxygenClient.createServerSocket());
+            FileOutputStream sshTunnelLogStream = null;
+            try {
+                sshTunnelLog = FileUtil.createTempFile("ssh-connection", ".txt");
+                sshTunnelLogStream = new FileOutputStream(sshTunnelLog, true);
+            } catch (IOException e) {
+                FileUtil.deleteFile(sshTunnelLog);
+                CLog.e("Failed to create ssh tunnel.");
+                CLog.e(e);
+                return;
+            }
+            sshTunnel =
+                    oxygenClient.createTunnelViaLHP(
+                            OxygenClient.LHPTunnelMode.SSH,
+                            mSshPortNumber,
+                            gceInfo.instanceName(),
+                            gceInfo.hostAndPort() != null ? gceInfo.hostAndPort().getHost() : null,
+                            OxygenUtil.getTargetRegion(device.getOptions()),
+                            device.getOptions().getOxygenAccountingUser(),
+                            gceInfo.getOxygenationDeviceId(),
+                            device.getOptions().getExtraOxygenArgs(),
+                            sshTunnelLogStream);
+            mHostname = "localhost";
+            if (sshTunnel == null || !sshTunnel.isAlive()) {
+                CLog.e("Ssh tunnel isn't ready, abort invocation execution.");
+                return;
+            }
+        }
+
+        try {
+            runTestsInternal(info, config, listener);
+        } finally {
+            if (device.getOptions().useOxygenationDevice()
+                    && oxygenClient != null
+                    && sshTunnelLog != null) {
+                oxygenClient.closeLHPConnection(sshTunnel);
+                GceManager.logAndDeleteFile(
+                        sshTunnelLog,
+                        "ssh_tunnel_log",
+                        ((AdbSshConnection) device.getConnection()).getLogger());
+            }
+        }
+    }
+
+    /** Helper to create an Oxygen Client. */
+    @VisibleForTesting
+    OxygenClient createOxygenClient(File avdDriverBinary) {
+        return OxygenUtil.createOxygenClient(avdDriverBinary);
+    }
+
+    private void runTestsInternal(
+            TestInformation info, IConfiguration config, ITestInvocationListener listener)
+            throws Throwable {
+        ManagedRemoteDevice device = (ManagedRemoteDevice) info.getDevice();
+        GceAvdInfo gceInfo = ((AdbSshConnection) device.getConnection()).getAvdInfo();
+        String mainRemoteDir = getRemoteMainDir(device.getOptions());
+        TestDeviceOptions options = device.getOptions();
+
+        // Run remote TF (new tests?)
+        IRunUtil runUtil = new RunUtil();
+
+        File tfToPush = getLocalTradefedPath(listener, options.getRemoteTf());
 
         String invocationWorkDir =
                 String.format("%stf-invocation-%s/", mainRemoteDir, UUID.randomUUID().toString());
@@ -186,7 +262,15 @@ public class RemoteInvocationExecution extends InvocationExecution {
 
         CommandResult cr =
                 GceManager.remoteSshCommandExecution(
-                        gceInfo, options, runUtil, 120000L, "mkdir", "-p", invocationWorkDir);
+                        gceInfo,
+                        options,
+                        runUtil,
+                        120000L,
+                        "-p",
+                        mSshPortNumber,
+                        "mkdir",
+                        "-p",
+                        invocationWorkDir);
         if (!CommandStatus.SUCCESS.equals(cr.getStatus())) {
             CLog.e("Creation of %s failed.", invocationWorkDir);
             CLog.e("Command stdout: %s, stderr: %s", cr.getStdout(), cr.getStderr());
@@ -202,10 +286,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
         while (!result && attempt < MAX_PUSH_TF_ATTEMPTS) {
             result =
                     RemoteFileUtil.pushFileToRemote(
-                            gceInfo.hostAndPort().getHost(),
+                            mHostname,
                             options.getInstanceUser(),
                             options.getSshPrivateKeyPath(),
-                            Arrays.asList("-r"),
+                            Arrays.asList("-P", mSshPortNumber, "-r"),
                             runUtil,
                             PUSH_TF_TIMEOUT,
                             invocationWorkDir,
@@ -223,7 +307,15 @@ public class RemoteInvocationExecution extends InvocationExecution {
         mRemoteTradefedDir = invocationWorkDir + tfToPush.getName() + "/";
         CommandResult listRemoteDir =
                 GceManager.remoteSshCommandExecution(
-                        gceInfo, options, runUtil, 120000L, "ls", "-l", mRemoteTradefedDir);
+                        gceInfo,
+                        options,
+                        runUtil,
+                        120000L,
+                        "-p",
+                        mSshPortNumber,
+                        "ls",
+                        "-l",
+                        mRemoteTradefedDir);
         CLog.d("stdout: %s", listRemoteDir.getStdout());
         CLog.d("stderr: %s", listRemoteDir.getStderr());
 
@@ -234,10 +326,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
             CLog.d("Pushing Tradefed XML configuration to remote.");
             boolean resultPush =
                     RemoteFileUtil.pushFileToRemote(
-                            gceInfo.hostAndPort().getHost(),
+                            mHostname,
                             options.getInstanceUser(),
                             options.getSshPrivateKeyPath(),
-                            null,
+                            Arrays.asList("-P", mSshPortNumber),
                             runUtil,
                             PUSH_TF_TIMEOUT,
                             mRemoteTradefedDir,
@@ -275,10 +367,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
             // Push the global configuration
             boolean resultPushGlobal =
                     RemoteFileUtil.pushFileToRemote(
-                            gceInfo.hostAndPort().getHost(),
+                            mHostname,
                             options.getInstanceUser(),
                             options.getSshPrivateKeyPath(),
-                            null,
+                            Arrays.asList("-P", mSshPortNumber),
                             runUtil,
                             PUSH_TF_TIMEOUT,
                             mRemoteTradefedDir,
@@ -299,10 +391,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
                         fileTransformer.getRenamedFiles().entrySet()) {
                     boolean pushResult =
                             RemoteFileUtil.pushFileToRemote(
-                                    gceInfo.hostAndPort().getHost(),
+                                    mHostname,
                                     options.getInstanceUser(),
                                     options.getSshPrivateKeyPath(),
-                                    null,
+                                    Arrays.asList("-P", mSshPortNumber),
                                     runUtil,
                                     PUSH_TF_TIMEOUT,
                                     entry.getValue(),
@@ -336,7 +428,15 @@ public class RemoteInvocationExecution extends InvocationExecution {
             FileUtil.recursiveDelete(globalConfig);
             cr =
                     GceManager.remoteSshCommandExecution(
-                            gceInfo, options, runUtil, 120000L, "rm", "-rf", invocationWorkDir);
+                            gceInfo,
+                            options,
+                            runUtil,
+                            120000L,
+                            "-p",
+                            mSshPortNumber,
+                            "rm",
+                            "-rf",
+                            invocationWorkDir);
             if (!CommandStatus.SUCCESS.equals(cr.getStatus())) {
                 CLog.w("Clean up of %s failed.", invocationWorkDir);
                 CLog.w("Command stdout: %s, stderr: %s", cr.getStdout(), cr.getStderr());
@@ -382,6 +482,8 @@ public class RemoteInvocationExecution extends InvocationExecution {
             File globalConfig)
             throws InvalidProtocolBufferException, IOException {
         List<String> remoteTfCommand = new ArrayList<>();
+        remoteTfCommand.add("-p");
+        remoteTfCommand.add(mSshPortNumber);
         remoteTfCommand.add("pushd");
         remoteTfCommand.add(mRemoteTradefedDir + ";");
         remoteTfCommand.add(String.format("PATH=%s:$PATH", new File(mRemoteAdbPath).getParent()));
@@ -477,9 +579,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
             if (exceptionRemoteFilePath != null) {
                 File remoteSerialized =
                         RemoteFileUtil.fetchRemoteFile(
-                                info.hostAndPort().getHost(),
+                                mHostname,
                                 options.getInstanceUser(),
                                 options.getSshPrivateKeyPath(),
+                                Arrays.asList("-P", mSshPortNumber),
                                 runUtil,
                                 PULL_RESULT_TIMEOUT,
                                 exceptionRemoteFilePath);
@@ -520,17 +623,19 @@ public class RemoteInvocationExecution extends InvocationExecution {
             if (config.getCommandOptions().shouldReportModuleProgression()) {
                 String remoteFilePath = mRemoteTradefedDir + PROTO_RESULT_NAME + currentIndex;
                 if (RemoteFileUtil.doesRemoteFileExist(
-                        info.hostAndPort().getHost(),
+                        mHostname,
                         options.getInstanceUser(),
                         options.getSshPrivateKeyPath(),
                         runUtil,
                         PULL_RESULT_TIMEOUT,
-                        remoteFilePath)) {
+                        remoteFilePath,
+                        mSshPortNumber)) {
                     File resultFile =
                             RemoteFileUtil.fetchRemoteFile(
-                                    info.hostAndPort().getHost(),
+                                    mHostname,
                                     options.getInstanceUser(),
                                     options.getSshPrivateKeyPath(),
+                                    Arrays.asList("-P", mSshPortNumber),
                                     runUtil,
                                     PULL_RESULT_TIMEOUT,
                                     remoteFilePath);
@@ -568,6 +673,8 @@ public class RemoteInvocationExecution extends InvocationExecution {
                             options,
                             runUtil,
                             120000L,
+                            "-p",
+                            mSshPortNumber,
                             "ps",
                             "-ef",
                             "| grep",
@@ -606,17 +713,19 @@ public class RemoteInvocationExecution extends InvocationExecution {
             do {
                 String remoteFilePath = mRemoteTradefedDir + PROTO_RESULT_NAME + currentIndex;
                 if (RemoteFileUtil.doesRemoteFileExist(
-                        info.hostAndPort().getHost(),
+                        mHostname,
                         options.getInstanceUser(),
                         options.getSshPrivateKeyPath(),
                         runUtil,
                         PULL_RESULT_TIMEOUT,
-                        remoteFilePath)) {
+                        remoteFilePath,
+                        mSshPortNumber)) {
                     resultFile =
                             RemoteFileUtil.fetchRemoteFile(
-                                    info.hostAndPort().getHost(),
+                                    mHostname,
                                     options.getInstanceUser(),
                                     options.getSshPrivateKeyPath(),
+                                    Arrays.asList("-P", mSshPortNumber),
                                     runUtil,
                                     PULL_RESULT_TIMEOUT,
                                     remoteFilePath);
@@ -648,13 +757,27 @@ public class RemoteInvocationExecution extends InvocationExecution {
     private void resetAdb(GceAvdInfo info, TestDeviceOptions options, IRunUtil runUtil) {
         CommandResult probAdb =
                 GceManager.remoteSshCommandExecution(
-                        info, options, runUtil, 120000L, mRemoteAdbPath, "devices");
+                        info,
+                        options,
+                        runUtil,
+                        120000L,
+                        "-p",
+                        mSshPortNumber,
+                        mRemoteAdbPath,
+                        "devices");
         CLog.d("remote adb prob: %s", probAdb.getStdout());
         CLog.d("%s", probAdb.getStderr());
 
         CommandResult versionAdb =
                 GceManager.remoteSshCommandExecution(
-                        info, options, runUtil, 120000L, mRemoteAdbPath, "version");
+                        info,
+                        options,
+                        runUtil,
+                        120000L,
+                        "-p",
+                        mSshPortNumber,
+                        mRemoteAdbPath,
+                        "version");
         CLog.d("version adb: %s", versionAdb.getStdout());
         CLog.d("%s", versionAdb.getStderr());
     }
@@ -667,7 +790,13 @@ public class RemoteInvocationExecution extends InvocationExecution {
             GceAvdInfo info, TestDeviceOptions options, IRunUtil runUtil, ITestLogger logger) {
         CommandResult tmpDirFolder =
                 GceManager.remoteSshCommandExecution(
-                        info, options, runUtil, 120000L, "bash -c \"echo \\$TMPDIR\"");
+                        info,
+                        options,
+                        runUtil,
+                        120000L,
+                        "-p",
+                        mSshPortNumber,
+                        "bash -c \"echo \\$TMPDIR\"");
         String folder = tmpDirFolder.getStdout().trim();
         CLog.d("Remote TMPDIR folder is: %s", folder);
         if (Strings.isNullOrEmpty(folder)) {
@@ -676,7 +805,13 @@ public class RemoteInvocationExecution extends InvocationExecution {
         }
         CommandResult uid =
                 GceManager.remoteSshCommandExecution(
-                        info, options, new RunUtil(), 120000L, "bash -c \"echo \\$UID\"");
+                        info,
+                        options,
+                        new RunUtil(),
+                        120000L,
+                        "-p",
+                        mSshPortNumber,
+                        "bash -c \"echo \\$UID\"");
         String uidString = uid.getStdout().trim();
         CLog.d("Remote $UID for adb is: %s", uidString);
 
@@ -692,7 +827,8 @@ public class RemoteInvocationExecution extends InvocationExecution {
                 runUtil,
                 folder + "/adb." + uidString + ".log",
                 LogDataType.TEXT,
-                "full_adb.log");
+                "full_adb.log",
+                Arrays.asList("-p", mSshPortNumber));
     }
 
     /**
@@ -828,9 +964,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
         }
         resultFile =
                 RemoteFileUtil.fetchRemoteFile(
-                        info.hostAndPort().getHost(),
+                        mHostname,
                         options.getInstanceUser(),
                         options.getSshPrivateKeyPath(),
+                        Arrays.asList("-P", mSshPortNumber),
                         runUtil,
                         PULL_RESULT_TIMEOUT,
                         resultDirPath + PROTO_RESULT_NAME);
@@ -863,9 +1000,10 @@ public class RemoteInvocationExecution extends InvocationExecution {
             IRunUtil runUtil) {
         File file =
                 RemoteFileUtil.fetchRemoteFile(
-                        info.hostAndPort().getHost(),
+                        mHostname,
                         options.getInstanceUser(),
                         options.getSshPrivateKeyPath(),
+                        Arrays.asList("-P", mSshPortNumber),
                         runUtil,
                         PULL_RESULT_TIMEOUT,
                         mRemoteTradefedDir + fileName);

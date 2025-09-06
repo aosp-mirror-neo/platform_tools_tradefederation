@@ -24,6 +24,7 @@ import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -33,7 +34,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -41,6 +45,22 @@ import java.util.stream.Stream;
 public class FuseMountManagerFactory {
 
     private static final Path mMountRoot = Path.of("/tmp", "tf-cas-fuse-mount-root");
+    // A lab host typically has 14 physical devices attched and can run that many tests in parallel.
+    // Each test typically needs 1 device image mounted. Set the threshold to 30 to provide some
+    // buffer. Adjust this if the assumption is no longer valid.
+    private static final int MOUNT_POINT_COUNT_THRESHOLD = 30;
+    // An invocation should not last more than 24 hours. A mount point not used in 24 hours is
+    // considered stale and can be removed.
+    private static final long STALE_MOUNT_POINT_THRESHOLD_MS = TimeUnit.HOURS.toMillis(24);
+    private static final long HEALTH_CHECK_INTERVAL_MS = TimeUnit.MINUTES.toMillis(10);
+    private static final ExecutorService cleanupExecutor =
+            Executors.newSingleThreadExecutor(
+                    new ThreadFactoryBuilder()
+                            .setNameFormat("FuseMountManagerFactory-CleanupManager-%d")
+                            .setDaemon(true) // Daemon threads won't block JVM exit
+                            .build());
+    private static final AtomicBoolean cleanupTaskRunning = new AtomicBoolean(false);
+    private static long lastCheckTime = 0;
 
     private final IRunUtil mRunUtil;
     private static final String CAS_CLIENT_NAME = "casviewer";
@@ -101,42 +121,69 @@ public class FuseMountManagerFactory {
     }
 
     /**
-     * Checks the health of the mount points.
+     * Checks the health of the mount points and triggers a cleanup if necessary.
      *
-     * <p>If the number of active mount points is high, it triggers a cleanup of stale mount points.
+     * <p>This method uses a two-level throttle to ensure the cleanup task is run at most once every
+     * `HEALTH_CHECK_INTERVAL_MS` and that only one such task runs at a time.
      */
     private static void checkMountPointHealth() {
-        // The number of active mount points should be close to the maximum concurrent TF tests on a
-        // host. A high number indicates stale mount points and a need for cleanup.
-
-        long count = 0;
-        try (Stream<Path> files = Files.list(mMountRoot)) {
-            count = files.count();
-        } catch (IOException e) {
-            CLog.e("Failed to count mount points: %s", e.getMessage());
+        // Attempt to acquire the lock. If another task is running, return.
+        if (!cleanupTaskRunning.compareAndSet(false, true)) {
+            CLog.d(
+                    "Another cleanup task is already in progress. Last check started %d minutes"
+                            + " ago.",
+                    (System.currentTimeMillis() - lastCheckTime) / TimeUnit.MINUTES.toMillis(1));
             return;
         }
-        CLog.d("Found %d active mount points in %s", count, mMountRoot);
-        InvocationMetricLogger.addInvocationMetrics(
-                InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
 
-        // A physical TF host typically has 14 devices and runs at most that many tests in parallel.
-        // Allow for 2x that many concurrent tests.
-        if (count > 30) {
-            removeStaleMountPoints(mMountRoot);
+        // We have the lock. Check if we need to throttle.
+        if (System.currentTimeMillis() - lastCheckTime < HEALTH_CHECK_INTERVAL_MS) {
+            CLog.d(
+                    "Health check throttled. Last check was %d minutes ago.",
+                    (System.currentTimeMillis() - lastCheckTime) / TimeUnit.MINUTES.toMillis(1));
+            cleanupTaskRunning.set(false);
+            return;
         }
+
+        // The throttle interval has passed and we have the lock. Update the time.
+        lastCheckTime = System.currentTimeMillis();
+
+        // The submitted task holds the responsibility to release the lock when it is finished.
+        cleanupExecutor.submit(
+                () -> {
+                    try {
+                        long count = 0;
+                        try (Stream<Path> files = Files.list(mMountRoot)) {
+                            count = files.count();
+                        } catch (IOException e) {
+                            CLog.e("Failed to count mount points: %s", e.getMessage());
+                            return; // Exit the task on failure
+                        }
+                        CLog.d("Found %d active mount points in %s", count, mMountRoot);
+                        InvocationMetricLogger.addInvocationMetrics(
+                                InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
+
+                        if (count > MOUNT_POINT_COUNT_THRESHOLD) {
+                            CLog.d(
+                                    "Mount point count > %s. Triggering stale mount point removal.",
+                                    MOUNT_POINT_COUNT_THRESHOLD);
+                            removeStaleMountPoints(mMountRoot);
+                        }
+                    } finally {
+                        // Ensure the flag is reset when the task is complete.
+                        cleanupTaskRunning.set(false);
+                    }
+                });
     }
 
     /**
-     * Removes stale mount points older than 24 hours.
-     *
-     * <p>TF invocations don't last more than 24 hours. Remove any mount points older than that.
+     * Removes stale mount points older than STALE_MOUNT_POINT_THRESHOLD_MS.
      *
      * @param mountRoot The mount root directory to scan for stale mount points.
      */
     @VisibleForTesting
     protected static void removeStaleMountPoints(Path mountRoot) {
-        long twentyFourHoursAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(24);
+        long cutoffTime = System.currentTimeMillis() - STALE_MOUNT_POINT_THRESHOLD_MS;
 
         try (Stream<Path> files = Files.list(mountRoot)) {
             // Create a map to functionally count the successes and failures
@@ -148,7 +195,7 @@ public class FuseMountManagerFactory {
                                             // Use Files.getLastModifiedTime directly on the Path
                                             // for efficiency
                                             return Files.getLastModifiedTime(p).toMillis()
-                                                    < twentyFourHoursAgo;
+                                                    < cutoffTime;
                                         } catch (IOException e) {
                                             // Log error and leave it alone (stay on the safe side).
                                             CLog.e(
@@ -213,11 +260,44 @@ public class FuseMountManagerFactory {
         return manager;
     }
 
-    public static List<FuseMountManager> getLiveManagers() {
-        // Purge any weak references that have been cleared by the GC
-        mManagers.removeIf(ref -> ref.get() == null);
+    public static void shutdownCleanupExecutor() {
+        CLog.i("Shutting down cleanup executor...");
+        cleanupExecutor.shutdown();
+        try {
+            if (!cleanupExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
+                CLog.w("Cleanup executor did not shut down gracefully. Forcing shutdown.");
+                // This interrupts all active tasks and could lead to an inconsistent state. Since
+                // the cleanup is defensive, this risk is acceptable.
+                cleanupExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            CLog.w("Cleanup executor shutdown was interrupted. Forcing shutdown.");
+            cleanupExecutor.shutdownNow();
+            // Restore the interrupted status
+            Thread.currentThread().interrupt();
+        }
+    }
 
-        // Return a list of strong references from the remaining weak ones.
-        return mManagers.stream().map(WeakReference::get).collect(Collectors.toList());
+    /**
+     * Cleans up any orphaned FUSE mounts.
+     *
+     * <p>This is intended to be called from a shutdown hook. It will unmount all live mounts.
+     */
+    public static void cleanUp() {
+        // DeviceBuildInfo unmounts device images it owns on shutdown.
+        // This is a best effort attempt to unmount orphaned mounts if any.
+
+        // Purge any weak references that have been cleared by the GC.
+        mManagers.removeIf(ref -> ref.get() == null);
+        mManagers.stream()
+                .map(WeakReference::get)
+                .forEach(
+                        manager -> {
+                            // The null check is needed as the manager can be null if the weak
+                            // reference is cleared by the GC after removeIf().
+                            if (manager != null) {
+                                manager.unmountAll();
+                            }
+                        });
     }
 }

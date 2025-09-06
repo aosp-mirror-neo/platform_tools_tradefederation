@@ -16,7 +16,6 @@
 
 package com.android.tradefed.command;
 
-import com.android.tradefed.build.FuseMountManager;
 import com.android.tradefed.build.FuseMountManagerFactory;
 import com.android.tradefed.clearcut.ClearcutClient;
 import com.android.tradefed.clearcut.TerminateClearcutClient;
@@ -54,19 +53,7 @@ import com.android.tradefed.util.VersionParser;
 import com.android.tradefed.util.ZipUtil;
 import com.android.tradefed.util.keystore.IKeyStoreFactory;
 import com.android.tradefed.util.keystore.KeyStoreException;
-
 import com.google.common.annotations.VisibleForTesting;
-
-import org.jline.reader.EndOfFileException;
-import org.jline.reader.LineReader;
-import org.jline.reader.LineReaderBuilder;
-import org.jline.reader.UserInterruptException;
-import org.jline.reader.impl.history.DefaultHistory;
-import org.jline.terminal.TerminalBuilder;
-
-import sun.misc.Signal;
-import sun.misc.SignalHandler;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -82,6 +69,14 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.UserInterruptException;
+import org.jline.reader.impl.history.DefaultHistory;
+import org.jline.terminal.TerminalBuilder;
+import sun.misc.Signal;
+import sun.misc.SignalHandler;
 
 /**
  * Main TradeFederation console providing user with the interface to interact
@@ -1052,7 +1047,9 @@ public class Console extends Thread {
         }
     }
 
-    /** @return the text {@link String} to display for the console prompt */
+    /**
+     * @return the text {@link String} to display for the console prompt
+     */
     protected String getConsolePrompt() {
         return CONSOLE_PROMPT;
     }
@@ -1364,8 +1361,6 @@ public class Console extends Thread {
      */
     public static void startConsole(Console console, String[] args)
             throws InterruptedException, ConfigurationException {
-        registerShutdownHook();
-
         ClearcutClient client =
                 new ClearcutClient(
                         TestSuiteInfo.getInstance().didLoadFromProperties()
@@ -1445,23 +1440,12 @@ public class Console extends Thread {
                     .addShutdownHook(
                             new TerminateGRPCServers(
                                     server, invocationManagementServer, deviceManagementServer));
+            Runtime.getRuntime()
+                    .addShutdownHook(
+                            new Thread(
+                                    () -> {
+                                        FuseMountManagerFactory.cleanUp();
+                                    }));
         }
-    }
-
-    /** Registers a shutdown hook to unmount any orphaned FUSE mounts. */
-    private static void registerShutdownHook() {
-        Runtime.getRuntime()
-                .addShutdownHook(
-                        new Thread(
-                                () -> {
-                                    // DeviceBuildInfo unmounts device images it owns on shutdown.
-                                    // This is a best effort attempt to unmount any orphaned mounts.
-                                    List<FuseMountManager> liveManagers =
-                                            FuseMountManagerFactory.getLiveManagers();
-                                    CLog.i("Shutdown hook is running. Live FuseMountManagers: %s.", liveManagers.size());
-                                    liveManagers.stream().forEach(manager -> manager.unmountAll());
-                                    CLog.i("Shutdown hook completed.");
-                                }));
-        CLog.i("Registered shutdown hook for unmounting FUSE mounts.");
     }
 }
