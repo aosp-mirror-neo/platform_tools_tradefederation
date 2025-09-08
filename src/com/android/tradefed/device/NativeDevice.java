@@ -1169,16 +1169,13 @@ public class NativeDevice
     @Override
     public void executeShellCommand(final String command, final IShellOutputReceiver receiver)
             throws DeviceNotAvailableException {
-        DeviceAction action = new DeviceAction() {
-            @Override
-            public boolean run() throws TimeoutException, IOException,
-                    AdbCommandRejectedException, ShellCommandUnresponsiveException {
-                getIDevice().executeShellCommand(command, receiver,
-                        getCommandTimeout(), TimeUnit.MILLISECONDS);
-                return true;
-            }
-        };
-        performDeviceAction(String.format("shell %s", command), action, MAX_RETRY_ATTEMPTS);
+        executeShellCommand(
+                command,
+                receiver,
+                0,
+                getCommandTimeout(),
+                TimeUnit.MILLISECONDS,
+                MAX_RETRY_ATTEMPTS);
     }
 
     /**
@@ -1240,9 +1237,7 @@ public class NativeDevice
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public String executeShellCommand(String command) throws DeviceNotAvailableException {
         CollectingOutputReceiver receiver = new CollectingOutputReceiver();
