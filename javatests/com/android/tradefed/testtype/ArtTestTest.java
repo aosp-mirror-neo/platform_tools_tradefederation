@@ -164,4 +164,52 @@ public class ArtTestTest {
             FileUtil.recursiveDelete(tempDir);
         }
     }
+
+    @Test
+    public void testIncludeFilter() throws Exception {
+        ArtTest test = new ArtTest();
+        test.addIncludeFilter("test1");
+        assertTrue(test.shouldIncludeTest("test1"));
+        assertTrue(!test.shouldIncludeTest("test2"));
+
+        test = new ArtTestForTesting();
+        test.addIncludeFilter("001-HelloWorld#1f5cdb07");
+        File tempDir = null;
+        try {
+            tempDir = FileUtil.createTempDir("art-test-sharding");
+            test.mRunnerDir = test.extractTarBall(tempDir);
+            Map<String, JSONObject> tests = test.loadTests();
+            assertTrue(tests.containsKey("001-HelloWorld#1f5cdb07"));
+            assertTrue(!tests.containsKey("002-Foo#1f5cdb08"));
+            assertTrue(!tests.containsKey("003-Bar#1f5cdb09"));
+            assertTrue(tests.containsKey("setup#compile-boot-image"));
+            assertEquals(2, tests.size());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    @Test
+    public void testExcludeFilter() throws Exception {
+        ArtTest test = new ArtTest();
+        test.addExcludeFilter("test1");
+        assertTrue(!test.shouldIncludeTest("test1"));
+        assertTrue(test.shouldIncludeTest("test2"));
+
+        test = new ArtTestForTesting();
+        test.addExcludeFilter("001-HelloWorld#1f5cdb07");
+        File tempDir = null;
+        try {
+            tempDir = FileUtil.createTempDir("art-test-sharding");
+            test.mRunnerDir = test.extractTarBall(tempDir);
+            Map<String, JSONObject> tests = test.loadTests();
+            assertTrue(!tests.containsKey("001-HelloWorld#1f5cdb07"));
+            assertTrue(tests.containsKey("002-Foo#1f5cdb08"));
+            assertTrue(tests.containsKey("003-Bar#1f5cdb09"));
+            assertTrue(tests.containsKey("setup#compile-boot-image"));
+            assertEquals(3, tests.size());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
 }
