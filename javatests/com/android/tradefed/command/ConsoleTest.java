@@ -124,7 +124,7 @@ public class ConsoleTest {
     @Test
     public void testRun_withConsoleInteractiveHelp() throws Throwable {
         mConsole =
-                new Console() {
+                new Console(null) {
                     @Override
                     boolean isConsoleFunctional() {
                         return mIsConsoleFunctional;
@@ -156,7 +156,7 @@ public class ConsoleTest {
     @Test
     public void testRun_withConsoleInteractive_noHelp() throws Throwable {
         mConsole =
-                new Console() {
+                new Console(null) {
                     @Override
                     boolean isConsoleFunctional() {
                         return mIsConsoleFunctional;
