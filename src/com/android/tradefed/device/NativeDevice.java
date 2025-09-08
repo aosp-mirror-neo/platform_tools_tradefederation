@@ -349,7 +349,7 @@ public class NativeDevice
         }
 
         @Override
-        public boolean run() throws TimeoutException, IOException {
+        public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
             IRunUtil runUtil = getRunUtil();
             if (!mEnvMap.isEmpty()) {
                 runUtil = createRunUtil();
@@ -371,8 +371,15 @@ public class NativeDevice
                 if (mIsShellCommand) {
                     // Interpret as communication failure for shell commands
                     throw new IOException("CommandStatus was FAILED, details in host log");
+                }
+                String stderr = mResult.getStderr();
+                if (stderr != null && stderr.contains("device offline")) {
+                    throw new DeviceNotAvailableException(
+                            String.format("Device went offline: %s", stderr),
+                            getSerialNumber(),
+                            DeviceErrorIdentifier.DEVICE_UNAVAILABLE);
                 } else {
-                    mOutput = mResult.getStdout();
+                    mOutput = mResult.getStderr();
                     return false;
                 }
             }
@@ -1705,7 +1712,21 @@ public class NativeDevice
         adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
         adbPushFileCmd.add(localFile.getAbsolutePath());
         CommandResult res = executeAdbV2Command(timeout, adbPushFileCmd.toArray(new String[0]));
-        return CommandStatus.SUCCESS.equals(res.getStatus());
+        if (CommandStatus.SUCCESS.equals(res.getStatus())) {
+            return true;
+        } else if (CommandStatus.TIMED_OUT.equals(res.getStatus())
+                || CommandStatus.EXCEPTION.equals(res.getStatus())) {
+            throw new DeviceNotAvailableException(
+                    String.format(
+                            "Failed to pull file '%s' due to command timeout or exception: %s",
+                            remoteFilePath, res.getStderr()),
+                    getSerialNumber());
+        } else { // CommandStatus.FAILED
+            CLog.w(
+                    "Failed to pull file '%s'. stdout: %s\nstderr: %s",
+                    remoteFilePath, res.getStdout(), res.getStderr());
+            return false;
+        }
     }
 
     /**
@@ -1779,7 +1800,21 @@ public class NativeDevice
             adbPushFileCmd.add(localFile.getAbsolutePath());
             adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
             CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
-            return CommandStatus.SUCCESS.equals(res.getStatus());
+            if (CommandStatus.SUCCESS.equals(res.getStatus())) {
+                return true;
+            } else if (CommandStatus.TIMED_OUT.equals(res.getStatus())
+                    || CommandStatus.EXCEPTION.equals(res.getStatus())) {
+                throw new DeviceNotAvailableException(
+                        String.format(
+                                "Failed to push file '%s' due to command timeout or exception: %s",
+                                remoteFilePath, res.getStderr()),
+                        getSerialNumber());
+            } else { // CommandStatus.FAILED
+                CLog.w(
+                        "Failed to push file '%s'. stdout: %s\nstderr: %s",
+                        remoteFilePath, res.getStdout(), res.getStderr());
+                return false;
+            }
         } finally {
             long totalTime = System.currentTimeMillis() - startTime;
             InvocationMetricLogger.addInvocationMetrics(

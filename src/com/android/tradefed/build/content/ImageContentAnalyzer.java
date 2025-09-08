@@ -133,8 +133,15 @@ public class ImageContentAnalyzer {
                                     "build key '%s' was unchanged.",
                                     context.contentEntry());
                         }
+                        String keyName = "build_key_" + context.contentEntry();
+                        // Normalizes the build-id if it's part of the name.
+                        if (keyName.contains(context.contentInformation().currentBuildId)) {
+                            keyName =
+                                    keyName.replace(
+                                            context.contentInformation().currentBuildId, "ABCDEF");
+                        }
                         results.addImageDigestMapping(
-                                context.contentEntry(),
+                                keyName,
                                 DeviceMerkleTree.buildFromContext(context, mAnalysisLevel));
                         break;
                     case DEVICE_IMAGE:
