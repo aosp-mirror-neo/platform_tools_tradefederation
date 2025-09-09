@@ -16,6 +16,8 @@
 
 package com.android.tradefed.testtype.junit4;
 
+import static com.google.common.truth.Truth.assertWithMessage;
+
 import static org.junit.Assert.assertTrue;
 
 import com.android.annotations.VisibleForTesting;
@@ -729,6 +731,8 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
                 throw new AssertionError(
                         "Failed to successfully run device tests for "
                                 + runResult.getName()
+                                + " on user "
+                                + userId
                                 + ": "
                                 + runResult.getRunFailureMessage());
             }
@@ -865,8 +869,13 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
             assertTrue(device.runInstrumentationTests(testRunner, allReceiver));
         } else {
             // Ensure userId is correct before starting instrumentation
-            assertTrue(userId >= 0);
-            assertTrue(device.runInstrumentationTestsAsUser(testRunner, userId, allReceiver));
+            assertWithMessage("userId").that(userId).isAtLeast(0);
+            assertWithMessage(
+                            "runInstrumentationTestsAsUser(user=%s, pkg=%s, testClass=%s,"
+                                    + " testMethod=%s",
+                            userId, pkgName, testClassName, testMethodName)
+                    .that(device.runInstrumentationTestsAsUser(testRunner, userId, allReceiver))
+                    .isTrue();
         }
         return listener.getCurrentRunResults();
     }
