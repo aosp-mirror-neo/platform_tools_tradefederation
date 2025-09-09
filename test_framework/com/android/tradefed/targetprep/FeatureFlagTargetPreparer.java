@@ -30,6 +30,7 @@ import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
+import com.android.tradefed.util.flag.AFlagsFeatureFlag;
 import com.android.tradefed.util.flag.DeviceFeatureFlag;
 
 import com.google.common.base.Strings;
@@ -73,6 +74,7 @@ import java.util.stream.Collectors;
  */
 @OptionClass(alias = "feature-flags")
 public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
+    private static final String DEFAULT_NAMESPACE = "default";
 
     @Option(
             name = "flag-file",
@@ -86,6 +88,11 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
             name = "reboot-between-flag-files",
             description = "Enables reboots after each input file. Used for reversibility testing.")
     private boolean mRebootBetweenFlagFiles = false;
+
+    @Option(
+            name = "use-device-config",
+            description = "Use `device_config` for setting/querying flags, instead of aflags")
+    private boolean mUseDeviceConfig = false;
 
     private final Map<String, Map<String, String>> mFlagsToRestore = new HashMap<>();
     private final Set<DeviceFeatureFlag> mFlagsOverridden = new HashSet<>();
@@ -109,10 +116,10 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
                         device.getDeviceDescriptor(),
                         InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
             }
-            flagBundles.add(parseFlags(device, flagFile));
+            flagBundles.add(parseDeviceConfigFlags(device, flagFile));
         }
         if (!mFlagValues.isEmpty()) {
-            flagBundles.add(parseFlags(device, mFlagValues, /* throwIfInvalid */ true));
+            flagBundles.add(parseDeviceConfigFlags(device, mFlagValues, /* throwIfInvalid */ true));
         }
 
         // Keep track of initial flags to be able to restore them during tearDown.
@@ -128,13 +135,13 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
 
             for (String namespace : targetFlags.keySet()) {
                 // Ignore unchanged flag values.
-                Map<String, String> currentValues = currentFlags.getOrDefault(namespace, Map.of());
+                Map<String, String> currentValues = getFlagsForNamespace(currentFlags, namespace);
                 Map<String, String> targetValues = targetFlags.get(namespace);
                 // target flags - current flags = new flags to apply
                 targetValues.entrySet().removeAll(currentValues.entrySet());
                 // new flags to apply - initial flags = new flags to restore
                 updateFlagsToRestore(
-                        namespace, initialFlags.getOrDefault(namespace, Map.of()), targetValues);
+                        namespace, getFlagsForNamespace(initialFlags, namespace), targetValues);
             }
 
             if (targetFlags.values().stream().allMatch(Map::isEmpty)) {
@@ -151,6 +158,14 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
         if (!mRebootBetweenFlagFiles && flagsUpdated) {
             device.reboot();
         }
+    }
+
+    private Map<String, String> getFlagsForNamespace(
+            Map<String, Map<String, String>> allFlags, String namespace) {
+        // Try returning the flags for the specified namespace first. If not set, pull from the
+        // "default" namespace. This is used because flag querying via aflags does not return the
+        // namespace, so all aflags get put in the same namespace to keep compat with device_config.
+        return allFlags.getOrDefault(namespace, allFlags.getOrDefault(DEFAULT_NAMESPACE, Map.of()));
     }
 
     @Override
@@ -172,24 +187,40 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
 
     private Map<String, Map<String, String>> listFlags(ITestDevice device)
             throws DeviceNotAvailableException, TargetSetupError {
-        String values = runCommand(device, "device_config list");
-        try (ByteArrayInputStream stream = new ByteArrayInputStream(values.getBytes());
-                BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-            return parseFlags(device, reader.lines().collect(Collectors.toList()), false);
-        } catch (IOException ioe) {
-            throw new TargetSetupError(
-                    "Failed to parse device flags",
-                    ioe,
-                    device.getDeviceDescriptor(),
-                    DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE);
+        if (!mUseDeviceConfig) {
+            String values = runCommand(device, "aflags list");
+            try (ByteArrayInputStream stream = new ByteArrayInputStream(values.getBytes());
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                return parseAFlagsFlags(device, reader.lines().collect(Collectors.toList()), false);
+            } catch (IOException ioe) {
+                throw new TargetSetupError(
+                        "Failed to parse aflags list",
+                        ioe,
+                        device.getDeviceDescriptor(),
+                        DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE);
+            }
+        } else {
+            String values = runCommand(device, "device_config list");
+            try (ByteArrayInputStream stream = new ByteArrayInputStream(values.getBytes());
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                return parseDeviceConfigFlags(
+                        device, reader.lines().collect(Collectors.toList()), false);
+            } catch (IOException ioe) {
+                throw new TargetSetupError(
+                        "Failed to parse device flags",
+                        ioe,
+                        device.getDeviceDescriptor(),
+                        DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE);
+            }
         }
     }
 
-    private Map<String, Map<String, String>> parseFlags(ITestDevice device, File flagFile)
-            throws TargetSetupError {
+    private Map<String, Map<String, String>> parseDeviceConfigFlags(
+            ITestDevice device, File flagFile) throws TargetSetupError {
         try (FileInputStream stream = new FileInputStream(flagFile);
                 BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-            return parseFlags(device, reader.lines().collect(Collectors.toList()), false);
+            return parseDeviceConfigFlags(
+                    device, reader.lines().collect(Collectors.toList()), false);
         } catch (IOException ioe) {
             throw new TargetSetupError(
                     "Failed to parse flag file",
@@ -199,7 +230,7 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
         }
     }
 
-    private Map<String, Map<String, String>> parseFlags(
+    private Map<String, Map<String, String>> parseDeviceConfigFlags(
             ITestDevice device, List<String> lines, boolean throwIfInvalid)
             throws TargetSetupError {
         Map<String, Map<String, String>> flags = new HashMap<>();
@@ -208,6 +239,42 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
                 DeviceFeatureFlag deviceFeatureFlag = new DeviceFeatureFlag(line);
                 flags.computeIfAbsent(deviceFeatureFlag.getNamespace(), ns -> new HashMap<>())
                         .put(deviceFeatureFlag.getFlagName(), deviceFeatureFlag.getFlagValue());
+            } catch (IllegalArgumentException e) {
+                if (throwIfInvalid) {
+                    throw new TargetSetupError(
+                            String.format("Failed to parse flag data: %s", line),
+                            e,
+                            device.getDeviceDescriptor(),
+                            InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+                }
+                CLog.w("Skipping invalid flag data: %s", line);
+                continue;
+            }
+        }
+        return flags;
+    }
+
+    private Map<String, Map<String, String>> parseAFlagsFlags(
+            ITestDevice device, List<String> lines, boolean throwIfInvalid)
+            throws TargetSetupError {
+        Map<String, Map<String, String>> flags = new HashMap<>();
+        for (String line : lines) {
+            try {
+                AFlagsFeatureFlag deviceFeatureFlag = new AFlagsFeatureFlag(line);
+
+                // If the flag is not overridden, we treat it as unset so we can restore it
+                // correctly in the teardown.
+                String currentValue = "";
+                if (deviceFeatureFlag.getSetter() == AFlagsFeatureFlag.Setter.LOCAL) {
+                    if (deviceFeatureFlag.getCurrentState() == AFlagsFeatureFlag.State.ENABLED) {
+                        currentValue = "true";
+                    } else {
+                        currentValue = "false";
+                    }
+                }
+
+                flags.computeIfAbsent(DEFAULT_NAMESPACE, ns -> new HashMap<>())
+                        .put(deviceFeatureFlag.getFlagName(), currentValue);
             } catch (IllegalArgumentException e) {
                 if (throwIfInvalid) {
                     throw new TargetSetupError(
@@ -273,13 +340,31 @@ public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
 
     private void updateFlag(ITestDevice device, String namespace, String name, String value)
             throws DeviceNotAvailableException, TargetSetupError {
-        if (Strings.isNullOrEmpty(value)) { // `device_config put` does not support empty values.
-            runCommand(device, String.format("device_config delete '%s' '%s'", namespace, name));
+        if (!mUseDeviceConfig) {
+            if (Strings.isNullOrEmpty(
+                    value)) { // `device_config put` does not support empty values.
+                runCommand(device, String.format("aflags unset '%s'", name));
+            } else {
+                if (value.equals("true")) {
+                    runCommand(device, String.format("aflags enable '%s'", name));
+                } else if (value.equals("false")) {
+                    runCommand(device, String.format("aflags disable '%s'", name));
+                } else {
+                    throw new IllegalArgumentException("Unknown value " + value);
+                }
+                mFlagsOverridden.add(new DeviceFeatureFlag(namespace, name, value));
+            }
         } else {
-            runCommand(
-                    device,
-                    String.format("device_config put '%s' '%s' '%s'", namespace, name, value));
-            mFlagsOverridden.add(new DeviceFeatureFlag(namespace, name, value));
+            if (Strings.isNullOrEmpty(
+                    value)) { // `device_config put` does not support empty values.
+                runCommand(
+                        device, String.format("device_config delete '%s' '%s'", namespace, name));
+            } else {
+                runCommand(
+                        device,
+                        String.format("device_config put '%s' '%s' '%s'", namespace, name, value));
+                mFlagsOverridden.add(new DeviceFeatureFlag(namespace, name, value));
+            }
         }
     }
 
