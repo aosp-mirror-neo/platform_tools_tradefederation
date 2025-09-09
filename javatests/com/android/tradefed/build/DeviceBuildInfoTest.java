@@ -186,7 +186,8 @@ public class DeviceBuildInfoTest {
         buildInfoSpy.setDeviceImageFile(sourceDir, VERSION);
 
         File mountPointDir = mTempFolder.newFolder("mount-point");
-        mTempFolder.newFile("mount-point/" + CasUtil.BOOT_IMAGE_FILENAME);
+        mTempFolder.newFile("mount-point/" + CasUtil.SYSTEM_IMAGE_FILENAME);
+        mTempFolder.newFile("mount-point/" + CasUtil.ANDROID_INFO_FILENAME);
 
         doReturn(Optional.of(mMockFuseManager)).when(buildInfoSpy).getFuseMountManager();
         doReturn(Optional.of(mMockCasConverter)).when(buildInfoSpy).getCasConverter();
