@@ -24,15 +24,12 @@ import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RemoteFileUtil;
 import com.android.tradefed.util.RemoteSshUtil;
 
-import org.json.JSONArray;
 import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 
@@ -178,36 +175,15 @@ public class CuttlefishControlRemoteCvd implements CuttlefishControl {
         }
         CLog.d("`cvd_internal_display list` stdout: %s", listDisplaysResult.getStdout());
 
-        CuttlefishDisplays cuttlefishDisplays = new CuttlefishDisplays();
+        CuttlefishDisplays cuttlefishDisplays = null;
         try {
-            JSONObject json = new JSONObject(listDisplaysResult.getStdout());
-            JSONObject jsonDisplays = json.getJSONObject("displays");
-            for (Iterator<String> keyIt = jsonDisplays.keys(); keyIt.hasNext(); ) {
-                String displayNumberString = keyIt.next();
-
-                JSONObject jsonDisplay = jsonDisplays.getJSONObject(displayNumberString);
-                JSONObject jsonDisplayMode = jsonDisplay.getJSONObject("mode");
-                JSONArray jsonDisplayModeWindowed = jsonDisplayMode.getJSONArray("windowed");
-                JSONArray jsonDisplayDpi = jsonDisplayMode.getJSONArray("dpi");
-
-                int id = Integer.parseInt(displayNumberString);
-                int w = jsonDisplayModeWindowed.getInt(0);
-                int h = jsonDisplayModeWindowed.getInt(1);
-                int dpi = jsonDisplayDpi.getInt(0);
-                int refreshRateHz = jsonDisplay.getInt("refresh-rate");
-
-                CuttlefishDisplay cuttlefishDisplay = new CuttlefishDisplay();
-                cuttlefishDisplay.width = w;
-                cuttlefishDisplay.height = h;
-                cuttlefishDisplay.dpi = dpi;
-                cuttlefishDisplay.refreshRateHz = refreshRateHz;
-                cuttlefishDisplays.displays.put(id, cuttlefishDisplay);
-            }
+            cuttlefishDisplays =
+                    CuttlefishUtils.parseCvdListDisplayOutput(listDisplaysResult.getStdout());
         } catch (JSONException e) {
             return CommandResultWith.errorString(
                     String.format(
-                            "Failed to parse Cuttlefish displays from json: %s",
-                            listDisplaysResult.getStdout()));
+                            "Failed to parse Cuttlefish displays from json: %s . Error: %s",
+                            listDisplaysResult.getStdout(), e.toString()));
         }
 
         return CommandResultWith.success(cuttlefishDisplays, listDisplaysResult);

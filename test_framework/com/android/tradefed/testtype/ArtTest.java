@@ -46,7 +46,9 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
 
@@ -82,13 +84,70 @@ import java.util.zip.ZipFile;
  *    }
  *  }
  */
-public class ArtTest implements IShardableTest {
+public class ArtTest implements IShardableTest, ITestFilterReceiver {
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
     protected Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
     protected Map<String, Boolean> mTestResults = new TreeMap<String, Boolean>();
     protected int mShardIndex = 0;
     protected int mShardCount = 1;
+
+    private Set<String> mIncludeFilters = new TreeSet<>();
+    private Set<String> mExcludeFilters = new TreeSet<>();
+
+    @Override
+    public void addIncludeFilter(String filter) {
+        mIncludeFilters.add(filter);
+    }
+
+    @Override
+    public void addAllIncludeFilters(Set<String> filters) {
+        mIncludeFilters.addAll(filters);
+    }
+
+    @Override
+    public void addExcludeFilter(String filter) {
+        mExcludeFilters.add(filter);
+    }
+
+    @Override
+    public void addAllExcludeFilters(Set<String> filters) {
+        mExcludeFilters.addAll(filters);
+    }
+
+    @Override
+    public Set<String> getIncludeFilters() {
+        return mIncludeFilters;
+    }
+
+    @Override
+    public Set<String> getExcludeFilters() {
+        return mExcludeFilters;
+    }
+
+    @Override
+    public void clearIncludeFilters() {
+        mIncludeFilters.clear();
+    }
+
+    @Override
+    public void clearExcludeFilters() {
+        mExcludeFilters.clear();
+    }
+
+    boolean shouldIncludeTest(String testName) {
+        for (String filter : mExcludeFilters) {
+            if (testName.matches(filter)) {
+                return false;
+            }
+        }
+        for (String filter : mIncludeFilters) {
+            if (testName.matches(filter)) {
+                return true;
+            }
+        }
+        return mIncludeFilters.isEmpty();
+    }
 
     @Override
     public void run(TestInformation testInfo, ITestInvocationListener listener)
@@ -159,6 +218,9 @@ public class ArtTest implements IShardableTest {
         for (int i = 0; i < sortedTestNames.size(); i++) {
             if (i % mShardCount == mShardIndex) {
                 String testName = sortedTestNames.get(i);
+                if (!shouldIncludeTest(testName)) {
+                    continue;
+                }
                 shardedTests.put(testName, allTests.get(testName));
                 dependencyQueue.add(testName);
             }
