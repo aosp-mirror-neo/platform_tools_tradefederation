@@ -124,10 +124,12 @@ public class CasUtilTest {
     @Test
     public void isUncompressedDeviceImage_success() throws IOException {
         File mountPoint = tempFolder.newFolder("uncompressed_device_image");
-        tempFolder.newFile("uncompressed_device_image/boot.img");
+        tempFolder.newFile("uncompressed_device_image/" + CasUtil.SYSTEM_IMAGE_FILENAME);
+        tempFolder.newFile("uncompressed_device_image/" + CasUtil.ANDROID_INFO_FILENAME);
 
         assertTrue(
-                "Should return true for an uncompressed device image containing boot.img.",
+                "Should return true for an uncompressed device image containing system.img and"
+                    + " android-info.txt.",
                 CasUtil.isUncompressedDeviceImage(mountPoint.toPath()));
     }
 
@@ -136,7 +138,7 @@ public class CasUtilTest {
         File mountPoint = tempFolder.newFolder("not_uncompressed_device_image");
 
         assertFalse(
-                "Should return false if the uncompressed device image does not contain boot.img.",
+                "Should return false if the uncompressed device image does not contain system.img.",
                 CasUtil.isUncompressedDeviceImage(mountPoint.toPath()));
     }
 
@@ -219,5 +221,4 @@ public class CasUtilTest {
         assertThat(log).isEqualTo(expectedlog);
         assertThat(Files.exists(logDir)).isFalse();
     }
-
 }

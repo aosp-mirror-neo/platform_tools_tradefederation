@@ -683,9 +683,16 @@ public interface ITestDevice extends INativeDevice {
     public List<PackageInfo> getAppPackageInfos() throws DeviceNotAvailableException;
 
     /**
-     * Determines if multi user is supported.
+     * Returns whether this device supports multiple switchable users with their own login and
+     * customizable space.
      *
-     * @return true if multi user is supported, false otherwise
+     * <p>Note that, even if false, multiple users might still be possible, as long as no login UI
+     * is required; e.g., profiles might still be supported, as they do not require a login UI.
+     *
+     * <p>This also checks config_enableMultiUserUI. By demand, we are allowed to assume that
+     * devices for which this is true are configured to allow adding secondary users via adb.
+     *
+     * @return whether the device supports multiple switchable users.
      * @throws DeviceNotAvailableException
      */
     public boolean isMultiUserSupported() throws DeviceNotAvailableException;
@@ -775,12 +782,36 @@ public interface ITestDevice extends INativeDevice {
     public Map<Integer, UserInfo> getUserInfos() throws DeviceNotAvailableException;
 
     /**
-     * Get the maximum number of supported users. Defaults to 0.
+     * Returns how many users of the given user type can be created on this device.
      *
-     * @return an integer indicating the number of supported users
+     * @param userType the type of user, as defined in UserManager, such as
+     *                 "android.os.usertype.full.SECONDARY".
+     * @return how many users of the given user type can be added
      * @throws DeviceNotAvailableException
      */
+    public int getRemainingCreatableUserCount(String userType) throws DeviceNotAvailableException;
+
+    /**
+     * Get the maximum number of supported switchable users, not including Guests. After api
+     * version 36, does not include non-switchable users (like profiles). Defaults to 0.
+     *
+     * @return an integer indicating the number of supported switchable users
+     * @throws DeviceNotAvailableException
+     * @deprecated use getMaxNumberOfUsersSupported(String userType) to obtain the max number of
+     *             supported users for a given user type.
+     */
+    @Deprecated
     public int getMaxNumberOfUsersSupported() throws DeviceNotAvailableException;
+
+    /**
+     * Get the maximum number of supported users of the given user type. Defaults to 0.
+     *
+     * @param userType the type of user, as defined in UserManager, such as
+     *                 "android.os.usertype.full.SECONDARY".
+     * @return an integer indicating the number of supported users of the given user type
+     * @throws DeviceNotAvailableException
+     */
+    public int getMaxNumberOfUsersSupported(String userType) throws DeviceNotAvailableException;
 
     /**
      * Get the maximum number of supported simultaneously running users. Defaults to 0.

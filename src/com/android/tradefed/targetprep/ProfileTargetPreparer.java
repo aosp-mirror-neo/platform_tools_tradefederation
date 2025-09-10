@@ -91,8 +91,8 @@ public abstract class ProfileTargetPreparer extends BaseTargetPreparer {
 
         if (profileId == -1) {
             if (!checkTrueOrSkipOnDevice(
-                    canCreateAdditionalUsers(testInfo.getDevice(), /* numberOfUsers*/ 1),
-                    "Device cannot support additional users",
+                    canCreateAdditionalProfiles(testInfo.getDevice(), /* numberOfUsers*/ 1),
+                    "Device cannot support additional users of type " + mProfileUserType,
                     testInfo)) {
                 return;
             }
@@ -142,6 +142,10 @@ public abstract class ProfileTargetPreparer extends BaseTargetPreparer {
 
     private boolean isPrivateProfileSupported(ITestDevice device)
             throws DeviceNotAvailableException {
+        if (device.checkApiLevelAgainstNextRelease(37)) {
+            return device.getMaxNumberOfUsersSupported("android.os.usertype.profile.PRIVATE") > 0;
+        }
+
         String command = "dumpsys user";
         String dumpsysOutput = device.executeShellCommand(command);
         if (dumpsysOutput == null || !dumpsysOutput.contains("Can add private profile:")) {
@@ -159,6 +163,10 @@ public abstract class ProfileTargetPreparer extends BaseTargetPreparer {
     }
 
     private boolean isCloneProfileEnabled(ITestDevice device) throws DeviceNotAvailableException {
+        if (device.checkApiLevelAgainstNextRelease(37)) {
+            return device.getMaxNumberOfUsersSupported("android.os.usertype.profile.CLONE") > 0;
+        }
+
         String command = "dumpsys user";
         String dumpsysOutput = device.executeShellCommand(command);
         if (dumpsysOutput == null
@@ -329,8 +337,11 @@ public abstract class ProfileTargetPreparer extends BaseTargetPreparer {
     }
 
     /** Checks whether it is possible to create the desired number of users. */
-    protected boolean canCreateAdditionalUsers(ITestDevice device, int numberOfUsers)
+    protected boolean canCreateAdditionalProfiles(ITestDevice device, int numberOfUsers)
             throws DeviceNotAvailableException {
+        if (device.getApiLevel() >= 36) {
+            return device.getRemainingCreatableUserCount(mProfileUserType) >= numberOfUsers;
+        }
         return device.listUsers().size() + numberOfUsers <= device.getMaxNumberOfUsersSupported();
     }
 

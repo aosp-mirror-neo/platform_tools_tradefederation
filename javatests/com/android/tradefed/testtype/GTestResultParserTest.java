@@ -40,7 +40,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a simple test run output with 11 tests. */
     @Test
-    public void testParseSimpleFile() throws Exception {
+    public void testParseSimpleFile() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_1);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
         GTestResultParser resultParser = new GTestResultParser(TEST_MODULE_NAME, mockRunListener);
@@ -60,7 +60,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a simple test run output with 53 tests and no times. */
     @Test
-    public void testParseSimpleFileNoTimes() throws Exception {
+    public void testParseSimpleFileNoTimes() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_2);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -81,7 +81,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a simple test run output with 0 tests and no times. */
     @Test
-    public void testParseNoTests() throws Exception {
+    public void testParseNoTests() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_3);
         HashMap<String, Metric> expected = new HashMap<>();
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
@@ -96,7 +96,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a run with 268 tests. */
     @Test
-    public void testParseLargerFile() throws Exception {
+    public void testParseLargerFile() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_4);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -117,7 +117,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a run with test failures. */
     @Test
-    public void testParseWithFailures() throws Exception {
+    public void testParseWithFailures() {
         String MESSAGE_OUTPUT = "This is some random text that should get captured by the parser.";
         String[] contents = readInFile(GTEST_OUTPUT_FILE_5);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
@@ -145,7 +145,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a run with test errors. */
     @Test
-    public void testParseWithErrors() throws Exception {
+    public void testParseWithErrors() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_6);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -167,7 +167,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a run with 11 tests. */
     @Test
-    public void testParseNonAlignedTag() throws Exception {
+    public void testParseNonAlignedTag() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_7);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -191,7 +191,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
      * crash.
      */
     @Test
-    public void testParseSimpleFile_AltFormat() throws Exception {
+    public void testParseSimpleFile_AltFormat() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_8);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -213,7 +213,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a simple test run output with a link error. */
     @Test
-    public void testParseSimpleFile_LinkError() throws Exception {
+    public void testParseSimpleFile_LinkError() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_9);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -242,7 +242,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
      * report all the logs we currently have and an error.
      */
     @Test
-    public void testParseSimpleFile_earlyError() throws Exception {
+    public void testParseSimpleFile_earlyError() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_10);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -267,7 +267,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a simple test run output with 11 tests where some are skipped. */
     @Test
-    public void testParseSimpleFileWithSkips() throws Exception {
+    public void testParseSimpleFileWithSkips() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_11);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -289,7 +289,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser for a test runs but doesn't finish run completely. */
     @Test
-    public void testParseSimpleFileWithoutRunComplete() throws Exception {
+    public void testParseSimpleFileWithoutRunComplete() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_12);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -315,7 +315,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
 
     /** Tests the parser when all tests are executed, but doesn't get run end tag from device. */
     @Test
-    public void testParseSimpleFile_TestsExecutedButNoRunEndTag() throws Exception {
+    public void testParseSimpleFile_TestsExecutedButNoRunEndTag() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_14);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
         GTestResultParser resultParser = new GTestResultParser(TEST_MODULE_NAME, mockRunListener);
@@ -338,7 +338,7 @@ public class GTestResultParserTest extends GTestParserTestBase {
      * as the test class and name separator
      */
     @Test
-    public void testParseRunTestNames() throws Exception {
+    public void testParseRunTestNames() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_15);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 
@@ -382,8 +382,31 @@ public class GTestResultParserTest extends GTestParserTestBase {
                 .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
     }
 
+    /** Tests the parser when the run start tag is not at the beginning of the line. */
     @Test
-    public void testParse_interrupted() throws Exception {
+    public void testParseSimpleFile_TestsExecutedButRunStartTagNotAtBeginning() {
+        String[] contents = readInFile(GTEST_OUTPUT_FILE_16);
+        ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
+        GTestResultParser resultParser = new GTestResultParser(TEST_MODULE_NAME, mockRunListener);
+        resultParser.processNewLines(contents);
+        resultParser.flush();
+
+        TestDescription testDescription =
+                new TestDescription("TestPartResultTest", "testCaseSkipped");
+        verify(mockRunListener).testRunStarted(TEST_MODULE_NAME, 1);
+        verify(mockRunListener).testStarted(Mockito.eq(testDescription), Mockito.anyLong());
+        verify(mockRunListener).testIgnored(Mockito.eq(testDescription));
+        verify(mockRunListener)
+                .testEnded(
+                        Mockito.eq(testDescription),
+                        Mockito.anyLong(),
+                        Mockito.<HashMap<String, Metric>>any());
+        verify(mockRunListener)
+                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+    }
+
+    @Test
+    public void testParse_interrupted() {
         String[] contents = readInFile(GTEST_OUTPUT_FILE_13);
         ITestInvocationListener mockRunListener = mock(ITestInvocationListener.class);
 

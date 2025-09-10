@@ -197,10 +197,12 @@ public class FuseMountManagerFactory {
                                             return Files.getLastModifiedTime(p).toMillis()
                                                     < cutoffTime;
                                         } catch (IOException e) {
-                                            // Log error and leave it alone (stay on the safe side).
-                                            CLog.e(
-                                                    "Could not get last modified time for '%s'",
-                                                    p, e);
+                                            if (Files.exists(p)) {
+                                                // Log error if it still exists and leave it alone.
+                                                CLog.e(
+                                                        "Could not get last modified time for '%s'",
+                                                        p, e);
+                                            }
                                             return false;
                                         }
                                     })

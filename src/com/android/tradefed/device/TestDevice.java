@@ -164,6 +164,9 @@ public class TestDevice extends NativeDevice {
     /** Time given to a file to be dumped on device side */
     private static final long DUMPHEAP_TIME = 5000L;
 
+    /** Shell command to get aconfig flags. */
+    private static final String DUMP_DEVICE_ACONFIG_FLAGS_CMD = "device_config list";
+
     /** Timeout in minutes for the package installation */
     static final long INSTALL_TIMEOUT_MINUTES = 4;
     /** Max timeout to output for package installation */
@@ -1750,15 +1753,50 @@ public class TestDevice extends NativeDevice {
         }
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public int getRemainingCreatableUserCount(String userType) throws DeviceNotAvailableException {
+        checkApiLevelAgainstNextRelease("getMaxNumberOfUsersSupported(userType)", 36);
+        if (!doesApiLevelHaveNoMaxUsersLimit()) {
+            // Without the flag, this command won't work. But we can adopt the same crude estimation
+            // that CTS tests were using before this was introduced, to preserve pre-flag behaviour.
+            return getMaxNumberOfUsersSupported() - listUsers().size();
+        }
+        String command = "pm get-remaining-user-count --user-type " + userType;
+        String commandOutput = executeShellCommand(command);
+        try {
+            return Integer.parseInt(commandOutput.substring(commandOutput.lastIndexOf(" ")).trim());
+        } catch (NumberFormatException e) {
+            CLog.e("Failed to parse result: %s", commandOutput);
+        }
+        return 0;
+    }
+
     /**
      * {@inheritDoc}
      */
     @Override
+    @Deprecated
     public int getMaxNumberOfUsersSupported() throws DeviceNotAvailableException {
+        return getMaxNumberOfUsersSupported(null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getMaxNumberOfUsersSupported(@Nullable String userType)
+            throws DeviceNotAvailableException {
         String command = "pm get-max-users";
+        if (userType != null) {
+            checkApiLevelAgainstNextRelease("getMaxNumberOfUsersSupported(userType)", 36);
+            if (doesApiLevelHaveNoMaxUsersLimit()) {
+                command += " --user-type " + userType;
+            }
+        }
         String commandOutput = executeShellCommand(command);
         try {
-            return Integer.parseInt(commandOutput.substring(commandOutput.lastIndexOf(" ")).trim());
+            return Integer.parseInt(commandOutput.substring(commandOutput.lastIndexOf(" ")).trim())
+                    // if flag is off on new builds, -1 for the system user.
+                    + (userType != null && !doesApiLevelHaveNoMaxUsersLimit() ? -1 : 0);
         } catch (NumberFormatException e) {
             CLog.e("Failed to parse result: %s", commandOutput);
         }
@@ -1779,9 +1817,8 @@ public class TestDevice extends NativeDevice {
         return 0;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
+    // Remember that this only refers to whether multiple *switchable* users are supported.
     @Override
     public boolean isMultiUserSupported() throws DeviceNotAvailableException {
         checkApiLevelAgainstNextRelease("get-max-running-users", 28);
@@ -1799,6 +1836,7 @@ public class TestDevice extends NativeDevice {
                 return false;
             }
         }
+        // old API version
         return getMaxNumberOfUsersSupported() > 1;
     }
 
@@ -3579,5 +3617,32 @@ public class TestDevice extends NativeDevice {
             throw new DeviceRuntimeException(message, DeviceErrorIdentifier.DEVICE_CRASHED);
         }
         return error;
+    }
+
+    /**
+     * Returns whether the device api level is such that there is no overall user max and supports
+     * per-user-type max value shell commands.
+     */
+    private boolean doesApiLevelHaveNoMaxUsersLimit() throws DeviceNotAvailableException {
+        return getApiLevel() >= 37 || getDeviceConfigFlag(
+                "multiuser/android.multiuser.decouple_max_users_from_profiles");
+    }
+
+    /** Returns the value corresponding to the given aconfig flag name.
+     *  @param flagName fully qualified aconfig flag name, including its namespace,
+     *                 like "namespace/android.area.flagname".
+     */
+    private boolean getDeviceConfigFlag(String flagName) throws DeviceNotAvailableException {
+        // The logic here is derived from android.platform.test.flag.junit.host.DeviceFlags.
+        String deviceConfigList = executeShellCommand(DUMP_DEVICE_ACONFIG_FLAGS_CMD);
+        for (String deviceConfig : deviceConfigList.split("\n")) {
+            if (deviceConfig.contains("=")) {
+                String[] flagNameValue = deviceConfig.split("=", 2);
+                if (flagName.equals(flagNameValue[0])) {
+                    return Boolean.parseBoolean(flagNameValue[1]);
+                }
+            }
+        }
+        return false;
     }
 }

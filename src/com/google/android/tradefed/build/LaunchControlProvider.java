@@ -59,6 +59,7 @@ import com.android.tradefed.targetprep.IFlashingResourcesParser;
 import com.android.tradefed.targetprep.TargetSetupError;
 import com.android.tradefed.testtype.IInvocationContextReceiver;
 import com.android.tradefed.util.ArrayUtil;
+import com.android.tradefed.util.CasUtil;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.MultiMap;
@@ -1657,7 +1658,12 @@ public class LaunchControlProvider
         if (downloadedFile.isDirectory()) {
             File[] children = downloadedFile.listFiles();
             if (children.length == 1) {
-                return children[0];
+                File child = children[0];
+                if (child.isDirectory() && child.getName().equals(CasUtil.CHUNKS_DIR_NAME)) {
+                    CLog.w("Downloaded a fast-cdc chunked directory.");
+                    return downloadedFile;
+                }
+                return child;
             }
             CLog.w(
                     "Downloaded a directory with more than one child: %s",

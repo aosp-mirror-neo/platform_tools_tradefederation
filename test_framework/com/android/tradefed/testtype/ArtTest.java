@@ -160,6 +160,7 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
                 mRunnerDir = extractTarBall(tmp_dir);
                 extractZipApex(tmp_dir);
                 mTests = loadTests();
+                mTestResults.clear(); // TF might reuse the same instance for multiple runs.
             } catch (IOException | JSONException e) {
                 throw new RuntimeException(e);
             }
@@ -301,6 +302,7 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
 
     void clean() throws DeviceNotAvailableException {
         ITestDevice device = mTestInfo.getDevice();
+        device.enableAdbRoot(); // Ensure we have the rights to delete everything.
         device.deleteFile("/data/local/tmp/art");
     }
 

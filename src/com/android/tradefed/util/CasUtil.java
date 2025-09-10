@@ -36,7 +36,8 @@ public final class CasUtil {
 
     public static final String CHUNKS_DIR_NAME = "_chunks";
     public static final String CHUNKS_INDEX_FILENAME = "_chunks_index.json";
-    public static final String BOOT_IMAGE_FILENAME = "boot.img";
+    public static final String SYSTEM_IMAGE_FILENAME = "system.img";
+    public static final String ANDROID_INFO_FILENAME = "android-info.txt";
     public static final String CAS_LOG_ROOT_NAME = "tf-cas-fuse-log-root";
     private static final Pattern LOG_LINE_PATTERN =
             Pattern.compile(
@@ -103,12 +104,24 @@ public final class CasUtil {
     /**
      * Returns true if the given path is a valid uncompressed device image.
      *
+     * <p>For the most robust and reliable check, verify the existence of both system.img AND
+     * android-info.txt.
+     *
+     * <p>system.img: Confirms that the core OS data is present.
+     *
+     * <p>android-info.txt: Confirms that this is an official build package with metadata describing
+     * the device and build version.
+     *
+     * <p>This combination is extremely unlikely to occur in a directory that isn't an uncompressed
+     * device image and correctly handles cases like the TV build where boot.img is absent.
+     *
      * @param path The absolute path to the device image.
      * @return True if the path is a valid uncompressed device image, false otherwise.
      */
     public static boolean isUncompressedDeviceImage(Path path) {
         // All device images are expected to have a boot image file.
-        return Files.exists(path.resolve(BOOT_IMAGE_FILENAME));
+        return Files.exists(path.resolve(SYSTEM_IMAGE_FILENAME))
+                && Files.exists(path.resolve(ANDROID_INFO_FILENAME));
     }
 
     public static void logCasClientVersion(Path clientPath, Consumer<String> versionHandlerFn) {

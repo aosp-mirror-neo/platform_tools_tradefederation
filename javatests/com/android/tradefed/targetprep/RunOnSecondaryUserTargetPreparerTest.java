@@ -17,8 +17,8 @@
 package com.android.tradefed.targetprep;
 
 import static com.android.tradefed.device.UserInfo.FLAG_FOR_TESTING;
-import static com.android.tradefed.targetprep.UserHelper.RUN_TESTS_AS_USER_KEY;
 import static com.android.tradefed.targetprep.RunOnSecondaryUserTargetPreparer.TEST_PACKAGE_NAME_OPTION;
+import static com.android.tradefed.targetprep.UserHelper.RUN_TESTS_AS_USER_KEY;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -31,7 +31,9 @@ import static org.mockito.Mockito.when;
 
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.UserInfo;
+import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.result.error.DeviceErrorIdentifier;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -53,6 +55,8 @@ import java.util.Set;
 @RunWith(JUnit4.class)
 public class RunOnSecondaryUserTargetPreparerTest {
 
+    public static final String USERTYPE_SECONDARY = "android.os.usertype.full.SECONDARY";
+
     @Rule public final MockitoRule mockito = MockitoJUnit.rule();
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
@@ -66,12 +70,9 @@ public class RunOnSecondaryUserTargetPreparerTest {
         mPreparer = new RunOnSecondaryUserTargetPreparer();
         mOptionSetter = new OptionSetter(mPreparer);
 
-        ArrayList<Integer> userIds = new ArrayList<>();
-        userIds.add(0);
-
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(3);
-        when(mTestInfo.getDevice().listUsers()).thenReturn(userIds);
-        when(mTestInfo.getDevice().getApiLevel()).thenReturn(30);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_SECONDARY)))
+                .thenReturn(2);
+        when(mTestInfo.getDevice().getApiLevel()).thenReturn(37);
         when(mTestInfo.getDevice().isHeadlessSystemUserMode()).thenReturn(false);
 
         Map<Integer, UserInfo> userInfos = new HashMap<>();
@@ -98,12 +99,44 @@ public class RunOnSecondaryUserTargetPreparerTest {
     }
 
     @Test
+    public void setUp_oldVersion_usesGetMaxNumberOfUsersSupported() throws Exception {
+        when(mTestInfo.getDevice().getApiLevel()).thenReturn(30);
+
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(3);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_SECONDARY)))
+                .thenThrow(
+                        new HarnessRuntimeException(
+                                "API not supported",
+                                DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE));
+
+        ArrayList<Integer> userIds = new ArrayList<>();
+        userIds.add(0);
+        when(mTestInfo.getDevice().listUsers()).thenReturn(userIds);
+
+        when(mTestInfo.getDevice().createUser(any(), anyBoolean(), anyBoolean(), anyBoolean()))
+                .thenReturn(2);
+        when(mTestInfo.getDevice().getCurrentUser()).thenReturn(0);
+
+        mPreparer.setUp(mTestInfo);
+
+        verify(mTestInfo.getDevice())
+                .createUser(
+                        "secondary",
+                        /* guest= */ false,
+                        /* ephemeral= */ false,
+                        /* forTesting= */ true);
+        verify(mTestInfo.getDevice()).startUser(2, /* waitFlag= */ true);
+        verify(mTestInfo.getDevice()).switchUser(2);
+    }
+
+    @Test
     public void setUp_oldVersion_createsStartsAndSwitchesToSecondaryUserWithoutWait()
             throws Exception {
         when(mTestInfo.getDevice().createUser(any(), anyBoolean(), anyBoolean(), anyBoolean()))
                 .thenReturn(2);
         when(mTestInfo.getDevice().getCurrentUser()).thenReturn(0);
         when(mTestInfo.getDevice().getApiLevel()).thenReturn(28);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(3);
 
         mPreparer.setUp(mTestInfo);
 
@@ -361,7 +394,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
 
     @Test
     public void setUp_doesNotSupportAdditionalUsers_doesNotChangeTestUser() throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_SECONDARY)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -370,7 +404,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
 
     @Test
     public void setUp_doesNotSupportAdditionalUsers_setsArgumentToSkipTests() throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_SECONDARY)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -381,7 +416,9 @@ public class RunOnSecondaryUserTargetPreparerTest {
     @Test
     public void setUp_doesNotSupportAdditionalUsers_alreadyHasSecondaryUser_runsTestAsExistingUser()
             throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_SECONDARY)))
+                .thenReturn(0);
+
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 3,
@@ -398,7 +435,9 @@ public class RunOnSecondaryUserTargetPreparerTest {
     @Test
     public void setUp_doesNotSupportAdditionalUsers_alreadyHasSecondaryUser_doesNotSkipTests()
             throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_SECONDARY)))
+                .thenReturn(0);
+
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 3,
