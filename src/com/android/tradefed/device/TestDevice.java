@@ -3628,8 +3628,9 @@ public class TestDevice extends NativeDevice {
                 "multiuser/android.multiuser.consistent_max_users");
     }
 
-    /** Returns the value corresponding to the given aconfig flag name.
-     *  @param flagName fully qualified aconfig flag name, including its namespace,
+    /**
+     * Returns the value corresponding to the given aconfig flag name.
+     * @param flagName fully qualified aconfig flag name, including its namespace,
      *                 like "namespace/android.area.flagname".
      */
     private boolean getDeviceConfigFlag(String flagName) throws DeviceNotAvailableException {
