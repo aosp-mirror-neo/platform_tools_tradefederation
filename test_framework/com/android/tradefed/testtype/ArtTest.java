@@ -302,6 +302,7 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
 
     void clean() throws DeviceNotAvailableException {
         ITestDevice device = mTestInfo.getDevice();
+        device.enableAdbRoot(); // Ensure we have the rights to delete everything.
         device.deleteFile("/data/local/tmp/art");
     }
 
