@@ -262,10 +262,12 @@ public class TestMappingsValidation implements IBuildReceiver {
         generalTestsModules =
                 extractTestsModules(
                         deviceBuildInfo.getFile("cas_content_details.json"), "general-tests.zip");
+        CLog.d("general-tests modules size: %s", generalTestsModules.size());
         deviceTestsModules =
                 extractTestsModules(
                         deviceBuildInfo.getFile("device_cas_content_details.json"),
                         "device-tests.zip");
+        CLog.d("device-tests modules size: %s", deviceTestsModules.size());
         mergeModuleInfo(deviceBuildInfo.getFile(MODULE_INFO));
         for (String fileKey : deviceBuildInfo.getVersionedFileKeys()) {
             if (fileKey.contains("additional-module-info")) {
