@@ -22,6 +22,9 @@ import static java.lang.String.format;
 
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.IDeviceBuildInfo;
+import com.android.tradefed.build.content.ContentAnalysisContext;
+import com.android.tradefed.build.content.ContentInformation;
+import com.android.tradefed.build.content.ContentModuleLister;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.ConfigurationFactory;
 import com.android.tradefed.config.ConfigurationUtil;
@@ -121,6 +124,8 @@ public class TestMappingsValidation implements IBuildReceiver {
     private IBuildInfo mBuild;
     private JsonObject mergedModuleInfo = new JsonObject();
     private Map<String, Set<TestInfo>> allTests = null;
+    private Set<String> generalTestsModules = new HashSet<String>();
+    private Set<String> deviceTestsModules = new HashSet<String>();
 
     /** Type of filters used in test options in TEST_MAPPING files. */
     enum Filters {
@@ -254,6 +259,13 @@ public class TestMappingsValidation implements IBuildReceiver {
                     TestMapping.extractTestMappingsZip(deviceBuildInfo.getFile(TEST_MAPPINGS_ZIP));
             deleteUnzip = true;
         }
+        generalTestsModules =
+                extractTestsModules(
+                        deviceBuildInfo.getFile("cas_content_details.json"), "general-tests.zip");
+        deviceTestsModules =
+                extractTestsModules(
+                        deviceBuildInfo.getFile("device_cas_content_details.json"),
+                        "device-tests.zip");
         mergeModuleInfo(deviceBuildInfo.getFile(MODULE_INFO));
         for (String fileKey : deviceBuildInfo.getVersionedFileKeys()) {
             if (fileKey.contains("additional-module-info")) {
@@ -622,6 +634,9 @@ public class TestMappingsValidation implements IBuildReceiver {
      *     "device-tests", or name doesn't exist in module-info.json.
      */
     private boolean validateSuiteSetting(String name) {
+        if (generalTestsModules.contains(name) || deviceTestsModules.contains(name)) {
+            return true;
+        }
         if (!mergedModuleInfo.has(name)) {
             CLog.w("Test Module: %s can't be found in module-info.json. Ignore checking...", name);
             return true;
@@ -685,6 +700,17 @@ public class TestMappingsValidation implements IBuildReceiver {
 
     private void mergeModuleInfoByName(JsonObject jsonObject) {
         mergedModuleInfo.add(jsonObject.get(MODULE_NAME).getAsString(), jsonObject);
+    }
+
+    private Set<String> extractTestsModules(File file, String contentEntry) throws IOException {
+        ContentInformation contentInformation = new ContentInformation(null, "", file, "");
+        ContentAnalysisContext context =
+                new ContentAnalysisContext(contentEntry, contentInformation, null);
+        Set<String> modules = ContentModuleLister.buildModuleList(context);
+        if (modules == null) {
+            return new HashSet<String>();
+        }
+        return modules;
     }
 
     /** Validate mainline test with parameterized mainline modules is properly configured. */
