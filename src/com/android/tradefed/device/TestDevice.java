@@ -3625,7 +3625,7 @@ public class TestDevice extends NativeDevice {
      */
     private boolean doesApiLevelHaveNoMaxUsersLimit() throws DeviceNotAvailableException {
         return getApiLevel() >= 37 || getDeviceConfigFlag(
-                "multiuser/android.multiuser.decouple_max_users_from_profiles");
+                "multiuser/android.multiuser.consistent_max_users");
     }
 
     /** Returns the value corresponding to the given aconfig flag name.
