@@ -377,9 +377,15 @@ public class InvocationExecution implements IInvocationExecution {
                                 && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildFlavor())
                                 && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildBranch())
                                 && (testInfo.getBuildInfo().getBuildFlavor().contains("sdv_core")
-                                        || testInfo.getBuildInfo().getBuildBranch().contains("release")
-                                        || testInfo.getBuildInfo().getBuildFlavor().endsWith("-user")
-                                        || testInfo.getBuildInfo().getBuildFlavor().endsWith("coverage"));
+                                        || testInfo.getBuildInfo()
+                                                .getBuildBranch()
+                                                .contains("release")
+                                        || testInfo.getBuildInfo()
+                                                .getBuildFlavor()
+                                                .endsWith("-user")
+                                        || testInfo.getBuildInfo()
+                                                .getBuildFlavor()
+                                                .endsWith("coverage"));
                 if (recategorize) {
                     InvocationMetricLogger.addInvocationPairMetrics(
                             InvocationMetricKey.TEST_SETUP_PAIR, start, end);
@@ -812,6 +818,12 @@ public class InvocationExecution implements IInvocationExecution {
                     gceAvdInfoList.get(i), devices.get(i).getSerialNumber());
             // Use the most common basic interface for device connection setup
             NativeDevice device = (NativeDevice) devices.get(i);
+
+            // Fail the setup if GceAvdInfo is invalid
+            if (gceAvdInfoList.get(i).hostAndPort() == null) {
+                throw new TargetSetupError(
+                        gceAvdInfoList.get(i).getErrors(), gceAvdInfoList.get(i).getErrorType());
+            }
 
             device.setConnectionAvdInfo(gceAvdInfoList.get(i));
             device.preInvocationSetup(buildInfos.get(i), context.getAttributes());
