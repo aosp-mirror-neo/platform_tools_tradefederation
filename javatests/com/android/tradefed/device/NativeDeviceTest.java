@@ -2411,7 +2411,7 @@ public class NativeDeviceTest {
     /** Test that {@link NativeDevice#getDeviceDescriptor()} returns the proper information. */
     @Test
     public void testGetDeviceDescriptor() {
-        final String serial = "Test";
+        final String serial = "serial";
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override

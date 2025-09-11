@@ -226,11 +226,13 @@ public class NativeDevice
      */
     private static final String EXIT_STATUS_DELIMITER = "x";
 
+    private static final String RE_EMULATOR_SN = "emulator-(\\d+)"; // $NON-NLS-1$
     private IConfiguration mConfiguration;
     private IDevice mIDevice;
     private IDeviceRecovery mRecovery = new WaitDeviceRecovery();
     protected final IDeviceStateMonitor mStateMonitor;
     private TestDeviceState mState = TestDeviceState.ONLINE;
+    private String mSerialNumber;
     private final ReentrantLock mFastbootLock = new ReentrantLock();
     private LogcatReceiver mLogcatReceiver;
     private boolean mFastbootEnabled = true;
@@ -520,6 +522,7 @@ public class NativeDevice
         throwIfNull(device);
         throwIfNull(stateMonitor);
         mIDevice = device;
+        mSerialNumber = device.getSerialNumber();
         mStateMonitor = stateMonitor;
         mAllocationMonitor = allocationMonitor;
         // Keep a short timeout to expire key in case of large state changes
@@ -671,6 +674,7 @@ public class NativeDevice
         if (!getIDevice().equals(newDevice)) {
             synchronized (currentDevice) {
                 mIDevice = newDevice;
+                mSerialNumber = newDevice.getSerialNumber();
             }
             mStateMonitor.setIDevice(mIDevice);
         }
@@ -681,7 +685,7 @@ public class NativeDevice
      */
     @Override
     public String getSerialNumber() {
-        return getIDevice().getSerialNumber();
+        return mSerialNumber;
     }
 
     @Override
@@ -4951,7 +4955,7 @@ public class NativeDevice
      */
     @Override
     public InputStreamSource getEmulatorOutput() {
-        if (getIDevice().isEmulator()) {
+        if (isEmulator()) {
             if (mEmulatorOutput == null) {
                 CLog.w("Emulator output for %s was not captured in background",
                         getSerialNumber());
@@ -4966,6 +4970,11 @@ public class NativeDevice
             }
         }
         return new ByteArrayInputStreamSource(new byte[0]);
+    }
+
+    /** Returns <code>true</code> if the device is an emulator. */
+    private boolean isEmulator() {
+        return mSerialNumber.matches(RE_EMULATOR_SN);
     }
 
     /**
@@ -5830,7 +5839,7 @@ public class NativeDevice
                         getSerialNumber(),
                         null,
                         idevice instanceof StubDevice,
-                        idevice.getState(),
+                        getDeviceState().getDdmsState(),
                         getAllocationState(),
                         getDeviceState(),
                         null,
@@ -5864,7 +5873,7 @@ public class NativeDevice
                             ? getSerialNumber() + "[" + mTrackingSerialNumber + "]"
                             : null,
                     idevice instanceof StubDevice,
-                    idevice.getState(),
+                    getDeviceState().getDdmsState(),
                     getAllocationState(),
                     getDeviceState(),
                     getDisplayString(selector.getDeviceProductType(idevice)),
