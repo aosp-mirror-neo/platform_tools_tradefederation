@@ -58,6 +58,13 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
     @Option(name="online-wait-time",
             description="maximum time in ms to wait for device to come online.")
     protected long mOnlineWaitTime = 60 * 1000;
+
+    @Option(
+            name = "reboot-not-available-timeout",
+            description = "Time in ms to wait for a device to become unavailable after a reboot.",
+            isTimeVal = true)
+    private long mRebootNotAvailableTimeout = 20 * 1000;
+
     @Option(name="device-wait-time",
             description="maximum time in ms to wait for a single device recovery command.")
     protected long mWaitTime = 4 * 60 * 1000;
@@ -466,7 +473,7 @@ public class WaitDeviceRecovery implements IDeviceRecovery {
         try {
             device.reboot(mode);
             if (mode == null) {
-                monitor.waitForDeviceNotAvailable(20000L);
+                monitor.waitForDeviceNotAvailable(mRebootNotAvailableTimeout);
             }
         } catch (IOException e) {
             CLog.w(
