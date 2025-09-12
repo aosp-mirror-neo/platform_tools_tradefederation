@@ -825,6 +825,7 @@ public class HostOrchestratorUtilTest {
                         return mMockRunUtil;
                     }
                 };
+        mHOUtil.setWaitForOperationMs(1);
         Mockito.when(mMockHttpClient.send(Mockito.any()))
                 .thenReturn(mockHttpResponse(500, "server error"));
         Assert.assertFalse(mHOUtil.deviceBootCompleted(10));

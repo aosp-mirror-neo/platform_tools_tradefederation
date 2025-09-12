@@ -403,9 +403,6 @@ public class GceManager {
                 return mGceAvdInfo;
             }
             if (getTestDeviceOptions().getExtraOxygenArgs().containsKey("no_wait_for_boot")) {
-                CLog.d(
-                        "Device leased without waiting for boot to finish. Poll emulator_stderr.txt"
-                                + " for flag `VIRTUAL_DEVICE_BOOT_COMPLETED`");
                 // When leasing without wait for boot to finish, use the time spent so far as the
                 // best estimate of cf_fetch_artifact_time_ms.
                 fetchTime = System.currentTimeMillis() - startTime;
@@ -428,8 +425,14 @@ public class GceManager {
                                     OxygenUtil.getTargetRegion(getTestDeviceOptions()),
                                     getTestDeviceOptions().getOxygenAccountingUser(),
                                     oxygenClient);
+                    CLog.d(
+                            "Device leased without waiting for boot to finish. Wait for device to"
+                                    + " complete boot through Host Orchestrator.");
                     bootSuccess = mHOUtil.deviceBootCompleted(timeout);
                 } else {
+                    CLog.d(
+                            "Device leased without waiting for boot to finish. Poll"
+                                + " emulator_stderr.txt for flag `VIRTUAL_DEVICE_BOOT_COMPLETED`");
                     final String remoteFile =
                             CommonLogRemoteFileUtil.OXYGEN_EMULATOR_LOG_DIR
                                     + "3/emulator_stderr.txt";

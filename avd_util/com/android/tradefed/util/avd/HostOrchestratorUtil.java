@@ -107,6 +107,8 @@ public class HostOrchestratorUtil {
     private IHoHttpClient mHttpClient;
     private String mHOPortNumber = "2080";
     private Process mHOTunnel;
+    // Intervals to wait before retrying a HO operation.
+    private long mWaitForOperationMs = WAIT_FOR_OPERATION_MS;
 
     public HostOrchestratorUtil(
             boolean useOxygenation,
@@ -237,18 +239,27 @@ public class HostOrchestratorUtil {
             return false;
         }
         long maxEndTime = System.currentTimeMillis() + maxWaitTime;
+        int retryCount = 1;
         while (System.currentTimeMillis() < maxEndTime) {
             ListCvdsResponse listCvdsRes = null;
             try {
                 listCvdsRes = listCvds();
             } catch (IOException | InterruptedException | ErrorResponseException e) {
-                CLog.e("Failed listing cvds: %s", e);
-                return false;
+                CLog.e("Failed listing cvds (attempt %d): %s", retryCount, e);
+                // Retry at most 5 times for HO exception
+                if (retryCount == 5) {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricLogger.InvocationMetricKey.DEVICE_ERROR_SIGNATURES,
+                            "ho_call_failed");
+                    return false;
+                }
+                retryCount++;
+                continue;
             }
             if (listCvdsRes.cvds.size() > 0 && listCvdsRes.cvds.get(0).status.equals("Running")) {
                 return true;
             }
-            getRunUtil().sleep(WAIT_FOR_OPERATION_MS);
+            getRunUtil().sleep(mWaitForOperationMs);
         }
         return false;
     }
@@ -786,5 +797,10 @@ public class HostOrchestratorUtil {
         CLog.e(msg);
         curlRes.setStderr(msg);
         return curlRes;
+    }
+
+    @VisibleForTesting
+    void setWaitForOperationMs(long interval) {
+        mWaitForOperationMs = interval;
     }
 }
