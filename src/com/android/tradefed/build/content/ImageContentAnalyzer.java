@@ -92,6 +92,28 @@ public class ImageContentAnalyzer {
         }
     }
 
+    public static String getImageDigestKey(
+            AnalysisMethod analysisMethod, DeviceImagePartition imagePartition) {
+        return getImageDigestKey(analysisMethod, null, imagePartition);
+    }
+
+    private static String getImageDigestKey(
+            AnalysisMethod analysisMethod,
+            String contentEntry,
+            DeviceImagePartition imagePartition) {
+        List<String> keyElements = new ArrayList<>();
+        if (analysisMethod != null) {
+            keyElements.add(analysisMethod.name());
+        }
+        if (contentEntry != null) {
+            keyElements.add(contentEntry);
+        }
+        if (imagePartition != null) {
+            keyElements.add(imagePartition.getCacheKeyName());
+        }
+        return String.join("_", keyElements);
+    }
+
     public ContentAnalysisResults evaluate() {
         List<ContentAnalysisContext> activeContexts = new ArrayList<>(contexts);
         try (CloseableTraceScope ignored = new CloseableTraceScope("image_analysis")) {
@@ -133,17 +155,34 @@ public class ImageContentAnalyzer {
                                     "build key '%s' was unchanged.",
                                     context.contentEntry());
                         }
-                        String keyName = "build_key_" + context.contentEntry();
+                        String normalizedContentEntry = context.contentEntry();
                         // Normalizes the build-id if it's part of the name.
-                        if (context.contentInformation() != null &&
-                                keyName.contains(context.contentInformation().currentBuildId)) {
-                            keyName =
-                                    keyName.replace(
+                        if (context.contentInformation() != null
+                                && normalizedContentEntry.contains(
+                                        context.contentInformation().currentBuildId)) {
+                            normalizedContentEntry =
+                                    normalizedContentEntry.replace(
                                             context.contentInformation().currentBuildId, "ABCDEF");
                         }
-                        results.addImageDigestMapping(
-                                keyName,
-                                DeviceMerkleTree.buildFromContext(context, mAnalysisLevel));
+                        if (normalizedContentEntry.contains("-target_files-")) {
+                            // Computes build key digests for all partitions.
+                            for (DeviceImagePartition imagePartition :
+                                    DeviceImagePartition.values()) {
+                                Digest imagePartitionDigest =
+                                        DeviceMerkleTree.buildFromContext(
+                                                context, mAnalysisLevel, imagePartition);
+                                String imageDigestKey =
+                                        getImageDigestKey(
+                                                AnalysisMethod.BUILD_KEY,
+                                                normalizedContentEntry,
+                                                imagePartition);
+                                results.addImageDigestMapping(imageDigestKey, imagePartitionDigest);
+                            }
+                        } else {
+                            results.addImageDigestMapping(
+                                    normalizedContentEntry,
+                                    DeviceMerkleTree.buildFromContext(context, mAnalysisLevel));
+                        }
                         break;
                     case DEVICE_IMAGE:
                         long changeCount = deviceImageAnalysis(context);
@@ -161,8 +200,9 @@ public class ImageContentAnalyzer {
                                         imagePartition.getInvocationMetricKey(),
                                         imagePartitionDigest.getHash());
                             }
-                            results.addImageDigestMapping(
-                                    imagePartition.getCacheKeyName(), imagePartitionDigest);
+                            String imageDigestKey =
+                                    getImageDigestKey(AnalysisMethod.DEVICE_IMAGE, imagePartition);
+                            results.addImageDigestMapping(imageDigestKey, imagePartitionDigest);
                         }
                         break;
                     default:

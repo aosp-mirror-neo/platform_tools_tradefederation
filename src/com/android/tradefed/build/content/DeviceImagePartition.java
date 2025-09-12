@@ -23,15 +23,15 @@ import java.util.function.Predicate;
 /** Defines the partitions for a device image. */
 public enum DeviceImagePartition {
     SYSTEM(
-            "device_image_system_partition",
+            "system_partition",
             InvocationMetricKey.DEVICE_IMAGE_SYSTEM_HASH,
             descriptor -> isWithinCoreSystemLayerPartitions(descriptor)),
     VENDOR(
-            "device_image_vendor_partition",
+            "vendor_partition",
             InvocationMetricKey.DEVICE_IMAGE_VENDOR_HASH,
             descriptor -> isWithinCoreVendorLayerPartitions(descriptor)),
     OTHER(
-            "device_image_other_partition",
+            "other_partition",
             InvocationMetricKey.DEVICE_IMAGE_OTHER_HASH,
             descriptor ->
                     !(isWithinCoreVendorLayerPartitions(descriptor)

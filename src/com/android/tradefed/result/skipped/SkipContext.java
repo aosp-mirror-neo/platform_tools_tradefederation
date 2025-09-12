@@ -15,7 +15,7 @@
  */
 package com.android.tradefed.result.skipped;
 
-import com.android.tradefed.build.content.DeviceImagePartition;
+import com.android.tradefed.build.content.ContentAnalysisContext.AnalysisMethod;
 
 import build.bazel.remote.execution.v2.Digest;
 
@@ -59,11 +59,9 @@ public class SkipContext {
     }
 
     public boolean hasDeviceDigest() {
-        for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
-            if (imageToDigest.containsKey(imagePartition.getCacheKeyName())) {
-                return true;
-            }
-        }
-        return false;
+        return imageToDigest.keySet().stream()
+                .anyMatch(
+                        imageDigestKey ->
+                                imageDigestKey.startsWith(AnalysisMethod.DEVICE_IMAGE.name()));
     }
 }

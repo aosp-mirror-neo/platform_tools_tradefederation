@@ -55,7 +55,9 @@ public class SkipManagerTest {
         Digest defaultDigest = DigestCalculator.compute(defaultDirectory);
         Map<String, Digest> imageFileToDigest = new HashMap<>();
         for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
-            imageFileToDigest.put(imagePartition.getCacheKeyName(), defaultDigest);
+            imageFileToDigest.put(
+                    "DEVICE_IMAGE_" + imagePartition.getCacheKeyName(), defaultDigest);
+            imageFileToDigest.put("BUILD_KEY_" + imagePartition.getCacheKeyName(), defaultDigest);
         }
         mManager.setImageToDigest(imageFileToDigest);
         mContext = new InvocationContext();
@@ -88,9 +90,86 @@ public class SkipManagerTest {
     }
 
     @Test
-    public void testImageToDigest_vendorOnlyStrategy() throws Exception {
+    public void testImageToDigest_vendorOnlyStrategyForDeviceImage() throws Exception {
         OptionSetter setter = new OptionSetter(mManager);
         setter.setOptionValue("enable-image-granularity-strategy", "true");
+        mConfiguration.setCommandLine(
+                new String[] {
+                    "google/cts/google-cts-launcher-for-aosp",
+                    "--config-name",
+                    "vts",
+                    "--cts-package-name",
+                    "android-vts.zip"
+                });
+        mManager.setup(mConfiguration, mContext);
+
+        Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(4);
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                "DEVICE_IMAGE_" + DeviceImagePartition.VENDOR.getCacheKeyName()))
+                .isTrue();
+    }
+
+    @Test
+    public void testImageToDigest_systemVendorStrategyForDeviceImage() throws Exception {
+        OptionSetter setter = new OptionSetter(mManager);
+        setter.setOptionValue("enable-image-granularity-strategy", "true");
+        mConfiguration.setCommandLine(
+                new String[] {
+                    "google/cts/google-cts-launcher-for-aosp",
+                    "--config-name",
+                    "cts-automated",
+                    "--cts-package-name",
+                    "android-cts.zip"
+                });
+        mManager.setup(mConfiguration, mContext);
+
+        Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(5);
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                "DEVICE_IMAGE_" + DeviceImagePartition.VENDOR.getCacheKeyName()))
+                .isTrue();
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                "DEVICE_IMAGE_" + DeviceImagePartition.SYSTEM.getCacheKeyName()))
+                .isTrue();
+    }
+
+    @Test
+    public void testImageToDigest_fullImageStrategyForDeviceImage() throws Exception {
+        mConfiguration.setCommandLine(
+                new String[] {
+                    "google/cts/google-cts-launcher-for-aosp",
+                    "--config-name",
+                    "gts-automated",
+                    "--cts-package-name",
+                    "android-gts.zip"
+                });
+        mManager.setup(mConfiguration, mContext);
+
+        Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(6);
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                "DEVICE_IMAGE_" + DeviceImagePartition.VENDOR.getCacheKeyName()))
+                .isTrue();
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                "DEVICE_IMAGE_" + DeviceImagePartition.SYSTEM.getCacheKeyName()))
+                .isTrue();
+        Truth.assertThat(
+                        imageFileToDigest.containsKey(
+                                "DEVICE_IMAGE_" + DeviceImagePartition.OTHER.getCacheKeyName()))
+                .isTrue();
+    }
+
+    @Test
+    public void testImageToDigest_noPartitionStrategyForBuildKey() throws Exception {
+        OptionSetter setter = new OptionSetter(mManager);
+        setter.setOptionValue("enable-image-granularity-strategy", "true");
+        setter.setOptionValue("enable-build-key-granularity-strategy", "true");
         mConfiguration.setCommandLine(
                 new String[] {
                     "google/cts/google-cts-launcher-for-aosp",
@@ -105,19 +184,20 @@ public class SkipManagerTest {
         Truth.assertThat(imageFileToDigest.size()).isEqualTo(1);
         Truth.assertThat(
                         imageFileToDigest.containsKey(
-                                DeviceImagePartition.VENDOR.getCacheKeyName()))
+                                "DEVICE_IMAGE_" + DeviceImagePartition.VENDOR.getCacheKeyName()))
                 .isTrue();
     }
 
     @Test
-    public void testImageToDigest_systemVendorStrategy() throws Exception {
+    public void testImageToDigest_systemOnlyStrategyForBuildKey() throws Exception {
         OptionSetter setter = new OptionSetter(mManager);
         setter.setOptionValue("enable-image-granularity-strategy", "true");
+        setter.setOptionValue("enable-build-key-granularity-strategy", "true");
         mConfiguration.setCommandLine(
                 new String[] {
                     "google/cts/google-cts-launcher-for-aosp",
                     "--config-name",
-                    "cts-automated",
+                    "cts-on-gsi",
                     "--cts-package-name",
                     "android-cts.zip"
                 });
@@ -127,16 +207,16 @@ public class SkipManagerTest {
         Truth.assertThat(imageFileToDigest.size()).isEqualTo(2);
         Truth.assertThat(
                         imageFileToDigest.containsKey(
-                                DeviceImagePartition.VENDOR.getCacheKeyName()))
+                                "DEVICE_IMAGE_" + DeviceImagePartition.VENDOR.getCacheKeyName()))
                 .isTrue();
         Truth.assertThat(
                         imageFileToDigest.containsKey(
-                                DeviceImagePartition.SYSTEM.getCacheKeyName()))
+                                "BUILD_KEY_" + DeviceImagePartition.SYSTEM.getCacheKeyName()))
                 .isTrue();
     }
 
     @Test
-    public void testImageToDigest_fullImageStrategy() throws Exception {
+    public void testImageToDigest_fullImageStrategyForBuildKey() throws Exception {
         mConfiguration.setCommandLine(
                 new String[] {
                     "google/cts/google-cts-launcher-for-aosp",
@@ -148,17 +228,18 @@ public class SkipManagerTest {
         mManager.setup(mConfiguration, mContext);
 
         Map<String, Digest> imageFileToDigest = mManager.getImageToDigest();
-        Truth.assertThat(imageFileToDigest.size()).isEqualTo(3);
+        Truth.assertThat(imageFileToDigest.size()).isEqualTo(6);
         Truth.assertThat(
                         imageFileToDigest.containsKey(
-                                DeviceImagePartition.VENDOR.getCacheKeyName()))
+                                "BUILD_KEY_" + DeviceImagePartition.VENDOR.getCacheKeyName()))
                 .isTrue();
         Truth.assertThat(
                         imageFileToDigest.containsKey(
-                                DeviceImagePartition.SYSTEM.getCacheKeyName()))
+                                "BUILD_KEY_" + DeviceImagePartition.SYSTEM.getCacheKeyName()))
                 .isTrue();
         Truth.assertThat(
-                        imageFileToDigest.containsKey(DeviceImagePartition.OTHER.getCacheKeyName()))
+                        imageFileToDigest.containsKey(
+                                "BUILD_KEY_" + DeviceImagePartition.OTHER.getCacheKeyName()))
                 .isTrue();
     }
 }
