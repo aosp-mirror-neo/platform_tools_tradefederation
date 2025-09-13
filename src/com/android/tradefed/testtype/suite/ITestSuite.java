@@ -1230,12 +1230,10 @@ public abstract class ITestSuite
             }
             try (FileOutputStream stream = new FileOutputStream(configFile);
                     PrintWriter pw = new PrintWriter(stream, true)) {
-                module.getModuleConfiguration()
-                        .dumpXml(
-                                pw,
-                                new ArrayList<String>(Configuration.NON_MODULE_OBJECTS),
-                                true,
-                                false);
+                List<String> excludedObjects =
+                        new ArrayList<String>(Configuration.NON_MODULE_OBJECTS);
+                excludedObjects.add(Configuration.COVERAGE_OPTIONS_TYPE_NAME);
+                module.getModuleConfiguration().dumpXml(pw, excludedObjects, true, false);
                 pw.flush();
                 return configFile;
             } finally {

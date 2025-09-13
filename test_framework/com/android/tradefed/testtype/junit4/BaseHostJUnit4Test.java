@@ -867,7 +867,7 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
             assertTrue(device.runInstrumentationTests(testRunner, allReceiver));
         } else {
             // Ensure userId is correct before starting instrumentation
-            assertTrue(userId >= 0);
+            assertTrue(String.format("userId=%s (want >= 0)", userId), userId >= 0);
             assertTrue(String.format("runInstrumentationTestsAsUser(user=%s, pkg=%s, testClass=%s,"
                             + " testMethod=%s",
                             userId, pkgName, testClassName, testMethodName),

@@ -79,6 +79,9 @@ public class InspectionUtil {
     private static final LinkedHashMap<String, ErrorIdentifier> ERROR_SIGNATURE_TO_IDENTIFIER_MAP =
             Stream.of(
                             new AbstractMap.SimpleEntry<>(
+                                    "ho_call_failed",
+                                    InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_HO_CALL_FAILED),
+                            new AbstractMap.SimpleEntry<>(
                                     "bluetooth_failed",
                                     InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_BLUETOOTH),
                             new AbstractMap.SimpleEntry<>(

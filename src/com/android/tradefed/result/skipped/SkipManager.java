@@ -328,7 +328,12 @@ public class SkipManager implements IDisableable {
                             mModulesDiscovered,
                             mDependencyFiles,
                             mAnalysisLevel);
-            return buildAnalysisDecision(information, analyzer.analyzeArtifacts());
+            try {
+                return buildAnalysisDecision(information, analyzer.analyzeArtifacts());
+            } catch (RuntimeException e) {
+                CLog.e(e);
+                return false;
+            }
         }
     }
 

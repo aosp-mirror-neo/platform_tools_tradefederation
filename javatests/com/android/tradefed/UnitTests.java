@@ -283,6 +283,8 @@ import com.android.tradefed.targetprep.BaseSwitchUserTargetPreparerTest;
 import com.android.tradefed.targetprep.BaseTargetPreparerTest;
 import com.android.tradefed.targetprep.CompileBootImageWithSpeedTargetPreparerTest;
 import com.android.tradefed.targetprep.CreateUserPreparerTest;
+import com.android.tradefed.targetprep.CrosDutTopologyPreparerTest;
+import com.android.tradefed.targetprep.CrosLsNexusPreparerTest;
 import com.android.tradefed.targetprep.DefaultTestsZipInstallerTest;
 import com.android.tradefed.targetprep.DeviceActionTargetPreparerTest;
 import com.android.tradefed.targetprep.DeviceFlashPreparerTest;
@@ -868,6 +870,8 @@ import org.junit.runners.Suite.SuiteClasses;
     BaseSwitchUserTargetPreparerTest.class,
     CompileBootImageWithSpeedTargetPreparerTest.class,
     CreateUserPreparerTest.class,
+    CrosLsNexusPreparerTest.class,
+    CrosDutTopologyPreparerTest.class,
     DefaultTestsZipInstallerTest.class,
     DeviceActionTargetPreparerTest.class,
     DeviceFlashPreparerTest.class,
