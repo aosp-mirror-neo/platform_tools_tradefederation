@@ -26,11 +26,6 @@ python_binary_host {
         "cas_metrics_proto",
         "content_uploader_lib",
     ],
-    version: {
-        py3: {
-            embedded_launcher: true,
-        },
-    },
 }
 
 python_library_host {
