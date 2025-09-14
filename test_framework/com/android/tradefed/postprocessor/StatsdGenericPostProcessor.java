@@ -25,13 +25,13 @@ import com.android.tradefed.result.ByteArrayInputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
-import com.android.tradefed.util.ExtensionAtomsRegistry;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
+import com.google.protobuf.TextFormat;
 import com.google.protobuf.util.JsonFormat;
 
 import java.io.File;
@@ -46,6 +46,8 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.android.tradefed.util.ExtensionAtomsRegistry;
 
 /**
  * A post processor that processes binary proto statsd reports into key-value pairs by expanding the
@@ -147,7 +149,7 @@ public class StatsdGenericPostProcessor extends BasePostProcessor {
                                     dataName,
                                     format,
                                     new ByteArrayInputStreamSource(
-                                            reportList.toString().getBytes()));
+                                            TextFormat.printToString(reportList).getBytes()));
                             break;
                         case JSON:
                             testLog(
