@@ -477,6 +477,7 @@ public class InvocationMetricLogger {
         // Host orchestrator metrics
         CVD_LONG_OPERATION_TIMEOUT_API("cvd_long_operation_timeout_api", true),
         UNSUPPORTED_HOST_ORCHESTRATOR_API("unsupported_host_orchestrator_api", true),
+        HO_CALL_RETRY_COUNT("host_orchestrator_call_retry_count", true),
         ;
 
         private final String mKeyName;

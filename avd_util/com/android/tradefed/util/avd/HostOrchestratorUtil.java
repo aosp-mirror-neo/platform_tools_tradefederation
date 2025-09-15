@@ -239,15 +239,16 @@ public class HostOrchestratorUtil {
             return false;
         }
         long maxEndTime = System.currentTimeMillis() + maxWaitTime;
-        int retryCount = 1;
+        int retryCount = 0;
         while (System.currentTimeMillis() < maxEndTime) {
             ListCvdsResponse listCvdsRes = null;
             try {
                 listCvdsRes = listCvds();
             } catch (IOException | InterruptedException | ErrorResponseException e) {
                 CLog.e("Failed listing cvds (attempt %d): %s", retryCount, e);
-                // Retry at most 5 times for HO exception
-                if (retryCount == 5) {
+                // TODO(b/444465436): Reduce the retry count to 5 after the bug is fixed.
+                // Retry at most 20 times for HO exception
+                if (retryCount == 20) {
                     InvocationMetricLogger.addInvocationMetrics(
                             InvocationMetricLogger.InvocationMetricKey.DEVICE_ERROR_SIGNATURES,
                             "ho_call_failed");
@@ -257,6 +258,11 @@ public class HostOrchestratorUtil {
                 continue;
             }
             if (listCvdsRes.cvds.size() > 0 && listCvdsRes.cvds.get(0).status.equals("Running")) {
+                if (retryCount > 0) {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricLogger.InvocationMetricKey.HO_CALL_RETRY_COUNT,
+                            retryCount);
+                }
                 return true;
             }
             getRunUtil().sleep(mWaitForOperationMs);
