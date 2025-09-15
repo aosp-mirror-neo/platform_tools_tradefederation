@@ -321,6 +321,11 @@ public class ResultReporter
     @Option(name = "enable-test-properties-migration")
     private boolean mEnablePropertyMigration = true;
 
+    @Option(
+            name = "enable-empty-module-reporting",
+            description = "Enable the creation of a module workunit test run without a module.")
+    private boolean mEnableEmptyModuleReporting = true;
+
     private TestResult mCurrentTestResult;
     private String mSummaryUrl;
     private DebugInfo mFailureInfo; // Contains invocation failure message.
@@ -342,6 +347,12 @@ public class ResultReporter
     // When uploading results and we want to associate result with the work unit,
     // the correct one is obtained by calling mWorkUnits.peek.
     private Deque<WorkUnit> mWorkUnits;
+
+    // The module work unit which is used for test runs which are not associated with a module. This
+    // ensures that every TF_TEST_RUN module has a TF_MODULE parent. This is only created when the
+    // test run is created without a module and every test run after will use it. The empty module
+    // will then be finalized when the invocation ends.
+    private WorkUnit mEmptyModuleWorkUnit = null;
 
     // List that stores cached work units. Cached work units are for tests where result is known
     // ahead of time
@@ -721,6 +732,9 @@ public class ResultReporter
                 }
             }
 
+            if (mEnableEmptyModuleReporting) {
+                finalizeEmptyModuleWorkUnit();
+            }
             mClient.finalizeTestResults();
             try (CloseableTraceScope update =
                     new CloseableTraceScope(
@@ -964,10 +978,16 @@ public class ResultReporter
                 mMetricFileUtil.testRunStarted(runName);
             }
 
+            WorkUnit parent = mWorkUnits.peek();
+            if (mEnableEmptyModuleReporting
+                    && !parent.getType().equals(WorkUnitType.TF_MODULE.name())) {
+                parent = getEmptyModuleWorkUnit();
+            }
+
             WorkUnit workUnit = new WorkUnit();
             workUnit.setName(runName)
                     .setInvocationId(mInvocation.getInvocationId())
-                    .setParentId(mWorkUnits.peek().getId())
+                    .setParentId(parent.getId())
                     .setTiming(new Timing().setCreationTimestamp(startTime))
                     // Keep the property & the child attempt number for backward compatibility
                     .setProperties(
@@ -1620,6 +1640,50 @@ public class ResultReporter
 
     private boolean isMainlineProperty(Property p) {
         return p.getName().equals(MAINLINE_MODULE_PROPERTY);
+    }
+
+    private WorkUnit getEmptyModuleWorkUnit() {
+        if (mEmptyModuleWorkUnit == null) {
+            WorkUnit workUnit =
+                    new WorkUnit()
+                            .setParentId(mWorkUnits.peek().getId())
+                            .setInvocationId(mInvocation.getInvocationId())
+                            .setTiming(new Timing().setCreationTimestamp(currentTimestamp()))
+                            .setType(WorkUnitType.TF_MODULE.name())
+                            .setState(SchedulerState.RUNNING.toString())
+                            .setModuleInfo(new ModuleInfo());
+            try {
+                mEmptyModuleWorkUnit = mClient.createWorkUnit(workUnit);
+            } catch (IOException e) {
+                CLog.w("%s\n", workUnit);
+                throw new RuntimeException(e);
+            }
+        }
+        return mEmptyModuleWorkUnit;
+    }
+
+    private void finalizeEmptyModuleWorkUnit() {
+        if (mEmptyModuleWorkUnit == null) {
+            return;
+        }
+        WorkUnit workUnit = mEmptyModuleWorkUnit;
+        try {
+            ObjectUpdater.create(mClient)
+                    .runUpdate(
+                            workUnit.getId(),
+                            new ObjectUpdater.WorkUnitUpdate() {
+                                @Override
+                                public WorkUnit doUpdate(WorkUnit current) {
+                                    current.getTiming().setCompleteTimestamp(currentTimestamp());
+                                    current.setState(SchedulerState.COMPLETED.toString());
+                                    return current;
+                                }
+                            });
+        } catch (IOException e) {
+            CLog.w("Failed to update work unit %s", workUnit);
+            CLog.w(e);
+        }
+        mEmptyModuleWorkUnit = null;
     }
 
     private void finalizeTfWorkUnit() {
