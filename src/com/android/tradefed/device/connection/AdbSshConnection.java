@@ -124,6 +124,9 @@ public class AdbSshConnection extends AdbTcpConnection {
         if (mGceAvd != null) {
             CLog.d("skipped GCE launch because GceAvdInfo %s is already set", mGceAvd);
             createGceTunnelMonitor(getDevice(), getBuildInfo(), mGceAvd, getDevice().getOptions());
+            if (mHOUtil == null) {
+                mHOUtil = createHostOrchestratorUtil(mGceAvd);
+            }
         } else {
             // Launch GCE helper script.
             long startTime = getCurrentTime();
