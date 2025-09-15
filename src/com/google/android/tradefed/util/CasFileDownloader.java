@@ -35,7 +35,6 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.TimeUtil;
-
 import com.google.android.tradefed.build.LCUtil;
 import com.google.android.tradefed.util.cas.CasOptions;
 import com.google.common.annotations.VisibleForTesting;
@@ -45,10 +44,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -66,8 +61,9 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
 import javax.annotation.Nullable;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /** File downloader to download files from RBE CAS. */
 public class CasFileDownloader implements IFileDownloader {
@@ -174,9 +170,6 @@ public class CasFileDownloader implements IFileDownloader {
     }
 
     public void setCasChunksOptions(boolean casKeepChunks, boolean casChunksOnly) {
-        CLog.d(
-                "Setting CAS chunks options: keepChunks=%s, chunksOnly=%s",
-                casKeepChunks, casChunksOnly);
         if (!FuseMountManagerFactory.isFuseAvailable()) {
             // When fuse mounting is unavailable, it doesn't help to keep chunks around with either
             // option. Although the chunks can be converted to an uncompressed image, it doesn't
@@ -191,6 +184,9 @@ public class CasFileDownloader implements IFileDownloader {
         }
         mCasKeepChunks = casKeepChunks && !isFuseMountDisabledForCluster;
         mCasChunksOnly = casChunksOnly && !isFuseMountDisabledForCluster;
+        CLog.d(
+                "[%s] Set CAS chunks options to: mCasKeepChunks := %s, mCasChunksOnly := %s",
+                Integer.toHexString(System.identityHashCode(this)), mCasKeepChunks, mCasChunksOnly);
     }
 
     // The map to store locks for each digest. It ensures that the same file is only downloaded by
@@ -284,8 +280,6 @@ public class CasFileDownloader implements IFileDownloader {
         this.mCasServiceAccountJson = casServiceAccountJson;
         this.mTempFileRoot = tempFileRoot;
         this.mRunUtil = runUtil;
-        CLog.i("mCasChunksOnly: %s", mCasChunksOnly);
-        CLog.i("mCasKeepChunks: %s", mCasKeepChunks);
     }
 
     /**
@@ -797,8 +791,11 @@ public class CasFileDownloader implements IFileDownloader {
                         getCasOptions().getDownloadTimeoutMs(), commandArgs.toArray(new String[0]));
         String stdout = result.getStdout();
         CLog.i(
-                "Output when downloading the file %s:\n%s\n%s",
-                fileName, stdout, result.getStderr());
+                "[%s] Output when downloading the file %s:\n%s\n%s",
+                Integer.toHexString(System.identityHashCode(this)),
+                fileName,
+                stdout,
+                result.getStderr());
         return result;
     }
 

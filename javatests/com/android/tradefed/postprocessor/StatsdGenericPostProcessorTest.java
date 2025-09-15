@@ -45,7 +45,6 @@ import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 
 import com.google.common.io.CharStreams;
-import com.google.protobuf.TextFormat;
 import com.google.protobuf.util.JsonFormat;
 
 import org.junit.Before;
@@ -220,8 +219,7 @@ public class StatsdGenericPostProcessorTest {
                 REPORT_PREFIX_APP_START + "-report",
                 new LogFile(mAppStartupReportFile.getAbsolutePath(), "some.url", LogDataType.PB));
         mProcessor.processTestMetricsAndLogs(description, new HashMap<>(), testLogs);
-        String expectedTextPb = TextFormat.printer().printToString(APP_STARTUP_REPORT);
-
+        String expectedTextPb = APP_STARTUP_REPORT.toString();
         verify(mListener, times(1))
                 .testLog(
                         argThat(
@@ -571,7 +569,7 @@ public class StatsdGenericPostProcessorTest {
                 REPORT_PREFIX_APP_START + "-report",
                 new LogFile(mAppStartupReportFile.getAbsolutePath(), "some.url", LogDataType.PB));
         mProcessor.processRunMetricsAndLogs(new HashMap<>(), runLogs);
-        String expectedTextPb = TextFormat.printer().printToString(APP_STARTUP_REPORT);
+        String expectedTextPb = APP_STARTUP_REPORT.toString();
         String expectedJson = JsonFormat.printer().print(APP_STARTUP_REPORT);
 
         verify(mListener, times(1))
