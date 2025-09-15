@@ -148,6 +148,16 @@ public class ModulePerfettoCollector extends BaseDeviceMetricCollector {
         // count should be increased even if no trace file collected to make missing traces visible.
         mTraceCountMap.put(device, mTraceCountMap.getOrDefault(device, 0) + 1);
         try {
+            CLog.d(
+                    "Waiting for device %s to be idle before starting perfetto trace.",
+                    device.getSerialNumber());
+            // Wait for the device shell to be available, which indicates a basic level of idleness/responsiveness.
+            // A timeout of 3 minutes (180 seconds) is used.
+            device.waitForDeviceShell(180 * 1000L);
+            CLog.d(
+                    "Device %s is idle, proceeding to start perfetto trace.",
+                    device.getSerialNumber());
+
             mPerfettoTraceRecorder.startTrace(device, mTraceConfigFile, null);
         } catch (IOException e) {
             CLog.d("Failed to start perfetto trace with error: %s", e.getMessage());

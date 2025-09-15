@@ -45,7 +45,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Collections;
 
-/** Unit tests for {@link PerfettoTraceRecorder}. */
+/** Unit tests for {@link ModulePerfettoCollector}. */
 @RunWith(JUnit4.class)
 public class ModulePerfettoCollectorTest {
 
