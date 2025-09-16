@@ -84,7 +84,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_oneFlagFile_newAndUpdatedFlags() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("namespace/f=v\n");
         addFlagFile("namespace/f=v1\nnamespace/f1=v1\n");
 
@@ -115,7 +114,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_oneFlagFile_nullValueFlagInDeviceConfig() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("namespace/f=\n");
         addFlagFile("namespace/f=v\n");
 
@@ -139,7 +137,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_oneFlagFile_nullValueFlagInFile() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("namespace/f=v\n");
         addFlagFile("namespace/f=\n");
 
@@ -160,7 +157,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_twoFlagFiles_allDifferentFlags() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         setFlagFilesAndDeviceConfigLists(
                 "namespace/f1=v1\nnamespace/f2=v2\nnamespace1/f3=v3\n",
                 "namespace/f1=v2\nnamespace/f2=v3\nnamespace2/f3=v4\n");
@@ -191,7 +187,6 @@ public class FeatureFlagTargetPreparerTest {
     @Test
     public void testSetUpAndTearDown_twoFlagFiles_sameFlagInDeviceConfigAndFiles()
             throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         setFlagFilesAndDeviceConfigLists(DEFAULT_CONFIG, DEFAULT_CONFIG, DEFAULT_CONFIG);
 
         // Updates to parsed flags (no change) during setUp and reboots.
@@ -208,7 +203,6 @@ public class FeatureFlagTargetPreparerTest {
     @Test
     public void testSetUpAndTearDown_twoFlagFiles_sameFlagInDeviceConfigAndSecondFile()
             throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         setFlagFilesAndDeviceConfigLists("namespace/f1=v1\n", "namespace/f=v\nnamespace/f1=v2\n");
 
         // Updates to parsed flags (add f1 and update its value) during setUp and reboots.
@@ -229,7 +223,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_twoFlagFiles_updatedFlagInFirstFile() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         setFlagFilesAndDeviceConfigLists("namespace/f=v1\n", DEFAULT_CONFIG);
 
         // Updates to parsed flags (update f1 twice) during setUp and reboots.
@@ -248,7 +241,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_twoFlagFiles_updatedFlagInSecondFile() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         setFlagFilesAndDeviceConfigLists(DEFAULT_CONFIG, "namespace/f=v1\n", DEFAULT_CONFIG);
 
         // Updates to parsed flags (update f once) during setUp and reboots.
@@ -268,7 +260,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUpAndTearDown_additionalFlagValues() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("namespace/f1=v1\n");
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/f1=v2");
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/f2=v3");
@@ -300,7 +291,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUp_withoutRebootBetweenFiles() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("namespace/f1=v1\n");
         new OptionSetter(mPreparer).setOptionValue("reboot-between-flag-files", "false");
 
@@ -319,7 +309,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test(expected = TargetSetupError.class)
     public void testSetUp_fileNotFound() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         File file = addFlagFile("");
         file.delete();
         // Throws if the flag file is not found.
@@ -328,7 +317,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUp_commandWithoutOptions() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         // Preparer should succeed when no options given in the command.
         mPreparer.setUp(mTestInfo);
         verify(mDevice, never()).reboot();
@@ -336,7 +324,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUp_ignoreInvalid() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("");
         addFlagFile("invalid=data\n");
 
@@ -350,14 +337,12 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test(expected = TargetSetupError.class)
     public void testSetUp_invalidAdditionalFlags() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         new OptionSetter(mPreparer).setOptionValue("flag-value", "invalid=data");
         mPreparer.setUp(mTestInfo);
     }
 
     @Test
     public void testSetUp_ignoreUnchanged() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         mCommandResult.setStdout("namespace/flag=value\n");
         addFlagFile("namespace/flag=value\n");
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/flag=value");
@@ -372,7 +357,6 @@ public class FeatureFlagTargetPreparerTest {
 
     @Test
     public void testSetUp_moduleNameExists_updatesInvocationAttribute() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "true");
         // Set module name and context in invocation context.
         when(mContext.getAttribute(ModuleDefinition.MODULE_NAME)).thenReturn("moduleName");
         doNothing().when(mContext).addInvocationAttribute(anyString(), anyString());
@@ -390,79 +374,6 @@ public class FeatureFlagTargetPreparerTest {
                 .addInvocationAttribute(
                         eq(MODULE_INVOCATION_ATTRIBUTE_FLAG_OVERRIDES_KEY), eq("namespace/f1=v2"));
         verifyNoMoreInteractions(mContext);
-    }
-
-    @Test
-    public void testSetUpAndTearDown_oneFlagFile_newAndUpdatedFlags_aflags() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "false");
-        mCommandResult.setStdout("f\tdisabled\t-\tdefault\tread-write\tsystem\n");
-        addFlagFile("namespace/f=true\nnamespace/f1=true\n");
-
-        mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command(eq("aflags list"));
-        verify(mDevice).executeShellV2Command(eq("aflags enable 'f'"));
-        verify(mDevice).executeShellV2Command(eq("aflags enable 'f1'"));
-        verify(mDevice).reboot();
-        verifyNoMoreInteractions(mDevice);
-
-        // On teardown, it does a revert.
-        clearInvocations(mDevice);
-        mPreparer.tearDown(mTestInfo, null);
-
-        // One flag was new, the other was its default. The runner should unset both.
-        verify(mDevice).executeShellV2Command(eq("aflags unset 'f'"));
-        verify(mDevice).executeShellV2Command(eq("aflags unset 'f1'"));
-        verify(mDevice).reboot();
-        verifyNoMoreInteractions(mDevice);
-    }
-
-    @Test
-    public void testSetUp_ignoredUnchangedLocalFlags_aflags() throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "false");
-        mCommandResult.setStdout("f\tdisabled\t-\tlocal\tread-write\tsystem\n");
-        addFlagFile("namespace/f=false\n");
-
-        mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command(eq("aflags list"));
-        verifyNoMoreInteractions(mDevice);
-    }
-
-    @Test
-    public void testSetUp_stillSetsUnchangedDefaultFlags_aflags() throws Exception {
-        // It's unclear whether this is the "best" behaviour, but it means that the flag won't get
-        // server-overridden later in the test or similar.
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "false");
-        mCommandResult.setStdout("f\tdisabled\t-\tdefault\tread-write\tsystem\n");
-        addFlagFile("namespace/f=false\n");
-
-        mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command(eq("aflags list"));
-        verify(mDevice).executeShellV2Command(eq("aflags disable 'f'"));
-        verify(mDevice).reboot();
-        verifyNoMoreInteractions(mDevice);
-    }
-
-    @Test
-    public void testSetUpAndTearDown_oneFlagFile_alreadyOverriddenFlagsArePreserved_aflags()
-            throws Exception {
-        new OptionSetter(mPreparer).setOptionValue("use-device-config", "false");
-        mCommandResult.setStdout("f\tdisabled\t-\tlocal\tread-write\tsystem\n");
-        addFlagFile("namespace/f=true\nnamespace/f1=true\n");
-
-        mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command(eq("aflags list"));
-        verify(mDevice).executeShellV2Command(eq("aflags enable 'f'"));
-        verify(mDevice).executeShellV2Command(eq("aflags enable 'f1'"));
-        verify(mDevice).reboot();
-        verifyNoMoreInteractions(mDevice);
-
-        // On teardown, it does a revert.
-        clearInvocations(mDevice);
-        mPreparer.tearDown(mTestInfo, null);
-        verify(mDevice).executeShellV2Command(eq("aflags disable 'f'"));
-        verify(mDevice).executeShellV2Command(eq("aflags unset 'f1'"));
-        verify(mDevice).reboot();
-        verifyNoMoreInteractions(mDevice);
     }
 
     private File addFlagFile(String content) throws Exception {
