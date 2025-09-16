@@ -166,40 +166,42 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
         }
 
         for (ITestDevice device : getRealDevices()) {
-            File testCoverage = null;
-            File coverageTarGz = null;
-            File untarDir = null;
-
             try (AdbRootElevator adbRoot = new AdbRootElevator(device)) {
-                try {
-                    if (mConfiguration.getCoverageOptions().isCoverageFlushEnabled()) {
-                        if (isJavaCoverageEnabled()) {
-                            getJavaCoverageFlusher(device).forceCoverageFlush();
+                if (mConfiguration.getCoverageOptions().isCoverageFlushEnabled()) {
+                    if (isJavaCoverageEnabled()) {
+                        getJavaCoverageFlusher(device).forceCoverageFlush();
+                    }
+                    if (isClangCoverageEnabled()) {
+                        getNativeCoverageFlusher(device).forceCoverageFlush();
+                    }
+                }
+
+                if (isJavaCoverageEnabled()) {
+                    // Pull and log the test coverage file.
+                    if (testCoveragePath != null) {
+                        if (!new File(testCoveragePath).isAbsolute()) {
+                            testCoveragePath =
+                                    "/sdcard/googletest/internal_use/" + testCoveragePath;
                         }
-                        if (isClangCoverageEnabled()) {
-                            getNativeCoverageFlusher(device).forceCoverageFlush();
+                        File testCoverage = device.pullFile(testCoveragePath);
+                        if (testCoverage == null) {
+                            // Log a warning only, since multi-device tests will not have this
+                            // file on all devices.
+                            CLog.w(
+                                    "Failed to pull test coverage file %s from the device.",
+                                    testCoveragePath);
+                        } else {
+                            try {
+                                saveJavaCoverageMeasurement(testCoverage);
+                            } finally {
+                                FileUtil.deleteFile(testCoverage);
+                            }
                         }
                     }
 
-                    if (isJavaCoverageEnabled()) {
-                        // Pull and log the test coverage file.
-                        if (testCoveragePath != null) {
-                            if (!new File(testCoveragePath).isAbsolute()) {
-                                testCoveragePath =
-                                        "/sdcard/googletest/internal_use/" + testCoveragePath;
-                            }
-                            testCoverage = device.pullFile(testCoveragePath);
-                            if (testCoverage == null) {
-                                // Log a warning only, since multi-device tests will not have this
-                                // file on all devices.
-                                CLog.w(
-                                        "Failed to pull test coverage file %s from the device.",
-                                        testCoveragePath);
-                            } else {
-                                saveJavaCoverageMeasurement(testCoverage);
-                            }
-                        }
-
+                    File coverageTarGz = null;
+                    File untarDir = null;
+                    try {
                         // Stream compressed coverage measurements from /data/misc/trace to the
                         // host.
                         coverageTarGz = FileUtil.createTempFile("java_coverage", ".tar.gz");
@@ -214,9 +216,7 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
                                             TimeUnit.MILLISECONDS,
                                             1);
                             if (!CommandStatus.SUCCESS.equals(result.getStatus())) {
-                                CLog.e(
-                                        "Failed to stream coverage data from the device: %s",
-                                        result.toString());
+                                throw new IOException(result.toString());
                             }
                         }
 
@@ -225,20 +225,23 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
                         for (String coveragePath : FileUtil.findFiles(untarDir, ".*\\.ec")) {
                             saveJavaCoverageMeasurement(new File(coveragePath));
                         }
-                    }
-                    if (isClangCoverageEnabled()) {
-                        logNativeCoverageMeasurement(device, generateNativeMeasurementFileName());
-                    }
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                } finally {
-                    // Clean up local coverage files.
-                    FileUtil.deleteFile(testCoverage);
-                    FileUtil.deleteFile(coverageTarGz);
-                    FileUtil.recursiveDelete(untarDir);
+                    } catch (IOException e) {
+                        CLog.e("Failed to stream coverage data from the device");
+                        CLog.e(e);
+                    } finally {
+                        FileUtil.deleteFile(coverageTarGz);
+                        FileUtil.recursiveDelete(untarDir);
 
-                    // Clean up device coverage files.
-                    cleanUpDeviceCoverageFiles(device);
+                        // Clean up device coverage files.
+                        cleanUpDeviceCoverageFiles(device);
+                    }
+                }
+                if (isClangCoverageEnabled()) {
+                    try {
+                        logNativeCoverageMeasurement(device, generateNativeMeasurementFileName());
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             }
         }
@@ -251,7 +254,8 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
                 mExecFileLoader.save(mergedCoverage, false);
                 logJavaCoverageMeasurement(mergedCoverage);
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                CLog.e("Failed to save merged coverage data.");
+                CLog.e(e);
             } finally {
                 mExecFileLoader = null;
                 FileUtil.deleteFile(mergedCoverage);
@@ -282,12 +286,17 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
     }
 
     /** Saves Java coverage file data. */
-    private void saveJavaCoverageMeasurement(File coverageFile) throws IOException {
+    private void saveJavaCoverageMeasurement(File coverageFile) {
         if (shouldMergeCoverage()) {
             if (mExecFileLoader == null) {
                 mExecFileLoader = new ExecFileLoader();
             }
-            mExecFileLoader.load(coverageFile);
+            try {
+                mExecFileLoader.load(coverageFile);
+            } catch (Exception e) {
+                CLog.w("Failed to load coverage measurement %s.", coverageFile);
+                CLog.w(e);
+            }
         } else {
             logJavaCoverageMeasurement(coverageFile);
         }
