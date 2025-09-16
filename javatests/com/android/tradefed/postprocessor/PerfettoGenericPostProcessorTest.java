@@ -386,7 +386,7 @@ public class PerfettoGenericPostProcessorTest {
         assertMetricsContainString(
                 parsedMetrics,
                 "perfetto_android_cpu-process_info-name-com.google.android.apps.messaging-threads-name-BG"
-                    + " Thread #1-core-id-1-metrics-runtime_ns",
+                    + "_Thread_#1-core-id-1-metrics-runtime_ns",
                 14376405);
     }
 
