@@ -349,4 +349,7 @@ public interface ICommandOptions {
 
     /** Whether to silence the prompt execution of models. */
     public boolean isGeminiLogOnlyMode();
+
+    /** Whether to enable device specific setup or not. */
+    public boolean shouldEnableDeviceSpecificSetup();
 }

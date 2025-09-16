@@ -437,6 +437,11 @@ public class CommandOptions implements ICommandOptions {
                             + " config.")
     private boolean mKeepPostProcessorOrder = false;
 
+    @Option(
+            name = "enable-device-specific-setup",
+            description = "Whether to enable the automated device setup or not.")
+    private boolean mEnableDeviceSpecificSetup = true;
+
     /**
      * Set the help mode for the config.
      * <p/>
@@ -1038,5 +1043,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean isGeminiLogOnlyMode() {
         return mLogOnlyPrompt;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean shouldEnableDeviceSpecificSetup() {
+        return mEnableDeviceSpecificSetup;
     }
 }

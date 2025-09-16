@@ -54,4 +54,8 @@ public class SwitchUserTargetPreparer extends BaseSwitchUserTargetPreparer {
         mUserSwitcher.switchBack();
         setPreparedUser(testInformation, /* userId= */ null);
     }
+
+    public void setUserType(UserType userType) {
+        mUserType = userType;
+    }
 }

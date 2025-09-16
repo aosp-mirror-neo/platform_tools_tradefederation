@@ -26,6 +26,7 @@ import com.android.tradefed.command.CommandScheduler;
 import com.android.tradefed.command.ICommandOptions;
 import com.android.tradefed.command.ICommandScheduler.IScheduledInvocationListener;
 import com.android.tradefed.config.ArgsOptionParser;
+import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.ConfigurationDescriptor;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.DynamicRemoteFileResolver;
@@ -52,6 +53,7 @@ import com.android.tradefed.device.SnapuserdWaitPhase;
 import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.StubLocalAndroidVirtualDevice;
 import com.android.tradefed.device.TestDeviceState;
+import com.android.tradefed.device.UserInfo.UserType;
 import com.android.tradefed.device.cloud.ManagedRemoteDevice;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.cloud.RemoteAndroidVirtualDevice;
@@ -102,6 +104,7 @@ import com.android.tradefed.retry.RetryStrategy;
 import com.android.tradefed.service.TradefedFeatureServer;
 import com.android.tradefed.targetprep.BuildError;
 import com.android.tradefed.targetprep.DeviceFailedToBootError;
+import com.android.tradefed.targetprep.SwitchUserTargetPreparer;
 import com.android.tradefed.targetprep.TargetSetupError;
 import com.android.tradefed.testtype.ITestInformationReceiver;
 import com.android.tradefed.testtype.SubprocessTfLauncher;
@@ -1092,6 +1095,7 @@ public class TestInvocation implements ITestInvocation {
             }
             // Handle the automated reporting
             applyAutomatedReporters(config);
+            applyDeviceAutomatedSetup(context, config);
 
             if (config.getCommandOptions().delegatedEarlyDeviceRelease()
                     && System.getenv(DelegatedInvocationExecution.DELEGATED_MODE_VAR) != null) {
@@ -1619,6 +1623,34 @@ public class TestInvocation implements ITestInvocation {
     protected void applyAutomatedReporters(IConfiguration config) {
         AutomatedReporters autoReport = new AutomatedReporters();
         autoReport.applyAutomatedReporters(config);
+    }
+
+    protected void applyDeviceAutomatedSetup(IInvocationContext context, IConfiguration config) {
+        if (!config.getCommandOptions().shouldEnableDeviceSpecificSetup()) {
+            CLog.i("Skipping device automated setup due to --no-device-specific-setup");
+            return;
+        }
+        for (ITestDevice device : context.getDevices()) {
+            if (device.getIDevice() instanceof StubDevice) {
+                continue;
+            }
+            try {
+                if (device.isHeadlessSystemUserMode()) {
+                    String deviceName = context.getDeviceName(device);
+                    if (deviceName == null) {
+                        continue;
+                    }
+                    IDeviceConfiguration deviceConfig = config.getDeviceConfigByName(deviceName);
+                    SwitchUserTargetPreparer switchPrep = new SwitchUserTargetPreparer();
+                    switchPrep.setUserType(UserType.FULL);
+                    deviceConfig.addSpecificConfig(
+                            switchPrep, Configuration.TARGET_PREPARER_TYPE_NAME);
+                    // TODO(b/434052978): Also add the reboot strategy
+                }
+            } catch (DeviceNotAvailableException | ConfigurationException dnae) {
+                CLog.e(dnae);
+            }
+        }
     }
 
     private void logExecuteShellCommand(List<ITestDevice> devices, ITestLogger logger) {
