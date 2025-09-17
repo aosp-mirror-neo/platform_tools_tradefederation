@@ -65,6 +65,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -83,6 +84,9 @@ public class TestMappingsValidation implements IBuildReceiver {
     @Option(name = "test-group-to-validate", description = "The test groups to be validated.")
     private Set<String> mTestGroupToValidate =
             new HashSet<>(Arrays.asList("presubmit", "postsubmit", "presubmit-large"));
+
+    @Option(name = "validate-host-test-group", description = "Whether to validate host test group.")
+    private boolean mValidateHostTestGroup = false;
 
     @Option(name = "skip-modules", description = "Test modules that could be skipped.")
     private Set<String> mSkipModules = new HashSet<>();
@@ -241,6 +245,23 @@ public class TestMappingsValidation implements IBuildReceiver {
                     "ApexServiceTestCases",
                     "OverlayDeviceTests");
 
+    // This list should not grow ! There is no point in being in that list as they cannot execute on
+    // the currently configured default test mapping groups we validate here.
+    private static final Set<String> KNOWN_NAMESPACE_MODULE =
+            ImmutableSet.of(
+                    "ConnectivityThermalPowerManagerTests",
+                    "vts_ltp_test_arm_64",
+                    "liblyric.catpipe_test",
+                    "vts_ltp_test_arm",
+                    "libg3a.afd_test",
+                    "android.hardware.input.processor-service_test",
+                    "vts_ltp_test_x86_64",
+                    "lassen_logging_config_test",
+                    "aarch64-paging_test_src_lib",
+                    "libperfmgr_test",
+                    "libadpf_test",
+                    "liboemservice_proxy_test");
+
     @Override
     public void setBuild(IBuildInfo buildInfo) {
         mBuild = buildInfo;
@@ -277,6 +298,9 @@ public class TestMappingsValidation implements IBuildReceiver {
         }
         TestMapping testMapping = new TestMapping();
         allTests = testMapping.getAllTests(testMappingsDir);
+        for (Entry<String, Set<TestInfo>> entry : allTests.entrySet()) {
+            entry.getValue().removeIf(test -> mValidateHostTestGroup != test.getHostOnly());
+        }
     }
 
     @After
@@ -424,8 +448,10 @@ public class TestMappingsValidation implements IBuildReceiver {
                 if (!validateSuiteSetting(moduleName)) {
                     errors.add(
                             String.format(
-                                    "Missing test_suite setting for test: %s, test group: %s, "
-                                            + "TEST_MAPPING file path: %s",
+                                    "You might be missing test_suite setting for test: %s, test"
+                                        + " group: %s, TEST_MAPPING file path: %s.\n"
+                                        + "Or your test is building under an unreachable namespace"
+                                        + " with current test mapping targets.",
                                     testInfo.getName(), testGroup, testInfo.getSources()));
                 }
             }
@@ -640,8 +666,18 @@ public class TestMappingsValidation implements IBuildReceiver {
             return true;
         }
         if (!mergedModuleInfo.has(name)) {
-            CLog.w("Test Module: %s can't be found in module-info.json. Ignore checking...", name);
-            return true;
+            if (KNOWN_NAMESPACE_MODULE.contains(name)) {
+                CLog.w(
+                        "Test Module: %s can't be found in module-info.json. Ignore checking...",
+                        name);
+                return true;
+            } else {
+                CLog.w(
+                        "Module '%s' doesn't exist and cannot be executed for those build targets"
+                                + " of test mapping.",
+                        name);
+                return false;
+            }
         }
         JsonArray compatibilitySuites =
                 mergedModuleInfo
