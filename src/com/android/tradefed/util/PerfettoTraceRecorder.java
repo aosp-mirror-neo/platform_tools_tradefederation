@@ -42,7 +42,7 @@ public class PerfettoTraceRecorder {
 
     private static final String TRACE_NAME_FORMAT = "device-trace_%s_";
     private static final String ON_DEVICE_CONFIG_PATH =
-            "/data/misc/perfetto-traces/trace_config.textproto";
+            "/data/misc/perfetto-configs/trace_config.textproto";
     private static final String ON_DEVICE_TRACE_DIR = "/data/misc/perfetto-traces/";
 
     @Option(name = "output-path", description = "Path where the files will be saved on the host.")
