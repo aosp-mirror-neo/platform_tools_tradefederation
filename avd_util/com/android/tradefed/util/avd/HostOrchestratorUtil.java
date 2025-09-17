@@ -530,14 +530,10 @@ public class HostOrchestratorUtil {
         String baseUrl = getHOBaseUrl(mHOPortNumber);
         HttpRequest httpRequest = buildDisplayListRequest(baseUrl, cvd.group, cvd.name);
         try {
-            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
-            waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
-
-            httpRequest = buildGetOperationResultRequest(baseUrl, operation.name);
             DisplayListResponse response =
                     sendRequest(mHttpClient, httpRequest, DisplayListResponse.class);
             return CommandResultWith.success(response);
-        } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
+        } catch (IOException | InterruptedException | ErrorResponseException e) {
             return CommandResultWith.error(
                     buildErrorCommandResult(
                             String.format(
