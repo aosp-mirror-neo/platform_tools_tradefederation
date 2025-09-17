@@ -1634,6 +1634,9 @@ public class TestInvocation implements ITestInvocation {
             if (device.getIDevice() instanceof StubDevice) {
                 continue;
             }
+            if (NativeDevice.class.isAssignableFrom(device.getClass())) {
+                continue;
+            }
             try {
                 if (device.isHeadlessSystemUserMode()) {
                     String deviceName = context.getDeviceName(device);
