@@ -90,6 +90,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.PrettyPrintDelimiter;
 import com.android.tradefed.util.RunInterruptedException;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.SystemUtil.EnvVariable;
 import com.android.tradefed.util.TimeUtil;
@@ -100,8 +101,10 @@ import com.google.common.base.Strings;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
@@ -376,7 +379,8 @@ public class InvocationExecution implements IInvocationExecution {
                         testInfo.getContext().getBuildInfos().size() > 0
                                 && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildFlavor())
                                 && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildBranch())
-                                && (testInfo.getBuildInfo().getBuildFlavor().contains("sdv_core")
+                                && (checkInternalCategorization(
+                                                testInfo.getBuildInfo().getBuildFlavor())
                                         || testInfo.getBuildInfo()
                                                 .getBuildBranch()
                                                 .contains("release")
@@ -428,6 +432,25 @@ public class InvocationExecution implements IInvocationExecution {
                 reportLogs(device, listener, Stage.SETUP);
             }
         }
+    }
+
+    private boolean checkInternalCategorization(String buildFlavor) {
+        try (InputStream resStream =
+                ITestSuite.class.getResourceAsStream("/infra/product_categorization.txt")) {
+            if (resStream == null) {
+                return false;
+            }
+            List<String> products =
+                    Arrays.asList(StreamUtil.getStringFromStream(resStream).split("\n"));
+            for (String product : products) {
+                if (buildFlavor.contains(product)) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            CLog.e(e);
+        }
+        return false;
     }
 
     private void runLabPreparersSetup(
