@@ -108,12 +108,16 @@ import com.android.tradefed.util.hostmetric.IHostMonitor.HostMetricType;
 import com.android.tradefed.util.keystore.IKeyStoreClient;
 import com.android.tradefed.util.keystore.IKeyStoreFactory;
 import com.android.tradefed.util.keystore.KeyStoreException;
+
 import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
 import com.google.android.tradefed.result.teststorage.ResultReporter;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -127,6 +131,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -677,14 +682,7 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                             List<String> optionValues = experimentalFlags.get(optionName);
                             // Support map experiments, where optionValue is a key=value pair
                             for (String optionValue : optionValues) {
-                                int equalsIndex = optionValue.indexOf('=');
-                                if (equalsIndex != -1) {
-                                    String mapKey = optionValue.substring(0, equalsIndex);
-                                    String mapValue = optionValue.substring(equalsIndex + 1);
-                                    config.injectOptionValue(optionName, mapKey, mapValue);
-                                } else {
-                                    config.injectOptionValue(optionName, optionValue);
-                                }
+                                injectOptions(config, optionName, optionValue);
                                 mInvocationContext.addInvocationAttribute(
                                         "experiment:" + optionName, optionValue);
                             }
@@ -697,22 +695,15 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
                     }
                 }
                 // Set TF rollout flags
-                List<String> ignoredFlags = new LinkedList<>();
+                Set<String> ignoredFlags = new LinkedHashSet<>();
+                injectRolloutFlagsFromFile(config, ignoredFlags);
                 MultiMap<String, String> rolloutFlags =
                         config.getCommandOptions().getRolloutFlags();
                 for (String optionName : rolloutFlags.keySet()) {
                     try {
                         List<String> optionValues = rolloutFlags.get(optionName);
                         for (String optionValue : optionValues) {
-                            // Support map flags, where optionValue is a key=value pair
-                            int equalsIndex = optionValue.indexOf('=');
-                            if (equalsIndex != -1) {
-                                String mapKey = optionValue.substring(0, equalsIndex);
-                                String mapValue = optionValue.substring(equalsIndex + 1);
-                                config.injectOptionValue(optionName, mapKey, mapValue);
-                            } else {
-                                config.injectOptionValue(optionName, optionValue);
-                            }
+                            injectOptions(config, optionName, optionValue);
                         }
                     } catch (ConfigurationException e) {
                         ignoredFlags.add(optionName);
@@ -1033,6 +1024,57 @@ public class CommandScheduler extends Thread implements ICommandScheduler, IComm
             // skip experiment for TRYBOT runs
             return config.getCommandOptions().skipTrybotExperiment()
                     && InvocationContext.isOnDemand(context);
+        }
+
+        private void injectOptions(IConfiguration config, String optionName, String optionValue)
+                throws ConfigurationException {
+            // Support map flags, where optionValue is a key=value pair
+            int equalsIndex = optionValue.indexOf('=');
+            if (equalsIndex != -1) {
+                String mapKey = optionValue.substring(0, equalsIndex);
+                String mapValue = optionValue.substring(equalsIndex + 1);
+                config.injectOptionValue(optionName, mapKey, mapValue);
+            } else {
+                config.injectOptionValue(optionName, optionValue);
+            }
+        }
+
+        private void injectRolloutFlagsFromFile(IConfiguration config, Set<String> ignoredFlags) {
+            List<File> rolloutFlagsFiles = config.getCommandOptions().getRolloutFlagsFiles();
+
+            for (File rolloutFlagsFile : rolloutFlagsFiles) {
+                try (InputStream stream = new FileInputStream(rolloutFlagsFile)) {
+                    Properties properties = new Properties();
+                    properties.load(stream);
+
+                    for (String optionName : properties.stringPropertyNames()) {
+                        String rawOptionValue = properties.getProperty(optionName);
+                        if (rawOptionValue == null || rawOptionValue.trim().isEmpty()) {
+                            continue;
+                        }
+                        rawOptionValue = rawOptionValue.trim();
+                        // handle multiple values
+                        String[] optionValues = rawOptionValue.split(",");
+                        for (String optionValue : optionValues) {
+                            if (optionValue.isEmpty()) {
+                                continue;
+                            }
+                            // convert the map key\=value to key=value for the helper function
+                            if (optionValue.contains("\\=")) {
+                                optionValue = optionValue.replaceFirst("\\\\=", "=");
+                            }
+                            try {
+                                injectOptions(config, optionName, optionValue);
+                            } catch (ConfigurationException e) {
+                                ignoredFlags.add(optionName);
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    CLog.w("Unable to inject rollout flags from properties file.");
+                    CLog.e(e);
+                }
+            }
         }
     }
 

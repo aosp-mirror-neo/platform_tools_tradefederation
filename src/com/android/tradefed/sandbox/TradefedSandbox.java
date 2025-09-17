@@ -730,6 +730,9 @@ public class TradefedSandbox implements ISandbox {
         try {
             String[] commandArray =
                     TradefedDelegator.clearCommandlineFromOneArg(args, "rollout-flags");
+            commandArray =
+                    TradefedDelegator.clearCommandlineFromOneArg(
+                            commandArray, "rollout-flags-files");
             commandArray = TradefedDelegator.clearCommandlineFromOneArg(
                     commandArray, "report-cache-invocation-results-postsubmit", true);
             commandArray = TradefedDelegator.clearCommandlineFromOneArg(

@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -288,6 +289,11 @@ public class CommandOptions implements ICommandOptions {
                     "Map of rollout flags to enable features completely. Rollout flags are ignored"
                             + " when TF objects are not present.")
     private MultiMap<String, String> mRolloutFlags = new MultiMap<>();
+
+    @Option(
+            name = "rollout-flags-files",
+            description = "A List of files containing rollout-flags to enable features completely.")
+    private List<File> mRolloutFlagsFiles = new LinkedList<>();
 
     @Option(
             name = "skip-trybot-experiment",
@@ -769,6 +775,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public MultiMap<String, String> getRolloutFlags() {
         return mRolloutFlags;
+    }
+
+    @Override
+    public List<File> getRolloutFlagsFiles() {
+        return mRolloutFlagsFiles;
     }
 
     /** {@inheritDoc} */

@@ -209,6 +209,9 @@ public interface ICommandOptions {
      */
     public MultiMap<String, String> getRolloutFlags();
 
+    /** Returns a list of files containing rollout flags. */
+    public List<File> getRolloutFlagsFiles();
+
     /** Whether to skip experiments for TRYBOT runs. */
     public boolean skipTrybotExperiment();
 
