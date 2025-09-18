@@ -44,6 +44,8 @@ import com.android.tradefed.device.DeviceManager;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.DeviceUnresponsiveException;
 import com.android.tradefed.device.FreeDeviceState;
+import com.android.tradefed.device.HsumHelper;
+import com.android.tradefed.device.HsumHelper.HsumBootStrategy;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.ITestDevice.RecoveryMode;
 import com.android.tradefed.device.NativeDevice;
@@ -1648,7 +1650,7 @@ public class TestInvocation implements ITestInvocation {
                     switchPrep.setUserType(UserType.FULL);
                     deviceConfig.addSpecificConfig(
                             switchPrep, Configuration.TARGET_PREPARER_TYPE_NAME);
-                    // TODO(b/434052978): Also add the reboot strategy
+                    new HsumHelper(device).setHsumBootStrategy(HsumBootStrategy.SWITCH_TO_PREVIOUS_USER);
                 }
             } catch (DeviceNotAvailableException | ConfigurationException dnae) {
                 CLog.e(dnae);
