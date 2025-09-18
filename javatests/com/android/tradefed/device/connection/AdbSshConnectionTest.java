@@ -1061,6 +1061,34 @@ public class AdbSshConnectionTest {
                         Mockito.eq("512")))
                 .thenReturn(processes);
 
+        // Collect syslog
+        CommandResult syslogRes = new CommandResult(CommandStatus.SUCCESS);
+        syslogRes.setStdout("some random log");
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq(stdout),
+                        Mockito.eq(stderr),
+                        Mockito.eq("ssh"),
+                        Mockito.eq("-o"),
+                        Mockito.eq("LogLevel=ERROR"),
+                        Mockito.eq("-o"),
+                        Mockito.eq("UserKnownHostsFile=/dev/null"),
+                        Mockito.eq("-o"),
+                        Mockito.eq("StrictHostKeyChecking=no"),
+                        Mockito.eq("-o"),
+                        Mockito.eq("ServerAliveInterval=10"),
+                        Mockito.eq("-i"),
+                        Mockito.any(),
+                        Mockito.eq("user1@localhost"),
+                        Mockito.eq("-p"),
+                        Mockito.eq("1111"),
+                        Mockito.eq("journalctl"),
+                        Mockito.eq("--since"),
+                        Mockito.eq("\"30"),
+                        Mockito.eq("minutes"),
+                        Mockito.eq("ago\"")))
+                .thenReturn(syslogRes);
+
         CommandResult adbRes = new CommandResult(CommandStatus.SUCCESS);
         adbRes.setStdout(
                 "List of devices attached\n"

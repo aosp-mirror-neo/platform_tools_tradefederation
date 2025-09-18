@@ -136,7 +136,8 @@ public class AdbSshConnection extends AdbTcpConnection {
                                 .getHostOptions()
                                 .getConcurrentVirtualDeviceStartupLimit()
                         != null) {
-                    try (CloseableTraceScope ignored = new CloseableTraceScope("fetch_cvd_permit")) {
+                    try (CloseableTraceScope ignored =
+                            new CloseableTraceScope("fetch_cvd_permit")) {
                         GlobalConfiguration.getInstance()
                                 .getHostOptions()
                                 .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
@@ -1238,6 +1239,27 @@ public class AdbSshConnection extends AdbTcpConnection {
                                             String.format("Expected process %s not found", p));
                         }
                     }
+                }
+            }
+
+            // Collect syslog for the last 30 minutes
+            cmd = getSshCommand("journalctl --since \"30 minutes ago\"", sshPortNumber);
+            res =
+                    GceManager.remoteSshCommandExecution(
+                            mGceAvd,
+                            getDevice().getOptions(),
+                            getRunUtil(),
+                            10000L,
+                            cmd.split(" "));
+            if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                CLog.e(
+                        "Failed to collect syslog: stdout: %s\nstderr: %s",
+                        res.getStdout(), res.getStderr());
+            } else {
+                String processes = res.getStdout().trim();
+                try (final InputStreamSource source =
+                        new ByteArrayInputStreamSource(processes.getBytes())) {
+                    getLogger().testLog("host_vm_syslog", LogDataType.TEXT, source);
                 }
             }
 
