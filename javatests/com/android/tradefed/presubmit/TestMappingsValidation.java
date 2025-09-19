@@ -260,7 +260,9 @@ public class TestMappingsValidation implements IBuildReceiver {
                     "aarch64-paging_test_src_lib",
                     "libperfmgr_test",
                     "libadpf_test",
-                    "liboemservice_proxy_test");
+                    "liboemservice_proxy_test",
+                    // Host:true test under namespace
+                    "trusty_app_compat_test_fingerprint");
 
     @Override
     public void setBuild(IBuildInfo buildInfo) {
