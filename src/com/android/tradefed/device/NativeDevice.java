@@ -2602,7 +2602,7 @@ public class NativeDevice
     @Override
     public CommandResult executeAdbV2Command(long timeout, String... cmdArgs)
             throws DeviceNotAvailableException {
-        return executeAdbV2Command(getCommandTimeout(), new HashMap<>(), cmdArgs);
+        return executeAdbV2Command(timeout, new HashMap<>(), cmdArgs);
     }
 
     /** {@inheritDoc} */
