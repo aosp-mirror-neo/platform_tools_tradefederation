@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -145,35 +146,51 @@ public class FuseMountManagerFactory {
             return;
         }
 
-        // The throttle interval has passed and we have the lock. Update the time.
-        lastCheckTime = System.currentTimeMillis();
+        // Add this check to avoid a race condition where the executor is shut down before this task
+        // is submitted.
+        if (cleanupExecutor.isShutdown()) {
+            CLog.w("Cleanup executor is shut down. Skipping health check.");
+            cleanupTaskRunning.set(false);
+            return;
+        }
 
         // The submitted task holds the responsibility to release the lock when it is finished.
-        cleanupExecutor.submit(
-                () -> {
-                    try {
-                        long count = 0;
-                        try (Stream<Path> files = Files.list(mMountRoot)) {
-                            count = files.count();
-                        } catch (IOException e) {
-                            CLog.e("Failed to count mount points: %s", e.getMessage());
-                            return; // Exit the task on failure
-                        }
-                        CLog.d("Found %d active mount points in %s", count, mMountRoot);
-                        InvocationMetricLogger.addInvocationMetrics(
-                                InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
+        // There is still a slight chance that the executor is shut down before this task is
+        // submitted and it will be handled in the finally block.
+        try {
+            cleanupExecutor.submit(
+                    () -> {
+                        try {
+                            // The throttle interval has passed and we have the lock. Update the
+                            // time.
+                            lastCheckTime = System.currentTimeMillis();
+                            long count = 0;
+                            try (Stream<Path> files = Files.list(mMountRoot)) {
+                                count = files.count();
+                            } catch (IOException e) {
+                                CLog.e("Failed to count mount points: %s", e.getMessage());
+                                return; // Exit the task on failure
+                            }
+                            CLog.d("Found %d active mount points in %s", count, mMountRoot);
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.CAS_MOUNT_POINTS_COUNT, count);
 
-                        if (count > MOUNT_POINT_COUNT_THRESHOLD) {
-                            CLog.d(
-                                    "Mount point count > %s. Triggering stale mount point removal.",
-                                    MOUNT_POINT_COUNT_THRESHOLD);
-                            removeStaleMountPoints(mMountRoot);
+                            if (count > MOUNT_POINT_COUNT_THRESHOLD) {
+                                CLog.d(
+                                        "Mount point count > %s. Triggering stale mount point"
+                                                + " removal.",
+                                        MOUNT_POINT_COUNT_THRESHOLD);
+                                removeStaleMountPoints(mMountRoot);
+                            }
+                        } finally {
+                            // Ensure the flag is reset when the task is complete.
+                            cleanupTaskRunning.set(false);
                         }
-                    } finally {
-                        // Ensure the flag is reset when the task is complete.
-                        cleanupTaskRunning.set(false);
-                    }
-                });
+                    });
+        } catch (RejectedExecutionException e) {
+            CLog.e("Failed to submit cleanup task", e);
+            cleanupTaskRunning.set(false);
+        }
     }
 
     /**
