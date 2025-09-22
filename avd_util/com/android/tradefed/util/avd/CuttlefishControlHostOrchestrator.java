@@ -21,6 +21,7 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandResultWith;
 
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 
 /** Interacts with a Cuttlefish device via the Cuttlefish Host Orhcestrator. */
@@ -66,6 +67,8 @@ public class CuttlefishControlHostOrchestrator implements CuttlefishControl {
         CLog.d("HostOrchestrator list displays response: %s", listDisplaysReseponse.toString());
 
         CuttlefishDisplays cuttlefishDisplays = new CuttlefishDisplays();
+        cuttlefishDisplays.displays = new HashMap<>();
+
         for (Map.Entry<Integer, HostOrchestratorClient.Display> entry :
                 listDisplaysReseponse.displays.entrySet()) {
             int displayNumber = entry.getKey();
