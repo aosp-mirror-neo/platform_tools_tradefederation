@@ -1375,8 +1375,17 @@ public class NativeDevice
         return mHostAdbMajorVersion.intValue();
     }
 
+    private boolean isNullDevice() {
+        return getIDevice() instanceof NullDevice || getIDevice() instanceof StubDevice;
+    }
+
     private Set<String> getDeviceSupportedFeatures() throws DeviceNotAvailableException {
         if (mDeviceSupportedFeatures != null) {
+            return mDeviceSupportedFeatures;
+        }
+        // Skip the features call for null-device
+        if (isNullDevice()) {
+            mDeviceSupportedFeatures = new LinkedHashSet<>();
             return mDeviceSupportedFeatures;
         }
         CommandResult res = executeAdbV2Command("features");
