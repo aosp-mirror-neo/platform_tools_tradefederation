@@ -255,6 +255,7 @@ public class HostOrchestratorUtil {
                     return false;
                 }
                 retryCount++;
+                getRunUtil().sleep(mWaitForOperationMs);
                 continue;
             }
             if (listCvdsRes.cvds.size() > 0 && listCvdsRes.cvds.get(0).status.equals("Running")) {
