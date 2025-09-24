@@ -1747,11 +1747,11 @@ public class NativeDevice
 
     protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile, long timeout)
             throws DeviceNotAvailableException {
-        List<String> adbPushFileCmd = new ArrayList<>();
-        adbPushFileCmd.add("pull");
-        adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
-        adbPushFileCmd.add(localFile.getAbsolutePath());
-        CommandResult res = executeAdbV2Command(timeout, adbPushFileCmd.toArray(new String[0]));
+        List<String> adbPullFileCmd = new ArrayList<>();
+        adbPullFileCmd.add("pull");
+        adbPullFileCmd.add(interpolatePathVariables(remoteFilePath));
+        adbPullFileCmd.add(localFile.getAbsolutePath());
+        CommandResult res = executeAdbV2Command(timeout, adbPullFileCmd.toArray(new String[0]));
         if (CommandStatus.SUCCESS.equals(res.getStatus())) {
             return true;
         } else if (CommandStatus.TIMED_OUT.equals(res.getStatus())
