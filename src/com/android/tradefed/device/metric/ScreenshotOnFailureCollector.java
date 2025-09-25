@@ -20,11 +20,18 @@ import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.ITestDevice.RecoveryMode;
 import com.android.tradefed.device.TestDeviceState;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.metrics.proto.MetricMeasurement;
+import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.TestDescription;
 
-/** Collector that will capture and log a screenshot when a test case fails. */
+import java.util.Map;
+
+/**
+ * Collector that will capture and log a screenshot when a test case fails. If default collection is
+ * enabled, it will collect screenshot at the specified levels.
+ */
 public class ScreenshotOnFailureCollector extends BaseDeviceMetricCollector {
 
     private static final String NAME_FORMAT = "%s-%s-screenshot-on-failure";
@@ -32,26 +39,82 @@ public class ScreenshotOnFailureCollector extends BaseDeviceMetricCollector {
 
     private int mCurrentCount = 0;
     private boolean mFirstThrottle = true;
+    private boolean mCurrentTestFailed = false;
+    private boolean mCurrentTestRunFailed = false;
 
     @Override
     public void onTestRunStart(DeviceMetricData runData) {
         mCurrentCount = 0;
         mFirstThrottle = true;
+        mCurrentTestRunFailed = false;
+    }
+
+    @Override
+    public void onTestStart(DeviceMetricData testData) throws DeviceNotAvailableException {
+        mCurrentTestFailed = false;
     }
 
     @Override
     public void onTestFail(DeviceMetricData testData, TestDescription test)
             throws DeviceNotAvailableException {
-        // during default collection, screenshot will be collected manually
         if (!isDefaultMetricCollectionEnabled()) {
             collectScreenShot(test.toString());
+        } else {
+            if (MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                collectScreenShot("test_level-" + test.toString());
+            }
+        }
+        mCurrentTestFailed = true;
+    }
+
+    @Override
+    public void onTestEnd(
+            DeviceMetricData testData, Map<String, MetricMeasurement.Metric> currentTestCaseMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_CASE.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestFailed
+                        || !MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                    collectScreenShot("test_level-" + getTestName());
+                }
+            }
         }
     }
 
     @Override
-    public void collectMetrics(MetricCollectionLevel level, String name)
+    public void onTestRunFailed(DeviceMetricData testData, FailureDescription failure)
             throws DeviceNotAvailableException {
-        collectScreenShot(name);
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                collectScreenShot("test_run_level-" + getRunName());
+            }
+        }
+        mCurrentTestRunFailed = true;
+    }
+
+    @Override
+    public void onTestRunEnd(
+            DeviceMetricData runData, Map<String, MetricMeasurement.Metric> currentRunMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_RUN.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestRunFailed
+                        || !MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                    collectScreenShot("test_run_level-" + getRunName());
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onTestModuleEnded() throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.MODULE.equals(getAlwaysOnCollectionLevel())
+                    || (MetricCollectionLevel.MODULE.equals(getOnFailureCollectionLevel())
+                            && doesModuleContainFailure())) {
+                collectScreenShot("module_level-" + getModuleName());
+            }
+        }
     }
 
     @Override

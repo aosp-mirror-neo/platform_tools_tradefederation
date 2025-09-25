@@ -38,8 +38,10 @@ import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.connection.AbstractConnection;
 import com.android.tradefed.device.connection.AdbTcpConnection;
+import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.device.metric.CollectorHelper;
 import com.android.tradefed.device.metric.IMetricCollector;
+import com.android.tradefed.device.metric.IMetricCollector.MetricCollectionLevel;
 import com.android.tradefed.device.metric.IMetricCollectorReceiver;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.error.IHarnessException;
@@ -428,6 +430,27 @@ public abstract class ITestSuite
                             + " config.")
     private boolean mKeepPostProcessorOrder = false;
 
+    @Option(
+            name = "enable-default-logs",
+            description = "Whether to collect debugging logs by default.")
+    private boolean mEnableDefaultLogs = false;
+
+    @Option(
+            name = "log-level-on-failure",
+            description =
+                    "A map to change the default log level of a AutoLogCollector at which logs will"
+                            + " be collected during failures.")
+    private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelOnFailure = new LinkedHashMap<>();
+
+    @Option(
+            name = "log-level-always-on",
+            description =
+                    "A map to change the default log level of a AutoLogCollector at which logs will"
+                            + " be collected regardless of failures.")
+    private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelAlwaysOn = new LinkedHashMap<>();
+
+    private boolean mCurrentModuleFailedCheckers = false;
+
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
         FULLY_ISOLATED; // Test received a fresh device.
@@ -444,6 +467,7 @@ public abstract class ITestSuite
     private List<ISystemStatusChecker> mSystemStatusCheckers;
     private IInvocationContext mContext;
     private List<IMetricCollector> mMetricCollectors;
+    private List<IMetricCollector> mDefaultLogCollectors;
     private IConfiguration mMainConfiguration;
     private Set<IAbi> mAbis = new LinkedHashSet<>();
 
@@ -905,12 +929,19 @@ public abstract class ITestSuite
         if (mSkipContext == null) {
             mSkipContext = SkipFeature.getSkipContext();
         }
+
+        mDefaultLogCollectors = populateDefaultLogCollectors();
+
         /** Run all the module, make sure to reduce the list to release resources as we go. */
         while (!mRunModules.isEmpty()) {
             ModuleDefinition module = mRunModules.remove(0);
+            List<IMetricCollector> clonedDefaultCollectors =
+                    CollectorHelper.cloneCollectors(mDefaultLogCollectors);
+            module.setDefaultLogCollectors(clonedDefaultCollectors);
             mModuleInProgress = module;
             boolean moduleStartReported = false;
             boolean moduleEndReported = false;
+            mCurrentModuleFailedCheckers = false;
             ITestInvocationListener listenerWithCollectors = null;
             try {
                 if (!shouldModuleRun(module)) {
@@ -961,8 +992,12 @@ public abstract class ITestSuite
                     if (module.getModuleConfiguration().getMetricCollectors() != null) {
                         allCollectors.addAll(module.getModuleConfiguration().getMetricCollectors());
                     }
-                    for (IMetricCollector collector :
-                            CollectorHelper.cloneCollectors(allCollectors)) {
+                    allCollectors = CollectorHelper.cloneCollectors(allCollectors);
+
+                    if (clonedDefaultCollectors != null) {
+                        allCollectors.addAll(clonedDefaultCollectors);
+                    }
+                    for (IMetricCollector collector : allCollectors) {
                         if (collector.isDisabled()) {
                             CLog.d("%s has been disabled. Skipping.", collector);
                         } else if (!collector.captureModuleLevel()) {
@@ -1136,6 +1171,12 @@ public abstract class ITestSuite
                 // if module end not reported(no DNAE happened), report it now
                 if (moduleStartReported && !moduleEndReported) {
                     if (listenerWithCollectors != null) {
+                        if (clonedDefaultCollectors != null
+                                && (module.hasModuleFailed() || mCurrentModuleFailedCheckers)) {
+                            for (IMetricCollector logCollector : clonedDefaultCollectors) {
+                                logCollector.setModuleContainsFailure();
+                            }
+                        }
                         listenerWithCollectors.testModuleEnded();
                     } else {
                         listener.testModuleEnded();
@@ -1144,6 +1185,78 @@ public abstract class ITestSuite
                 // clear out module invocation context since we are now done with module
                 // execution
                 mModuleInProgress = null;
+            }
+        }
+    }
+
+    private List<IMetricCollector> populateDefaultLogCollectors() {
+        if (!mEnableDefaultLogs) {
+            return null;
+        }
+        List<IMetricCollector> defaultCollectors = new LinkedList<>();
+        addDefaultCollector(AutoLogCollector.LOGCAT_ON_FAILURE, defaultCollectors);
+        addDefaultCollector(AutoLogCollector.HOSTLOG_ON_FAILURE, defaultCollectors);
+        addDefaultCollector(AutoLogCollector.SCREENSHOT_ON_FAILURE, defaultCollectors);
+        addDefaultCollector(AutoLogCollector.BUGREPORTZ_ON_FAILURE, defaultCollectors);
+
+        return defaultCollectors;
+    }
+
+    private void addDefaultCollector(
+            AutoLogCollector type, List<IMetricCollector> defaultLogCollectors) {
+        // Skip adding if collection is disabled for both always-on and failure case.
+        MetricCollectionLevel alwaysOnLevel = mLogLevelAlwaysOn.get(type);
+        MetricCollectionLevel onFailureLevel = mLogLevelOnFailure.get(type);
+        if (alwaysOnLevel != null
+                && onFailureLevel != null
+                && MetricCollectionLevel.NULL.equals(alwaysOnLevel)
+                && MetricCollectionLevel.NULL.equals(onFailureLevel)) {
+            return;
+        }
+        IMetricCollector logCollector = type.getInstanceForValue();
+        logCollector.enableDefaultMetricCollection();
+        // set always on levels
+        if (alwaysOnLevel != null) {
+            logCollector.setAlwaysOnCollectionLevel(alwaysOnLevel);
+        } else {
+            // set default always on level if not provided.
+            if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
+            } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
+            } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
+            } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
+            }
+        }
+        // set on failure levels
+        if (onFailureLevel != null) {
+            logCollector.setOnFailureCollectionLevel(onFailureLevel);
+        } else {
+            // set default on failure level if not provided.
+            if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+            } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+            } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+            } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.MODULE);
+            }
+        }
+        defaultLogCollectors.add(logCollector);
+
+        // remove duplicated invocation level collectors
+        Iterator<IMetricCollector> itr = mMetricCollectors.iterator();
+        while (itr.hasNext()) {
+            IMetricCollector invocationMetricCollector = itr.next();
+            if (invocationMetricCollector.getClass().equals(logCollector.getClass())) {
+                itr.remove();
+                CLog.d(
+                        "Removing duplicated invocation level log collector %s in favor of default"
+                                + " log collection.",
+                        type);
             }
         }
     }
@@ -1529,6 +1642,10 @@ public abstract class ITestSuite
             Map<String, String> failures,
             long startTime,
             ITestInvocationListener listener) {
+        // collect default logs even if system status checker reporting is disabled.
+        if (!failures.isEmpty()) {
+            mCurrentModuleFailedCheckers = true;
+        }
         if (!mReportSystemChecker) {
             // do not log here, otherwise it could be very verbose.
             return;

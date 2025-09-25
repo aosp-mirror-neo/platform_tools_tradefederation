@@ -93,6 +93,9 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
     private String mRunName;
     private String mTestName;
     private boolean mIsDefaultCollection = false;
+    private boolean mModuleContainsFailure = false;
+    private MetricCollectionLevel mAlwaysOnCollectionLevel = null;
+    private MetricCollectionLevel mOnFailureCollectionLevel = null;
 
     /**
      * Variable for whether or not to skip the collection of one test case because it was filtered.
@@ -839,5 +842,35 @@ public class BaseDeviceMetricCollector implements IMetricCollector, IDeviceActio
     @Override
     public boolean isDefaultMetricCollectionEnabled() {
         return mIsDefaultCollection;
+    }
+
+    @Override
+    public void setAlwaysOnCollectionLevel(MetricCollectionLevel level) {
+        mAlwaysOnCollectionLevel = level;
+    }
+
+    @Override
+    public void setOnFailureCollectionLevel(MetricCollectionLevel level) {
+        mOnFailureCollectionLevel = level;
+    }
+
+    @Override
+    public MetricCollectionLevel getOnFailureCollectionLevel() {
+        return mOnFailureCollectionLevel;
+    }
+
+    @Override
+    public MetricCollectionLevel getAlwaysOnCollectionLevel() {
+        return mAlwaysOnCollectionLevel;
+    }
+
+    @Override
+    public void setModuleContainsFailure() {
+        mModuleContainsFailure = true;
+    }
+
+    @Override
+    public boolean doesModuleContainFailure() {
+        return mModuleContainsFailure;
     }
 }

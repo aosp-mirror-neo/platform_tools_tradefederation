@@ -18,35 +18,96 @@ package com.android.tradefed.device.metric;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.metrics.proto.MetricMeasurement;
 import com.android.tradefed.result.FailureDescription;
+import com.android.tradefed.result.TestDescription;
 
-/** Collect a bugreportz when a test case fails. */
+import java.util.Map;
+
+/**
+ * Collect a bugreportz when a test case fails. If default collection is enabled, it will collect
+ * bugreport at the specified levels.
+ */
 public class BugreportzOnFailureCollector extends BaseDeviceMetricCollector {
 
     private static final String NAME_FORMAT = "%s-%s-bugreportz-on-failure";
     private static final int THROTTLE_LIMIT_PER_RUN = 10;
     private int mCurrentCount = 0;
     private boolean mFirstThrottle = true;
+    private boolean mCurrentTestFailed = false;
+    private boolean mCurrentTestRunFailed = false;
 
     @Override
     public void onTestRunStart(DeviceMetricData runData) throws DeviceNotAvailableException {
         mCurrentCount = 0;
         mFirstThrottle = true;
+        mCurrentTestRunFailed = false;
+    }
+
+    @Override
+    public void onTestStart(DeviceMetricData testData) throws DeviceNotAvailableException {
+        mCurrentTestFailed = false;
+    }
+
+    @Override
+    public void onTestFail(DeviceMetricData testData, TestDescription test)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                collectBugReport("test_level-" + test.toString());
+            }
+        }
+        mCurrentTestFailed = true;
+    }
+
+    @Override
+    public void onTestEnd(
+            DeviceMetricData testData, Map<String, MetricMeasurement.Metric> currentTestCaseMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_CASE.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestFailed
+                        || !MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                    collectBugReport("test_level-" + getTestName());
+                }
+            }
+        }
     }
 
     @Override
     public void onTestRunFailed(DeviceMetricData testData, FailureDescription failure) {
-        // if default collection enabled, it will be collected manually.
         if (!isDefaultMetricCollectionEnabled()) {
-            if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                if (mFirstThrottle) {
-                    CLog.w("Throttle capture of bugreportz-on-failure due to too many failures.");
-                    mFirstThrottle = false;
-                }
-                return;
-            }
             collectBugReport(getRunName());
-            mCurrentCount++;
+        } else {
+            if (MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                collectBugReport("test_run_level-" + getRunName());
+            }
+        }
+        mCurrentTestRunFailed = true;
+    }
+
+    @Override
+    public void onTestRunEnd(
+            DeviceMetricData runData, Map<String, MetricMeasurement.Metric> currentRunMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_RUN.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestRunFailed
+                        || !MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                    collectBugReport("test_run_level-" + getRunName());
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onTestModuleEnded() throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.MODULE.equals(getAlwaysOnCollectionLevel())
+                    || (MetricCollectionLevel.MODULE.equals(getOnFailureCollectionLevel())
+                            && doesModuleContainFailure())) {
+                collectBugReport("module_level-" + getModuleName());
+            }
         }
     }
 
@@ -55,46 +116,15 @@ public class BugreportzOnFailureCollector extends BaseDeviceMetricCollector {
         return true;
     }
 
-    @Override
-    public void collectMetrics(MetricCollectionLevel level, String name) {
-        switch (level) {
-            case TEST_CASE:
-                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                    if (mFirstThrottle) {
-                        CLog.w(
-                                "Throttle capture of bugreportz-on-failure due to too many"
-                                        + " failures.");
-                        mFirstThrottle = false;
-                    }
-                    return;
-                }
-                mCurrentCount++;
-                name = "test-level-" + name;
-                break;
-            case TEST_RUN:
-                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                    if (mFirstThrottle) {
-                        CLog.w(
-                                "Throttle capture of bugreportz-on-failure due to too many"
-                                        + " failures.");
-                        mFirstThrottle = false;
-                    }
-                    return;
-                }
-                mCurrentCount++;
-                name = "test-run-level-" + name;
-                break;
-            case MODULE:
-                name = "module-level-" + name;
-                break;
-            default:
-                // Should never happen
-                break;
-        }
-        collectBugReport(name);
-    }
-
     private void collectBugReport(String name) {
+        if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
+            if (mFirstThrottle) {
+                CLog.w("Throttle capture of bugreportz-on-failure due to too many failures.");
+                mFirstThrottle = false;
+            }
+            return;
+        }
+        mCurrentCount++;
         for (ITestDevice device : getDevices()) {
             String logName = String.format(NAME_FORMAT, name, device.getSerialNumber());
             if (!device.logBugreport(logName, getInvocationListener())) {

@@ -90,6 +90,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private IRemoteTest mTest;
     private ModuleDefinition mModule;
     private List<IMetricCollector> mRunMetricCollectors;
+    private List<IMetricCollector> mDefaultLogCollectors;
     private IInvocationContext mModuleInvocationContext;
     private IConfiguration mModuleConfiguration;
     private ModuleListener mMainGranularRunListener;
@@ -184,6 +185,10 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
      */
     public void setMetricCollectors(List<IMetricCollector> runMetricCollectors) {
         mRunMetricCollectors = runMetricCollectors;
+    }
+
+    public void setDefaultLogCollectors(List<IMetricCollector> collectors) {
+        mDefaultLogCollectors = collectors;
     }
 
     /**
@@ -418,6 +423,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                 new CloseableTraceScope(
                         "attempt " + attempt + " " + mTest.getClass().getCanonicalName())) {
             List<IMetricCollector> clonedCollectors = cloneCollectors(mRunMetricCollectors);
+            clonedCollectors.addAll(cloneCollectors(mDefaultLogCollectors));
             if (mTest instanceof IMetricCollectorReceiver) {
                 ((IMetricCollectorReceiver) mTest).setMetricCollectors(clonedCollectors);
                 // If test can receive collectors then let it handle how to set them up
