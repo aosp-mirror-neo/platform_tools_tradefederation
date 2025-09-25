@@ -34,7 +34,6 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 
-import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -144,7 +143,7 @@ public class ArtTestTest {
             assertEquals(0, shard0.mShardIndex);
             assertEquals(2, shard0.mShardCount);
             shard0.mRunnerDir = shard0.extractTarBall(new File(tempDir, "shard0_basedir"));
-            Map<String, JSONObject> testsShard0 = shard0.loadTests();
+            Map<String, ArtTest.Test> testsShard0 = shard0.loadTests();
             assertEquals(3, testsShard0.size());
             assertTrue(testsShard0.containsKey("001-HelloWorld#1f5cdb07"));
             assertTrue(testsShard0.containsKey("003-Bar#1f5cdb09"));
@@ -155,7 +154,7 @@ public class ArtTestTest {
             assertEquals(1, shard1.mShardIndex);
             assertEquals(2, shard1.mShardCount);
             shard1.mRunnerDir = shard1.extractTarBall(new File(tempDir, "shard1_basedir"));
-            Map<String, JSONObject> testsShard1 = shard1.loadTests();
+            Map<String, ArtTest.Test> testsShard1 = shard1.loadTests();
             assertEquals(2, testsShard1.size());
             assertTrue(testsShard1.containsKey("002-Foo#1f5cdb08"));
             assertTrue(testsShard1.containsKey("setup#compile-boot-image"));
@@ -178,7 +177,7 @@ public class ArtTestTest {
         try {
             tempDir = FileUtil.createTempDir("art-test-sharding");
             test.mRunnerDir = test.extractTarBall(tempDir);
-            Map<String, JSONObject> tests = test.loadTests();
+            Map<String, ArtTest.Test> tests = test.loadTests();
             assertTrue(tests.containsKey("001-HelloWorld#1f5cdb07"));
             assertTrue(!tests.containsKey("002-Foo#1f5cdb08"));
             assertTrue(!tests.containsKey("003-Bar#1f5cdb09"));
@@ -202,7 +201,7 @@ public class ArtTestTest {
         try {
             tempDir = FileUtil.createTempDir("art-test-sharding");
             test.mRunnerDir = test.extractTarBall(tempDir);
-            Map<String, JSONObject> tests = test.loadTests();
+            Map<String, ArtTest.Test> tests = test.loadTests();
             assertTrue(!tests.containsKey("001-HelloWorld#1f5cdb07"));
             assertTrue(tests.containsKey("002-Foo#1f5cdb08"));
             assertTrue(tests.containsKey("003-Bar#1f5cdb09"));

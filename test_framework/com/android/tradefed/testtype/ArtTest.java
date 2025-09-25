@@ -45,10 +45,16 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
 
@@ -87,8 +93,7 @@ import java.util.zip.ZipFile;
 public class ArtTest implements IShardableTest, ITestFilterReceiver {
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
-    protected Map<String, JSONObject> mTests = new TreeMap<String, JSONObject>();
-    protected Map<String, Boolean> mTestResults = new TreeMap<String, Boolean>();
+    protected Map<String, Test> mTests = new TreeMap<String, Test>();
     protected int mShardIndex = 0;
     protected int mShardCount = 1;
 
@@ -154,13 +159,13 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
             throws DeviceNotAvailableException {
         mTestInfo = testInfo;
         File tmp_dir = null;
+        ExecutorService executor = null;
         try {
             try {
                 tmp_dir = FileUtil.createTempDir("art-tf-");
                 mRunnerDir = extractTarBall(tmp_dir);
                 extractZipApex(tmp_dir);
                 mTests = loadTests();
-                mTestResults.clear(); // TF might reuse the same instance for multiple runs.
             } catch (IOException | JSONException e) {
                 throw new RuntimeException(e);
             }
@@ -168,18 +173,41 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
             long startTime = System.currentTimeMillis();
             try {
                 clean();
+                executor = Executors.newFixedThreadPool(4);
                 listener.testRunStarted("ArtTest", mTests.size());
-                for (Map.Entry<String, JSONObject> entry : mTests.entrySet()) {
-                    runTest(entry.getKey(), entry.getValue(), listener);
+
+                // Schedule all tests to run.
+                ArrayList<Future<Boolean>> futures = new ArrayList<Future<Boolean>>();
+                for (Test test : mTests.values()) {
+                    Future<Boolean> future =
+                            executor.submit(
+                                    new Callable<Boolean>() {
+                                        @Override
+                                        public Boolean call() throws Exception {
+                                            return test.run(listener);
+                                        }
+                                    });
+                    futures.add(future);
                 }
+
+                // Wait for all tests to complete.
+                for (Future<Boolean> future : futures) {
+                    try {
+                        future.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        CLog.e("Error waiting for test completion: %s", e.getMessage());
+                    }
+                }
+
                 clean();
-            } catch (JSONException e) {
+            } catch (RuntimeException e) {
                 listener.testRunFailed(e.toString());
-                throw new RuntimeException(e);
+                throw e;
             } catch (DeviceNotAvailableException e) {
                 listener.testRunFailed(e.toString());
                 throw e;
             } finally {
+                executor.shutdown();
                 listener.testRunEnded(
                         System.currentTimeMillis() - startTime, Collections.emptyMap());
             }
@@ -201,17 +229,24 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
         }
     }
 
-    TreeMap<String, JSONObject> loadTests() throws IOException, JSONException {
-        TreeMap<String, JSONObject> allTests = new TreeMap<String, JSONObject>();
+    TreeMap<String, Test> loadTests() throws IOException, JSONException {
+        TreeMap<String, Test> allTests = new TreeMap<String, Test>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
             JSONObject jsonData = new JSONObject(FileUtil.readStringFromFile(jsonFile));
             for (Iterator<?> it = jsonData.keys(); it.hasNext(); ) {
                 String name = (String) it.next();
-                allTests.put(name, jsonData.getJSONObject(name));
+                Test test =
+                        new Test() {
+                            {
+                                mName = name;
+                                mJson = jsonData.getJSONObject(name);
+                            }
+                        };
+                allTests.put(name, test);
             }
         }
 
-        TreeMap<String, JSONObject> shardedTests = new TreeMap<String, JSONObject>();
+        TreeMap<String, Test> shardedTests = new TreeMap<String, Test>();
         Queue<String> dependencyQueue = new ArrayDeque<>();
 
         // Select tests for this shard based on index modulo shardCount
@@ -230,8 +265,8 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
         // Include dependencies recursively
         while (!dependencyQueue.isEmpty()) {
             String testName = dependencyQueue.remove();
-            JSONObject test = allTests.get(testName);
-            JSONArray dependencies = test.optJSONArray("dependencies");
+            Test test = allTests.get(testName);
+            JSONArray dependencies = test.mJson.optJSONArray("dependencies");
             for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
                 String depName = dependencies.getString(i);
                 if (!shardedTests.containsKey(depName)) {
@@ -244,60 +279,67 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
         return shardedTests;
     }
 
-    Boolean runTest(String name, JSONObject test, ITestInvocationListener listener)
-            throws JSONException, DeviceNotAvailableException {
-        if (mTestResults.containsKey(name)) {
-            return mTestResults.get(name);
-        }
+    class Test {
+        synchronized Boolean run(ITestInvocationListener listener)
+                throws JSONException, DeviceNotAvailableException {
+            // Check if the test has already completed (e.g., as a dependency of another test)
+            if (mResult.isPresent()) {
+                return mResult.get();
+            }
 
-        String error = null;
-        JSONArray dependencies = test.optJSONArray("dependencies");
-        for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
-            String dep = dependencies.getString(i);
-            if (!runTest(dep, mTests.get(dep), listener)) {
-                error = "Dependency '" + dep + "' failed";
-                break;
-            }
-        }
-
-        TestDescription testId = TestDescription.fromString(name);
-        try {
-            if (error == null) {
-                CLog.i("Running ART test %s", name);
-            }
-            listener.testStarted(testId);
-            if (error == null) {
-                error = adbPush(test);
-            }
-            if (error == null) {
-                error = adbShell(test);
-            }
-        } catch (JSONException | DeviceNotAvailableException e) {
-            error = e.toString();
-            throw e;
-        } finally {
-            // Check if it might be an issue with the device.
-            if (error != null) {
-                if (!adbPing()) {
-                    error = "Device unavailable\n---\n" + error;
-                    CLog.e("Device unavailable, sleep...");
-                    try {
-                        TimeUnit.SECONDS.sleep(100);
-                    } catch (InterruptedException e) {
-                        CLog.e("InterruptedException");
-                    }
-                    if (!adbPing()) {
-                        // Still unavailable, give up on remaining tests.
-                        throw new DeviceNotAvailableException();
-                    }
+            String error = null;
+            JSONArray dependencies = mJson.optJSONArray("dependencies");
+            for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
+                String dep = dependencies.getString(i);
+                if (!mTests.get(dep).run(listener)) {
+                    error = "Dependency '" + dep + "' failed";
+                    break;
                 }
-                listener.testFailed(testId, FailureDescription.create(error));
             }
 
-            listener.testEnded(testId, Collections.emptyMap());
-            mTestResults.put(name, (error == null));
+            TestDescription testId = TestDescription.fromString(mName);
+            try {
+                if (error == null) {
+                    CLog.i("Running ART test %s", mName);
+                }
+                listener.testStarted(testId);
+                if (error == null) {
+                    error = adbPush(mJson);
+                }
+                if (error == null) {
+                    error = adbShell(mJson);
+                }
+            } catch (JSONException | DeviceNotAvailableException e) {
+                error = e.toString();
+                throw e;
+            } finally {
+                // Check if it might be an issue with the device.
+                if (error != null) {
+                    if (!adbPing()) {
+                        error = "Device unavailable\n---\n" + error;
+                        CLog.e("Device unavailable, sleep...");
+                        try {
+                            TimeUnit.SECONDS.sleep(100);
+                        } catch (InterruptedException e) {
+                            CLog.e("InterruptedException");
+                        }
+                        if (!adbPing()) {
+                            // Still unavailable, give up on remaining tests.
+                            throw new DeviceNotAvailableException();
+                        }
+                    }
+                    listener.testFailed(testId, FailureDescription.create(error));
+                }
+
+                listener.testEnded(testId, Collections.emptyMap());
+                mResult = Optional.of(error == null);
+            }
+            return error == null;
         }
-        return error == null;
+
+        String mName;
+        JSONObject mJson;
+        Optional<Boolean> mResult = Optional.empty();
     }
 
     void clean() throws DeviceNotAvailableException {
