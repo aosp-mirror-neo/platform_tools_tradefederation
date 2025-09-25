@@ -92,7 +92,7 @@ import java.util.UUID;
 public class RemoteInvocationExecution extends InvocationExecution {
 
     public static final String START_FEATURE_SERVER = "START_FEATURE_SERVER";
-    public static final long PUSH_TF_TIMEOUT = 150000L;
+    public static final long PUSH_TF_TIMEOUT = 300000L;
     public static final long PULL_RESULT_TIMEOUT = 180000L;
     public static final long REMOTE_PROCESS_RUNNING_WAIT = 15000L;
     public static final long LAUNCH_EXTRA_DEVICE = 15 * 60 * 1000L;
@@ -283,6 +283,7 @@ public class RemoteInvocationExecution extends InvocationExecution {
         // Push Tradefed to the remote
         int attempt = 0;
         boolean result = false;
+        CLog.d("Push %d bytes to remote host.", FileUtil.sizeOfDirectory(tfToPush));
         while (!result && attempt < MAX_PUSH_TF_ATTEMPTS) {
             result =
                     RemoteFileUtil.pushFileToRemote(
