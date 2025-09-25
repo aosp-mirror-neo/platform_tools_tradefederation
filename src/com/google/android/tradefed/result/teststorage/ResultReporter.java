@@ -211,6 +211,8 @@ public class ResultReporter
     private static final ImmutableSet<String> TEST_PROPERTIES_MIGRATION =
             ImmutableSet.of("board", "model", "sku", "account_id");
 
+    private static final String ACCOUNT_ID = "account_id";
+
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
 
@@ -1962,7 +1964,9 @@ public class ResultReporter
             }
         }
         for (Property migrationProperty : mMigrationTestProperties) {
-            result.add(migrationProperty);
+            if (!ACCOUNT_ID.equals(migrationProperty.getName())) {
+                result.add(migrationProperty);
+            }
         }
         return result;
     }
