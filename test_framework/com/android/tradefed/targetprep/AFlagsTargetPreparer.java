@@ -16,6 +16,7 @@
 package com.android.tradefed.targetprep;
 
 import com.android.tradefed.config.Option;
+import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
@@ -55,6 +56,7 @@ import java.util.stream.Stream;
  * <p>Example usage: {@code --flag-value namespace/flag_name=true --flag-value
  * other_namespace/another_flag=false}.
  */
+@OptionClass(alias = "aflags")
 public class AFlagsTargetPreparer extends BaseTargetPreparer {
     @Option(name = "flag-value", description = "Additional flag values to apply. Can be repeated.")
     private List<String> mFlagValues = new ArrayList<>();
