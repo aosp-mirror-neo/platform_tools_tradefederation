@@ -132,8 +132,16 @@ public class ContentAnalysisResults {
                 + modifiedModules
                 + ", buildKeyChanges="
                 + buildKeyChanges
+                + ", deviceImageChanges="
+                + deviceImageChanges
                 + ", unchangedModules="
                 + unchangedModules
+                + ", modifiedModuleNames="
+                + modifiedModuleNames
+                + ", imageToDigest="
+                + imageToDigest
+                + ", artifactToDigest="
+                + artifactToDigest
                 + "]";
     }
 

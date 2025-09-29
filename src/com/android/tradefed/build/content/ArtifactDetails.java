@@ -87,11 +87,9 @@ public class ArtifactDetails {
             }
             Map<String, ArtifactFileDescriptor> mappingBase =
                     base.details.stream()
-                            .map(e -> e)
                             .collect(Collectors.toMap(e -> e.path, e -> e));
             Map<String, ArtifactFileDescriptor> mappingCurrent =
                     current.details.stream()
-                            .map(e -> e)
                             .collect(Collectors.toMap(e -> e.path, e -> e));
             List<ArtifactFileDescriptor> affected = new ArrayList<>();
             int modified = 0;

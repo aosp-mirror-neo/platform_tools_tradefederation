@@ -87,6 +87,8 @@ public class BuildAnalysis {
                 + mHasTestsArtifacts
                 + ", mHasChangesInTests="
                 + mHasChangesInTests
+                + ", mUnchangedModules="
+                + mUnchangedModules
                 + ", imageDigests="
                 + mImageToDigest
                 + ", artifactDigests="

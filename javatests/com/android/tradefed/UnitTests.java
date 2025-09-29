@@ -34,6 +34,7 @@ import com.android.tradefed.build.content.ArtifactDetailsTest;
 import com.android.tradefed.build.content.ContentAnalysisResultsTest;
 import com.android.tradefed.build.content.DeviceImagePartitionTest;
 import com.android.tradefed.build.content.DeviceMerkleTreeTest;
+import com.android.tradefed.build.content.ImageContentAnalyzerTest;
 import com.android.tradefed.build.content.TestContentAnalyzerTest;
 import com.android.tradefed.cache.MerkleTreeTest;
 import com.android.tradefed.cache.UploadManifestTest;
@@ -565,6 +566,7 @@ import org.junit.runners.Suite.SuiteClasses;
     ContentAnalysisResultsTest.class,
     DeviceImagePartitionTest.class,
     DeviceMerkleTreeTest.class,
+    ImageContentAnalyzerTest.class,
     TestContentAnalyzerTest.class,
 
     // cache
