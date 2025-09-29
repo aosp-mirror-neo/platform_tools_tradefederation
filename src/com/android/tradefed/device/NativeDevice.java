@@ -77,6 +77,7 @@ import com.android.tradefed.util.KeyguardControllerState;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.ProcessInfo;
 import com.android.tradefed.util.QuotationAwareTokenizer;
+import com.android.tradefed.util.RunInterruptedException;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.SizeLimitedOutputStream;
@@ -400,6 +401,8 @@ public class NativeDevice
         private File mPipeAsInput; // Used in pushFile, uses local file as input to "content write"
         private OutputStream mPipeToOutput; // Used in pullFile, to pipe content from "content read"
         private OutputStream mPipeToError;
+        private IShellOutputReceiver mReceiver;
+        private boolean mIsCancelByReceiver;
 
         AdbShellAction(
                 String[] cmd,
@@ -413,6 +416,8 @@ public class NativeDevice
             mPipeToError = pipeToError;
             mTimeout = timeout;
             mOutputResponseTimeout = 0;
+            mReceiver = null;
+            mIsCancelByReceiver = false;
         }
 
         AdbShellAction(
@@ -428,9 +433,30 @@ public class NativeDevice
             mPipeToError = pipeToError;
             mTimeout = timeout;
             mOutputResponseTimeout = outputTimeout;
+            mReceiver = null;
+            mIsCancelByReceiver = false;
+        }
+
+        AdbShellAction(
+                String[] cmd,
+                File pipeAsInput,
+                OutputStream pipeToOutput,
+                OutputStream pipeToError,
+                long timeout,
+                long outputTimeout,
+                IShellOutputReceiver receiver) {
+            mCmd = cmd;
+            mPipeAsInput = pipeAsInput;
+            mPipeToOutput = pipeToOutput;
+            mPipeToError = pipeToError;
+            mTimeout = timeout;
+            mOutputResponseTimeout = outputTimeout;
+            mReceiver = receiver;
+            mIsCancelByReceiver = false;
         }
 
         private void logExceptionAndOutput(CommandResult result) {
+            CLog.w("Adb Shell Command : %s", String.join(" ", mCmd));
             CLog.w("Adb Shell Command exited with status: %s", result.getStatus().toString());
             CLog.w("Adb Shell Command shell stdout:\n%s\n", result.getStdout());
             CLog.w("Adb Shell Command shell stderr:\n%s\n", result.getStderr());
@@ -438,20 +464,74 @@ public class NativeDevice
 
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
-            if (mPipeAsInput != null) {
-                mResult = getRunUtil().runTimedCmdWithInputRedirect(mTimeout, mPipeAsInput, mCmd);
-            } else if (mOutputResponseTimeout != 0) {
-                mResult =
-                        getRunUtil()
-                                .runTimedCmdWithOutputMonitor(
-                                        mTimeout,
-                                        mOutputResponseTimeout,
-                                        mPipeToOutput,
-                                        mPipeToError,
-                                        mCmd);
-            } else {
-                mResult = getRunUtil().runTimedCmd(mTimeout, mPipeToOutput, mPipeToError, mCmd);
+            final Thread commandThread = Thread.currentThread();
+
+            Thread watcher = null;
+            if (mReceiver != null) {
+                // Create a watcher to monite if receiver.cancel() is called.
+                watcher =
+                        new Thread(
+                                () -> {
+                                    try {
+                                        // Poll the receiver's cancellation status.
+                                        while (!mReceiver.isCancelled()) {
+                                            // If the main command thread dies for any reason, the
+                                            // watcher can exit.
+                                            if (!commandThread.isAlive()) {
+                                                return;
+                                            }
+                                            Thread.sleep(250); // Poll every 250ms
+                                        }
+                                        // If we get here, the receiver was cancelled.
+                                        CLog.i(
+                                                "Watcher: Receiver was cancelled. Interrupting"
+                                                        + " command thread.");
+                                        RunUtil.getDefault()
+                                                .interrupt(
+                                                        commandThread,
+                                                        "Cancelled by receiver watcher");
+                                        mIsCancelByReceiver = true;
+                                    } catch (InterruptedException e) {
+                                        // The watcher itself was interrupted, which is fine. Just
+                                        // exit.
+                                        Thread.currentThread().interrupt();
+                                    }
+                                });
+                watcher.setName("AdbShellAction-Watcher");
+                watcher.setDaemon(true); // Ensure it doesn't block JVM exit
+                watcher.start();
             }
+            try {
+                if (mPipeAsInput != null) {
+                    mResult =
+                            getRunUtil().runTimedCmdWithInputRedirect(mTimeout, mPipeAsInput, mCmd);
+                } else if (mOutputResponseTimeout != 0) {
+                    mResult =
+                            getRunUtil()
+                                    .runTimedCmdWithOutputMonitor(
+                                            mTimeout,
+                                            mOutputResponseTimeout,
+                                            mPipeToOutput,
+                                            mPipeToError,
+                                            mCmd);
+                } else {
+                    mResult = getRunUtil().runTimedCmd(mTimeout, mPipeToOutput, mPipeToError, mCmd);
+                }
+            } catch (RunInterruptedException e) {
+                // CATCH THE FRAMEWORK-SPECIFIC EXCEPTION!
+                // This is the expected outcome when our watcher interrupts the thread.
+                CLog.w("RunUtil call was interrupted as expected by watcher: %s", e.getMessage());
+                // We must create a result object since the RunUtil call did not complete.
+                // The status doesn't matter much here because we'll check the
+                // mWasCancelledByReceiver flag.
+                if (mIsCancelByReceiver) {
+                    mResult = new CommandResult(CommandStatus.SUCCESS);
+                } else {
+                    mResult = new CommandResult(CommandStatus.EXCEPTION);
+                    mResult.setStderr(e.getMessage());
+                }
+            }
+
             if (mResult.getStatus() == CommandStatus.EXCEPTION) {
                 logExceptionAndOutput(mResult);
                 throw new IOException(mResult.getStderr());
@@ -1142,7 +1222,8 @@ public class NativeDevice
                         outputReceiverStream,
                         outputReceiverStream,
                         timeUnit.toMillis(maxTimeoutForCommand),
-                        timeUnit.toMillis(maxTimeToOutputShellResponse));
+                        timeUnit.toMillis(maxTimeToOutputShellResponse),
+                        receiver);
         try {
             performDeviceAction(String.format("shell %s", fullCmd[4]), adbAction, retryAttempts);
         } catch (DeviceNotAvailableException e) {
@@ -1155,7 +1236,7 @@ public class NativeDevice
             postProcessExitStatus(adbAction.mResult);
         }
         if (!CommandStatus.SUCCESS.equals(adbAction.mResult.getStatus())) {
-            CLog.e("Execute Shell Command (%s) failed.");
+            CLog.e("Execute Shell Command (%s) failed.", command);
         }
     }
 
