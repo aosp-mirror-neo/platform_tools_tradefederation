@@ -44,18 +44,19 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
 /* Generic test runner for ART.
@@ -174,21 +175,14 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
             try {
                 clean();
                 executor = Executors.newFixedThreadPool(4);
+                final ExecutorService executorRef = executor;
                 listener.testRunStarted("ArtTest", mTests.size());
 
                 // Schedule all tests to run.
-                ArrayList<Future<Boolean>> futures = new ArrayList<Future<Boolean>>();
-                for (Test test : mTests.values()) {
-                    Future<Boolean> future =
-                            executor.submit(
-                                    new Callable<Boolean>() {
-                                        @Override
-                                        public Boolean call() throws Exception {
-                                            return test.run(listener);
-                                        }
-                                    });
-                    futures.add(future);
-                }
+                List<Future<Boolean>> futures =
+                        mTests.values().stream()
+                                .map(test -> executorRef.submit(() -> test.run(listener)))
+                                .collect(Collectors.toList());
 
                 // Wait for all tests to complete.
                 for (Future<Boolean> future : futures) {
@@ -207,7 +201,9 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
                 listener.testRunFailed(e.toString());
                 throw e;
             } finally {
-                executor.shutdown();
+                if (executor != null) {
+                    executor.shutdown();
+                }
                 listener.testRunEnded(
                         System.currentTimeMillis() - startTime, Collections.emptyMap());
             }
