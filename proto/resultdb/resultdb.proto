@@ -28,6 +28,7 @@ import public "tools/tradefederation/core/proto/resultdb/invocation.proto";
 import public "tools/tradefederation/core/proto/resultdb/predicate.proto";
 import public "tools/tradefederation/core/proto/resultdb/root_invocation.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_aggregation.proto";
+import public "tools/tradefederation/core/proto/resultdb/test_exoneration.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_result.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_variant.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_verdict.proto";
@@ -225,66 +226,6 @@ service ResultDB {
   // Queries invocation artifacts that match a search_string for given variant_union_hash and artifact_id.
   rpc QueryInvocationVariantArtifacts(QueryInvocationVariantArtifactsRequest) returns (
     QueryInvocationVariantArtifactsResponse) {}
-}
-
-// A request message for the GetRootInvocation RPC.
-message GetRootInvocationRequest {
-  // The name of the root invocation to read, see RootInvocation.name.
-  string name = 1 [ (google.api.field_behavior) = REQUIRED ];
-}
-
-// A request message for the GetWorkUnit RPC.
-message GetWorkUnitRequest {
-  // The name of the work unit to read, see WorkUnit.name.
-  string name = 1 [ (google.api.field_behavior) = REQUIRED ];
-
-  // The view to apply to the returned work unit. Defaults to BASIC.
-  WorkUnitView view = 2;
-}
-
-// A request message for the BatchGetWorkUnits RPC.
-//
-// As per google.aip.dev/231, this request will be handled atomically:
-// either it will succeed in reading all nominated work units or it will fail.
-message BatchGetWorkUnitsRequest {
-  // The parent root invocation shared by all work units being retrieved.
-  // Format: rootInvocations/{root_invocation_id}
-  // The parent of all work units specified in `names` must match this
-  // field.
-  // Required.
-  string parent = 1 [ (google.api.field_behavior) = REQUIRED ];
-
-  // The names of the work units to retrieve.
-  // A maximum of 500 work units can be retrieved in a batch.
-  // Format: rootInvocations/{root_invocation_id}/workUnits/{work_unit_id}
-  repeated string names = 2 [ (google.api.field_behavior) = REQUIRED ];
-
-  // The view to apply to returned work units. Using the view BASIC is
-  // strongly recommended as response size limits could be easily exceeded
-  // if FULL is used (as each work unit's extended properties may be up to
-  // ~2MB). Defaults to BASIC.
-  WorkUnitView view = 3;
-}
-
-// WorkUnitView represents the set of work unit fields to be retrieved.
-// See https://google.aip.dev/157.
-enum WorkUnitView {
-  // The default / unset value. The API will default to the basic view.
-  WORK_UNIT_VIEW_UNSPECIFIED = 0;
-
-  // Include basic information about the work unit. Excludes
-  // extended_properties.
-  WORK_UNIT_VIEW_BASIC = 1;
-
-  // Include all fields, including extended_properties.
-  WORK_UNIT_VIEW_FULL = 2;
-}
-
-// A response message for the BatchGetWorkUnits RPC.
-message BatchGetWorkUnitsResponse {
-  // The work units requested. These will appear in the same order as
-  // names in the request, i.e. work_units[i] corresponds to names[i].
-  repeated WorkUnit work_units = 1;
 }
 
 // A request message for GetInvocation RPC.
@@ -507,8 +448,9 @@ message GetArtifactRequest {
 
 // A request message for ListArtifacts RPC.
 message ListArtifactsRequest {
-  // Name of the parent, e.g. an invocation (see Invocation.name) or
-  // a test result (see TestResult.name).
+  // Name of the parent, e.g. a work unit (see WorkUnit.name),
+  // a test result (see TestResult.name), or a legacy invocation name
+  // (see Invocation.name).
   string parent = 1 [ (google.api.field_behavior) = REQUIRED ];
 
   // The maximum number of artifacts to return.
@@ -534,7 +476,7 @@ message ListArtifactsResponse {
   // A token, which can be sent as `page_token` to retrieve the next page.
   // If this field is omitted, there were no subsequent pages at the time of
   // request.
-  // If the invocation is not finalized, more results may appear later.
+  // If the work unit is not finalized, more results may appear later.
   string next_page_token = 2;
 }
 
@@ -669,13 +611,19 @@ message QueryArtifactFailureOnlyLinesResponse {
 }
 
 // A request message for QueryTestVariants RPC.
-// Next id: 10.
+// Next id: 12.
 message QueryTestVariantsRequest {
+
+  // The name of the root invocation to retrieve test variants from, see RootInvocation.name.
+  // Should be empty if invocations field is specified.
+  string parent = 11 [ (google.api.field_behavior) = REQUIRED ];
+
   // Retrieve test verdicts included in these invocations, directly or indirectly
   // (via Invocation.included_invocations).
   //
   // As of April 2024, a maximum of one invocation may be specified.
-  repeated string invocations = 2;
+  // DEPRECATED: Use parent instead.
+  repeated string invocations = 2 [ deprecated = true ];
 
   // A test variant must satisfy this predicate.
   TestVariantPredicate predicate = 6;
@@ -832,6 +780,7 @@ message QueryRunTestVerdictsResponse {
 }
 
 // A request message for BatchGetTestVariants RPC.
+// Next ID: 5.
 message BatchGetTestVariantsRequest {
   message TestVariantIdentifier {
     // Option 1: Structured test identifier.
@@ -853,8 +802,13 @@ message BatchGetTestVariantsRequest {
     string variant_hash = 2 [ (google.api.field_behavior) = REQUIRED ];
   }
 
+  // Name of the root invocation that the test variants are in, see RootInvocation.name.
+  // Should be empty if invocation is specified.
+  string parent = 4 [ (google.api.field_behavior) = REQUIRED ];
+
   // Name of the invocation that the test variants are in.
-  string invocation = 1;
+  // DEPRECATED: Use parent instead.
+  string invocation = 1 [ deprecated = true ];
 
   // A list of test variants to query. Size is limited to 500.
   // Any request for more than 500 variants will return an error.

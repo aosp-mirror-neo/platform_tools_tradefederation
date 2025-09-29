@@ -19,6 +19,7 @@ syntax = "proto3";
 package luci.resultdb.v1;
 
 import public "tools/tradefederation/core/proto/resultdb/common.proto";
+import public "tools/tradefederation/core/proto/resultdb/test_exoneration.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_metadata.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_result.proto";
 
