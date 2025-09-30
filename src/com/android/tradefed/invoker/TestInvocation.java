@@ -526,12 +526,17 @@ public class TestInvocation implements ITestInvocation {
                         scheduleListener.releaseDevices(context, devicesStates);
                     }
                 }
-                // Log count of allocated devices for test accounting
-                addInvocationMetric(
-                        InvocationMetricKey.DEVICE_COUNT, context.getNumDevicesAllocated());
-                // Track the timestamp when we are done with devices
-                addInvocationMetric(
-                        InvocationMetricKey.DEVICE_DONE_TIMESTAMP, System.currentTimeMillis());
+                long deviceDoneTimestamp = System.currentTimeMillis();
+                if (deviceDoneTimestamp > 0) {
+                    // Log count of allocated devices for test accounting
+                    addInvocationMetric(
+                            InvocationMetricKey.DEVICE_COUNT, context.getNumDevicesAllocated());
+                    // Track the timestamp when we are done with devices.
+                    addInvocationMetric(
+                            InvocationMetricKey.DEVICE_DONE_TIMESTAMP, deviceDoneTimestamp);
+                } else {
+                    CLog.w("Device done timestamp is 0. Skipping logging device usage metrics.");
+                }
             }
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope(InvocationMetricKey.test_cleanup.name())) {
