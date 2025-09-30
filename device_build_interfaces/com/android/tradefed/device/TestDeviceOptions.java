@@ -442,6 +442,12 @@ public class TestDeviceOptions {
                             + " tests against an oxygenation device.")
     private boolean mUseOxygenationDevice = false;
 
+    @Option(
+            name = "create-with-ho",
+            description =
+                    "Indicates whether create the instance via the Host Orchestrator REST API")
+    private boolean mCreateWithHO = false;
+
     @Option(name = "force-evaluate-connection")
     private boolean mForceEvaluateDeviceConnection = false;
 
@@ -1080,6 +1086,10 @@ public class TestDeviceOptions {
     /** Returns true if it's to lease oxygenation devices in OmniLab's infra. False otherwise. */
     public boolean useOxygenationDevice() {
         return mUseOxygenationDevice;
+    }
+
+    public boolean getCreateWithHO() {
+        return mCreateWithHO;
     }
 
     /** Helper to return true if the device is launched by cvd, false otherwise. */
