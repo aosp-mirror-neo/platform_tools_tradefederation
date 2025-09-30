@@ -18,6 +18,7 @@ package com.android.tradefed.util;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +49,10 @@ public final class ITestDeviceMockHelper {
 
     public void mockGetMaxNumberOfUsersSupported(int max) throws Exception {
         when(mMockDevice.getMaxNumberOfUsersSupported()).thenReturn(max);
+    }
+
+    public void mockGetRemainingCreatableUserCount(String userType, int count) throws Exception {
+        when(mMockDevice.getRemainingCreatableUserCount(eq(userType))).thenReturn(count);
     }
 
     public void mockSwitchUser(int userId) throws Exception {

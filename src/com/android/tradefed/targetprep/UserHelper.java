@@ -25,7 +25,6 @@ import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.base.Strings;
 
-import java.util.ArrayList;
 import java.util.Map;
 
 // Not directly unit tested, but its clients are
@@ -38,6 +37,7 @@ public final class UserHelper {
     /** System property used to indicate which Android user is running the test. */
     public static final String RUN_TESTS_AS_USER_KEY = "RUN_TESTS_AS_USER";
 
+    /** Create a new secondary user, or reuse an existing one if applicable. */
     public static int createUser(ITestDevice device, boolean reuseTestUser)
             throws DeviceNotAvailableException, TargetSetupError {
         if (reuseTestUser) {
@@ -80,29 +80,43 @@ public final class UserHelper {
         return device.getCurrentUser();
     }
 
+    /**
+     * If we cannot add any more secondary users, deletes old users to try to make space for one.
+     */
     private static void cleanupOldUsersIfLimitReached(ITestDevice device)
             throws DeviceNotAvailableException {
-        ArrayList<Integer> tfCreatedUsers = new ArrayList<>();
-        int existingUsersCount = 0;
+
+        if (canAddAnotherSecondaryUser(device)) {
+            return;
+        }
+
+        // We cannot add another secondary user. Try to free up space by removing stale users.
         for (Map.Entry<Integer, UserInfo> entry : device.getUserInfos().entrySet()) {
             UserInfo userInfo = entry.getValue();
             String userName = userInfo.userName();
+            if (userName != null && userName.equals(TF_CREATED_USER)) {
+                int userId = entry.getKey();
+                device.removeUser(userId);
+            }
+        }
+    }
 
+    private static boolean canAddAnotherSecondaryUser(ITestDevice device)
+            throws DeviceNotAvailableException {
+        if (device.getApiLevel() >= 37) {
+            return device.getRemainingCreatableUserCount("android.os.usertype.full.SECONDARY") > 0;
+        }
+
+        // For older devices, use older historical heuristic.
+        int existingUsersCount = 0;
+        for (Map.Entry<Integer, UserInfo> entry : device.getUserInfos().entrySet()) {
+            UserInfo userInfo = entry.getValue();
             if (!userInfo.isGuest()) {
                 // Guest users don't fall under the quota.
                 existingUsersCount++;
             }
-            if (userName != null && userName.equals(TF_CREATED_USER)) {
-                tfCreatedUsers.add(entry.getKey());
-            }
         }
-
-        if (existingUsersCount >= device.getMaxNumberOfUsersSupported()) {
-            // Reached the maximum number of users allowed. Remove stale users to free up space.
-            for (int userId : tfCreatedUsers) {
-                device.removeUser(userId);
-            }
-        }
+        return existingUsersCount < device.getMaxNumberOfUsersSupported();
     }
 
     private static Integer findExistingTradefedUser(ITestDevice device)
