@@ -294,11 +294,11 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
             }
 
             TestDescription testId = TestDescription.fromString(mName);
+            long startTime = System.currentTimeMillis();
             try {
                 if (error == null) {
                     CLog.i("Running ART test %s", mName);
                 }
-                listener.testStarted(testId);
                 if (error == null) {
                     error = adbPush(mJson);
                 }
@@ -309,6 +309,7 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
                 error = e.toString();
                 throw e;
             } finally {
+                long endTime = System.currentTimeMillis();
                 // Check if it might be an issue with the device.
                 if (error != null) {
                     if (!adbPing()) {
@@ -324,10 +325,14 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
                             throw new DeviceNotAvailableException();
                         }
                     }
-                    listener.testFailed(testId, FailureDescription.create(error));
                 }
-
-                listener.testEnded(testId, Collections.emptyMap());
+                synchronized (listener) {
+                    listener.testStarted(testId, startTime);
+                    if (error != null) {
+                        listener.testFailed(testId, FailureDescription.create(error));
+                    }
+                    listener.testEnded(testId, endTime, Collections.emptyMap());
+                }
                 mResult = Optional.of(error == null);
             }
             return error == null;
