@@ -165,12 +165,11 @@ public class CrosDutTopologyPreparer extends BaseTargetPreparer {
                 }
                 String dKey = dParts[0].trim();
                 String dVal = dParts[1].trim();
-                context.addInvocationAttribute(dKey, dVal);
-                CLog.d("Add invocation attribute: '%s' = '%s'", dKey, dVal);
-            } else {
-                testInfo.properties().put(key, value);
-                CLog.d("Set property: '%s' = '%s'", key, value);
+                key = "invocation_data." + dKey;
+                value = dVal;
             }
+            testInfo.properties().put(key, value);
+            CLog.d("Set property: '%s' = '%s'", key, value);
         }
     }
 }

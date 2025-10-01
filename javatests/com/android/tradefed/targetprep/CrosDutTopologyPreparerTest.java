@@ -114,12 +114,12 @@ public class CrosDutTopologyPreparerTest {
         assertTrue(command.contains("-config_name"));
         assertTrue(command.contains("-mh"));
         assertTrue(command.contains("-tf"));
-
         assertEquals("/tmp/mobly_config.yaml", mTestInfo.properties().get("-c"));
         assertEquals("dut1:5555", mTestInfo.properties().get("-s"));
         assertEquals("value1", mTestInfo.properties().get("extra_prop"));
-        assertEquals("localhost", mContext.getAttributes().get("lsnexus_primary.host").get(0));
-        assertEquals("9100", mContext.getAttributes().get("lsnexus_primary.port").get(0));
+        assertEquals(
+                "localhost", mTestInfo.properties().get("invocation_data.lsnexus_primary.host"));
+        assertEquals("9100", mTestInfo.properties().get("invocation_data.lsnexus_primary.port"));
     }
 
     @Test
@@ -210,8 +210,9 @@ public class CrosDutTopologyPreparerTest {
         assertEquals("/tmp/mobly_config.yaml", mTestInfo.properties().get("-c"));
         assertEquals("dut1:5555", mTestInfo.properties().get("-s"));
         assertEquals("value1", mTestInfo.properties().get("extra_prop"));
-        assertEquals("localhost", mContext.getAttributes().get("lsnexus_primary.host").get(0));
-        assertEquals("9100", mContext.getAttributes().get("lsnexus_primary.port").get(0));
+        assertEquals(
+                "localhost", mTestInfo.properties().get("invocation_data.lsnexus_primary.host"));
+        assertEquals("9100", mTestInfo.properties().get("invocation_data.lsnexus_primary.port"));
     }
 
     @Test
@@ -223,9 +224,10 @@ public class CrosDutTopologyPreparerTest {
 
         mPreparer.parseOutput(mTestInfo, output);
 
-        assertEquals("localhost", mContext.getAttributes().get("lsnexus_primary.host").get(0));
-        assertEquals("9100", mContext.getAttributes().get("lsnexus_primary.port").get(0));
-        assertTrue(mContext.getAttributes().get("malformed_invocation_data") == null);
+        assertEquals(
+                "localhost", mTestInfo.properties().get("invocation_data.lsnexus_primary.host"));
+        assertEquals("9100", mTestInfo.properties().get("invocation_data.lsnexus_primary.port"));
+        assertTrue(mTestInfo.properties().get("invocation_data.malformed_invocation_data") == null);
     }
 
     @Test
