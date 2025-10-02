@@ -20,6 +20,9 @@ package com.android.tradefed.testtype;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -116,15 +119,25 @@ public class ArtTestTest {
         CommandResult success = new CommandResult(CommandStatus.SUCCESS);
         when(mDevice.pushFile(any(), any())).thenReturn(true);
         when(mDevice.pushDir(any(), any())).thenReturn(true);
+        when(mDevice.executeShellV2Command(any(), anyLong(), any(), anyInt())).thenReturn(success);
         when(mDevice.executeShellV2Command(any())).thenReturn(success);
 
         // Run the test.
         mTest.run(info, mListener);
 
         // Check the recorded behaviour of test.  We expected the following commands to be executed:
-        verify(mDevice).executeShellV2Command("rm -rf /data/local/tmp/art/test");
-        verify(mDevice).executeShellV2Command("sh /data/local/tmp/art/setup.sh");
-        verify(mDevice).executeShellV2Command("sh /data/local/tmp/art/test/1f5cdb07/run.sh");
+        verify(mDevice)
+                .executeShellV2Command(
+                        eq("rm -rf /data/local/tmp/art/test"), anyLong(), any(), anyInt());
+        verify(mDevice)
+                .executeShellV2Command(
+                        eq("sh /data/local/tmp/art/setup.sh"), anyLong(), any(), anyInt());
+        verify(mDevice)
+                .executeShellV2Command(
+                        eq("sh /data/local/tmp/art/test/1f5cdb07/run.sh"),
+                        anyLong(),
+                        any(),
+                        anyInt());
     }
 
     @Test

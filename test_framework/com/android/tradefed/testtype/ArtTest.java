@@ -92,6 +92,9 @@ import java.util.zip.ZipFile;
  *  }
  */
 public class ArtTest implements IShardableTest, ITestFilterReceiver {
+    private static final int ADB_TIMEOUT = 900;
+    private static final int ADB_RETRIES = 3;
+
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
     protected Map<String, Test> mTests = new TreeMap<String, Test>();
@@ -397,7 +400,10 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
                 cmdBuilder.append(args.getString(j));
             }
             String cmd = cmdBuilder.toString();
-            CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
+            CommandResult res =
+                    mTestInfo
+                            .getDevice()
+                            .executeShellV2Command(cmd, ADB_TIMEOUT, TimeUnit.SECONDS, ADB_RETRIES);
             if (res.getStatus() != CommandStatus.SUCCESS) {
                 return String.format("stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
             }
