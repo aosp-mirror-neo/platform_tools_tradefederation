@@ -99,21 +99,12 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
     private static final int MODEM_SIMULATOR_VSOCK_CID = 2;
     private static final int MODEM_SIMULATOR_VSOCK_PORT = 9600;
 
-    // These are the host (i.e. the machine running pts-bot) ports on which we
-    // forward Pandora Server, Rootcanal HCI and Control ports of the DUT, and
-    // the modem_simulator port. These ports are not fixed because when
-    // sharding, multiple hosts (or a single host) can share the same physical
-    // resources and are thus determined dynamically.
-    private int hostPandoraServerPort;
-    private int hostHciRootcanalPort;
-    private int hostControlRootcanalPort;
-    private int hostModemSimulatorPort;
-
     // PTS inactivity timeout in seconds.
     // Must be above 60s to avoid conflict with PTS timeout for triggering
     // disconnections. This notably happens on Android which closes GATT but
     // does not explicitly close the underlying BLE ACL link.
     private static final int PTS_INACTIVITY_TIMEOUT = 90;
+    private static final int DEVICE_AVAILABLE_TIMEOUT = 120;
 
     private static final String NATIVE_BLUETOOTH_FLAG =
             "setprop persist.device_config.aconfig_flags.bluetooth.com.android.bluetooth.flags";
@@ -330,26 +321,6 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
         // sysprops' values.
         initSystemPropertiesConfig(testsConfigFile);
 
-        // Forward allocated host Pandora Server port to actual DUT Pandora
-        // Server ports.
-        hostPandoraServerPort = adbForwardPort(testDevice, 0, PANDORA_SERVER_PORT);
-
-        CLog.i("PTS HCI port: %s", getHciPort());
-
-        if (!physical) {
-            // Forward allocated host Rootcanal ports to DUT Rootcanal ports.
-            hostHciRootcanalPort =
-                    adbForwardVsockPort(testDevice, 0, ROOTCANAL_VSOCK_CID, HCI_ROOTCANAL_PORT_CF);
-            hostControlRootcanalPort =
-                    adbForwardVsockPort(
-                            testDevice, 0, ROOTCANAL_VSOCK_CID, CONTROL_ROOTCANAL_PORT_CF);
-
-            // forward host port to DUT modem_simulator vsock
-            hostModemSimulatorPort =
-                    adbForwardVsockPort(
-                            testDevice, 0, MODEM_SIMULATOR_VSOCK_CID, MODEM_SIMULATOR_VSOCK_PORT);
-        }
-
         // List all applicable tests in a sorted fashion.
         String[] allFilteredTests = getAllFilteredTests(testInfo).toArray(new String[0]);
 
@@ -365,14 +336,6 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
 
         // Execute tests.
         runPtsBotTests(tests, testInfo, listener);
-
-        // Remove forwarded ports.
-        adbForwardRemovePort(testDevice, hostPandoraServerPort);
-        if (!physical) {
-            adbForwardRemovePort(testDevice, hostHciRootcanalPort);
-            adbForwardRemovePort(testDevice, hostControlRootcanalPort);
-            adbForwardRemovePort(testDevice, hostModemSimulatorPort);
-        }
 
         // Clean up temp directory.
         if (binTempDir != null) FileUtil.recursiveDelete(binTempDir);
@@ -398,16 +361,6 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
             throw new RuntimeException("Failed to get pts-bot version. Error:\n" + c.getStderr());
         }
         CLog.d("pts-bot version: %s", c.getStdout().trim());
-    }
-
-    /**
-     * The port that the PTS bot writes HCI commands to. When running virtual tests, it is the
-     * Rootcanal HCI port exposed on the host (i.e. the machine running PTS-bot), which corresponds
-     * to the port on which the DUT Rootcanal port is forwarded to. For physical tests, this port is
-     * fixed, which means that sharding cannot be supported.
-     */
-    private int getHciPort() {
-        return physical ? HCI_PROXY_PORT : hostHciRootcanalPort;
     }
 
     private SortedSet<String> getAllFilteredTests(TestInformation testInfo) {
@@ -462,7 +415,7 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
 
     private String[] listPtsBotTestsForProfile(String profile, TestInformation testInfo) {
         try {
-            ProcessBuilder processBuilder = ptsBot(testInfo, "--list", profile);
+            ProcessBuilder processBuilder = ptsBot(testInfo, 0, "--list", profile);
 
             CLog.i("Running command: %s", String.join(" ", processBuilder.command()));
             Process process = processBuilder.start();
@@ -758,14 +711,49 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
         TestDescription testDescription = new TestDescription(profile, testName);
 
         listener.testStarted(testDescription);
-        Log.i(testInfo.getDevice(), "Test Started: " + testName);
+        ITestDevice testDevice = testInfo.getDevice();
+        Log.i(testDevice, "Test Started: " + testName);
 
         boolean success = false;
         boolean inconclusive = false;
 
         int retryCount = 0;
         while (true) {
+            // These are the host (i.e. the machine running pts-bot) ports on which we
+            // forward Pandora Server, Rootcanal HCI and Control ports of the DUT, and
+            // the modem_simulator port. These ports are not fixed because when
+            // sharding, multiple hosts (or a single host) can share the same physical
+            // resources and are thus determined dynamically.
+            int hostPandoraServerPort = 0;
+            int hostHciRootcanalPort = 0;
+            int hostControlRootcanalPort = 0;
+            int hostModemSimulatorPort = 0;
+
             try {
+                // Ensure device is available for testing before retrying.
+                testDevice.waitForDeviceAvailable(DEVICE_AVAILABLE_TIMEOUT);
+                // Forward allocated host Pandora Server port to actual DUT Pandora
+                // Server ports.
+                hostPandoraServerPort = adbForwardPort(testDevice, 0, PANDORA_SERVER_PORT);
+                if (!physical) {
+                    // Forward allocated host Rootcanal ports to DUT Rootcanal ports.
+                    hostHciRootcanalPort =
+                            adbForwardVsockPort(
+                                    testDevice, 0, ROOTCANAL_VSOCK_CID, HCI_ROOTCANAL_PORT_CF);
+                    hostControlRootcanalPort =
+                            adbForwardVsockPort(
+                                    testDevice, 0, ROOTCANAL_VSOCK_CID, CONTROL_ROOTCANAL_PORT_CF);
+                    // forward host port to DUT modem_simulator vsock
+                    hostModemSimulatorPort =
+                            adbForwardVsockPort(
+                                    testDevice,
+                                    0,
+                                    MODEM_SIMULATOR_VSOCK_CID,
+                                    MODEM_SIMULATOR_VSOCK_PORT);
+                }
+                int hciPort = physical ? HCI_PROXY_PORT : hostHciRootcanalPort;
+                CLog.i("PTS HCI port: %d", hciPort);
+
                 // The last three arguments are the Pandora gRPC server port,
                 // the Rootcanal control port which pts-bot provides to
                 // mmi2grpc, and the modem simulator port that is forwarded from
@@ -773,6 +761,7 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
                 ProcessBuilder processBuilder =
                         ptsBot(
                                 testInfo,
+                                hciPort,
                                 testName,
                                 String.valueOf(hostPandoraServerPort),
                                 String.valueOf(hostControlRootcanalPort),
@@ -823,6 +812,22 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
             } catch (Exception e) {
                 CLog.e(e);
                 CLog.e("Cannot run pts-bot, make sure it is properly installed");
+            } finally {
+                // Remove forwarded ports.
+                for (int port :
+                        Set.of(
+                                hostPandoraServerPort,
+                                hostControlRootcanalPort,
+                                hostModemSimulatorPort,
+                                hostPandoraServerPort)) {
+                    if (port != 0) {
+                        try {
+                            adbForwardRemovePort(testDevice, port);
+                        } catch (DeviceNotAvailableException e) {
+                            CLog.e(e);
+                        }
+                    }
+                }
             }
 
             if (success) break;
@@ -833,7 +838,7 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
             if (retryCount == 1) flakyCount++;
             if (flakyCount <= maxFlakyTests && retryCount <= maxRetriesPerTest) {
                 Log.w(
-                        testInfo.getDevice(),
+                        testDevice,
                         String.format(
                                 "Test %s: %s, retrying [count=%s]",
                                 inconclusive ? "Inconclusive" : "Failed", testName, retryCount));
@@ -843,9 +848,9 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
         }
 
         if (success) {
-            Log.i(testInfo.getDevice(), "Test Ended [Success]: " + testName);
+            Log.i(testDevice, "Test Ended [Success]: " + testName);
         } else {
-            Log.e(testInfo.getDevice(), "Test Ended [Failed]: " + testName);
+            Log.e(testDevice, "Test Ended [Failed]: " + testName);
             listener.testFailed(
                     testDescription,
                     String.format(
@@ -860,14 +865,14 @@ public class PtsBotTest implements IRemoteTest, ITestFilterReceiver, IShardableT
         return success;
     }
 
-    private ProcessBuilder ptsBot(TestInformation testInfo, String... args) {
+    private ProcessBuilder ptsBot(TestInformation testInfo, int hciPort, String... args) {
         List<String> command = new ArrayList<>();
 
         command.add(ptsBotPath.getPath());
         command.add("--config");
         command.add(testsConfigFile.getPath());
         command.add("--hci");
-        command.add(String.valueOf(getHciPort()));
+        command.add(String.valueOf(hciPort));
         command.add("--inactivity-timeout");
         command.add(String.valueOf(PTS_INACTIVITY_TIMEOUT));
 
