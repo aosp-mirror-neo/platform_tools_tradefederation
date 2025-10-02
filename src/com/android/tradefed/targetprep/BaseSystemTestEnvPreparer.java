@@ -16,17 +16,26 @@
 
 package com.android.tradefed.targetprep;
 
+import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.TestDeviceState;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.RunUtil;
 
 /** Reboots to base system test environment */
 @OptionClass(alias = "base-system-test-env-preparer")
 public class BaseSystemTestEnvPreparer extends BaseTargetPreparer {
+
+    @Option(
+        name = "skip-vendor-mount",
+        description =
+                "Do not mount vendor partitions if set to true, otherwise, mount vendor and "
+                + "vendor_dlkm during setup.")
+    private boolean mSkipVendorMount = false;
 
     @Override
     public void setUp(TestInformation testInfo)
@@ -60,8 +69,30 @@ public class BaseSystemTestEnvPreparer extends BaseTargetPreparer {
         RunUtil.getDefault().sleep(15 * 1000);
 
         CLog.i("Stop recovery");
-        res = device.executeAdbCommand("shell", "stop", "recovery");
-        CLog.i("Stop recovery res=%s", res);
+        CommandResult ret = device.executeShellV2Command("stop recovery");
+        if (ret.getExitCode() != 0) {
+            CLog.e("Failed to stop recovery: %s", ret.getStderr());
+            device.reboot();
+            throw new TargetSetupError("Failed to stop recovery");
+        }
+
+        if (mSkipVendorMount) {
+            CLog.i("Vendor mounting skipped.");
+        } else {
+            CLog.i("Mounting vendor partitions");
+            ret = device.executeShellV2Command("bestie -m /vendor /vendor");
+            if (ret.getExitCode() != 0) {
+                CLog.e("Mounting vendor failed: %s", ret.getStderr());
+                device.reboot();
+                throw new TargetSetupError("Failed to mount /vendor");
+            }
+            ret = device.executeShellV2Command("bestie -m /vendor_dlkm /vendor_dlkm");
+            if (ret.getExitCode() != 0) {
+                CLog.e("Mounting vendor_dlkm failed: %s", ret.getStderr());
+                device.reboot();
+                throw new TargetSetupError("Failed to mount /vendor_dlkm");
+            }
+        }
     }
 
     @Override
