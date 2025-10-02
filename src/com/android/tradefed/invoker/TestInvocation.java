@@ -122,11 +122,9 @@ import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.TimeUtil;
 import com.android.tradefed.util.executor.ParallelDeviceExecutor;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -142,7 +140,6 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 import javax.annotation.Nullable;
 
 /**
@@ -499,6 +496,7 @@ public class TestInvocation implements ITestInvocation {
                             listener);
                 }
             }
+            long tearDownEndTimestamp = System.currentTimeMillis();
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope(InvocationMetricKey.log_and_release_device.name())) {
                 // Capture last logcat before releasing the device.
@@ -632,7 +630,13 @@ public class TestInvocation implements ITestInvocation {
                     InvocationMetricLogger.addInvocationMetrics(
                             InvocationMetricKey.TEAR_DOWN_DISK_USAGE, size);
                 }
-                elapsedTime = System.currentTimeMillis() - startTime;
+
+                // Count the time from tearDownEndTimestamp to now as part of "TF TEARDOWN" to avoid
+                // a gap between "TF TEARDOWN" and "TF REPORTING".
+                long now = System.currentTimeMillis();
+                InvocationMetricLogger.addInvocationPairMetrics(
+                        InvocationMetricKey.TEARDOWN_PAIR, tearDownEndTimestamp, now);
+                elapsedTime = now - startTime;
                 reportInvocationEnded(config, context, listener, elapsedTime);
             }
         }
