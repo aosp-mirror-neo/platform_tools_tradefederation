@@ -305,6 +305,30 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
+        // Read root invocation and work unit context.
+        String rootInvocationId = context.getAttribute("resultdb_root_invocation_id");
+        String workUnitId = context.getAttribute("resultdb_work_unit_id");
+        String workUnitUpdateToken = context.getAttribute("resultdb_work_unit_update_token");
+        if (!rootInvocationId.isEmpty()) {
+            if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
+                CLog.w(
+                        "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
+                            + " required when resultdb_root_invocation_id is provided %s",
+                        rootInvocationId);
+                return;
+            }
+            CLog.i(
+                    "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
+                            + " update token",
+                    rootInvocationId, workUnitId);
+            CLog.i(
+                    "Disabling ResultDBReporter, because ResultDB work unit support is not"
+                            + " yet implemented in this plugin. Test results will be uploaded"
+                            + " automatically once support is ready.");
+            // TODO(beining): Implement work unit upload support.
+            mDisable = true;
+            return;
+        }
         try {
             // Obtain invocation ID from context.
             String invocationId = context.getAttribute("resultdb_invocation_id");
