@@ -1,0 +1,212 @@
+syntax = "proto3";
+
+package tradefed.crystalball.dimensional_metrics;
+
+option java_package = "com.android.tradefed.dimensional_metrics.proto";
+option java_outer_classname = "DimensionalMetrics";
+
+// The top-level container for all metric data produced by a single source
+// within a test invocation (e.g., all metrics from Perfetto V2).
+message MetricReport {
+  // A flat list of all results, where each result corresponds to a specific
+  // test context (e.g., a single test case iteration or run-level metrics).
+  repeated TestMetricResult test_metric_results = 1;
+}
+
+// A container for all metrics associated with a single, unique test context.
+// This could be a single iteration of a test case or the aggregated results
+// for a test run.
+message TestMetricResult {
+  // The iteration number for this test result.
+  int64 iteration = 1;
+
+  // The unique identifier for the test associated with this result.
+  TestIdentifier identifier = 2;
+
+  // A list of all metric records associated with this test result.
+  repeated MetricRecord metric_records = 3;
+
+}
+
+// A structured identifier that uniquely defines a test within an invocation.
+message TestIdentifier {
+  // The name of the test module (e.g., "CtsUiAutomatorTestCases").
+  string module = 1;
+
+  // The name of the test class (e.g.,
+  // "com.android.server.cts.ActivityManagerDisplayTests").
+  string test_class = 2;
+
+  // The name of the test method (e.g., "testMultiDisplay").
+  string method = 3;
+
+  // The fully qualified test name, which often includes the class, method, and
+  // iteration number (e.g.,
+  // "com.android.server.cts.ActivityManagerDisplayTests#testMultiDisplay$1").
+  string full_test_name = 4;
+
+}
+
+// Defines a metric's complete metadata and contains all of its dimensional
+// data. This message is a generic container, capable of representing metrics
+// from various sources like Perfetto, Statsd, etc.
+message MetricRecord {
+  // A machine-readable, unique identifier for the metric.
+  string metric_id = 1;
+
+  // A human-readable name for the metric, suitable for display in UIs.
+  string human_readable_name = 2;
+
+  // The standard unit of measurement for this metric's values.
+  // Perfetto V2's `MetricUnit` enum.
+  Unit unit = 3;
+
+  // The desired direction of change for this metric's value.
+  Polarity polarity = 4;
+
+  // The original source of the metric.
+  Source source = 5;
+
+  // The aggregation method used to produce the value (e.g., "avg", "max").
+  // For metrics from Perfetto, this is often defined within the SQL query
+  // that generates the metric. (See TraceMetricV2Spec.query)
+  string aggregation = 6;
+
+  // A collection of all data sets for this metric, where each data set is
+  // broken down by a unique combination of dimensions.
+  repeated DimensionalMetric dimensional_metrics = 7;
+}
+
+// A single set of data that shares the same dimensional context. This is the
+// level at which measured values are stored.
+message DimensionalMetric {
+  // The set of key-value pairs that uniquely define this specific data series.
+  // For example: [ {key:"process", value:"system_server"}, {key:"cuj_name",
+  // value:"LAUNCH"} ]
+  repeated Dimension dimensions = 1;
+
+  // The payload that contains the actual values, which can be either a list of
+  // raw measurements or pre-computed statistics.
+  oneof data_payload {
+    RawValues raw_values = 2;
+    ComputedStatistics computed_statistics = 3;
+  }
+}
+
+// A wrapper for a list of raw, measured values.
+message RawValues {
+  // A list of raw measured values.
+  repeated Value values = 1;
+}
+
+// A wrapper for a list of calculated statistics (e.g., min, max, mean).
+message ComputedStatistics {
+  // A list of computed statistics.
+  repeated Stat stats = 1;
+}
+
+// A simple key-value pair used to define a dimension.
+message Dimension {
+  // The name of the dimension (e.g., "cuj_name").
+  string key = 1;
+  // The value of the dimension.
+  Value value = 2;
+}
+
+// A single key-value pair representing a calculated statistic.
+message Stat {
+  // The name of the statistic (e.g., "min", "p90").
+  string key = 1;
+  // The calculated value of the statistic.
+  Value value = 2;
+}
+
+// The standard unit of measurement for a metric's value.
+enum Unit {
+  UNIT_UNSPECIFIED = 0;
+
+  // Generic
+  COUNT = 1;
+  PERCENTAGE = 2;
+  BOUNDED_PERCENTAGE = 3;
+
+  // Time
+  TIME_NANOS = 4;
+  TIME_MICROS = 5;
+  TIME_MILLIS = 6;
+  TIME_SECONDS = 7;
+  TIME_MINUTES = 8;
+  TIME_HOURS = 9;
+  TIME_DAYS = 10;
+  MINUTES_PER_DAY = 11; // This unit comes from Perfetto
+  SECONDS_PER_HOUR = 12; // This unit comes from Perfetto
+
+  // Data Size
+  BYTES = 13;
+  KILOBYTES = 14;
+  MEGABYTES = 15;
+  GIGABYTES = 16;
+  TERABYTES = 17;
+
+  // Electrical
+  MILLI_VOLTS = 18;
+  MILLI_AMPS = 19;
+  MILLI_WATTS = 20;
+  VOLTS = 21;
+  AMPS = 22;
+  WATTS = 23;
+
+  // Electrical Capacity/Energy
+  MILLI_AMP_HOURS = 24;
+  MILLI_WATT_HOURS = 25;
+  AMP_HOURS = 26;
+  WATT_HOURS = 27;
+
+  // Data Rates
+  BYTES_PER_SECOND = 28;
+  KILOBYTES_PER_SECOND = 29;
+  MEGABYTES_PER_SECOND = 30;
+  GIGABYTES_PER_SECOND = 31;
+  KILOBYTES_PER_HOUR = 32;
+
+  // Event Rates
+  COUNT_PER_SECOND = 33;
+  COUNT_PER_HOUR = 34;
+  PERCENT_PER_HOUR = 35;
+  PERCENT_PER_HOUR_LEGACY = 36;
+
+  // Deltas / Change Rates
+  COUNT_DELTA_PER_HOUR = 37;
+  BYTES_DELTA_PER_HOUR = 38;
+
+  // Other
+  CORRELATION_COEFFICIENT = 39;
+}
+
+// The desired direction of change for a metric's value, used to determine
+// if a change represents a regression or an improvement.
+enum Polarity {
+  POLARITY_UNSPECIFIED = 0;
+  HIGHER_IS_BETTER = 1;
+  LOWER_IS_BETTER = 2;
+  STABLE_IS_BETTER = 3;
+  NOT_APPLICABLE = 4;
+}
+
+// The original source of a given metric.
+enum Source {
+  SOURCE_UNSPECIFIED = 0;
+  PERFETTO_V1 = 1;
+  PERFETTO_V2 = 2;
+  STATSD = 3;
+}
+
+// A container for a single typed value.
+message Value {
+  oneof value {
+    string string_value = 1;
+    double double_value = 2;
+    int64 int_value = 3;
+    bool bool_value = 4;
+  }
+}

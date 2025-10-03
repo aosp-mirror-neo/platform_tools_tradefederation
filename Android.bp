@@ -42,6 +42,17 @@ java_library_host {
     java_version: "11",
 }
 
+java_library {
+    name: "dimensional_metrics_proto",
+    srcs: ["proto/crystalball/dimensional_metrics.proto"],
+    static_libs: [
+        "libprotobuf-java-lite",
+    ],
+    proto: {
+        type: "lite",
+    },
+}
+
 java_library_host {
     name: "lab-resource-grpc",
     srcs: [
