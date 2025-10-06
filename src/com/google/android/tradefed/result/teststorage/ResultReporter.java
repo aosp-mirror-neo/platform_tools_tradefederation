@@ -44,6 +44,7 @@ import com.android.tradefed.result.ITestSummaryListener;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
+import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.result.resultdb.ResultDBReporter;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
@@ -703,6 +704,9 @@ public class ResultReporter
                 errorDebug += String.format("code: %s", failure.getErrorIdentifier().code());
                 mFailureInfo.setErrorName(failure.getErrorIdentifier().name());
                 errorDebug += String.format(",name: %s", failure.getErrorIdentifier().name());
+            } else {
+                mFailureInfo.setErrorCode(InfraErrorIdentifier.UNDETERMINED.code());
+                mFailureInfo.setErrorName(InfraErrorIdentifier.UNDETERMINED.name());
             }
             if (failure.getOrigin() != null) {
                 mFailureInfo.setErrorOrigin(failure.getOrigin());
