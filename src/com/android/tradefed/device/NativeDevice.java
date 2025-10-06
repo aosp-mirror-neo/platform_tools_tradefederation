@@ -1405,10 +1405,6 @@ public class NativeDevice
     }
 
     public boolean isShellV2Support() throws DeviceNotAvailableException {
-        // TODO(b/443068212): Remove the special case after bug is fixed.
-        if (mOptions.useOxygenationDevice()) {
-            return getDeviceSupportedFeatures().contains("shell_v2");
-        }
         return getHostAdbMajorVersion() >= 29 && getDeviceSupportedFeatures().contains("shell_v2");
     }
 
