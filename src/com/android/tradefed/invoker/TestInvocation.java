@@ -1641,6 +1641,7 @@ public class TestInvocation implements ITestInvocation {
             CLog.i("Skipping device automated setup due to --no-device-specific-setup");
             return;
         }
+        CLog.i("Applying device automated setup");
         for (ITestDevice device : context.getDevices()) {
             if (device.getIDevice() instanceof StubDevice) {
                 continue;
@@ -1650,6 +1651,7 @@ public class TestInvocation implements ITestInvocation {
             }
             try {
                 if (device.isHeadlessSystemUserMode()) {
+                    CLog.d("Applying HSUM setup for device %s", device.getSerialNumber());
                     String deviceName = context.getDeviceName(device);
                     if (deviceName == null) {
                         continue;
