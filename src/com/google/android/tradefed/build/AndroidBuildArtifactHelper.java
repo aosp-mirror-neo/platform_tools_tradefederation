@@ -41,6 +41,7 @@ import com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetada
 import com.google.api.services.androidbuildinternal.v3.model.BuildListResponse;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -68,6 +69,11 @@ public class AndroidBuildArtifactHelper {
 
     protected static final String PLATFORM_LINUX = "linux";
     protected static final String PLATFORM_MAC = "mac";
+    protected static final String PLATFORM_MAC_ARM64 = "mac_arm64";
+
+    // A set of platforms that do not need the OS appended to their build flavor.
+    private static final ImmutableSet<String> STANDARD_PLATFORMS =
+        ImmutableSet.of(PLATFORM_LINUX, PLATFORM_MAC, PLATFORM_MAC_ARM64);
 
     private static final long PAGE_SIZE = 100;
     private Androidbuildinternal mClient;
@@ -594,14 +600,16 @@ public class AndroidBuildArtifactHelper {
         getRunUtil().sleep(sleepTime);
     }
 
-    /** apply the "fastbuild" hack, basically */
-    protected String getBuildFlavor(String buildFlavor, String os) {
-        if (os != null && !PLATFORM_LINUX.equals(os) && !PLATFORM_MAC.equals(os)) {
-            // if build-os param is not null, and is neither "linux" or "os", append it to
-            // build flavor
-            buildFlavor = String.format("%s_%s", buildFlavor, os);
+    /**
+    * The original purpose of this was to support targets with a "fastboot" suffix. This logic is no
+    * longer considered relevant and may be removed in the future to avoid confusion. We keep this
+    * method for now to avoid adding an unexpected suffix to the build flavor. See (b/448820244)
+    */
+    protected static String getBuildFlavor(String buildFlavor, String os) {
+        if (os == null || STANDARD_PLATFORMS.contains(os)) {
+            return buildFlavor;
         }
-        return buildFlavor;
+        return String.format("%s_%s", buildFlavor, os);
     }
 
     private IBuildInfo createErrorBuild(String branch, String buildId, String buildFlavor) {
