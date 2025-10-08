@@ -222,7 +222,12 @@ public class TestAppInstallSetup extends BaseTargetPreparer
     private IAbi mAbi = null;
     private Integer mUserId = null;
     private Integer mSetterUserId = null;
+
+    @Option(
+            name = "grant-permissions",
+            description = "Whether or not to auto-grant all requested permissions")
     private Boolean mGrantPermission = null;
+
     // TODO: b/367468564 - Remove this flag once we have fixed the tests so that installation
     // for the system user is no longer required when conducting tests for
     // the secondary_user_on_secondary_display user type.
