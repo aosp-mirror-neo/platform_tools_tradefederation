@@ -54,6 +54,7 @@ import com.android.tradefed.device.RemoteAvdIDevice;
 import com.android.tradefed.device.SnapuserdWaitPhase;
 import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.StubLocalAndroidVirtualDevice;
+import com.android.tradefed.device.TestDevice;
 import com.android.tradefed.device.TestDeviceState;
 import com.android.tradefed.device.UserInfo.UserType;
 import com.android.tradefed.device.cloud.ManagedRemoteDevice;
@@ -122,9 +123,11 @@ import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.TimeUtil;
 import com.android.tradefed.util.executor.ParallelDeviceExecutor;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -140,6 +143,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
 import javax.annotation.Nullable;
 
 /**
@@ -1644,9 +1648,15 @@ public class TestInvocation implements ITestInvocation {
         CLog.i("Applying device automated setup");
         for (ITestDevice device : context.getDevices()) {
             if (device.getIDevice() instanceof StubDevice) {
+                CLog.i(
+                        "Skipping device automated setup for StubDevice type: %s",
+                        device.getIDevice().getClass().getName());
                 continue;
             }
-            if (NativeDevice.class.isAssignableFrom(device.getClass())) {
+            if (!(device instanceof TestDevice)) {
+                CLog.i(
+                        "Skipping device automated setup for non-TestDevice type: %s",
+                        device.getClass().getName());
                 continue;
             }
             try {
