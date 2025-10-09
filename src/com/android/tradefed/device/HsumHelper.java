@@ -26,7 +26,7 @@ public final class HsumHelper {
 
     // Copied from UserManagerService
     @VisibleForTesting
-    static final String BOOT_STRATEGY_PROPERTY = "persist.user.hsum_boot_strategy";
+    public static final String BOOT_STRATEGY_PROPERTY = "persist.user.hsum_boot_strategy";
 
     private final ITestDevice mDevice;
 
@@ -81,7 +81,7 @@ public final class HsumHelper {
         }
 
         @VisibleForTesting
-        int getValue() {
+        public int getValue() {
             return mValue;
         }
     }

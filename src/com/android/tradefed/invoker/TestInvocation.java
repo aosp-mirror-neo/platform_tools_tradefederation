@@ -44,7 +44,6 @@ import com.android.tradefed.device.DeviceManager;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.DeviceUnresponsiveException;
 import com.android.tradefed.device.FreeDeviceState;
-import com.android.tradefed.device.HsumHelper;
 import com.android.tradefed.device.HsumHelper.HsumBootStrategy;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.ITestDevice.RecoveryMode;
@@ -107,6 +106,7 @@ import com.android.tradefed.retry.RetryStrategy;
 import com.android.tradefed.service.TradefedFeatureServer;
 import com.android.tradefed.targetprep.BuildError;
 import com.android.tradefed.targetprep.DeviceFailedToBootError;
+import com.android.tradefed.targetprep.HsumBootStrategyPreparer;
 import com.android.tradefed.targetprep.SwitchUserTargetPreparer;
 import com.android.tradefed.targetprep.TargetSetupError;
 import com.android.tradefed.testtype.ITestInformationReceiver;
@@ -1671,7 +1671,10 @@ public class TestInvocation implements ITestInvocation {
                     switchPrep.setUserType(UserType.FULL);
                     deviceConfig.addSpecificConfig(
                             switchPrep, Configuration.TARGET_PREPARER_TYPE_NAME);
-                    new HsumHelper(device).setHsumBootStrategy(HsumBootStrategy.SWITCH_TO_PREVIOUS_USER);
+                    HsumBootStrategyPreparer strategyPrep = new HsumBootStrategyPreparer();
+                    strategyPrep.setHsumBootStrategy(HsumBootStrategy.SWITCH_TO_PREVIOUS_USER);
+                    deviceConfig.addSpecificConfig(
+                            strategyPrep, Configuration.TARGET_PREPARER_TYPE_NAME);
                 }
             } catch (DeviceNotAvailableException | ConfigurationException dnae) {
                 CLog.e(dnae);
