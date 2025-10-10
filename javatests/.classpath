@@ -16,7 +16,7 @@
         <classpathentry kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/frameworks/base/platformprotos/linux_glibc_common/javac/platformprotos.jar"/>
 	<classpathentry kind="var" path="TRADEFED_ROOT/prebuilts/tools/common/m2/repository/org/mockito/mockito-core/4.6.1/mockito-core-4.6.1.jar" sourcepath="/TRADEFED_ROOT/prebuilts/tools/common/m2/repository/org/mockito/mockito-core/4.6.1/mockito-core-4.6.1-sources.jar"/>
 	<classpathentry kind="var" path="TRADEFED_ROOT/prebuilts/tools/common/m2/repository/net/bytebuddy/byte-buddy/1.14.18/byte-buddy-1.14.18.jar" sourcepath="TRADEFED_ROOT/prebuilts/tools/common/m2/repository/net/bytebuddy/byte-buddy/1.14.18/byte-buddy-1.14.18-sources.jar"/>
-	<classpathentry kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/truth/truth/linux_glibc_common/combined/truth.jar"/>
+	<classpathentry kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/truth/truth/linux_glibc_common/javac/truth.jar"/>
 	<classpathentry kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/grpc-grpc-java/testing/grpc-java-testing/linux_glibc_common/javac/grpc-java-testing.jar"/>
 	<classpathentry kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/opencensus-java/api/opencensus-java-api/linux_glibc_common/javac/opencensus-java-api.jar"/>
 	<classpathentry kind="output" path="bin"/>
