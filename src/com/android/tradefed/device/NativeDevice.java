@@ -1175,7 +1175,8 @@ public class NativeDevice
                 0,
                 getCommandTimeout(),
                 TimeUnit.MILLISECONDS,
-                MAX_RETRY_ATTEMPTS);
+                MAX_RETRY_ATTEMPTS,
+                true);
     }
 
     /**
@@ -1207,6 +1208,25 @@ public class NativeDevice
             final TimeUnit timeUnit,
             final int retryAttempts)
             throws DeviceNotAvailableException {
+        executeShellCommand(
+                command,
+                receiver,
+                maxTimeoutForCommand,
+                maxTimeToOutputShellResponse,
+                timeUnit,
+                retryAttempts,
+                false);
+    }
+
+    private void executeShellCommand(
+            final String command,
+            final IShellOutputReceiver receiver,
+            final long maxTimeoutForCommand,
+            final long maxTimeToOutputShellResponse,
+            final TimeUnit timeUnit,
+            final int retryAttempts,
+            final boolean skipReceiverWatcher)
+            throws DeviceNotAvailableException {
         CLog.i("ExecuteShellCommand: %s", command);
         ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
         boolean parseExitStatus = !isShellV2Support() && getOptions().useExitStatusWorkaround();
@@ -1220,7 +1240,7 @@ public class NativeDevice
                         outputReceiverStream,
                         timeUnit.toMillis(maxTimeoutForCommand),
                         timeUnit.toMillis(maxTimeToOutputShellResponse),
-                        receiver);
+                        skipReceiverWatcher ? null : receiver);
         try {
             performDeviceAction(String.format("shell %s", fullCmd[4]), adbAction, retryAttempts);
         } catch (DeviceNotAvailableException e) {
