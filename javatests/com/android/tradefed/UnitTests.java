@@ -530,6 +530,8 @@ import com.android.tradefed.util.testmapping.TestMappingTest;
 import com.android.tradefed.util.zip.CentralDirectoryInfoTest;
 import com.android.tradefed.util.zip.MergedZipEntryCollectionTest;
 
+import com.google.android.tradefed.result.CoverageMetadataCollectorTest;
+
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
@@ -811,6 +813,7 @@ import org.junit.runners.Suite.SuiteClasses;
     CollectingTestListenerTest.class,
     ConsoleResultReporterTest.class,
     CountingTestResultListenerTest.class,
+    CoverageMetadataCollectorTest.class,
     DeviceFileReporterTest.class,
     FailureDescriptionTest.class,
     FileSystemLogSaverTest.class,
