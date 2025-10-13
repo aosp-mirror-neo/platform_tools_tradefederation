@@ -530,6 +530,7 @@ import com.android.tradefed.util.testmapping.TestMappingTest;
 import com.android.tradefed.util.zip.CentralDirectoryInfoTest;
 import com.android.tradefed.util.zip.MergedZipEntryCollectionTest;
 
+import com.google.android.tradefed.build.AndroidBuildArtifactHelperTest;
 import com.google.android.tradefed.result.CoverageMetadataCollectorTest;
 
 import org.junit.runner.RunWith;
@@ -548,6 +549,7 @@ import org.junit.runners.Suite.SuiteClasses;
     ServiceAccountKeyCredentialFactoryTest.class,
 
     // build
+    AndroidBuildArtifactHelperTest.class,
     AppDeviceBuildInfoTest.class,
     BootstrapBuildProviderTest.class,
     BuildInfoTest.class,
