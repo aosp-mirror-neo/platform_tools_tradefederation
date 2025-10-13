@@ -25,6 +25,8 @@ import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.targetprep.ArtChrootPreparer;
+import com.android.tradefed.util.CommandResult;
+import com.android.tradefed.util.CommandStatus;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -60,6 +62,18 @@ public class ArtGTestTest {
         mTestInfo = TestInformation.newBuilder().build();
 
         when(mMockITestDevice.getSerialNumber()).thenReturn("serial");
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("\n");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
     }
 
     @Test
@@ -75,9 +89,12 @@ public class ArtGTestTest {
         mGTest.run(mTestInfo, mMockInvocationListener);
 
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.startsWith("chroot /data/local/tmp/art-test-chroot /test1"),
-                        Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
                         Mockito.anyLong(),
                         Mockito.any(),
                         Mockito.anyInt());

@@ -467,6 +467,37 @@ public interface INativeDevice {
             throws DeviceNotAvailableException;
 
     /**
+     * Executes a adb shell command, with more parameters to control command behavior.
+     *
+     * @see #executeShellV2Command(String)
+     * @param command the adb shell command to run
+     * @param pipeAsInput A {@link File} that will be piped as input to the command, or null.
+     * @param pipeToOutput {@link OutputStream} where the std output will be redirected, or null.
+     * @param pipeToError {@link OutputStream} where the std error will be redirected, or null.
+     * @param maxTimeoutForCommand the maximum timeout for the command to complete; unit as
+     *     specified in <code>timeUnit</code>
+     * @param maxTimeToOutputShellResponse the maximum amount of time during which the command is
+     *     allowed to not output any response; unit as specified in <code>timeUnit</code>
+     * @param timeUnit unit for <code>maxTimeToOutputShellResponse</code>
+     * @param retryAttempts the maximum number of times to retry command if it fails due to a
+     *     exception. DeviceNotResponsiveException will be thrown if <var>retryAttempts</var> are
+     *     performed without success.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     * @see TimeUtil
+     */
+    public CommandResult executeShellV2Command(
+            String command,
+            File pipeAsInput,
+            OutputStream pipeToOutput,
+            OutputStream pipeToError,
+            final long maxTimeoutForCommand,
+            final long maxTimeToOutputShellResponse,
+            final TimeUnit timeUnit,
+            int retryAttempts)
+            throws DeviceNotAvailableException;
+
+    /**
      * Helper method which executes a adb command as a system command.
      * <p/>
      * {@link #executeShellCommand(String)} should be used instead wherever possible, as that

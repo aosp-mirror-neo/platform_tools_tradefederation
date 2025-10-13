@@ -35,6 +35,8 @@ import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.testtype.coverage.CoverageOptions;
+import com.android.tradefed.util.CommandResult;
+import com.android.tradefed.util.CommandStatus;
 
 import com.google.common.collect.ImmutableList;
 
@@ -47,7 +49,6 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
-import java.util.concurrent.TimeUnit;
 
 /** Unit tests for {@link GTest}. */
 @RunWith(JUnit4.class)
@@ -71,6 +72,18 @@ public class GTestTest {
         MockitoAnnotations.initMocks(this);
 
         when(mMockITestDevice.getSerialNumber()).thenReturn("serial");
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("\n");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
         when(mMockContext.getDevices()).thenReturn(ImmutableList.of(mMockITestDevice));
         mGTest =
                 new GTest() {
@@ -165,18 +178,24 @@ public class GTestTest {
         mGTest.run(mTestInfo, mMockInvocationListener);
 
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(test1),
-                        Mockito.same(mMockReceiver),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(test2),
-                        Mockito.same(mMockReceiver),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
     }
 
@@ -204,11 +223,14 @@ public class GTestTest {
         mGTest.run(mTestInfo, mMockInvocationListener);
 
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(test2),
-                        Mockito.same(mMockReceiver),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
     }
 
@@ -230,11 +252,14 @@ public class GTestTest {
         mGTest.run(mTestInfo, mMockInvocationListener);
 
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(modulePath),
-                        Mockito.same(mMockReceiver),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
     }
 
@@ -258,11 +283,14 @@ public class GTestTest {
         mGTest.run(mTestInfo, mMockInvocationListener);
 
         verify(mMockITestDevice)
-                .executeShellCommand(
-                        Mockito.contains(filterString),
-                        Mockito.same(mMockReceiver),
+                .executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
     }
 
@@ -353,11 +381,14 @@ public class GTestTest {
 
         verify(mMockITestDevice, times(1)).executeShellCommand(Mockito.contains("chmod"));
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.eq(String.format("sh %s", deviceScriptPath)),
-                        Mockito.same(mMockReceiver),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
         verify(mMockITestDevice).deleteFile(deviceScriptPath);
     }
@@ -444,18 +475,24 @@ public class GTestTest {
         verify(mMockITestDevice).deleteFile(testPath1 + "_res.xml");
         verify(mMockITestDevice).deleteFile(testPath2 + "_res.xml");
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(test1),
-                        (CollectingOutputReceiver) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
         verify(mMockITestDevice)
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(test2),
-                        (CollectingOutputReceiver) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
     }
 

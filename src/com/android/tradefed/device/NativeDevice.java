@@ -1394,6 +1394,29 @@ public class NativeDevice
             final TimeUnit timeUnit,
             int retryAttempts)
             throws DeviceNotAvailableException {
+        return executeShellV2Command(
+                cmd,
+                pipeAsInput,
+                pipeToOutput,
+                pipeToError,
+                maxTimeoutForCommand,
+                0,
+                timeUnit,
+                retryAttempts);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeShellV2Command(
+            String cmd,
+            File pipeAsInput,
+            OutputStream pipeToOutput,
+            OutputStream pipeToError,
+            final long maxTimeoutForCommand,
+            final long maxTimeToOutputShellResponse,
+            final TimeUnit timeUnit,
+            int retryAttempts)
+            throws DeviceNotAvailableException {
         // If the device does not support the v2 shell features. Exit status will not be propagated
         // and stdout/stderr will be merged in stdout.
         //
@@ -1411,7 +1434,8 @@ public class NativeDevice
                         pipeAsInput,
                         pipeToOutput,
                         pipeToError,
-                        timeUnit.toMillis(maxTimeoutForCommand));
+                        timeUnit.toMillis(maxTimeoutForCommand),
+                        timeUnit.toMillis(maxTimeToOutputShellResponse));
         performDeviceAction(String.format("adb %s", fullCmd[4]), adbActionV2, retryAttempts);
         if (parseExitStatus) {
             postProcessExitStatus(adbActionV2.mResult);
