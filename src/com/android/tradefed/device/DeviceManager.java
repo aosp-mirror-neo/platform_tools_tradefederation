@@ -81,11 +81,6 @@ public class DeviceManager implements IDeviceManager {
     private static final long FASTBOOT_CMD_TIMEOUT = 1 * 60 * 1000;
     /** time to wait in ms between fastboot devices requests */
     private static final long FASTBOOT_POLL_WAIT_TIME = 5 * 1000;
-    /**
-     * time to wait for device adb shell responsive connection before declaring it unavailable for
-     * testing
-     */
-    private static final int CHECK_WAIT_DEVICE_AVAIL_MS = 30 * 1000;
 
     /* the max size of the emulator output in bytes */
     private static final long MAX_EMULATOR_OUTPUT = 20 * 1024 * 1024;
@@ -170,6 +165,18 @@ public class DeviceManager implements IDeviceManager {
     @Option(name = "adb-path", description = "path of the adb binary to use, "
             + "default use the one in $PATH.")
     private String mAdbPath = "adb";
+
+    @Option(
+            name = "shell-wait-time",
+            description =
+                    "maximum time to wait for device adb shell responsive connection before "
+                            + "declaring it unavailable for testing.")
+    private long mShellWaitTime = 30 * 1000;
+
+    @Option(
+            name = "shell-check-cmd-time",
+            description = "the timeout in ms to check device shell availability.")
+    private long mShellCheckCmdTime = 10 * 1000;
 
     @Option(
         name = "fastboot-path",
@@ -474,31 +481,42 @@ public class DeviceManager implements IDeviceManager {
         }
 
         final String threadName = String.format("Check device %s", testDevice.getSerialNumber());
-        Runnable checkRunnable = new Runnable() {
-            @Override
-            public void run() {
-                CLog.d("checking new '%s' '%s' responsiveness", testDevice.getClass().getName(),
-                        testDevice.getSerialNumber());
-                if (testDevice.getMonitor().waitForDeviceShell(CHECK_WAIT_DEVICE_AVAIL_MS)) {
-                    DeviceEventResponse r = mManagedDeviceList.handleDeviceEvent(testDevice,
-                            DeviceEvent.AVAILABLE_CHECK_PASSED);
-                    if (r.stateChanged && r.allocationState == DeviceAllocationState.Available) {
-                        CLog.logAndDisplay(LogLevel.INFO, "Detected new device %s",
-                                testDevice.getSerialNumber());
-                    } else {
-                        CLog.d("Device %s failed or ignored responsiveness check, ",
-                                testDevice.getSerialNumber());
+        Runnable checkRunnable =
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        CLog.d(
+                                "checking new '%s' '%s' responsiveness",
+                                testDevice.getClass().getName(), testDevice.getSerialNumber());
+                        if (testDevice.getMonitor().waitForDeviceShell(mShellWaitTime)) {
+                            DeviceEventResponse r =
+                                    mManagedDeviceList.handleDeviceEvent(
+                                            testDevice, DeviceEvent.AVAILABLE_CHECK_PASSED);
+                            if (r.stateChanged
+                                    && r.allocationState == DeviceAllocationState.Available) {
+                                CLog.logAndDisplay(
+                                        LogLevel.INFO,
+                                        "Detected new device %s",
+                                        testDevice.getSerialNumber());
+                            } else {
+                                CLog.d(
+                                        "Device %s failed or ignored responsiveness check, ",
+                                        testDevice.getSerialNumber());
+                            }
+                        } else {
+                            DeviceEventResponse r =
+                                    mManagedDeviceList.handleDeviceEvent(
+                                            testDevice, DeviceEvent.AVAILABLE_CHECK_FAILED);
+                            if (r.stateChanged
+                                    && r.allocationState == DeviceAllocationState.Unavailable) {
+                                CLog.w(
+                                        "Device %s is unresponsive, will not be available for"
+                                                + " testing",
+                                        testDevice.getSerialNumber());
+                            }
+                        }
                     }
-                } else {
-                    DeviceEventResponse r = mManagedDeviceList.handleDeviceEvent(testDevice,
-                            DeviceEvent.AVAILABLE_CHECK_FAILED);
-                    if (r.stateChanged && r.allocationState == DeviceAllocationState.Unavailable) {
-                        CLog.w("Device %s is unresponsive, will not be available for testing",
-                                testDevice.getSerialNumber());
-                    }
-                }
-            }
-        };
+                };
         if (mSynchronousMode) {
             checkRunnable.run();
         } else {
@@ -1787,5 +1805,11 @@ public class DeviceManager implements IDeviceManager {
     @Override
     public boolean isFileSystemMountCheckEnabled() {
         return mMountFileSystemCheckEnabled;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public long getShellCheckCmdTime() {
+        return mShellCheckCmdTime;
     }
 }

@@ -237,7 +237,10 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
                     try {
                         getIDevice()
                                 .executeShellCommand(
-                                        cmd, receiver, MAX_OP_TIME, TimeUnit.MILLISECONDS);
+                                        cmd,
+                                        receiver,
+                                        mMgr.getShellCheckCmdTime(),
+                                        TimeUnit.MILLISECONDS);
                         String output = receiver.getOutput();
                         if (output.contains("uid=")) {
                             CLog.i("shell ready. id output: %s", output);
