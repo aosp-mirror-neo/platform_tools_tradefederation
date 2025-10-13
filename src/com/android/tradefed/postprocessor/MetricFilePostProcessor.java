@@ -76,6 +76,14 @@ public class MetricFilePostProcessor extends BasePostProcessor {
     private Set<Integer> mPercentiles = new HashSet<>();
 
     @Option(
+            name = "test-iterations",
+            description =
+                    "The number of test iterations, used for aggregating metrics where a metric is "
+                            + " not always produced. If set to 0, the count of metrics will be used"
+                            + " instead.")
+    private int mTestIterations = 0;
+
+    @Option(
             name = "strict-include-metric-filter",
             description =
                     "Regular expression that will be used for filtering the metrics from individual"
@@ -178,5 +186,6 @@ public class MetricFilePostProcessor extends BasePostProcessor {
         mMetricUtil.setPercentiles(mPercentiles);
         mMetricUtil.setIterationSeparator(mTestIterationSeparator);
         mMetricUtil.buildMetricFilterPatterns(mStrictIncludeRegEx);
+        mMetricUtil.setTestIterations(mTestIterations);
     }
 }

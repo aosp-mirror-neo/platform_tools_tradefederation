@@ -143,7 +143,7 @@ public class AggregatePostProcessor extends BasePostProcessor {
             Map<String, Metric.Builder> aggregateMetrics) {
         List<Double> doubleValues = values.stream().map(Double::parseDouble)
                 .collect(Collectors.toList());
-        Map<String, Double> stats = MetricUtility.getStats(doubleValues, mPercentiles);
+        Map<String, Double> stats = MetricUtility.getStats(doubleValues, mPercentiles, 0);
         for (String statKey : stats.keySet()) {
             Metric.Builder metricBuilder = Metric.newBuilder();
             metricBuilder

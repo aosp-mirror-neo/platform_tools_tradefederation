@@ -80,6 +80,9 @@ public class MetricUtility {
 
     private List<Pattern> mMetricPatterns = new ArrayList<>();
 
+    // The number of test iterations.
+    private int mTestIterations = 0;
+
     /**
      * Used for storing the individual test metrics and use it for aggregation.
      *
@@ -235,6 +238,10 @@ public class MetricUtility {
         mTestIterationSeparator = separator;
     }
 
+    public void setTestIterations(int testIterations) {
+        mTestIterations = testIterations;
+    }
+
     @VisibleForTesting
     public Map<String, ArrayListMultimap<String, Metric>> getStoredTestMetric() {
         return mStoredTestMetrics;
@@ -265,16 +272,22 @@ public class MetricUtility {
      * @param percentiles stats to include in the final metrics.
      * @return aggregated values.
      */
-    public static Map<String, Double> getStats(List<Double> values, Set<Integer> percentiles) {
+    public static Map<String, Double> getStats(
+            List<Double> values, Set<Integer> percentiles, int testIterations) {
         Map<String, Double> stats = new LinkedHashMap<>();
         double sum = values.stream().mapToDouble(Double::doubleValue).sum();
         double count = values.size();
         // The orElse situation should never happen.
-        double mean =
-                values.stream()
-                        .mapToDouble(Double::doubleValue)
-                        .average()
-                        .orElseThrow(IllegalStateException::new);
+        double mean;
+        if (testIterations > 0) {
+            mean = sum / testIterations;
+        } else {
+            mean =
+                    values.stream()
+                            .mapToDouble(Double::doubleValue)
+                            .average()
+                            .orElseThrow(IllegalStateException::new);
+        }
         double variance = values.stream().reduce(0.0, (a, b) -> a + Math.pow(b - mean, 2) / count);
         // Calculate percentiles. 50 th percentile will be used as median.
         Set<Integer> updatedPercentile = new LinkedHashSet<>(percentiles);
@@ -331,7 +344,7 @@ public class MetricUtility {
             String metricKey, List<String> values, Map<String, Metric> aggregateMetrics) {
         List<Double> doubleValues =
                 values.stream().map(Double::parseDouble).collect(Collectors.toList());
-        Map<String, Double> stats = getStats(doubleValues, mActualPercentiles);
+        Map<String, Double> stats = getStats(doubleValues, mActualPercentiles, mTestIterations);
         for (String statKey : stats.keySet()) {
             Metric.Builder metricBuilder = Metric.newBuilder();
             metricBuilder
