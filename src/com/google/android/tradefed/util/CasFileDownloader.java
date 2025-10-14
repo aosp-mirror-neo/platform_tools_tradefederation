@@ -103,6 +103,7 @@ public class CasFileDownloader implements IFileDownloader {
             "cas_nfs_local_cache_capacity";
 
     private static final ReentrantLock sLock = new ReentrantLock(true);
+    private static boolean mIsCasCacheDirValidated = false;
 
     @Nullable private final File mCasServiceAccountJson;
     private File mManifestPath;
@@ -1098,6 +1099,28 @@ public class CasFileDownloader implements IFileDownloader {
             CLog.w("No 'cas-downloader' global object was configured. Using default one.");
             // Return default values if object is not configured
             options = new CasOptions();
+        } else {
+            if (options != null && !mIsCasCacheDirValidated) {
+                synchronized (CasOptions.class) {
+                    if (!mIsCasCacheDirValidated) {
+                        File cacheDir = options.getCasCacheDir();
+                        String cacheDirPath = cacheDir != null ? cacheDir.getAbsolutePath() : null;
+                        if (cacheDirPath != null
+                                && !cacheDirPath.startsWith(System.getProperty("java.io.tmpdir"))) {
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.CAS_CACHE_DIR_NOT_IN_TEMP_DIR,
+                                    cacheDirPath);
+                            CLog.w(
+                                    "The cas-downloader cache directory is not under the default"
+                                        + " temporary directory. This may result in unexpected"
+                                        + " behavior. Please ensure the cache directory is under"
+                                        + " the default temporary directory. %s",
+                                    cacheDirPath);
+                        }
+                        mIsCasCacheDirValidated = true;
+                    }
+                }
+            }
         }
         return options;
     }

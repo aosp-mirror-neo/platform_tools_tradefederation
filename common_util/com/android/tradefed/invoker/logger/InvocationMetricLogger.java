@@ -315,6 +315,7 @@ public class InvocationMetricLogger {
         CAS_CONVERTER_SUCCESS_COUNT("cas_converter_success_count", true),
         CAS_CONVERTER_FAILURE_COUNT("cas_converter_failure_count", true),
         CAS_CLIENT_NOT_EXECUTABLE_COUNT("cas_client_not_executable_count", true),
+        CAS_CACHE_DIR_NOT_IN_TEMP_DIR("cas_cache_dir_not_in_temp_dir", false),
 
         // Download Cache
         CACHE_HIT_COUNT("cache_hit_count", true),
