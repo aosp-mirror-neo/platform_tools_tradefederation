@@ -45,6 +45,12 @@ public enum TestDeviceState {
                 return DeviceState.RECOVERY;
             case SIDELOAD:
                 return DeviceState.SIDELOAD;
+            case FASTBOOT:
+                return DeviceState.BOOTLOADER;
+            case FASTBOOTD:
+                return DeviceState.FASTBOOTD;
+            case NOT_AVAILABLE:
+                return DeviceState.OFFLINE;
             default:
                 return null;
         }
