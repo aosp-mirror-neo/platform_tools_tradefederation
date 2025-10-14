@@ -41,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 // FuseMountManager is a class that manages mounting and unmounting FUSE filesystems.
@@ -171,7 +172,8 @@ public class FuseMountManager {
             } while (System.currentTimeMillis() < deadline);
 
             // FAILURE: Timed out waiting for mount point to be ready.
-            logTimeout(sourceDataPath, capturedOutput.toString(StandardCharsets.UTF_8));
+            logTimeoutWithDirectoryListing(
+                    sourceDataPath, capturedOutput.toString(StandardCharsets.UTF_8), mountPoint);
             throw new IOException(String.format("Mount process started but timed out."));
         } catch (IOException | InterruptedException e) {
             // FAILURE: Handle all exceptions from the try block here.
@@ -205,9 +207,20 @@ public class FuseMountManager {
         }
     }
 
-    private void logTimeout(Path sourceDataPath, String output) {
+    private void logTimeoutWithDirectoryListing(
+            Path sourceDataPath, String output, Path mountPoint) {
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
-        CLog.i("Mounting of '%s' timed out. Output:\n%s", sourceDataPath, output);
+        CLog.e("Mounting of '%s' timed out. Output:\n%s", sourceDataPath, output);
+        try (Stream<Path> stream = Files.list(mountPoint)) {
+            CLog.w(
+                    "Timeout waiting for mount. Files in '%s': %s",
+                    mountPoint,
+                    stream.map(p -> p.getFileName().toString()).collect(Collectors.toList()));
+        } catch (IOException listEx) {
+            CLog.e(
+                    "Error listing files in mount point '%s' after timeout with error: %s.",
+                    mountPoint, listEx.getMessage());
+        }
     }
 
     /**
