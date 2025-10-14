@@ -85,7 +85,7 @@ public class CasOptions {
     @Option(
             name = "batch-read-blobs-timeout",
             description = "RPC timeout for BatchReadBlobs in seconds.")
-    private long mRPCBatchReadBlobsTimeout = 180L; // 0 for default.
+    private long mRPCBatchReadBlobsTimeout = 600L; // 0 for default.
 
     @Option(name = "get-tree-timeout", description = "RPC timeout for GetTree in seconds")
     private long mRPCGetTreeTimeout = 120L; // 0 for default.
