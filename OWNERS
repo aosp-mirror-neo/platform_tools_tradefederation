@@ -3,8 +3,6 @@ dshi@google.com
 frankfeng@google.com
 guangzhu@google.com
 jahinimtiaz@google.com
-jdesprez@google.com
-tsu@google.com
 
 # Restrict build related changes to core harness team
 per-file Android.bp,Android.mk=set noparent
