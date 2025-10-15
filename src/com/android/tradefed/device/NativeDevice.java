@@ -1760,6 +1760,22 @@ public class NativeDevice
         throw new UnsupportedOperationException("No support for Package Manager's features");
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public String adbInstallPackage(
+            final File packageFile, final boolean reinstall, final String... extraArgs)
+            throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for Package Manager's features");
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String adbInstallPackage(
+            File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
+            throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for Package Manager's features");
+    }
+
     /**
      * {@inheritDoc}
      */

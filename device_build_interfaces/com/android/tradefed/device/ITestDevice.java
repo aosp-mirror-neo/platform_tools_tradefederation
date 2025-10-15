@@ -176,8 +176,6 @@ public interface ITestDevice extends INativeDevice {
      * @return a {@link String} with an error code, or <code>null</code> if success.
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
      *     recovered.
-     * @throws UnsupportedOperationException if runtime permission is not supported by the platform
-     *     on device.
      */
     public String installPackage(
             File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
@@ -214,8 +212,6 @@ public interface ITestDevice extends INativeDevice {
      * @return a {@link String} with an error code, or <code>null</code> if success.
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
      *     recovered.
-     * @throws UnsupportedOperationException if runtime permission is not supported by the platform
-     *     on device.
      */
     public String installPackageForUser(
             File packageFile,
@@ -233,6 +229,39 @@ public interface ITestDevice extends INativeDevice {
      */
     public boolean installPackageWithIncrementalMode(
             File[] apkFiles, String[] extraArgs, String userId) throws DeviceNotAvailableException;
+
+    /**
+     * Install an Android package on device with adb command.
+     *
+     * @param packageFile the apk file to install
+     * @param reinstall <code>true</code> if a reinstall should be performed
+     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
+     *     options.
+     * @return a {@link String} with an error code, or <code>null</code> if success.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public String adbInstallPackage(File packageFile, boolean reinstall, String... extraArgs)
+            throws DeviceNotAvailableException;
+
+    /**
+     * Install an Android package on device with adb command.
+     *
+     * <p>Note: Only use cases that requires explicit control of granting runtime permission at
+     * install time should call this function.
+     *
+     * @param packageFile the apk file to install
+     * @param reinstall <code>true</code> if a reinstall should be performed
+     * @param grantPermissions if all runtime permissions should be granted at install time
+     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
+     *     options.
+     * @return a {@link String} with an error code, or <code>null</code> if success.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public String adbInstallPackage(
+            File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
+            throws DeviceNotAvailableException;
 
     /**
      * Uninstall an Android package from device.
