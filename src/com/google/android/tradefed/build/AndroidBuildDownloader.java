@@ -62,6 +62,7 @@ public class AndroidBuildDownloader implements IFileDownloader {
     static {
         STANDARD_PLATFORMS.add("linux");
         STANDARD_PLATFORMS.add("mac");
+        STANDARD_PLATFORMS.add("mac_arm64");
     }
 
     /** A cache of remote zip files indexed by remote path. */

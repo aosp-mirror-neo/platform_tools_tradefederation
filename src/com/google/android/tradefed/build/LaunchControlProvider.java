@@ -420,7 +420,7 @@ public class LaunchControlProvider
     private Set<String> mContentBasedReportingDefault = new LinkedHashSet<>();
 
     /** Standard platforms */
-    private static final Set<String> STANDARD_PLATFORMS = ImmutableSet.of("linux", "mac");
+    private static final Set<String> STANDARD_PLATFORMS = ImmutableSet.of("linux", "mac", "mac_arm64");
 
     @Override
     public void setTestLogger(ITestLogger testLogger) {

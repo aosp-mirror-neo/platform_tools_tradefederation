@@ -44,7 +44,7 @@ public class LCUtil {
             Pattern.compile(
                     //        key(opt)      branch    os                  flavor    bid
                     // filename
-                    "(?:([^:]+):)? (.+?   ) -([^-]*linux|mac)   -([^/]+ )/ ([A-Z]?\\d+)/ (.+     "
+                    "(?:([^:]+):)? (.+?   ) -([^-]*linux|mac|mac_arm64)   -([^/]+ )/ ([A-Z]?\\d+)/ (.+     "
                             + " )",
                     Pattern.COMMENTS);
 
