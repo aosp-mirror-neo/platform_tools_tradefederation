@@ -457,8 +457,10 @@ public class AndroidBuildRemoteFileResolver implements IRemoteFileResolver {
             CLog.d("No build id specified, using latest for download.");
             return helper.queryForLatestBuild(branch, buildFlavor, OS_STRING, pattern);
         } else {
+            Set<String> downloadExclusionPatterns = new HashSet<>(
+                AndroidBuildAPIHelper.getAndroidBuildAPIOptions().getDownloadExclusionPatterns());
             return helper.queryForBuildById(
-                    branch, buildId, buildFlavor, OS_STRING, pattern, new HashSet<>());
+                    branch, buildId, buildFlavor, OS_STRING, pattern, downloadExclusionPatterns);
         }
     }
 
