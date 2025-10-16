@@ -108,7 +108,11 @@ public class InspectionUtil {
                             new AbstractMap.SimpleEntry<>(
                                     "gcp_resource_exhausted",
                                     InfraErrorIdentifier
-                                            .CUTTLEFISH_LAUNCH_FAILURE_GCP_RESOURCE_EXHAUSTED))
+                                            .CUTTLEFISH_LAUNCH_FAILURE_GCP_RESOURCE_EXHAUSTED),
+                            new AbstractMap.SimpleEntry<>(
+                                    "invalid_cvd_config",
+                                    InfraErrorIdentifier
+                                            .CUTTLEFISH_LAUNCH_FAILURE_INVALID_CVD_CONFIG))
                     .collect(
                             Collectors.toMap(
                                     Map.Entry::getKey,

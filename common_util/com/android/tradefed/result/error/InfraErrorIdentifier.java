@@ -136,6 +136,7 @@ public enum InfraErrorIdentifier implements ErrorIdentifier {
     // Cuttlefish boot failure signature: gcp_resource_exhausted
     CUTTLEFISH_LAUNCH_FAILURE_GCP_RESOURCE_EXHAUSTED(505_312, FailureStatus.INFRA_FAILURE),
     CUTTLEFISH_LAUNCH_FAILURE_HO_CALL_FAILED(505_313, FailureStatus.INFRA_FAILURE),
+    CUTTLEFISH_LAUNCH_FAILURE_INVALID_CVD_CONFIG(505_314, FailureStatus.CUSTOMER_ISSUE),
 
     UNDETERMINED(510_000, FailureStatus.UNSET);
 
