@@ -428,6 +428,65 @@ public class TestDeviceTest {
         when(mMockStateMonitor.waitForDeviceOnline()).thenReturn(mMockIDevice);
     }
 
+    private void setAdbInstallCommandExepectations(CommandResult result) throws Exception {
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("-r"),
+                        Mockito.eq("-g"),
+                        Mockito.anyString()))
+                .thenReturn(result);
+
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("-r"),
+                        Mockito.anyString()))
+                .thenReturn(result);
+
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("-r"),
+                        Mockito.eq("--user"),
+                        Mockito.anyString(),
+                        Mockito.anyString()))
+                .thenReturn(result);
+
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("-r"),
+                        Mockito.eq("-g"),
+                        Mockito.eq("--user"),
+                        Mockito.anyString(),
+                        Mockito.anyString()))
+                .thenReturn(result);
+
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("--apex"),
+                        Mockito.eq("-r"),
+                        Mockito.anyString()))
+                .thenReturn(result);
+    }
+
     /**
      * Configure Mockito expectations for a successful adb command call
      *
@@ -1588,31 +1647,25 @@ public class TestDeviceTest {
      */
     @Test
     public void testinstallPackageForUser_default_runtimePermissionNotSupported() throws Exception {
-        mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    InstallReceiver createInstallReceiver() {
-                        InstallReceiver receiver = new InstallReceiver();
-                        receiver.processNewLines(new String[] {"Success"});
-                        return receiver;
-                    }
-                };
         final String apkFile = "foo.apk";
         int uid = 123;
         setMockIDeviceRuntimePermissionNotSupported();
         setMockIDeviceAppOpsToPersist();
+        CommandResult adbSuccessResult = new CommandResult(CommandStatus.SUCCESS);
+        setAdbInstallCommandExepectations(adbSuccessResult);
 
         assertNull(mTestDevice.installPackageForUser(new File(apkFile), true, uid));
-        verify(mMockIDevice, times(1))
-                .installPackage(
-                        Mockito.contains(apkFile),
-                        Mockito.eq(true),
-                        Mockito.any(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_TO_OUTPUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES),
+        verify(mMockRunUtil, times(1))
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("-r"),
                         Mockito.eq("--user"),
-                        Mockito.eq(Integer.toString(uid)));
+                        Mockito.eq("123"),
+                        Mockito.anyString());
     }
 
     /**
@@ -1623,32 +1676,26 @@ public class TestDeviceTest {
      */
     @Test
     public void testinstallPackageForUser_default_runtimePermissionSupported() throws Exception {
-        mTestDevice =
-                new TestableTestDevice() {
-                    @Override
-                    InstallReceiver createInstallReceiver() {
-                        InstallReceiver receiver = new InstallReceiver();
-                        receiver.processNewLines(new String[] {"Success"});
-                        return receiver;
-                    }
-                };
         final String apkFile = "foo.apk";
         int uid = 123;
         setMockIDeviceRuntimePermissionSupported();
         setMockIDeviceAppOpsToPersist();
+        CommandResult adbSuccessResult = new CommandResult(CommandStatus.SUCCESS);
+        setAdbInstallCommandExepectations(adbSuccessResult);
 
         assertNull(mTestDevice.installPackageForUser(new File(apkFile), true, uid));
-        verify(mMockIDevice, times(1))
-                .installPackage(
-                        Mockito.contains(apkFile),
-                        Mockito.eq(true),
-                        Mockito.any(),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_MINUTES),
-                        Mockito.eq(TestDevice.INSTALL_TIMEOUT_TO_OUTPUT_MINUTES),
-                        Mockito.eq(TimeUnit.MINUTES),
+        verify(mMockRunUtil, times(1))
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq(MOCK_DEVICE_SERIAL),
+                        Mockito.eq("install"),
+                        Mockito.eq("-r"),
                         Mockito.eq("-g"),
                         Mockito.eq("--user"),
-                        Mockito.eq(Integer.toString(uid)));
+                        Mockito.eq("123"),
+                        Mockito.anyString());
     }
 
     /**
