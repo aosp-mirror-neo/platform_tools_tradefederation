@@ -267,7 +267,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                             TraceSummary.Builder builderV2 = TraceSummary.newBuilder();
                             ALLOW_UNKNOWN_FIELD.merge(bufferedReader, builderV2);
                             parsedMetrics.putAll(
-                                    handlePrefixForProcessedMetrics(
+                                    replaceAllMetricPrefix(
                                             convertPerfettoProtoMessageV2(builderV2.build())));
                         } else {
                             TraceMetrics.Builder builder = TraceMetrics.newBuilder();
@@ -282,7 +282,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                             TraceSummary traceSummary =
                                     TraceSummary.parseFrom(new FileInputStream(perfettoMetricFile));
                             parsedMetrics.putAll(
-                                    handlePrefixForProcessedMetrics(
+                                    replaceAllMetricPrefix(
                                             convertPerfettoProtoMessageV2(traceSummary)));
                         } else {
                             TraceMetrics metricProto = null;
@@ -393,8 +393,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         result.putAll(filterMetrics(processedMetrics));
         replacePrefix(result);
         // Generic prefix string is applied to all the metrics parsed from perfetto trace file.
-        replaceAllMetricPrefix(result);
-        return result;
+        return replaceAllMetricPrefix(result);
     }
 
     /**
@@ -433,9 +432,10 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
      *
      * @param processPerfettoMetrics metrics parsed from the perfetto proto file.
      */
-    private void replaceAllMetricPrefix(Map<String, Metric.Builder> processPerfettoMetrics) {
+    private Map<String, Metric.Builder> replaceAllMetricPrefix(
+            Map<String, Metric.Builder> processPerfettoMetrics) {
         if (mAllMetricPrefix == null || mAllMetricPrefix.isEmpty()) {
-            return;
+            return processPerfettoMetrics;
         }
         Map<String, Metric.Builder> finalMetrics = new HashMap<String, Metric.Builder>();
         for (Map.Entry<String, Metric.Builder> metric : processPerfettoMetrics.entrySet()) {
@@ -443,8 +443,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
             finalMetrics.put(newKey, metric.getValue());
             CLog.d("Perfetto trace metric: key: %s value: %s", newKey, metric.getValue());
         }
-        processPerfettoMetrics.clear();
-        processPerfettoMetrics.putAll(finalMetrics);
+        return finalMetrics;
     }
 
     /**
