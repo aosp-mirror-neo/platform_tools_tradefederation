@@ -44,6 +44,7 @@ import com.android.tradefed.result.ITestSummaryListener;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
+import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.result.resultdb.ResultDBReporter;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
@@ -55,6 +56,7 @@ import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.UniqueMultiMap;
 import com.android.tradefed.util.VersionParser;
+import com.android.tradefed.util.executor.ParallelDeviceExecutor;
 
 import com.google.android.tradefed.build.AbLocalBuildProvider;
 import com.google.android.tradefed.result.AndroidBuildApiLogSaver;
@@ -102,7 +104,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -207,6 +211,8 @@ public class ResultReporter
 
     private static final ImmutableSet<String> TEST_PROPERTIES_MIGRATION =
             ImmutableSet.of("board", "model", "sku", "account_id");
+
+    private static final String ACCOUNT_ID = "account_id";
 
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
@@ -318,6 +324,11 @@ public class ResultReporter
     @Option(name = "enable-test-properties-migration")
     private boolean mEnablePropertyMigration = true;
 
+    @Option(
+            name = "enable-empty-module-reporting",
+            description = "Enable the creation of a module workunit test run without a module.")
+    private boolean mEnableEmptyModuleReporting = true;
+
     private TestResult mCurrentTestResult;
     private String mSummaryUrl;
     private DebugInfo mFailureInfo; // Contains invocation failure message.
@@ -339,6 +350,12 @@ public class ResultReporter
     // When uploading results and we want to associate result with the work unit,
     // the correct one is obtained by calling mWorkUnits.peek.
     private Deque<WorkUnit> mWorkUnits;
+
+    // The module work unit which is used for test runs which are not associated with a module. This
+    // ensures that every TF_TEST_RUN module has a TF_MODULE parent. This is only created when the
+    // test run is created without a module and every test run after will use it. The empty module
+    // will then be finalized when the invocation ends.
+    private WorkUnit mEmptyModuleWorkUnit = null;
 
     // List that stores cached work units. Cached work units are for tests where result is known
     // ahead of time
@@ -687,6 +704,9 @@ public class ResultReporter
                 errorDebug += String.format("code: %s", failure.getErrorIdentifier().code());
                 mFailureInfo.setErrorName(failure.getErrorIdentifier().name());
                 errorDebug += String.format(",name: %s", failure.getErrorIdentifier().name());
+            } else {
+                mFailureInfo.setErrorCode(InfraErrorIdentifier.UNDETERMINED.code());
+                mFailureInfo.setErrorName(InfraErrorIdentifier.UNDETERMINED.name());
             }
             if (failure.getOrigin() != null) {
                 mFailureInfo.setErrorOrigin(failure.getOrigin());
@@ -718,6 +738,9 @@ public class ResultReporter
                 }
             }
 
+            if (mEnableEmptyModuleReporting) {
+                finalizeEmptyModuleWorkUnit();
+            }
             mClient.finalizeTestResults();
             try (CloseableTraceScope update =
                     new CloseableTraceScope(
@@ -961,10 +984,16 @@ public class ResultReporter
                 mMetricFileUtil.testRunStarted(runName);
             }
 
+            WorkUnit parent = mWorkUnits.peek();
+            if (mEnableEmptyModuleReporting
+                    && !parent.getType().equals(WorkUnitType.TF_MODULE.name())) {
+                parent = getEmptyModuleWorkUnit();
+            }
+
             WorkUnit workUnit = new WorkUnit();
             workUnit.setName(runName)
                     .setInvocationId(mInvocation.getInvocationId())
-                    .setParentId(mWorkUnits.peek().getId())
+                    .setParentId(parent.getId())
                     .setTiming(new Timing().setCreationTimestamp(startTime))
                     // Keep the property & the child attempt number for backward compatibility
                     .setProperties(
@@ -1619,6 +1648,50 @@ public class ResultReporter
         return p.getName().equals(MAINLINE_MODULE_PROPERTY);
     }
 
+    private WorkUnit getEmptyModuleWorkUnit() {
+        if (mEmptyModuleWorkUnit == null) {
+            WorkUnit workUnit =
+                    new WorkUnit()
+                            .setParentId(mWorkUnits.peek().getId())
+                            .setInvocationId(mInvocation.getInvocationId())
+                            .setTiming(new Timing().setCreationTimestamp(currentTimestamp()))
+                            .setType(WorkUnitType.TF_MODULE.name())
+                            .setState(SchedulerState.RUNNING.toString())
+                            .setModuleInfo(new ModuleInfo());
+            try {
+                mEmptyModuleWorkUnit = mClient.createWorkUnit(workUnit);
+            } catch (IOException e) {
+                CLog.w("%s\n", workUnit);
+                throw new RuntimeException(e);
+            }
+        }
+        return mEmptyModuleWorkUnit;
+    }
+
+    private void finalizeEmptyModuleWorkUnit() {
+        if (mEmptyModuleWorkUnit == null) {
+            return;
+        }
+        WorkUnit workUnit = mEmptyModuleWorkUnit;
+        try {
+            ObjectUpdater.create(mClient)
+                    .runUpdate(
+                            workUnit.getId(),
+                            new ObjectUpdater.WorkUnitUpdate() {
+                                @Override
+                                public WorkUnit doUpdate(WorkUnit current) {
+                                    current.getTiming().setCompleteTimestamp(currentTimestamp());
+                                    current.setState(SchedulerState.COMPLETED.toString());
+                                    return current;
+                                }
+                            });
+        } catch (IOException e) {
+            CLog.w("Failed to update work unit %s", workUnit);
+            CLog.w(e);
+        }
+        mEmptyModuleWorkUnit = null;
+    }
+
     private void finalizeTfWorkUnit() {
         WorkUnit workUnit = mWorkUnits.pop();
 
@@ -1895,7 +1968,9 @@ public class ResultReporter
             }
         }
         for (Property migrationProperty : mMigrationTestProperties) {
-            result.add(migrationProperty);
+            if (!ACCOUNT_ID.equals(migrationProperty.getName())) {
+                result.add(migrationProperty);
+            }
         }
         return result;
     }
@@ -1971,21 +2046,80 @@ public class ResultReporter
                 CLog.v("ResultDB reporter is null, skipping reporting storage path.");
                 return;
             }
+            if (rdbReporter.isDisabled()) {
+                CLog.v("ResultDB reporter is disabled, skipping reporting storage path.");
+                return;
+            }
             // Temporary solution to sent AnTS test artifact storage path to ResultDB, as part of
             // the migration from AnTS to ResultDB (go/convergence-tr).
             // TODO(beining): Remove this method once we can properly migrate AnTS artifacts to
             // ResultDB.
-            for (LogAssociation association : logAssociations) {
-                if (!association.isSupported()) {
-                    continue;
-                }
-                BuildArtifactMetadata artifact =
-                        mClient.getTestArtifact(
-                                mInvocation.getInvocationId(), association.getResourceId());
-                String storagePath = artifact.getStoragePath();
-                rdbReporter.uploadStoragePath(
-                        association.getResourceId(), storagePath, association.getLog());
+            reportLogToResultDB(logAssociations, rdbReporter);
+        }
+    }
+
+    public void reportLogToResultDB(
+            List<LogAssociation> logAssociations, ResultDBReporter rdbReporter) throws IOException {
+        List<Callable<Void>> tasks = new ArrayList<>();
+        for (LogAssociation association : logAssociations) {
+            if (!association.isSupported()) {
+                continue;
             }
+            ResultDBLogReportTask oneTask =
+                    new ResultDBLogReportTask(
+                            association, mInvocation.getInvocationId(), mClient, rdbReporter);
+            tasks.add(oneTask);
+        }
+
+        if (tasks.isEmpty()) {
+            return;
+        }
+        if (mParallelLogUploadPool > 0) {
+            int effectivePoolSize = Math.min(mParallelLogUploadPool, tasks.size());
+            ParallelDeviceExecutor<Void> executor = new ParallelDeviceExecutor<>(effectivePoolSize);
+            // The invokeAll method will block until all tasks are completed.
+            executor.invokeAll(tasks, 0, TimeUnit.MILLISECONDS);
+        } else {
+            // Call sequentially with blocking call.
+            for (Callable<Void> callable : tasks) {
+                ((ResultDBLogReportTask) callable).call();
+            }
+        }
+    }
+
+    /**
+     * A Callable class that encapsulates the logic for reporting a single log association to
+     * ResultDB.
+     */
+    private class ResultDBLogReportTask implements Callable<Void> {
+        private final LogAssociation mAssociation;
+        private final ITestStorageClient mClient;
+        private final ResultDBReporter rdbReporter;
+        private final String mInvocationId;
+
+        private ResultDBLogReportTask(
+                LogAssociation association,
+                String invocationId,
+                ITestStorageClient mClient,
+                ResultDBReporter rdbReporter) {
+            this.mAssociation = association;
+            this.mClient = mClient;
+            this.rdbReporter = rdbReporter;
+            this.mInvocationId = invocationId;
+        }
+
+        @Override
+        public Void call() throws IOException {
+            CLog.v(
+                    "Reporting log association to ResultDB %s name: %s:",
+                    mAssociation, mAssociation.getResourceId());
+
+            BuildArtifactMetadata artifact =
+                    mClient.getTestArtifact(mInvocationId, mAssociation.getResourceId());
+            String storagePath = artifact.getStoragePath();
+            rdbReporter.uploadStoragePath(
+                    mAssociation.getResourceId(), storagePath, mAssociation.getLog());
+            return null;
         }
     }
 

@@ -22,6 +22,7 @@ import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.postprocessor.AutoLogProcessor;
+import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.UniqueMultiMap;
 
 import java.io.File;
@@ -29,6 +30,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -279,14 +281,19 @@ public class CommandOptions implements ICommandOptions {
     @Option(
             name = "experimental-flags",
             description = "Map of experimental flags that can be used for feature gating projects.")
-    private Map<String, String> mExperimentalFlags = new LinkedHashMap<>();
+    private MultiMap<String, String> mExperimentalFlags = new MultiMap<>();
 
     @Option(
             name = "rollout-flags",
             description =
                     "Map of rollout flags to enable features completely. Rollout flags are ignored"
                             + " when TF objects are not present.")
-    private Map<String, String> mRolloutFlags = new LinkedHashMap<>();
+    private MultiMap<String, String> mRolloutFlags = new MultiMap<>();
+
+    @Option(
+            name = "rollout-flags-files",
+            description = "A List of files containing rollout-flags to enable features completely.")
+    private List<File> mRolloutFlagsFiles = new LinkedList<>();
 
     @Option(
             name = "skip-trybot-experiment",
@@ -435,6 +442,11 @@ public class CommandOptions implements ICommandOptions {
                     "Whether to apply post processors in the order they are mentioned in the"
                             + " config.")
     private boolean mKeepPostProcessorOrder = false;
+
+    @Option(
+            name = "enable-device-specific-setup",
+            description = "Whether to enable the automated device setup or not.")
+    private boolean mEnableDeviceSpecificSetup = true;
 
     /**
      * Set the help mode for the config.
@@ -755,14 +767,19 @@ public class CommandOptions implements ICommandOptions {
 
     /** {@inheritDoc} */
     @Override
-    public Map<String, String> getExperimentalFlags() {
+    public MultiMap<String, String> getExperimentalFlags() {
         return mExperimentalFlags;
     }
 
     /** {@inheritDoc} */
     @Override
-    public Map<String, String> getRolloutFlags() {
+    public MultiMap<String, String> getRolloutFlags() {
         return mRolloutFlags;
+    }
+
+    @Override
+    public List<File> getRolloutFlagsFiles() {
+        return mRolloutFlagsFiles;
     }
 
     /** {@inheritDoc} */
@@ -1037,5 +1054,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean isGeminiLogOnlyMode() {
         return mLogOnlyPrompt;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean shouldEnableDeviceSpecificSetup() {
+        return mEnableDeviceSpecificSetup;
     }
 }

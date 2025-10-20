@@ -206,6 +206,11 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             error.setFailureStatus(FailureStatus.TEST_FAILURE);
             error.setErrorIdentifier(InfraErrorIdentifier.EXPECTED_TESTS_MISMATCH);
         }
+        // attempt to back-fill unfinished test during a crash or device issue.
+        if (mLastStartedTest != null) {
+            super.testFailed(mLastStartedTest, error);
+            super.testEnded(mLastStartedTest, new HashMap<String, Metric>());
+        }
         String runLevelError =
                 String.format("Run level error reported reason: '%s'", error.getErrorMessage());
         reportUnexecutedTestsIfNeeded(runLevelError);

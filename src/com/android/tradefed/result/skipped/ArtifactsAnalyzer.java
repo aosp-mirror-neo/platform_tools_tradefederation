@@ -186,7 +186,10 @@ public class ArtifactsAnalyzer {
                 if (res == null) {
                     deviceImageChanged = true;
                     for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
-                        imageToDigest.put(imagePartition.getCacheKeyName(), null);
+                        String imageDigestKey =
+                                ImageContentAnalyzer.getImageDigestKey(
+                                        AnalysisMethod.DEVICE_IMAGE, imagePartition);
+                        imageToDigest.put(imageDigestKey, null);
                     }
                 } else {
                     imageToDigest.putAll(res.getImageToDigest());

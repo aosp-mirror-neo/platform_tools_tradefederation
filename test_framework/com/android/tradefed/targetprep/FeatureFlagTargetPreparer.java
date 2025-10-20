@@ -70,7 +70,10 @@ import java.util.stream.Collectors;
  *
  * <p>Should be used in combination with {@link DeviceSetup} to disable DeviceConfig syncing during
  * the test which could overwrite the changes made by this preparer.
+ *
+ * @deprecated Use {@link AFlagsTargetPreparer} instead.
  */
+@Deprecated
 @OptionClass(alias = "feature-flags")
 public class FeatureFlagTargetPreparer extends BaseTargetPreparer {
 

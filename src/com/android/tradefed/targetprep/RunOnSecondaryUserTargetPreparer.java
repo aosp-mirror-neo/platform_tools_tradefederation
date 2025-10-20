@@ -57,6 +57,8 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
 
     @VisibleForTesting static final String START_BACKGROUND_USER = "start-background-user";
 
+    private static final String SECONDARY_USER_TYPE = "android.os.usertype.full.SECONDARY";
+
     private int userIdToDelete = -1;
     private int originalUserId;
 
@@ -91,7 +93,7 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
 
         if (secondaryUserId == -1) {
             if (!assumeTrue(
-                    canCreateAdditionalUsers(testInfo.getDevice(), 1),
+                    canCreateAdditionalSecondaryUsers(testInfo.getDevice(), 1),
                     "Device cannot support additional users",
                     testInfo)) {
                 return;
@@ -235,9 +237,12 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
                 || userInfo.isCommunalProfile();
     }
 
-    /** Checks whether it is possible to create the desired number of users. */
-    protected boolean canCreateAdditionalUsers(ITestDevice device, int numberOfUsers)
+    /** Checks whether it is possible to create the desired number of secondary users. */
+    protected boolean canCreateAdditionalSecondaryUsers(ITestDevice device, int numberOfUsers)
             throws DeviceNotAvailableException {
+        if (device.getApiLevel() >= 36) {
+            return device.getRemainingCreatableUserCount(SECONDARY_USER_TYPE) >= numberOfUsers;
+        }
         return device.listUsers().size() + numberOfUsers <= device.getMaxNumberOfUsersSupported();
     }
 }

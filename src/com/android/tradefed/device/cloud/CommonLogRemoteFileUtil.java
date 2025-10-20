@@ -28,6 +28,8 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.MultiMap;
+import com.android.tradefed.util.RemoteFileUtil;
+import com.android.tradefed.util.RemoteSshUtil;
 import com.android.tradefed.util.ZipUtil;
 import com.android.tradefed.util.avd.HostOrchestratorUtil;
 
@@ -218,7 +220,12 @@ public class CommonLogRemoteFileUtil {
             // Override the list of logs to collect when the device is hosted by Oxygen service.
             toFetch.addAll(OXYGEN_LOG_FILES);
             if (!RemoteFileUtil.doesRemoteFileExist(
-                    gceAvd, options, runUtil, 60000, OXYGEN_CUTTLEFISH_LOG_DIR)) {
+                    gceAvd.hostAndPort().getHost(),
+                    options.getInstanceUser(),
+                    options.getSshPrivateKeyPath(),
+                    runUtil,
+                    60000,
+                    OXYGEN_CUTTLEFISH_LOG_DIR)) {
                 toFetch.addAll(OXYGEN_LOG_FILES_FALLBACK);
             }
         } else {
@@ -299,7 +306,14 @@ public class CommonLogRemoteFileUtil {
         cmd.add("exit");
         CommandStatus sshAttemptStatus =
                 RemoteSshUtil.remoteSshCommandExec(
-                                gceAvd, options, runUtil, 10000, cmd.toArray(new String[0]))
+                                options.useOxygenationDevice()
+                                        ? "localhost"
+                                        : gceAvd.hostAndPort().getHost(),
+                                options.getInstanceUser(),
+                                options.getSshPrivateKeyPath(),
+                                runUtil,
+                                10000,
+                                cmd.toArray(new String[0]))
                         .getStatus();
         if (!CommandStatus.SUCCESS.equals(sshAttemptStatus)) {
             CLog.e(
@@ -389,7 +403,14 @@ public class CommonLogRemoteFileUtil {
         if (resultList.getStdout().split("\n").length <= 0) {
             return;
         }
-        File tombstonesDir = RemoteFileUtil.fetchRemoteDir(gceAvd, options, runUtil, 120000, path);
+        File tombstonesDir =
+                RemoteFileUtil.fetchRemoteDir(
+                        gceAvd.hostAndPort().getHost(),
+                        options.getInstanceUser(),
+                        options.getSshPrivateKeyPath(),
+                        runUtil,
+                        120000,
+                        path);
         if (tombstonesDir == null) {
             CLog.w("No tombstones directory was pulled.");
             return;

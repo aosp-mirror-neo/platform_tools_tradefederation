@@ -17,6 +17,10 @@ package com.android.tradefed.util.avd;
 
 import static com.android.tradefed.util.avd.HostOrchestratorClient.CreateSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.Cvd;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.DisplayAddRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.DisplayAddResponse;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.DisplayListResponse;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.DisplayScreenshotResponse;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.ErrorResponseException;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.HoHttpClient;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.IHoHttpClient;
@@ -26,6 +30,10 @@ import static com.android.tradefed.util.avd.HostOrchestratorClient.StartCVDReque
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateBugreportRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDeleteSnapshotRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDisplayAddRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDisplayListRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDisplayRemoveRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDisplayScreenshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildGetOperationResultRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildListCvdsRequest;
@@ -40,6 +48,7 @@ import com.android.ddmlib.Log.LogLevel;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.CommandResult;
+import com.android.tradefed.util.CommandResultWith;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
@@ -98,6 +107,8 @@ public class HostOrchestratorUtil {
     private IHoHttpClient mHttpClient;
     private String mHOPortNumber = "2080";
     private Process mHOTunnel;
+    // Intervals to wait before retrying a HO operation.
+    private long mWaitForOperationMs = WAIT_FOR_OPERATION_MS;
 
     public HostOrchestratorUtil(
             boolean useOxygenation,
@@ -228,18 +239,34 @@ public class HostOrchestratorUtil {
             return false;
         }
         long maxEndTime = System.currentTimeMillis() + maxWaitTime;
+        int retryCount = 0;
         while (System.currentTimeMillis() < maxEndTime) {
             ListCvdsResponse listCvdsRes = null;
             try {
                 listCvdsRes = listCvds();
             } catch (IOException | InterruptedException | ErrorResponseException e) {
-                CLog.e("Failed listing cvds: %s", e);
-                return false;
+                CLog.e("Failed listing cvds (attempt %d): %s", retryCount, e);
+                // TODO(b/444465436): Reduce the retry count to 5 after the bug is fixed.
+                // Retry at most 20 times for HO exception
+                if (retryCount == 20) {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricLogger.InvocationMetricKey.DEVICE_ERROR_SIGNATURES,
+                            "ho_call_failed");
+                    return false;
+                }
+                retryCount++;
+                getRunUtil().sleep(mWaitForOperationMs);
+                continue;
             }
             if (listCvdsRes.cvds.size() > 0 && listCvdsRes.cvds.get(0).status.equals("Running")) {
+                if (retryCount > 0) {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricLogger.InvocationMetricKey.HO_CALL_RETRY_COUNT,
+                            retryCount);
+                }
                 return true;
             }
-            getRunUtil().sleep(WAIT_FOR_OPERATION_MS);
+            getRunUtil().sleep(mWaitForOperationMs);
         }
         return false;
     }
@@ -427,6 +454,152 @@ public class HostOrchestratorUtil {
             return result;
         }
         return new CommandResult(CommandStatus.SUCCESS);
+    }
+
+    private CommandResult buildErrorCommandResult(String message) {
+        CommandResult result = new CommandResult(CommandStatus.EXCEPTION);
+        result.setStderr(message);
+        return result;
+    }
+
+    private CommandResultWith<Cvd> getCvd() {
+        if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+            return CommandResultWith.error(buildHOFailureResult());
+        }
+
+        Cvd cvd;
+        try {
+            ListCvdsResponse listCvdsResponse = listCvds();
+            if (listCvdsResponse.cvds.size() != 1) {
+                return CommandResultWith.errorString(
+                        String.format(
+                                "Expected exactly 1 cvd instance but found %d",
+                                listCvdsResponse.cvds.size()));
+            }
+            cvd = listCvdsResponse.cvds.get(0);
+            return CommandResultWith.success(cvd);
+        } catch (InterruptedException | IOException | ErrorResponseException e) {
+            return CommandResultWith.errorString(
+                    String.format("Failed to list cvd instances: %s", e));
+        }
+    }
+
+    /** Attempt to hotplug add a display to a Cuttlefish instance via Host Orchestrator. */
+    public CommandResultWith<DisplayAddResponse> addDisplay(
+            int width, int height, int dpi, int refreshRateHz) {
+        CommandResultWith<Cvd> cvdCommandResult = getCvd();
+        if (!cvdCommandResult.isSuccess()) {
+            return CommandResultWith.errorString(
+                    String.format(
+                            "Failed to add display: failed to get cvd: %s",
+                            cvdCommandResult.getCommandResult().getStderr()));
+        }
+        Cvd cvd = cvdCommandResult.getValue();
+
+        String baseUrl = getHOBaseUrl(mHOPortNumber);
+        HttpRequest httpRequest =
+                buildDisplayAddRequest(
+                        baseUrl,
+                        cvd.group,
+                        cvd.name,
+                        new DisplayAddRequest(width, height, dpi, refreshRateHz));
+        try {
+            DisplayAddResponse response =
+                    sendRequest(mHttpClient, httpRequest, DisplayAddResponse.class);
+            return CommandResultWith.success(response);
+        } catch (IOException | InterruptedException | ErrorResponseException e) {
+            return CommandResultWith.error(
+                    buildErrorCommandResult(
+                            String.format(
+                                    "Failed to add display: failed to add via host orchestrator:"
+                                            + " %s",
+                                    e)));
+        }
+    }
+
+    /** Attempt to list the displays of a Cuttlefish instance via Host Orchestrator. */
+    public CommandResultWith<DisplayListResponse> listDisplays() {
+        CommandResultWith<Cvd> cvdCommandResult = getCvd();
+        if (!cvdCommandResult.isSuccess()) {
+            return CommandResultWith.errorString(
+                    String.format(
+                            "Failed to list displays: failed to get cvd: %s",
+                            cvdCommandResult.getCommandResult().getStderr()));
+        }
+        Cvd cvd = cvdCommandResult.getValue();
+
+        String baseUrl = getHOBaseUrl(mHOPortNumber);
+        HttpRequest httpRequest = buildDisplayListRequest(baseUrl, cvd.group, cvd.name);
+        try {
+            DisplayListResponse response =
+                    sendRequest(mHttpClient, httpRequest, DisplayListResponse.class);
+            return CommandResultWith.success(response);
+        } catch (IOException | InterruptedException | ErrorResponseException e) {
+            return CommandResultWith.error(
+                    buildErrorCommandResult(
+                            String.format(
+                                    "Failed to list displays: failed to list displays via host"
+                                            + " orchestrator: %s",
+                                    e)));
+        }
+    }
+
+    /** Attempt to hotplug remove a display from a Cuttlefish instance via Host Orchestrator. */
+    public CommandResult removeDisplay(int displayNumber) {
+        CommandResultWith<Cvd> cvdCommandResult = getCvd();
+        if (!cvdCommandResult.isSuccess()) {
+            return buildErrorCommandResult(
+                    String.format(
+                            "Failed to remove display: failed to get cvd: %s",
+                            cvdCommandResult.getCommandResult().getStderr()));
+        }
+        Cvd cvd = cvdCommandResult.getValue();
+
+        String baseUrl = getHOBaseUrl(mHOPortNumber);
+        HttpRequest httpRequest =
+                buildDisplayRemoveRequest(baseUrl, cvd.group, cvd.name, displayNumber);
+        try {
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+        } catch (IOException | InterruptedException | ErrorResponseException e) {
+            return buildErrorCommandResult(
+                    String.format(
+                            "Failed to remove display: failed to remove displays via host"
+                                    + " orchestrator: %s",
+                            e));
+        }
+        return new CommandResult(CommandStatus.SUCCESS);
+    }
+
+    /** Attempt to screenshot a display from a Cuttlefish instance via Host Orchestrator. */
+    public CommandResultWith<DisplayScreenshotResponse> screenshotDisplay(int displayNumber) {
+        CommandResultWith<Cvd> cvdCommandResult = getCvd();
+        if (!cvdCommandResult.isSuccess()) {
+            return CommandResultWith.errorString(
+                    String.format(
+                            "Failed to screenshot display: failed to get cvd: %s",
+                            cvdCommandResult.getCommandResult().getStderr()));
+        }
+        Cvd cvd = cvdCommandResult.getValue();
+
+        String baseUrl = getHOBaseUrl(mHOPortNumber);
+        HttpRequest httpRequest =
+                buildDisplayScreenshotRequest(baseUrl, cvd.group, cvd.name, displayNumber);
+        try {
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+            waitForOperation(mHttpClient, baseUrl, operation.name, WAIT_FOR_OPERATION_TIMEOUT_MS);
+
+            httpRequest = buildGetOperationResultRequest(baseUrl, operation.name);
+            DisplayScreenshotResponse screenshotResponse =
+                    sendRequest(mHttpClient, httpRequest, DisplayScreenshotResponse.class);
+            return CommandResultWith.success(screenshotResponse);
+        } catch (IOException | InterruptedException | ErrorResponseException | TimeoutException e) {
+            return CommandResultWith.error(
+                    buildErrorCommandResult(
+                            String.format(
+                                    "Failed to screenshot display: failed to screenshot display via"
+                                            + " host orchestrator: %s",
+                                    e)));
+        }
     }
 
     /**
@@ -627,5 +800,10 @@ public class HostOrchestratorUtil {
         CLog.e(msg);
         curlRes.setStderr(msg);
         return curlRes;
+    }
+
+    @VisibleForTesting
+    void setWaitForOperationMs(long interval) {
+        mWaitForOperationMs = interval;
     }
 }

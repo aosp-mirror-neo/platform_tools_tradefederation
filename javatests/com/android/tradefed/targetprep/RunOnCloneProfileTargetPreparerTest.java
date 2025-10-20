@@ -45,7 +45,6 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -97,12 +96,11 @@ public final class RunOnCloneProfileTargetPreparerTest {
         mPreparer.setProfileUserType(USERTYPE_PROFILE_CLONE);
         mPreparer.setTradefedUserType(CLONE_PROFILE);
 
-        ArrayList<Integer> userIds = new ArrayList<>();
-        userIds.add(0);
-
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(2);
-        when(mTestInfo.getDevice().listUsers()).thenReturn(userIds);
-        when(mTestInfo.getDevice().getApiLevel()).thenReturn(34);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(1);
+        when(mTestInfo.getDevice().getApiLevel()).thenReturn(37);
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND))
                 .thenReturn(SAMPLE_DUMPSYS_USER_CAN_ADD_CP);
     }
@@ -129,6 +127,8 @@ public final class RunOnCloneProfileTargetPreparerTest {
     public void setUp_deviceDoesNotSupportCloneUser_doesNotChangeTestUser() throws Exception {
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND))
                 .thenReturn(SAMPLE_DUMPSYS_USER_CAN_NOT_ADD_CP);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -139,6 +139,8 @@ public final class RunOnCloneProfileTargetPreparerTest {
     public void setUp_deviceDoesNotSupportCloneUser_setsArgumentToSkipTests() throws Exception {
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND))
                 .thenReturn(SAMPLE_DUMPSYS_USER_CAN_NOT_ADD_CP);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -285,7 +287,8 @@ public final class RunOnCloneProfileTargetPreparerTest {
 
     @Test
     public void setUp_doesNotSupportAdditionalUsers_doesNotChangeTestUser() throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -296,7 +299,8 @@ public final class RunOnCloneProfileTargetPreparerTest {
     @Test
     public void setUp_doesNotSupportAdditionalUsers_alreadyHasProfile_runsTestAsExistingUser()
             throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(0);
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 11,
@@ -330,7 +334,8 @@ public final class RunOnCloneProfileTargetPreparerTest {
     @Test
     public void setUp_doesNotSupportAdditionalUsers_alreadyHasCloneProfile_doesNotSkipTests()
             throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_CLONE)))
+                .thenReturn(0);
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 11,

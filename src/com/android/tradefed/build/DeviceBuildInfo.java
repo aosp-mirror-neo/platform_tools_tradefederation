@@ -18,6 +18,7 @@ package com.android.tradefed.build;
 
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.util.CasUtil;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
@@ -35,6 +36,8 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     private String mDeviceBuildFlavor = null;
     private transient Optional<FuseMountManager> mOptionalFuseMountManager = null;
     private transient Optional<CasConverter> mOptionalCasConverter = null;
+    private static final String CAS_FUSE_MOUNT = "cas_fuse_mount";
+    private static final String CAS_CONVERT = "cas_convert";
 
     public DeviceBuildInfo() {
         super();
@@ -52,6 +55,12 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
     Optional<FuseMountManager> getFuseMountManager() {
         // Lazy-initialize the manager by calling the factory.
         if (mOptionalFuseMountManager == null) {
+            if (!FuseMountManagerFactory.isFuseAvailable()) {
+                CLog.w("FUSE is not available, FUSE mounting will be disabled.");
+                mOptionalFuseMountManager = Optional.empty();
+                return mOptionalFuseMountManager;
+            }
+
             try {
                 mOptionalFuseMountManager =
                         Optional.of(
@@ -62,11 +71,15 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             } catch (IOException | ExceptionInInitializerError | NoClassDefFoundError e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 CLog.w(
-                        "Failed to get FUSE mount manager, FUSE mounting will be disabled. Error:"
+                        "Failed to get FUSE mount manager, can't fuse mount device image. Error:"
                                 + " %s",
                         cause.getMessage());
                 mOptionalFuseMountManager = Optional.empty();
             }
+        } else {
+            CLog.d(
+                    "Reusing FuseMountManager for DeviceBuildInfo(0x%s).",
+                    Integer.toHexString(System.identityHashCode(this)));
         }
         return mOptionalFuseMountManager;
     }
@@ -125,9 +138,14 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
             return null;
         }
 
-        // TODO(frankfeng): return if image is uncompressed once rollout is done.
-        if (!CasUtil.isChunkedDir(deviceImage.toPath())) {
+        if (CasUtil.isUncompressedDeviceImage(deviceImage.toPath())) {
+            CLog.i("Device image is uncompressed: '%s'.", deviceImage);
             return deviceImage;
+        }
+
+        if (!CasUtil.isChunkedDir(deviceImage.toPath())) {
+            CLog.i("Device image is not chunked: '%s'.", deviceImage);
+            return deviceImage; // This can be a compressed image zip file.
         }
 
         return getFuseMountManager()
@@ -146,7 +164,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
      */
     private File mountIfPossible(FuseMountManager manager, File deviceImage) {
         if (CasUtil.isChunkedDir(deviceImage.toPath())) {
-            try {
+            try (CloseableTraceScope ignore = new CloseableTraceScope(CAS_FUSE_MOUNT)) {
                 return manager.mount(deviceImage.toPath()).toFile();
 
             } catch (IOException | InterruptedException e) {
@@ -196,7 +214,7 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
      * @param convertedImage the converted device image. If null, the conversion is in-place.
      */
     private void convertNoThrow(CasConverter converter, Path image, Path convertedImage) {
-        try {
+        try (CloseableTraceScope ignore = new CloseableTraceScope(CAS_CONVERT)) {
             converter.convert(image, convertedImage);
         } catch (IOException e) {
             CLog.e(e);
@@ -343,9 +361,16 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
 
     /** {@inheritDoc} */
     @Override
+    public final void unmountAll() {
+        CLog.i(
+                "DeviceBuildInfo.unmountAll() for 0x%s",
+                Integer.toHexString(System.identityHashCode(this)));
+        getFuseMountManager().ifPresent(manager -> manager.unmountAll());
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public void cleanUp() {
-        // It is not adequate to call manager.unMount(getDeviceImageFile()) as setDeviceImageFile()
-        // could have been called multiple times with different image files.
         getFuseMountManager().ifPresent(manager -> manager.unmountAll());
         super.cleanUp();
     }

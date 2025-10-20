@@ -90,6 +90,8 @@ public class FilePullerLogCollector extends FilePullerDeviceMetricCollector {
             return LogDataType.JSON;
         } else if (".bmp".equals(ext)) {
             return LogDataType.BMP;
+        } else if (".data".equals(ext)) {
+            return LogDataType.DATA;
         }
         return LogDataType.TEXT;
     }

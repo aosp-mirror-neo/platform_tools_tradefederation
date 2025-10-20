@@ -22,6 +22,9 @@ import static java.lang.String.format;
 
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.IDeviceBuildInfo;
+import com.android.tradefed.build.content.ContentAnalysisContext;
+import com.android.tradefed.build.content.ContentInformation;
+import com.android.tradefed.build.content.ContentModuleLister;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.ConfigurationFactory;
 import com.android.tradefed.config.ConfigurationUtil;
@@ -62,6 +65,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -80,6 +84,9 @@ public class TestMappingsValidation implements IBuildReceiver {
     @Option(name = "test-group-to-validate", description = "The test groups to be validated.")
     private Set<String> mTestGroupToValidate =
             new HashSet<>(Arrays.asList("presubmit", "postsubmit", "presubmit-large"));
+
+    @Option(name = "validate-host-test-group", description = "Whether to validate host test group.")
+    private boolean mValidateHostTestGroup = false;
 
     @Option(name = "skip-modules", description = "Test modules that could be skipped.")
     private Set<String> mSkipModules = new HashSet<>();
@@ -121,6 +128,8 @@ public class TestMappingsValidation implements IBuildReceiver {
     private IBuildInfo mBuild;
     private JsonObject mergedModuleInfo = new JsonObject();
     private Map<String, Set<TestInfo>> allTests = null;
+    private Set<String> generalTestsModules = new HashSet<String>();
+    private Set<String> deviceTestsModules = new HashSet<String>();
 
     /** Type of filters used in test options in TEST_MAPPING files. */
     enum Filters {
@@ -236,6 +245,25 @@ public class TestMappingsValidation implements IBuildReceiver {
                     "ApexServiceTestCases",
                     "OverlayDeviceTests");
 
+    // This list should not grow ! There is no point in being in that list as they cannot execute on
+    // the currently configured default test mapping groups we validate here.
+    private static final Set<String> KNOWN_NAMESPACE_MODULE =
+            ImmutableSet.of(
+                    "ConnectivityThermalPowerManagerTests",
+                    "vts_ltp_test_arm_64",
+                    "liblyric.catpipe_test",
+                    "vts_ltp_test_arm",
+                    "libg3a.afd_test",
+                    "android.hardware.input.processor-service_test",
+                    "vts_ltp_test_x86_64",
+                    "lassen_logging_config_test",
+                    "aarch64-paging_test_src_lib",
+                    "libperfmgr_test",
+                    "libadpf_test",
+                    "liboemservice_proxy_test",
+                    // Host:true test under namespace
+                    "trusty_app_compat_test_fingerprint");
+
     @Override
     public void setBuild(IBuildInfo buildInfo) {
         mBuild = buildInfo;
@@ -254,6 +282,15 @@ public class TestMappingsValidation implements IBuildReceiver {
                     TestMapping.extractTestMappingsZip(deviceBuildInfo.getFile(TEST_MAPPINGS_ZIP));
             deleteUnzip = true;
         }
+        generalTestsModules =
+                extractTestsModules(
+                        deviceBuildInfo.getFile("cas_content_details.json"), "general-tests.zip");
+        CLog.d("general-tests modules size: %s", generalTestsModules.size());
+        deviceTestsModules =
+                extractTestsModules(
+                        deviceBuildInfo.getFile("device_cas_content_details.json"),
+                        "device-tests.zip");
+        CLog.d("device-tests modules size: %s", deviceTestsModules.size());
         mergeModuleInfo(deviceBuildInfo.getFile(MODULE_INFO));
         for (String fileKey : deviceBuildInfo.getVersionedFileKeys()) {
             if (fileKey.contains("additional-module-info")) {
@@ -263,6 +300,9 @@ public class TestMappingsValidation implements IBuildReceiver {
         }
         TestMapping testMapping = new TestMapping();
         allTests = testMapping.getAllTests(testMappingsDir);
+        for (Entry<String, Set<TestInfo>> entry : allTests.entrySet()) {
+            entry.getValue().removeIf(test -> mValidateHostTestGroup != test.getHostOnly());
+        }
     }
 
     @After
@@ -410,8 +450,10 @@ public class TestMappingsValidation implements IBuildReceiver {
                 if (!validateSuiteSetting(moduleName)) {
                     errors.add(
                             String.format(
-                                    "Missing test_suite setting for test: %s, test group: %s, "
-                                            + "TEST_MAPPING file path: %s",
+                                    "You might be missing test_suite setting for test: %s, test"
+                                        + " group: %s, TEST_MAPPING file path: %s.\n"
+                                        + "Or your test is building under an unreachable namespace"
+                                        + " with current test mapping targets.",
                                     testInfo.getName(), testGroup, testInfo.getSources()));
                 }
             }
@@ -622,9 +664,22 @@ public class TestMappingsValidation implements IBuildReceiver {
      *     "device-tests", or name doesn't exist in module-info.json.
      */
     private boolean validateSuiteSetting(String name) {
-        if (!mergedModuleInfo.has(name)) {
-            CLog.w("Test Module: %s can't be found in module-info.json. Ignore checking...", name);
+        if (generalTestsModules.contains(name) || deviceTestsModules.contains(name)) {
             return true;
+        }
+        if (!mergedModuleInfo.has(name)) {
+            if (KNOWN_NAMESPACE_MODULE.contains(name)) {
+                CLog.w(
+                        "Test Module: %s can't be found in module-info.json. Ignore checking...",
+                        name);
+                return true;
+            } else {
+                CLog.w(
+                        "Module '%s' doesn't exist and cannot be executed for those build targets"
+                                + " of test mapping.",
+                        name);
+                return false;
+            }
         }
         JsonArray compatibilitySuites =
                 mergedModuleInfo
@@ -685,6 +740,17 @@ public class TestMappingsValidation implements IBuildReceiver {
 
     private void mergeModuleInfoByName(JsonObject jsonObject) {
         mergedModuleInfo.add(jsonObject.get(MODULE_NAME).getAsString(), jsonObject);
+    }
+
+    private Set<String> extractTestsModules(File file, String contentEntry) throws IOException {
+        ContentInformation contentInformation = new ContentInformation(null, "", file, "");
+        ContentAnalysisContext context =
+                new ContentAnalysisContext(contentEntry, contentInformation, null);
+        Set<String> modules = ContentModuleLister.buildModuleList(context);
+        if (modules == null) {
+            return new HashSet<String>();
+        }
+        return modules;
     }
 
     /** Validate mainline test with parameterized mainline modules is properly configured. */

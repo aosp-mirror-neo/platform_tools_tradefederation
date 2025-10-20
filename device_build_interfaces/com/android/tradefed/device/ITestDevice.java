@@ -91,14 +91,28 @@ public interface ITestDevice extends INativeDevice {
 
     /** A simple struct class to store information about a single APEX */
     public static class ApexInfo {
+        // NOTE: this is the package name, specified in AndroidManifest.xml, not the APEX name.
         public final String name;
         public final long versionCode;
         public final String sourceDir;
+        public final boolean isFactory;
 
-        public ApexInfo(String name, long versionCode, String sourceDir) {
+        public ApexInfo(String name, long versionCode, String sourceDir, boolean isFactory) {
             this.name = name;
             this.versionCode = versionCode;
             this.sourceDir = sourceDir;
+            this.isFactory = isFactory;
+        }
+
+        public ApexInfo(String name, long versionCode, String sourceDir) {
+            // installed APEXes are located in /data/active/apex
+            // or /dev/block/dm-NNN (with the mount_before_data feature)
+            this(
+                    name,
+                    versionCode,
+                    sourceDir,
+                    !sourceDir.startsWith("/data/apex/active/")
+                            && !sourceDir.startsWith("/dev/block/dm-"));
         }
 
         public ApexInfo(String name, long versionCode) {
@@ -109,7 +123,10 @@ public interface ITestDevice extends INativeDevice {
         public boolean equals(Object other) {
             if (other != null && other instanceof ApexInfo) {
                 ApexInfo ai = (ApexInfo) other;
-                return name.equals(ai.name) && versionCode == ai.versionCode;
+                return name.equals(ai.name)
+                        && versionCode == ai.versionCode
+                        && sourceDir.equals(ai.sourceDir)
+                        && isFactory == ai.isFactory;
             }
             return false;
         }
@@ -159,8 +176,6 @@ public interface ITestDevice extends INativeDevice {
      * @return a {@link String} with an error code, or <code>null</code> if success.
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
      *     recovered.
-     * @throws UnsupportedOperationException if runtime permission is not supported by the platform
-     *     on device.
      */
     public String installPackage(
             File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
@@ -197,8 +212,6 @@ public interface ITestDevice extends INativeDevice {
      * @return a {@link String} with an error code, or <code>null</code> if success.
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
      *     recovered.
-     * @throws UnsupportedOperationException if runtime permission is not supported by the platform
-     *     on device.
      */
     public String installPackageForUser(
             File packageFile,
@@ -216,6 +229,39 @@ public interface ITestDevice extends INativeDevice {
      */
     public boolean installPackageWithIncrementalMode(
             File[] apkFiles, String[] extraArgs, String userId) throws DeviceNotAvailableException;
+
+    /**
+     * Install an Android package on device with adb command.
+     *
+     * @param packageFile the apk file to install
+     * @param reinstall <code>true</code> if a reinstall should be performed
+     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
+     *     options.
+     * @return a {@link String} with an error code, or <code>null</code> if success.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public String adbInstallPackage(File packageFile, boolean reinstall, String... extraArgs)
+            throws DeviceNotAvailableException;
+
+    /**
+     * Install an Android package on device with adb command.
+     *
+     * <p>Note: Only use cases that requires explicit control of granting runtime permission at
+     * install time should call this function.
+     *
+     * @param packageFile the apk file to install
+     * @param reinstall <code>true</code> if a reinstall should be performed
+     * @param grantPermissions if all runtime permissions should be granted at install time
+     * @param extraArgs optional extra arguments to pass. See 'adb shell pm -h' for available
+     *     options.
+     * @return a {@link String} with an error code, or <code>null</code> if success.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public String adbInstallPackage(
+            File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
+            throws DeviceNotAvailableException;
 
     /**
      * Uninstall an Android package from device.
@@ -666,9 +712,16 @@ public interface ITestDevice extends INativeDevice {
     public List<PackageInfo> getAppPackageInfos() throws DeviceNotAvailableException;
 
     /**
-     * Determines if multi user is supported.
+     * Returns whether this device supports multiple switchable users with their own login and
+     * customizable space.
      *
-     * @return true if multi user is supported, false otherwise
+     * <p>Note that, even if false, multiple users might still be possible, as long as no login UI
+     * is required; e.g., profiles might still be supported, as they do not require a login UI.
+     *
+     * <p>This also checks config_enableMultiUserUI. By demand, we are allowed to assume that
+     * devices for which this is true are configured to allow adding secondary users via adb.
+     *
+     * @return whether the device supports multiple switchable users.
      * @throws DeviceNotAvailableException
      */
     public boolean isMultiUserSupported() throws DeviceNotAvailableException;
@@ -758,12 +811,36 @@ public interface ITestDevice extends INativeDevice {
     public Map<Integer, UserInfo> getUserInfos() throws DeviceNotAvailableException;
 
     /**
-     * Get the maximum number of supported users. Defaults to 0.
+     * Returns how many users of the given user type can be created on this device.
      *
-     * @return an integer indicating the number of supported users
+     * @param userType the type of user, as defined in UserManager, such as
+     *                 "android.os.usertype.full.SECONDARY".
+     * @return how many users of the given user type can be added
      * @throws DeviceNotAvailableException
      */
+    public int getRemainingCreatableUserCount(String userType) throws DeviceNotAvailableException;
+
+    /**
+     * Get the maximum number of supported switchable users, not including Guests. After api
+     * version 36, does not include non-switchable users (like profiles). Defaults to 0.
+     *
+     * @return an integer indicating the number of supported switchable users
+     * @throws DeviceNotAvailableException
+     * @deprecated use getMaxNumberOfUsersSupported(String userType) to obtain the max number of
+     *             supported users for a given user type.
+     */
+    @Deprecated
     public int getMaxNumberOfUsersSupported() throws DeviceNotAvailableException;
+
+    /**
+     * Get the maximum number of supported users of the given user type. Defaults to 0.
+     *
+     * @param userType the type of user, as defined in UserManager, such as
+     *                 "android.os.usertype.full.SECONDARY".
+     * @return an integer indicating the number of supported users of the given user type
+     * @throws DeviceNotAvailableException
+     */
+    public int getMaxNumberOfUsersSupported(String userType) throws DeviceNotAvailableException;
 
     /**
      * Get the maximum number of supported simultaneously running users. Defaults to 0.

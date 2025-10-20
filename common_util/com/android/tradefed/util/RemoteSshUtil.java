@@ -13,13 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.tradefed.device.cloud;
+package com.android.tradefed.util;
 
-import com.android.tradefed.device.TestDeviceOptions;
-import com.android.tradefed.util.CommandResult;
-import com.android.tradefed.util.GceRemoteCmdFormatter;
-import com.android.tradefed.util.IRunUtil;
-
+import java.io.File;
 import java.io.OutputStream;
 import java.util.List;
 
@@ -40,24 +36,16 @@ public class RemoteSshUtil {
      * @return A {@link CommandResult} containing the status and logs.
      */
     public static CommandResult remoteSshCommandExec(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeoutMs,
             OutputStream stdout,
             OutputStream stderr,
             String... command) {
-        String hostName =
-                options.useOxygenationDevice()
-                        ? "localhost"
-                        : remoteInstance.hostAndPort().getHost();
         List<String> sshCmd =
-                GceRemoteCmdFormatter.getSshCommand(
-                        options.getSshPrivateKeyPath(),
-                        null,
-                        options.getInstanceUser(),
-                        hostName,
-                        command);
+                GceRemoteCmdFormatter.getSshCommand(sshPrivateKey, null, user, host, command);
         return runUtil.runTimedCmd(timeoutMs, stdout, stderr, sshCmd.toArray(new String[0]));
     }
 
@@ -73,12 +61,13 @@ public class RemoteSshUtil {
      * @return A {@link CommandResult} containing the status and logs.
      */
     public static CommandResult remoteSshCommandExec(
-            GceAvdInfo remoteInstance,
-            TestDeviceOptions options,
+            String host,
+            String user,
+            File sshPrivateKey,
             IRunUtil runUtil,
             long timeoutMs,
             String... command) {
         return remoteSshCommandExec(
-                remoteInstance, options, runUtil, timeoutMs, null, null, command);
+                host, user, sshPrivateKey, runUtil, timeoutMs, null, null, command);
     }
 }

@@ -1,0 +1,160 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Definitions for the coverage metadata proto format.
+syntax = "proto2";
+
+package android_code_coverage.coverage_metadata;
+
+option java_package = "com.google.wireless.android.testtools.coverage.aggregator";
+option java_outer_classname = "CoverageMetadataProto";
+
+// Describes a collection of coverage measurements. Used by the
+// android-code-coverage borg job to generate code coverage reports.
+message CoverageMetadata {
+  // The components for which these measurements were collected.
+  repeated Component components = 1;
+
+  // The raw code coverage measurements.
+  repeated CoverageMeasurement measurements = 2;
+
+  // The metadata zip containing class coverage information.
+  optional string metadata_zip = 3;
+}
+
+message Component {
+  // Required string identifier for this component. Each component will have a
+  // separate code coverage report.
+  optional string name = 1;
+
+  // Configuration options to use when generating the coverage report for this
+  // component.
+  optional Configuration configuration = 3;
+
+  // Deprecated tag numbers.
+  reserved 2;
+}
+
+// LINT.IfChange(Configuration)
+message Configuration {
+  // Toolchain-specific configuration options.
+  oneof toolchain_oneof {
+    JackConfiguration jack = 1;
+    JacocoConfiguration jacoco = 2;
+    GcovConfiguration gcov = 3;
+    ClangConfiguration clang = 4;
+    GcovKernelConfiguration gcov_kernel = 5;
+  }
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:Configuration)
+
+// LINT.IfChange(JackConfiguration)
+message JackConfiguration {
+  // Glob patterns used to select one or more .em files from the emma_meta.zip
+  // archive. The .em files describe the set of Java classes that should be
+  // included in the report.
+  // An example filter: "glob:**/AndroidVCardTests_intermediates/coverage.em"
+  repeated string metadata_filters = 1;
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:JackConfiguration)
+
+// LINT.IfChange(JacocoConfiguration)
+message JacocoConfiguration {
+  // Glob patterns used to select the set of class files that should be included
+  // in the coverage report.
+  // An example filter: "glob:**/com/android/vcard/**.class"
+  repeated string include_filters = 1;
+
+  // Glob patterns used to exclude class files from the coverage report.
+  // An example filter: "glob:**/com/android/vcard/tests/**.class"
+  repeated string exclude_filters = 2;
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:JacocoConfiguration)
+
+// LINT.IfChange(GcovConfiguration)
+message GcovConfiguration {
+  // Glob patterns used to select the set of source files that should be
+  // included in the coverage report.
+  // An example filter: "glob:**/bionic/**"
+  repeated string include_filters = 1;
+
+  // Glob patterns used to exclude source files from the coverage report.
+  // An example filter: "glob:**/bionic/tests/**"
+  repeated string exclude_filters = 2;
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:GcovConfiguration)
+
+// LINT.IfChange(ClangConfiguration)
+message ClangConfiguration {
+  // Glob patterns to select the set of binaries by install path that should
+  // contribute to the coverage report. If this is empty, then all binaries in
+  // the build will be included (minus the binary_exclude_filters).
+  // An example filter: "glob:**/com.android.resolv/lib/**"
+  repeated string binary_include_filters = 1;
+
+  // Glob patterns to exclude binaries by install path from the coverage report.
+  // An example filter: "glob:**/com.android.resolv/lib/libssl.so"
+  repeated string binary_exclude_filters = 2;
+
+  // Glob patterns used to select the set of source files that should be
+  // included in the coverage report.
+  // An example filter: "glob:**/packages/modules/DnsResolver/**"
+  repeated string include_filters = 3;
+
+  // Glob patterns used to exclude source files from the coverage report.
+  // An example filter: "glob:**/packages/modules/DnsResolver/tests/**"
+  repeated string exclude_filters = 4;
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:ClangConfiguration)
+
+// LINT.IfChange(GcovKernelConfiguration)
+message GcovKernelConfiguration {}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:GcovKernelConfiguration)
+
+// LINT.IfChange(CoverageMeasurement)
+message CoverageMeasurement {
+  oneof measurement_oneof {
+    // A measurement that has been saved to the Build API as a test artifact.
+    TestArtifact test_artifact = 1;
+    // A measurement that has been saved to the Build API as a build artifact.
+    BuildArtifact build_artifact = 2;
+  }
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:CoverageMeasurement)
+
+// The parameters that can be used to retrieve the test artifact from the build API
+// LINT.IfChange(TestArtifact)
+message TestArtifact {
+  optional string build_type = 1;
+  optional string build_id = 2;
+  optional string target = 3;
+  optional string attempt_id = 4;
+  optional int64 test_result_id = 5;
+  optional string resource_id = 6;
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:TestArtifact)
+
+// The parameters that can be used to retrieve the build artifact from the build API
+// LINT.IfChange(BuildArtifact)
+message BuildArtifact {
+  optional string build_type = 1;
+  optional string build_id = 2;
+  optional string target = 3;
+  optional string attempt_id = 4;
+  optional string resource_id = 5;
+}
+// LINT.ThenChange(//depot/google3/java/com/google/wireless/android/testtools/coverage/database/storage.proto:BuildArtifact)
+

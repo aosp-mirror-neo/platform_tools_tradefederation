@@ -331,6 +331,8 @@ public class InvocationExecutionTest {
                         return null;
                     }
                 };
+        when(mockDevice1.getOptions()).thenReturn(new TestDeviceOptions());
+        when(mockDevice2.getOptions()).thenReturn(new TestDeviceOptions());
         doAnswer(answer).when(mockDevice1).preInvocationSetup(any(), any());
         doAnswer(answer).when(mockDevice2).preInvocationSetup(any(), any());
         mContext.addAllocatedDevice("device1", mockDevice1);
@@ -357,6 +359,8 @@ public class InvocationExecutionTest {
         mContext.addAllocatedDevice("device1", mockDevice1);
         mContext.addAllocatedDevice("device2", mockDevice2);
 
+        when(mockDevice1.getOptions()).thenReturn(new TestDeviceOptions());
+        when(mockDevice2.getOptions()).thenReturn(new TestDeviceOptions());
         OptionSetter setter = new OptionSetter(mConfig.getCommandOptions());
         setter.setOptionValue("parallel-pre-invocation-setup", "true");
         setter.setOptionValue("parallel-pre-invocation-setup-timeout", "2s");

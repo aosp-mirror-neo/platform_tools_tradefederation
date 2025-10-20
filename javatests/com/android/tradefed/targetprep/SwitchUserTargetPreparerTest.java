@@ -279,6 +279,58 @@ public final class SwitchUserTargetPreparerTest {
     }
 
     @Test
+    public void testWorkflow_whenSetUpFailsAndCallerRetries_sameCurrentUserOn2ndCall()
+            throws Exception {
+        mOptionSetter.setOptionValue("user-type", "primary");
+        when(mMockDevice.getCurrentUser()).thenReturn(10, 10);
+
+        // 1st setup call
+        mockListUsersInfo(
+                mMockDevice,
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10},
+                /* flags= */ new Integer[] {UserInfo.FLAG_PRIMARY, 0});
+        when(mMockDevice.switchUser(USER_SYSTEM)).thenReturn(false);
+        assertThrows(
+                TargetSetupError.class, () -> mSwitchUserTargetPreparer.setUp(mTestInformation));
+
+        // 2nd setup call
+        when(mMockDevice.switchUser(USER_SYSTEM)).thenReturn(true);
+        mSwitchUserTargetPreparer.setUp(mTestInformation);
+        expectPreparedUserId(/* userId= */ USER_SYSTEM);
+
+        // Teardown
+        mSwitchUserTargetPreparer.tearDown(mTestInformation, null);
+        expectPreparedUserId(/* userId= */ null);
+        verify(mMockDevice).switchUser(10);
+    }
+
+    @Test
+    public void testWorkflow_whenSetUpFailsAndCallerRetries_differentCurrentUserOn2ndCall()
+            throws Exception {
+        mOptionSetter.setOptionValue("user-type", "primary");
+        when(mMockDevice.getCurrentUser()).thenReturn(10, 11);
+
+        // 1st setup call
+        mockListUsersInfo(
+                mMockDevice,
+                /* userIds= */ new Integer[] {USER_SYSTEM, 10, 11},
+                /* flags= */ new Integer[] {UserInfo.FLAG_PRIMARY, 0, 0});
+        when(mMockDevice.switchUser(USER_SYSTEM)).thenReturn(false);
+        assertThrows(
+                TargetSetupError.class, () -> mSwitchUserTargetPreparer.setUp(mTestInformation));
+
+        // 2nd setup call
+        when(mMockDevice.switchUser(USER_SYSTEM)).thenReturn(true);
+        mSwitchUserTargetPreparer.setUp(mTestInformation);
+        expectPreparedUserId(/* userId= */ USER_SYSTEM);
+
+        // Teardown
+        mSwitchUserTargetPreparer.tearDown(mTestInformation, null);
+        expectPreparedUserId(/* userId= */ null);
+        verify(mMockDevice).switchUser(11);
+    }
+
+    @Test
     public void testGetExpectedUserId_beforeSetup() throws Exception {
         expectPreparedUserId(/* userId= */ null);
     }

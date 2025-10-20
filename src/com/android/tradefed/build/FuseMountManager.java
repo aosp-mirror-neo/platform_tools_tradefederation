@@ -33,8 +33,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -61,19 +59,19 @@ public class FuseMountManager {
 
     // Timeouts for unmount operations. The process may still alive after a fuse command is done.
     // Wait for the process to terminate before the next step.
-    private static final long FUSEMOUNT_TIMEOUT_MS = 2 * 1000; // For 'fusermount -u' to complete.
-    private static final long UMOUNT_LAZY_TIMEOUT_MS = 5 * 1000; // For 'umount -l' to complete.
+    private static final long FUSEMOUNT_TIMEOUT_MS = 4 * 1000; // For 'fusermount -u' to complete.
+    private static final long UMOUNT_LAZY_TIMEOUT_MS = 2 * 1000; // For 'umount -l' to complete.
     private static final long PROCESS_WAIT_TIMEOUT_MS = 5 * 1000; // For fuse process to terminate.
+    private static final long CLEANUP_TIMEOUT_MS = 5 * 1000;
+    private static final long CLEANUP_INTERVAL_MS = 200;
 
     /** MountInfo is a class that holds information about a mounted FUSE filesystem. */
     private static class MountInfo {
         Path mMountPoint;
-        Path mLogDir;
         Process mProcess;
 
-        MountInfo(Path mountPoint, Path logDir, Process process) {
+        MountInfo(Path mountPoint, Process process) {
             mMountPoint = mountPoint;
-            mLogDir = logDir;
             mProcess = process;
         }
     }
@@ -128,14 +126,11 @@ public class FuseMountManager {
         }
 
         Path mountPoint = null;
-        Path logDir = null;
         Process process = null;
         String casviewerPath = null;
         try (ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream()) {
             mountPoint = createUniqueMountPoint(sourceDataPath);
-            logDir = CasUtil.createUniqueCasLogDir(CAS_LOG_ROOT);
-            List<String> command =
-                    mDriverProfile.buildMountCommand(sourceDataPath, mountPoint, logDir);
+            List<String> command = mDriverProfile.buildMountCommand(sourceDataPath, mountPoint);
             casviewerPath = command.get(0);
 
             // This shouldn't be needed. Log indicates the casviewer may lost the executable bit for
@@ -161,7 +156,7 @@ public class FuseMountManager {
                     CLog.i(
                             "Done mounting '%s' at '%s' (dir count: %d), took %d ms",
                             sourceDataPath, mountPoint, getMountPointDirCount(), duration);
-                    mActiveMounts.put(sourceDataPath, new MountInfo(mountPoint, logDir, process));
+                    mActiveMounts.put(sourceDataPath, new MountInfo(mountPoint, process));
                     return mountPoint; // Exit the method on success.
                 }
 
@@ -177,7 +172,8 @@ public class FuseMountManager {
             } while (System.currentTimeMillis() < deadline);
 
             // FAILURE: Timed out waiting for mount point to be ready.
-            logTimeout(sourceDataPath, capturedOutput.toString(StandardCharsets.UTF_8), logDir);
+            logTimeoutWithDirectoryListing(
+                    sourceDataPath, capturedOutput.toString(StandardCharsets.UTF_8), mountPoint);
             throw new IOException(String.format("Mount process started but timed out."));
         } catch (IOException | InterruptedException e) {
             // FAILURE: Handle all exceptions from the try block here.
@@ -193,7 +189,7 @@ public class FuseMountManager {
             if (process != null && process.isAlive()) {
                 destroyProcess(process, mountPoint);
             }
-            cleanUp(mountPoint, logDir);
+            cleanUp(mountPoint);
 
             // Log generic failure metrics for any exception path.
             InvocationMetricLogger.addInvocationMetrics(
@@ -211,10 +207,20 @@ public class FuseMountManager {
         }
     }
 
-    private void logTimeout(Path sourceDataPath, String output, Path logDir) {
+    private void logTimeoutWithDirectoryListing(
+            Path sourceDataPath, String output, Path mountPoint) {
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.CAS_MOUNT_TIMEOUT_COUNT, 1);
-        String log = CasUtil.getCasLogFromDir(logDir);
-        CLog.i("Mounting of '%s' timed out. Output:\n%s\nLog:\n%s", sourceDataPath, output, log);
+        CLog.e("Mounting of '%s' timed out. Output:\n%s", sourceDataPath, output);
+        try (Stream<Path> stream = Files.list(mountPoint)) {
+            CLog.w(
+                    "Timeout waiting for mount. Files in '%s': %s",
+                    mountPoint,
+                    stream.map(p -> p.getFileName().toString()).collect(Collectors.toList()));
+        } catch (IOException listEx) {
+            CLog.e(
+                    "Error listing files in mount point '%s' after timeout with error: %s.",
+                    mountPoint, listEx.getMessage());
+        }
     }
 
     /**
@@ -234,7 +240,6 @@ public class FuseMountManager {
         }
 
         Path mountPoint = mountInfo.mMountPoint;
-        Path logDir = mountInfo.mLogDir;
         Process process = mountInfo.mProcess;
 
         try {
@@ -246,8 +251,9 @@ public class FuseMountManager {
 
         } finally {
             mActiveMounts.remove(sourceDataPath); // Atomically remove from map
-            cleanUp(mountPoint, logDir); // Best-effort directory cleanup
+            cleanUp(mountPoint); // Best-effort directory cleanup
 
+            InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.CAS_UNMOUNT_COUNT, 1);
             CLog.d(
                     "Done unmounting '%s' (dir count: %d), took %d ms",
                     sourceDataPathString,
@@ -327,10 +333,21 @@ public class FuseMountManager {
     }
 
     private void lazyUnmount(Path mountPoint) {
+        lazyUnmount(mountPoint, mRunUtil);
+    }
+
+    /**
+     * Unmounts the filesystem associated with the given mount point. This is a best-effort attempt
+     * to unmount the filesystem, and does not throw any exceptions.
+     *
+     * @param mountPoint The mount point to unmount.
+     * @param runUtil The IRunUtil to use for running commands.
+     */
+    private static void lazyUnmount(Path mountPoint, IRunUtil runUtil) {
         try {
             CLog.d("Performing lazy unmount for '%s' to ensure cleanup.", mountPoint);
             CommandResult lazyUnmountResult =
-                    mRunUtil.runTimedCmd(
+                    runUtil.runTimedCmd(
                             UMOUNT_LAZY_TIMEOUT_MS,
                             "umount",
                             "-l",
@@ -438,52 +455,64 @@ public class FuseMountManager {
     }
 
     /**
-     * Deletes the mount point and log dir. This method logs any exceptions but does not throw, as
+     * Deletes the mount point directory. This method logs any exceptions but does not throw, as
      * this is a best-effort cleanup.
      *
      * @param mountPoint The mount point to delete.
-     * @param logDir The log directory to delete.
      */
-    protected void cleanUp(Path mountPoint, Path logDir) {
-        final long timeoutMs = 1000;
-        final long deadline = System.currentTimeMillis() + timeoutMs;
-        final long intervalMs = 100;
+    private void cleanUp(Path mountPoint) {
+        cleanUp(mountPoint, mRunUtil);
+    }
+
+    /**
+     * Cleans up the mount point directory. This method logs any exceptions but does not throw, as
+     * this is a best-effort cleanup.
+     *
+     * <p>This method retries the lazy unmount and deletion of the mount point directory. If the
+     * directory still exists, it retries the lazy unmount and deletion until the deadline is
+     * reached.
+     *
+     * @param mountPoint The mount point to delete.
+     * @param runUtil The IRunUtil to use for running commands.
+     */
+    public static boolean cleanUp(Path mountPoint, IRunUtil runUtil) {
+        if (!Files.exists(mountPoint)) {
+            return true;
+        }
 
         long start = System.currentTimeMillis();
-        List<Path> toDelete = new ArrayList<>(Arrays.asList(mountPoint, logDir));
+        final long deadline = start + CLEANUP_TIMEOUT_MS;
         do {
-            try {
-                if (Files.exists(logDir)) {
-                    FileUtil.recursiveDelete(logDir.toFile()); // Doesn't throw.
-                }
-                Files.deleteIfExists(mountPoint);
-                if (toDelete.stream().filter(Files::exists).count() == 0) {
-                    CLog.d("Done cleaning up, took %d ms", System.currentTimeMillis() - start);
-                    return;
-                }
-            } catch (IOException e) {
-                // This is expected if the kernel hasn't released the mount yet.
-                CLog.v(
-                        "Deletion of mount point '%s' failed, will retry. Error: %s",
-                        mountPoint, e.getMessage());
+            // The mount point is empty for a successful graceful unmount. If the fuse driver is
+            // terminated with SIGTERM or SIGKILL, the directory may contain dangling links which
+            // should also be removed too.
+            FileUtil.recursiveDelete(mountPoint.toFile());
+            if (!Files.exists(mountPoint)) {
+                return true;
             }
+
+            // The directory is still busy. do a lazy unmount to ensure that the system's intent to
+            // unmount is clear and maximizes the chances of success.
+            lazyUnmount(mountPoint, runUtil);
 
             if (System.currentTimeMillis() >= deadline) {
                 break;
             }
 
-            mRunUtil.sleep(intervalMs);
+            // Wait for a short interval before the next retry.
+            runUtil.sleep(CLEANUP_INTERVAL_MS);
         } while (System.currentTimeMillis() < deadline);
 
-        List<Path> failedToDelete =
-                toDelete.stream().filter(Files::exists).collect(Collectors.toList());
-        if (!failedToDelete.isEmpty()) {
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.CAS_UNMOUNT_CLEANUP_FAILURE_COUNT, 1);
-            CLog.w(
-                    "Failed to delete directories: %s, took %d ms",
-                    failedToDelete.toString(), System.currentTimeMillis() - start);
+        if (!Files.exists(mountPoint)) {
+            return true;
         }
+
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_UNMOUNT_CLEANUP_FAILURE_COUNT, 1);
+        CLog.w(
+                "Failed to clean up mount point '%s', took %d ms",
+                mountPoint.toString(), System.currentTimeMillis() - start);
+        return false;
     }
 
     /**

@@ -335,6 +335,19 @@ public interface INativeDevice {
     public CommandResult executeShellV2Command(String command) throws DeviceNotAvailableException;
 
     /**
+     * Helper method which executes a adb shell command and returns the results as a {@link
+     * CommandResult} properly populated with the command status output, stdout and stderr.
+     *
+     * @param command The command that should be run.
+     * @param receiver the {@link IShellOutputReceiver} to direct shell output to.
+     * @return The result in {@link CommandResult}.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public CommandResult executeShellV2Command(String command, IShellOutputReceiver receiver)
+            throws DeviceNotAvailableException;
+
+    /**
      * Helper method which executes an adb shell command and returns the results as a {@link
      * CommandResult} properly populated with the command status output, stdout and stderr.
      *
@@ -449,6 +462,37 @@ public interface INativeDevice {
             OutputStream pipeToOutput,
             OutputStream pipeToError,
             final long maxTimeoutForCommand,
+            final TimeUnit timeUnit,
+            int retryAttempts)
+            throws DeviceNotAvailableException;
+
+    /**
+     * Executes a adb shell command, with more parameters to control command behavior.
+     *
+     * @see #executeShellV2Command(String)
+     * @param command the adb shell command to run
+     * @param pipeAsInput A {@link File} that will be piped as input to the command, or null.
+     * @param pipeToOutput {@link OutputStream} where the std output will be redirected, or null.
+     * @param pipeToError {@link OutputStream} where the std error will be redirected, or null.
+     * @param maxTimeoutForCommand the maximum timeout for the command to complete; unit as
+     *     specified in <code>timeUnit</code>
+     * @param maxTimeToOutputShellResponse the maximum amount of time during which the command is
+     *     allowed to not output any response; unit as specified in <code>timeUnit</code>
+     * @param timeUnit unit for <code>maxTimeToOutputShellResponse</code>
+     * @param retryAttempts the maximum number of times to retry command if it fails due to a
+     *     exception. DeviceNotResponsiveException will be thrown if <var>retryAttempts</var> are
+     *     performed without success.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     * @see TimeUtil
+     */
+    public CommandResult executeShellV2Command(
+            String command,
+            File pipeAsInput,
+            OutputStream pipeToOutput,
+            OutputStream pipeToError,
+            final long maxTimeoutForCommand,
+            final long maxTimeToOutputShellResponse,
             final TimeUnit timeUnit,
             int retryAttempts)
             throws DeviceNotAvailableException;
@@ -763,6 +807,21 @@ public interface INativeDevice {
             throws DeviceNotAvailableException;
 
     /**
+     * Retrieves a file off device.
+     *
+     * @param remoteFilePath the absolute path to file on device.
+     * @param localFile the local file to store contents in. If non-empty, contents will be
+     *     replaced.
+     * @param userId The user id to pull from
+     * @param timeout pull file command timeout
+     * @return <code>true</code> if file was retrieved successfully. <code>false</code> otherwise.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public boolean pullFile(String remoteFilePath, File localFile, int userId, long timeout)
+            throws DeviceNotAvailableException;
+
+    /**
      * Retrieves a file off device, stores it in a local temporary {@link File}, and returns that
      * {@code File}.
      *
@@ -832,6 +891,20 @@ public interface INativeDevice {
      *     recovered.
      */
     public boolean pullDir(String deviceFilePath, File localDir, int userId)
+            throws DeviceNotAvailableException;
+
+    /**
+     * Recursively pull directory contents from device.
+     *
+     * @param deviceFilePath the absolute file path of the remote source
+     * @param localDir the local directory to pull files into
+     * @param userId the user id to pull from
+     * @param timeout the timeout for pulling command
+     * @return <code>true</code> if file was pulled successfully. <code>false</code> otherwise.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public boolean pullDir(String deviceFilePath, File localDir, int userId, long timeout)
             throws DeviceNotAvailableException;
 
     /**

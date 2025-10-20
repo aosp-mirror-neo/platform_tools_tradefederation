@@ -81,11 +81,6 @@ public class DeviceManager implements IDeviceManager {
     private static final long FASTBOOT_CMD_TIMEOUT = 1 * 60 * 1000;
     /** time to wait in ms between fastboot devices requests */
     private static final long FASTBOOT_POLL_WAIT_TIME = 5 * 1000;
-    /**
-     * time to wait for device adb shell responsive connection before declaring it unavailable for
-     * testing
-     */
-    private static final int CHECK_WAIT_DEVICE_AVAIL_MS = 30 * 1000;
 
     /* the max size of the emulator output in bytes */
     private static final long MAX_EMULATOR_OUTPUT = 20 * 1024 * 1024;
@@ -172,6 +167,18 @@ public class DeviceManager implements IDeviceManager {
     private String mAdbPath = "adb";
 
     @Option(
+            name = "shell-wait-time",
+            description =
+                    "maximum time to wait for device adb shell responsive connection before "
+                            + "declaring it unavailable for testing.")
+    private long mShellWaitTime = 30 * 1000;
+
+    @Option(
+            name = "shell-check-cmd-time",
+            description = "the timeout in ms to check device shell availability.")
+    private long mShellCheckCmdTime = 10 * 1000;
+
+    @Option(
         name = "fastboot-path",
         description = "path of the fastboot binary to use, default use the one in $PATH."
     )
@@ -183,6 +190,16 @@ public class DeviceManager implements IDeviceManager {
                     "Whether or not to check the file system type as part of device storage "
                             + "readiness")
     private boolean mMountFileSystemCheckEnabled = true;
+
+    @Option(
+            name = "enable-adb-device-tracker",
+            description =
+                    "Use the new AdbDeviceTracker for device detection instead of the ddmlib"
+                            + " listener.")
+    private boolean mEnableAdbDeviceTracker = false;
+
+    private AdbDeviceTracker mAdbDeviceTracker;
+    private Thread mAdbDeviceTrackerThread;
 
     private File mUnpackedFastbootDir = null;
     private File mUnpackedFastboot = null;
@@ -301,9 +318,19 @@ public class DeviceManager implements IDeviceManager {
         DdmPreferences.setTimeOut(120 * 1000);
         mAdbBridge = createAdbBridge();
         mManagedDeviceListener = new ManagedDeviceListener();
-        // It's important to add the listener before initializing the ADB bridge to avoid a race
-        // condition when detecting devices.
-        mAdbBridge.addDeviceChangeListener(mManagedDeviceListener);
+        if (mEnableAdbDeviceTracker) {
+            CLog.i("Using new AdbDeviceTracker for device event detection.");
+            mAdbDeviceTracker = new AdbDeviceTracker();
+            mAdbDeviceTracker.addListener(mManagedDeviceListener);
+            mAdbDeviceTrackerThread = new Thread(mAdbDeviceTracker, "AdbDeviceTrackerThread");
+            mAdbDeviceTrackerThread.setDaemon(true);
+            mAdbDeviceTrackerThread.start();
+        } else {
+            CLog.i("Using default ddmlib IDeviceChangeListener for device event detection.");
+            // It's important to add the listener before initializing the ADB bridge to avoid a race
+            // condition when detecting devices.
+            mAdbBridge.addDeviceChangeListener(mManagedDeviceListener);
+        }
         if (mDvcMon != null && !mDvcMonRunning) {
             mDvcMon.setDeviceLister(
                     new DeviceLister() {
@@ -454,31 +481,42 @@ public class DeviceManager implements IDeviceManager {
         }
 
         final String threadName = String.format("Check device %s", testDevice.getSerialNumber());
-        Runnable checkRunnable = new Runnable() {
-            @Override
-            public void run() {
-                CLog.d("checking new '%s' '%s' responsiveness", testDevice.getClass().getName(),
-                        testDevice.getSerialNumber());
-                if (testDevice.getMonitor().waitForDeviceShell(CHECK_WAIT_DEVICE_AVAIL_MS)) {
-                    DeviceEventResponse r = mManagedDeviceList.handleDeviceEvent(testDevice,
-                            DeviceEvent.AVAILABLE_CHECK_PASSED);
-                    if (r.stateChanged && r.allocationState == DeviceAllocationState.Available) {
-                        CLog.logAndDisplay(LogLevel.INFO, "Detected new device %s",
-                                testDevice.getSerialNumber());
-                    } else {
-                        CLog.d("Device %s failed or ignored responsiveness check, ",
-                                testDevice.getSerialNumber());
+        Runnable checkRunnable =
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        CLog.d(
+                                "checking new '%s' '%s' responsiveness",
+                                testDevice.getClass().getName(), testDevice.getSerialNumber());
+                        if (testDevice.getMonitor().waitForDeviceShell(mShellWaitTime)) {
+                            DeviceEventResponse r =
+                                    mManagedDeviceList.handleDeviceEvent(
+                                            testDevice, DeviceEvent.AVAILABLE_CHECK_PASSED);
+                            if (r.stateChanged
+                                    && r.allocationState == DeviceAllocationState.Available) {
+                                CLog.logAndDisplay(
+                                        LogLevel.INFO,
+                                        "Detected new device %s",
+                                        testDevice.getSerialNumber());
+                            } else {
+                                CLog.d(
+                                        "Device %s failed or ignored responsiveness check, ",
+                                        testDevice.getSerialNumber());
+                            }
+                        } else {
+                            DeviceEventResponse r =
+                                    mManagedDeviceList.handleDeviceEvent(
+                                            testDevice, DeviceEvent.AVAILABLE_CHECK_FAILED);
+                            if (r.stateChanged
+                                    && r.allocationState == DeviceAllocationState.Unavailable) {
+                                CLog.w(
+                                        "Device %s is unresponsive, will not be available for"
+                                                + " testing",
+                                        testDevice.getSerialNumber());
+                            }
+                        }
                     }
-                } else {
-                    DeviceEventResponse r = mManagedDeviceList.handleDeviceEvent(testDevice,
-                            DeviceEvent.AVAILABLE_CHECK_FAILED);
-                    if (r.stateChanged && r.allocationState == DeviceAllocationState.Unavailable) {
-                        CLog.w("Device %s is unresponsive, will not be available for testing",
-                                testDevice.getSerialNumber());
-                    }
-                }
-            }
-        };
+                };
         if (mSynchronousMode) {
             checkRunnable.run();
         } else {
@@ -1091,7 +1129,17 @@ public class DeviceManager implements IDeviceManager {
     /** Stop adb bridge and services depending on adb connection. */
     private synchronized void stopAdbBridgeAndDependentServices() {
         terminateDeviceRecovery();
-        mAdbBridge.removeDeviceChangeListener(mManagedDeviceListener);
+        if (mEnableAdbDeviceTracker) {
+            if (mAdbDeviceTracker != null) {
+                mAdbDeviceTracker.removeListener(mManagedDeviceListener);
+                mAdbDeviceTracker.stop();
+            }
+            if (mAdbDeviceTrackerThread != null) {
+                mAdbDeviceTrackerThread.interrupt();
+            }
+        } else {
+            mAdbBridge.removeDeviceChangeListener(mManagedDeviceListener);
+        }
         mAdbBridge.terminate();
     }
 
@@ -1310,36 +1358,16 @@ public class DeviceManager implements IDeviceManager {
         }
     }
 
-    /**
-     * A class to listen for and act on device presence updates from ddmlib
-     */
-    private class ManagedDeviceListener implements IDeviceChangeListener {
-
-        /**
-         * {@inheritDoc}
-         */
+    /** A class to listen for and act on device presence updates from ddmlib */
+    private class ManagedDeviceListener implements IDeviceChangeListener, IAdbDeviceChangeListener {
+        // Method from IDeviceChangeListener
+        // These will be called when the feature flag is OFF.
+        /** {@inheritDoc} */
         @Override
         public void deviceChanged(IDevice idevice, int changeMask) {
             if ((changeMask & IDevice.CHANGE_STATE) != 0) {
-                IManagedTestDevice testDevice = mManagedDeviceList.findOrCreate(idevice);
-                if (testDevice == null) {
-                    return;
-                }
-                TestDeviceState newState = TestDeviceState.getStateByDdms(idevice.getState());
-                testDevice.setDeviceState(newState);
-                if (newState == TestDeviceState.ONLINE) {
-                    DeviceEventResponse r = mManagedDeviceList.handleDeviceEvent(testDevice,
-                            DeviceEvent.STATE_CHANGE_ONLINE);
-                    if (r.stateChanged && r.allocationState ==
-                            DeviceAllocationState.Checking_Availability) {
-                        checkAndAddAvailableDevice(testDevice);
-                    }
-                } else if (DeviceState.OFFLINE.equals(idevice.getState()) ||
-                        DeviceState.UNAUTHORIZED.equals(idevice.getState())) {
-                    // handle device changing to offline or unauthorized.
-                    mManagedDeviceList.handleDeviceEvent(testDevice,
-                            DeviceEvent.STATE_CHANGE_OFFLINE);
-                }
+                // To avoid code duplication, we extract the core logic.
+                handleDeviceChanged(idevice);
             }
         }
 
@@ -1348,6 +1376,119 @@ public class DeviceManager implements IDeviceManager {
          */
         @Override
         public void deviceConnected(IDevice idevice) {
+            // To avoid code duplication, we extract the core logic.
+            handleDeviceConnected(idevice);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void deviceDisconnected(IDevice disconnectedDevice) {
+            // To avoid code duplication, we extract the core logic.
+            handleDeviceDisconnected(disconnectedDevice);
+        }
+
+        // ---IAdbDeviceChangeListener METHODS ---
+        // These will be called when the feature flag is ON.
+        /** {@inheritDoc} */
+        @Override
+        public void deviceConnected(String serial, String state) {
+            CLog.d("Tracker reported CONNECTED for %s", serial);
+            // Look up the full ddmlib IDevice object from the still-running bridge.
+            IDevice device = findDeviceBySerial(serial);
+            if (device != null) {
+                // Delegate to the common handler logic.
+                handleDeviceConnected(device);
+            } else {
+                CLog.w(
+                        "AdbDeviceTracker reported serial %s, but it was not found in"
+                                + " AndroidDebugBridge.",
+                        serial);
+            }
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void deviceChanged(String serial, String newState) {
+            CLog.d("Tracker reported CHANGED for %s", serial);
+            IDevice device = findDeviceBySerial(serial);
+            if (device != null) {
+                handleDeviceChanged(device);
+            } else {
+                CLog.w(
+                        "AdbDeviceTracker reported change for %s, but it was not found in"
+                                + " AndroidDebugBridge.",
+                        serial);
+            }
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public void deviceDisconnected(String serial) {
+            CLog.d("Tracker reported DISCONNECTED for %s", serial);
+            IManagedTestDevice d = mManagedDeviceList.find(serial);
+            if (d != null) {
+                mManagedDeviceList.handleDeviceEvent(d, DeviceEvent.DISCONNECTED);
+                d.setDeviceState(TestDeviceState.NOT_AVAILABLE);
+                logDeviceEvent(EventType.DEVICE_DISCONNECTED, serial);
+            } else {
+                CLog.w(
+                        "AdbDeviceTracker reported disconnect for %s, but it was not found.",
+                        serial);
+            }
+        }
+
+        /** Helper to find a live ddmlib IDevice object from the bridge using its serial. */
+        private IDevice findDeviceBySerial(String serial) {
+            if (mAdbBridge == null) {
+                return null;
+            }
+
+            final long timeout = 5000; // Wait up to 5 seconds
+            final long pollInterval = 200; // Check every 200ms
+            long startTime = System.currentTimeMillis();
+
+            while (System.currentTimeMillis() - startTime < timeout) {
+                for (IDevice d : mAdbBridge.getDevices()) {
+                    if (serial.equals(d.getSerialNumber())) {
+                        CLog.d(
+                                "Found IDevice for serial %s after %d ms.",
+                                serial, (System.currentTimeMillis() - startTime));
+                        return d;
+                    }
+                }
+                // Device not found yet, sleep and retry
+                RunUtil.getDefault().sleep(pollInterval);
+            }
+
+            CLog.w(
+                    "Timed out waiting for AndroidDebugBridge to create an IDevice for serial %s.",
+                    serial);
+            return null;
+        }
+
+        private void handleDeviceChanged(IDevice idevice) {
+            IManagedTestDevice testDevice = mManagedDeviceList.findOrCreate(idevice);
+            if (testDevice == null) {
+                return;
+            }
+            TestDeviceState newState = TestDeviceState.getStateByDdms(idevice.getState());
+            testDevice.setDeviceState(newState);
+            if (newState == TestDeviceState.ONLINE) {
+                DeviceEventResponse r =
+                        mManagedDeviceList.handleDeviceEvent(
+                                testDevice, DeviceEvent.STATE_CHANGE_ONLINE);
+                if (r.stateChanged
+                        && r.allocationState == DeviceAllocationState.Checking_Availability) {
+                    checkAndAddAvailableDevice(testDevice);
+                }
+            } else if (DeviceState.OFFLINE.equals(idevice.getState())
+                    || DeviceState.UNAUTHORIZED.equals(idevice.getState())) {
+                // handle device changing to offline or unauthorized.
+                mManagedDeviceList.handleDeviceEvent(testDevice, DeviceEvent.STATE_CHANGE_OFFLINE);
+            }
+        }
+
+        private void handleDeviceConnected(IDevice idevice) {
             CLog.d("Detected device connect %s, id %d", idevice.getSerialNumber(),
                     idevice.hashCode());
             String threadName = String.format("Connected device %s", idevice.getSerialNumber());
@@ -1402,11 +1543,7 @@ public class DeviceManager implements IDeviceManager {
             }
         }
 
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public void deviceDisconnected(IDevice disconnectedDevice) {
+        private void handleDeviceDisconnected(IDevice disconnectedDevice) {
             IManagedTestDevice d = mManagedDeviceList.find(disconnectedDevice.getSerialNumber());
             if (d != null) {
                 mManagedDeviceList.handleDeviceEvent(d, DeviceEvent.DISCONNECTED);
@@ -1668,5 +1805,11 @@ public class DeviceManager implements IDeviceManager {
     @Override
     public boolean isFileSystemMountCheckEnabled() {
         return mMountFileSystemCheckEnabled;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public long getShellCheckCmdTime() {
+        return mShellCheckCmdTime;
     }
 }

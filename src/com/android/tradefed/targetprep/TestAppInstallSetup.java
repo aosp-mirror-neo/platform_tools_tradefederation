@@ -221,7 +221,13 @@ public class TestAppInstallSetup extends BaseTargetPreparer
 
     private IAbi mAbi = null;
     private Integer mUserId = null;
+    private Integer mSetterUserId = null;
+
+    @Option(
+            name = "grant-permissions",
+            description = "Whether or not to auto-grant all requested permissions")
     private Boolean mGrantPermission = null;
+
     // TODO: b/367468564 - Remove this flag once we have fixed the tests so that installation
     // for the system user is no longer required when conducting tests for
     // the secondary_user_on_secondary_display user type.
@@ -284,7 +290,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
      * If the apk should be installed for a particular user, sets the id of the user to install for.
      */
     public void setUserId(int userId) {
-        mUserId = userId;
+        mSetterUserId = userId;
     }
 
     /** If a userId is provided, grantPermission can be set for the apk installation. */
@@ -357,6 +363,8 @@ public class TestAppInstallSetup extends BaseTargetPreparer
     public void setUp(TestInformation testInfo)
             throws TargetSetupError, BuildError, DeviceNotAvailableException {
         mTestInfo = testInfo;
+        // Always reset tracked user
+        mUserId = null;
         if (mTestFiles.isEmpty() && mSplitApkFileNames.isEmpty()) {
             CLog.i("No test apps to install, skipping");
             return;
@@ -400,8 +408,9 @@ public class TestAppInstallSetup extends BaseTargetPreparer
                 mInstallArgs.add("--instant");
             }
         }
-
-        if (mUserId == null && testInfo.properties().get(RUN_TESTS_AS_USER_KEY) != null) {
+        if (mSetterUserId != null) {
+            mUserId = mSetterUserId;
+        } else if (testInfo.properties().get(RUN_TESTS_AS_USER_KEY) != null) {
             mUserId = Integer.parseInt(testInfo.properties().get(RUN_TESTS_AS_USER_KEY));
             if (!testInfo.getDevice().getUserInfos().containsKey(mUserId)) {
                 CLog.w("User requested: %s doesn't exist on device. Ignoring it.", mUserId);
@@ -572,7 +581,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
         String result = installPackage(testDevice, apkFiles);
 
         if (result != null) {
-            if (result.startsWith(INSTALL_FAILED_UPDATE_INCOMPATIBLE)) {
+            if (result.contains(INSTALL_FAILED_UPDATE_INCOMPATIBLE)) {
                 // Try to uninstall package and reinstall.
                 uninstallPackage(testDevice, packageName);
                 result = installPackage(testDevice, apkFiles);
@@ -580,7 +589,7 @@ public class TestAppInstallSetup extends BaseTargetPreparer
         }
 
         if (result != null) {
-            if (result.startsWith(INSTALL_FAILED_CONFLICTING_PROVIDER)) {
+            if (result.contains(INSTALL_FAILED_CONFLICTING_PROVIDER)) {
                 // Try to uninstall the conflicting package and reinstall this package.
                 Matcher matcher = CONFLICTING_PROVIDER_PATTERN.matcher(result);
                 if (matcher.find()) {

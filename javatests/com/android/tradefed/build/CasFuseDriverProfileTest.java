@@ -83,7 +83,8 @@ public class CasFuseDriverProfileTest {
     @Test
     public void isMountPointReady_success() throws IOException {
         File mountPoint = tempFolder.newFolder("ready_mount_point");
-        tempFolder.newFile("ready_mount_point/" + CasUtil.BOOT_IMAGE_FILENAME);
+        tempFolder.newFile("ready_mount_point/" + CasUtil.SYSTEM_IMAGE_FILENAME);
+        tempFolder.newFile("ready_mount_point/" + CasUtil.ANDROID_INFO_FILENAME);
 
         assertTrue(
                 "Should return true for a mount point containing boot.img.",

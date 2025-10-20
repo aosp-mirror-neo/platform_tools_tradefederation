@@ -34,7 +34,6 @@ import com.android.tradefed.testtype.suite.ModuleDefinition;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.PerfettoTraceRecorder;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -46,7 +45,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Collections;
 
-/** Unit tests for {@link PerfettoTraceRecorder}. */
+/** Unit tests for {@link ModulePerfettoCollector}. */
 @RunWith(JUnit4.class)
 public class ModulePerfettoCollectorTest {
 
@@ -56,31 +55,31 @@ public class ModulePerfettoCollectorTest {
     @Mock private PerfettoTraceRecorder mMockPerfettoTraceRecorder;
     @Mock private IInvocationContext mMockContext;
 
-    @Before
-    public void setUp() throws Exception {
+    // @Before
+    public void setUp(String moduleName) throws Exception {
         MockitoAnnotations.initMocks(this);
-
         mCollector = new ModulePerfettoCollector();
         // Inject the mock recorder.
         mCollector.mPerfettoTraceRecorder = mMockPerfettoTraceRecorder;
-
         when(mMockDevice.getSerialNumber()).thenReturn("SERIAL");
         when(mMockContext.getDevices()).thenReturn(Collections.singletonList(mMockDevice));
 
         MultiMap<String, String> attributes = new MultiMap<>();
-        attributes.put(ModuleDefinition.MODULE_NAME, "test_module");
+        attributes.put(ModuleDefinition.MODULE_NAME, moduleName);
         doReturn(attributes).when(mMockContext).getAttributes();
 
         mCollector.init(mMockContext, mMockListener);
     }
 
     @Test
-    public void testCaptureModuleLevel() {
+    public void testCaptureModuleLevel() throws Exception {
+        setUp("test_module");
         assertTrue(mCollector.captureModuleLevel());
     }
 
     @Test
     public void testCollectOnModuleLevel() throws Exception {
+        setUp("test_module");
         File fakeTrace = File.createTempFile("fake_trace", ".perfetto-trace");
         try {
             // Write some data to the file so it's not empty and is logged.
@@ -108,15 +107,14 @@ public class ModulePerfettoCollectorTest {
 
     @Test
     public void testCollectOnRunLevel() throws Exception {
+        setUp(null);
         // Set the flag to false to simulate run-level capture.
-        mCollector.setModuleLevelFlag(false);
         File fakeTrace = File.createTempFile("fake_trace", ".perfetto-trace");
         try {
             // Write some data to the file so it's not empty and is logged.
             try (FileOutputStream out = new FileOutputStream(fakeTrace)) {
                 out.write("some trace data".getBytes());
             }
-
             when(mMockPerfettoTraceRecorder.stopTrace(mMockDevice)).thenReturn(fakeTrace);
 
             mCollector.onTestRunStart(new DeviceMetricData(mMockContext));
@@ -128,14 +126,15 @@ public class ModulePerfettoCollectorTest {
             ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
             verify(mMockListener).testLog(nameCaptor.capture(), eq(LogDataType.PERFETTO), any());
 
-            assertEquals("perfetto-debug-trace_test_module_onTestRunEnd_1", nameCaptor.getValue());
+            assertEquals("perfetto-debug-trace_null_onTestRunEnd_1", nameCaptor.getValue());
         } finally {
             fakeTrace.delete();
         }
     }
 
     @Test
-    public void testCollect_noTraceFile() throws DeviceNotAvailableException {
+    public void testCollect_noTraceFile() throws DeviceNotAvailableException, Exception {
+        setUp("test_module");
         when(mMockPerfettoTraceRecorder.stopTrace(mMockDevice)).thenReturn(null);
 
         mCollector.onTestModuleStarted();
@@ -147,6 +146,7 @@ public class ModulePerfettoCollectorTest {
 
     @Test
     public void testRebootStarted() throws Exception {
+        setUp("test_module");
         File fakeTrace = File.createTempFile("fake_trace", ".perfetto-trace");
         try {
             // Write some data to the file so it's not empty and is logged.

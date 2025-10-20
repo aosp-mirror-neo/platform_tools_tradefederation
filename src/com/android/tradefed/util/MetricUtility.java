@@ -80,14 +80,16 @@ public class MetricUtility {
 
     private List<Pattern> mMetricPatterns = new ArrayList<>();
 
+    // The number of test iterations.
+    private int mTestIterations = 0;
+
     /**
      * Used for storing the individual test metrics and use it for aggregation.
      *
      * @param testDescription contains the test details like class name and test name.
      * @param testMetrics metrics collected for the test.
      */
-    public void storeTestMetrics(TestDescription testDescription,
-            Map<String, Metric> testMetrics) {
+    public void storeTestMetrics(TestDescription testDescription, Map<String, Metric> testMetrics) {
 
         if (testMetrics == null) {
             return;
@@ -99,35 +101,37 @@ public class MetricUtility {
                 CLASS_METHOD_JOINER
                         .join(testDescription.getClassName(), testDescription.getTestName())
                         .replaceFirst(Pattern.quote(mTestIterationSeparator) + "\\d+", "");
-
         if (!mStoredTestMetrics.containsKey(newTestId)) {
             mStoredTestMetrics.put(newTestId, ArrayListMultimap.create());
         }
-        ArrayListMultimap<String, Metric> storedMetricsForThisTest = mStoredTestMetrics
-                .get(newTestId);
+        ArrayListMultimap<String, Metric> storedMetricsForThisTest =
+                mStoredTestMetrics.get(newTestId);
         for (Map.Entry<String, Metric> entry : testMetrics.entrySet()) {
             storedMetricsForThisTest.put(entry.getKey(), entry.getValue());
         }
     }
 
     /**
-     *
      * Write metrics to a file.
      *
      * @param testFileSuffix is used as suffix in the test metric file name.
      * @param testHeaderName metrics will be written under the test header name.
      * @param metrics to write in the file.
-     * @param resultsFile if null create a new file and write the metrics otherwise append the
-     *        test header name and metric to the file.
+     * @param resultsFile if null create a new file and write the metrics otherwise append the test
+     *     header name and metric to the file.
      * @return file with the metric.
      */
-    public File writeResultsToFile(String testFileSuffix, String testHeaderName,
-            Map<String, String> metrics, File resultsFile) {
+    public File writeResultsToFile(
+            String testFileSuffix,
+            String testHeaderName,
+            Map<String, String> metrics,
+            File resultsFile) {
 
         if (resultsFile == null) {
             try {
-                resultsFile = FileUtil.createTempFile(String.format("test_results_%s_",
-                        testFileSuffix), "");
+                resultsFile =
+                        FileUtil.createTempFile(
+                                String.format("test_results_%s_", testFileSuffix), "");
             } catch (IOException e) {
                 CLog.e(e);
                 return resultsFile;
@@ -136,11 +140,13 @@ public class MetricUtility {
 
         try (FileOutputStream outputStream = new FileOutputStream(resultsFile, true)) {
             // Write the header description name.
-            outputStream.write(String.format("%s%s", testHeaderName, TEST_HEADER_SEPARATOR)
-                    .getBytes());
+            outputStream.write(
+                    String.format("%s%s", testHeaderName, TEST_HEADER_SEPARATOR).getBytes());
             for (Map.Entry<String, String> entry : metrics.entrySet()) {
-                String test_metric = String.format("%s%s%s", entry.getKey(),
-                        METRIC_KEY_VALUE_SEPARATOR, entry.getValue());
+                String test_metric =
+                        String.format(
+                                "%s%s%s",
+                                entry.getKey(), METRIC_KEY_VALUE_SEPARATOR, entry.getValue());
                 outputStream.write(String.format("%s%s", test_metric, METRIC_SEPARATOR).getBytes());
             }
             outputStream.write(TEST_HEADER_SEPARATOR.getBytes());
@@ -159,7 +165,7 @@ public class MetricUtility {
     public Map<String, Metric> aggregateMetrics(Map<String, Metric> rawMetrics) {
         Map<String, Metric> aggregateMetrics = new LinkedHashMap<String, Metric>();
         for (Map.Entry<String, Metric> entry : rawMetrics.entrySet()) {
-            String values = entry.getValue().getMeasurements().getSingleString();
+            String values = getMeasurementAsString(entry.getValue().getMeasurements());
             List<String> splitVals = Arrays.asList(values.split(",", 0));
             // Build stats for keys with any values, even only one.
             if (isAllDoubleValues(splitVals)) {
@@ -170,8 +176,8 @@ public class MetricUtility {
     }
 
     /**
-     * Aggregate the metrics collected from multiple iterations of the test and
-     * write the aggregated metrics to a test result file.
+     * Aggregate the metrics collected from multiple iterations of the test and write the aggregated
+     * metrics to a test result file.
      *
      * @param fileName file name to use while writing the metrics.
      */
@@ -183,24 +189,27 @@ public class MetricUtility {
             Map<String, Metric> aggregateMetrics = new LinkedHashMap<String, Metric>();
             for (String metricKey : currentTest.keySet()) {
                 List<Metric> metrics = currentTest.get(metricKey);
-                List<Measurements> measures = metrics.stream().map(Metric::getMeasurements)
-                        .collect(Collectors.toList());
+                List<Measurements> measures =
+                        metrics.stream().map(Metric::getMeasurements).collect(Collectors.toList());
                 // Parse metrics into a list of SingleString values, concating lists in the process
-                List<String> rawValues = measures.stream()
-                        .map(Measurements::getSingleString)
-                        .map(
-                                m -> {
-                                    // Split results; also deals with the case of empty results
-                                    // in a certain run
-                                    List<String> splitVals = Arrays.asList(m.split(",", 0));
-                                    if (splitVals.size() == 1 && splitVals.get(0).isEmpty()) {
-                                        return Collections.<String> emptyList();
-                                    }
-                                    return splitVals;
-                                })
-                        .flatMap(Collection::stream)
-                        .map(String::trim)
-                        .collect(Collectors.toList());
+                List<String> rawValues =
+                        measures.stream()
+                                .map(MetricUtility::getMeasurementAsString)
+                                .map(
+                                        m -> {
+                                            // Split results; also deals with the case of empty
+                                            // results
+                                            // in a certain run
+                                            List<String> splitVals = Arrays.asList(m.split(",", 0));
+                                            if (splitVals.size() == 1
+                                                    && splitVals.get(0).isEmpty()) {
+                                                return Collections.<String>emptyList();
+                                            }
+                                            return splitVals;
+                                        })
+                                .flatMap(Collection::stream)
+                                .map(String::trim)
+                                .collect(Collectors.toList());
                 // Do not report empty metrics
                 if (rawValues.isEmpty()) {
                     continue;
@@ -212,11 +221,11 @@ public class MetricUtility {
 
             aggregateMetrics =
                     mMetricPatterns.size() > 0 ? filterMetrics(aggregateMetrics) : aggregateMetrics;
-            Map<String, String> compatibleTestMetrics = TfMetricProtoUtil
-                    .compatibleConvert(aggregateMetrics);
+            Map<String, String> compatibleTestMetrics =
+                    TfMetricProtoUtil.compatibleConvert(aggregateMetrics);
 
-            resultsFile = writeResultsToFile(fileName, testName,
-                    compatibleTestMetrics, resultsFile);
+            resultsFile =
+                    writeResultsToFile(fileName, testName, compatibleTestMetrics, resultsFile);
         }
         return resultsFile;
     }
@@ -229,20 +238,22 @@ public class MetricUtility {
         mTestIterationSeparator = separator;
     }
 
+    public void setTestIterations(int testIterations) {
+        mTestIterations = testIterations;
+    }
+
     @VisibleForTesting
     public Map<String, ArrayListMultimap<String, Metric>> getStoredTestMetric() {
         return mStoredTestMetrics;
     }
 
     /**
-     * Return true is all the values can be parsed to double value.
-     * Otherwise return false.
+     * Return true is all the values can be parsed to double value. Otherwise return false.
      *
      * @param rawValues list whose values are validated.
      */
     public static boolean isAllDoubleValues(List<String> rawValues) {
-        return rawValues
-                .stream()
+        return rawValues.stream()
                 .allMatch(
                         val -> {
                             try {
@@ -261,31 +272,38 @@ public class MetricUtility {
      * @param percentiles stats to include in the final metrics.
      * @return aggregated values.
      */
-    public static Map<String, Double> getStats(List<Double> values,
-            Set<Integer> percentiles) {
+    public static Map<String, Double> getStats(
+            List<Double> values, Set<Integer> percentiles, int testIterations) {
         Map<String, Double> stats = new LinkedHashMap<>();
         double sum = values.stream().mapToDouble(Double::doubleValue).sum();
         double count = values.size();
         // The orElse situation should never happen.
-        double mean = values.stream()
-                .mapToDouble(Double::doubleValue)
-                .average()
-                .orElseThrow(IllegalStateException::new);
+        double mean;
+        if (testIterations > 0) {
+            mean = sum / testIterations;
+        } else {
+            mean =
+                    values.stream()
+                            .mapToDouble(Double::doubleValue)
+                            .average()
+                            .orElseThrow(IllegalStateException::new);
+        }
         double variance = values.stream().reduce(0.0, (a, b) -> a + Math.pow(b - mean, 2) / count);
         // Calculate percentiles. 50 th percentile will be used as median.
         Set<Integer> updatedPercentile = new LinkedHashSet<>(percentiles);
         updatedPercentile.add(50);
-        Map<Integer, Double> percentileStat = Quantiles.percentiles().indexes(updatedPercentile)
-                .compute(values);
+        Map<Integer, Double> percentileStat =
+                Quantiles.percentiles().indexes(updatedPercentile).compute(values);
         double median = percentileStat.get(50);
         // Diff of last and first value from the list. Return the first value if only one value is
         // present.
-        double diff = (values.size() > 1) ? (values.get(values.size() - 1) - values.get(0))
-                : values.get(0);
+        double diff =
+                (values.size() > 1)
+                        ? (values.get(values.size() - 1) - values.get(0))
+                        : values.get(0);
         // Calculate median absolute deviation
-        List<Double> absoluteDeviations = values.stream()
-                .map(v -> Math.abs(v - median))
-                .collect(Collectors.toList());
+        List<Double> absoluteDeviations =
+                values.stream().map(v -> Math.abs(v - median)).collect(Collectors.toList());
         double mad = Quantiles.median().compute(absoluteDeviations);
         double madCoefficient = (mad / median) * 100;
 
@@ -300,9 +318,7 @@ public class MetricUtility {
         stats.put(STATS_KEY_DIFF, diff);
         stats.put(STATS_KEY_MAD, mad);
         stats.put(STATS_KEY_MAD_COEFF, madCoefficient);
-        percentileStat
-                .entrySet()
-                .stream()
+        percentileStat.entrySet().stream()
                 .forEach(
                         e -> {
                             // If the percentile is 50, only include it if the user asks for it
@@ -317,26 +333,25 @@ public class MetricUtility {
     }
 
     /**
-     * Build stats for the given set of values and build the metrics using the metric key
-     * and stats name and update the results in aggregated metrics.
+     * Build stats for the given set of values and build the metrics using the metric key and stats
+     * name and update the results in aggregated metrics.
      *
      * @param metricKey key to which the values correspond to.
      * @param values list of raw values.
      * @param aggregateMetrics where final metrics will be stored.
      */
-    private void buildStats(String metricKey, List<String> values,
-            Map<String, Metric> aggregateMetrics) {
-        List<Double> doubleValues = values.stream().map(Double::parseDouble)
-                .collect(Collectors.toList());
-        Map<String, Double> stats = getStats(doubleValues, mActualPercentiles);
+    private void buildStats(
+            String metricKey, List<String> values, Map<String, Metric> aggregateMetrics) {
+        List<Double> doubleValues =
+                values.stream().map(Double::parseDouble).collect(Collectors.toList());
+        Map<String, Double> stats = getStats(doubleValues, mActualPercentiles, mTestIterations);
         for (String statKey : stats.keySet()) {
             Metric.Builder metricBuilder = Metric.newBuilder();
             metricBuilder
                     .getMeasurementsBuilder()
                     .setSingleString(String.format("%2.2f", stats.get(statKey)));
             aggregateMetrics.put(
-                    String.join(STATS_KEY_SEPARATOR, metricKey, statKey),
-                    metricBuilder.build());
+                    String.join(STATS_KEY_SEPARATOR, metricKey, statKey), metricBuilder.build());
         }
     }
 
@@ -361,5 +376,26 @@ public class MetricUtility {
             }
         }
         return filteredMetrics;
+    }
+
+    /**
+     * Extracts the metric value from a {@link Measurements} proto as a string.
+     *
+     * <p>Handles single string and single double values.
+     *
+     * @param measurements The proto to extract from.
+     * @return The value as a string, or an empty string if not set or not a supported type.
+     */
+    private static String getMeasurementAsString(Measurements measurements) {
+        if (measurements.hasSingleString()) {
+            return measurements.getSingleString();
+        }
+        if (measurements.hasSingleDouble()) {
+            return String.valueOf(measurements.getSingleDouble());
+        }
+        if (measurements.hasSingleInt()) {
+            return String.valueOf(measurements.getSingleInt());
+        }
+        return "";
     }
 }

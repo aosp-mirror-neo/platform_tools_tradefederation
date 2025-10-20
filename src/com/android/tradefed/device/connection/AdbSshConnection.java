@@ -36,7 +36,6 @@ import com.android.tradefed.device.cloud.GceLHPTunnelMonitor;
 import com.android.tradefed.device.cloud.GceManager;
 import com.android.tradefed.device.cloud.GceSshTunnelMonitor;
 import com.android.tradefed.device.cloud.OxygenUtil;
-import com.android.tradefed.device.cloud.RemoteFileUtil;
 import com.android.tradefed.device.cloud.VmRemoteDevice;
 import com.android.tradefed.host.IHostOptions.PermitLimitType;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
@@ -56,7 +55,11 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.DeviceInspectionResult;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MultiMap;
+import com.android.tradefed.util.RemoteFileUtil;
 import com.android.tradefed.util.StreamUtil;
+import com.android.tradefed.util.avd.CuttlefishControl;
+import com.android.tradefed.util.avd.CuttlefishControlHostOrchestrator;
+import com.android.tradefed.util.avd.CuttlefishControlRemoteCvd;
 import com.android.tradefed.util.avd.HostOrchestratorUtil;
 import com.android.tradefed.util.avd.InspectionUtil;
 import com.android.tradefed.util.avd.OxygenClient;
@@ -121,6 +124,9 @@ public class AdbSshConnection extends AdbTcpConnection {
         if (mGceAvd != null) {
             CLog.d("skipped GCE launch because GceAvdInfo %s is already set", mGceAvd);
             createGceTunnelMonitor(getDevice(), getBuildInfo(), mGceAvd, getDevice().getOptions());
+            if (mHOUtil == null) {
+                mHOUtil = createHostOrchestratorUtil(mGceAvd);
+            }
         } else {
             // Launch GCE helper script.
             long startTime = getCurrentTime();
@@ -130,15 +136,18 @@ public class AdbSshConnection extends AdbTcpConnection {
                                 .getHostOptions()
                                 .getConcurrentVirtualDeviceStartupLimit()
                         != null) {
-                    GlobalConfiguration.getInstance()
-                            .getHostOptions()
-                            .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
-                    long queueTime = System.currentTimeMillis() - startTime;
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
-                    CLog.v(
-                            "Fetch and launch CVD permit obtained after %ds",
-                            TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                    try (CloseableTraceScope ignored =
+                            new CloseableTraceScope("fetch_cvd_permit")) {
+                        GlobalConfiguration.getInstance()
+                                .getHostOptions()
+                                .takePermit(PermitLimitType.CONCURRENT_VIRTUAL_DEVICE_STARTUP);
+                        long queueTime = System.currentTimeMillis() - startTime;
+                        InvocationMetricLogger.addInvocationMetrics(
+                                InvocationMetricKey.CF_LAUNCH_PERMISSION_LATENCY, queueTime);
+                        CLog.v(
+                                "Fetch and launch CVD permit obtained after %ds",
+                                TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                    }
                 }
                 // Reset start time for device launch time calculation.
                 startTime = getCurrentTime();
@@ -989,8 +998,9 @@ public class AdbSshConnection extends AdbTcpConnection {
     @VisibleForTesting
     boolean fetchRemoteDir(File localDir, String remotePath) {
         return RemoteFileUtil.fetchRemoteDir(
-                mGceAvd,
-                getDevice().getOptions(),
+                mGceAvd.hostAndPort().getHost(),
+                getDevice().getOptions().getInstanceUser(),
+                getDevice().getOptions().getSshPrivateKeyPath(),
                 getRunUtil(),
                 FETCH_TOMBSTONES_TIMEOUT_MS,
                 remotePath,
@@ -1232,6 +1242,27 @@ public class AdbSshConnection extends AdbTcpConnection {
                 }
             }
 
+            // Collect syslog for the last 30 minutes
+            cmd = getSshCommand("journalctl --since \"30 minutes ago\"", sshPortNumber);
+            res =
+                    GceManager.remoteSshCommandExecution(
+                            mGceAvd,
+                            getDevice().getOptions(),
+                            getRunUtil(),
+                            10000L,
+                            cmd.split(" "));
+            if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+                CLog.e(
+                        "Failed to collect syslog: stdout: %s\nstderr: %s",
+                        res.getStdout(), res.getStderr());
+            } else {
+                String processes = res.getStdout().trim();
+                try (final InputStreamSource source =
+                        new ByteArrayInputStreamSource(processes.getBytes())) {
+                    getLogger().testLog("host_vm_syslog", LogDataType.TEXT, source);
+                }
+            }
+
             if (getDevice().getOptions().useOxygenationDevice()) {
                 CLog.d("Collecting bugreportz in Oxygenation is not supported yet, skipping...");
             } else {
@@ -1302,5 +1333,29 @@ public class AdbSshConnection extends AdbTcpConnection {
     @VisibleForTesting
     OxygenClient createOxygenClient() {
         return OxygenUtil.createOxygenClient(getDevice().getOptions().getAvdDriverBinary());
+    }
+
+    public CuttlefishControl getCuttlefishControl() {
+        boolean hasHostOrchestrator =
+                // Oxygenation always uses HO:
+                getDevice().getOptions().useOxygenationDevice()
+                        ||
+                        // Oxygen uses HO when "use-cvd" is set:
+                        (getDevice().getOptions().useOxygen()
+                                && getDevice().getOptions().useCvdCF());
+
+        if (hasHostOrchestrator) {
+            return new CuttlefishControlHostOrchestrator(createHostOrchestratorUtil(getAvdInfo()));
+        } else {
+            return new CuttlefishControlRemoteCvd(
+                    getDevice().getOptions().useOxygenationDevice()
+                            ? "localhost"
+                            : getAvdInfo().hostAndPort().getHost(),
+                    getDevice().getOptions().getInstanceUser(),
+                    getDevice().getOptions().getSshPrivateKeyPath(),
+                    getAvdInfo().getDeviceOffset(),
+                    getDevice().getOptions().useOxygen(),
+                    getRunUtil());
+        }
     }
 }

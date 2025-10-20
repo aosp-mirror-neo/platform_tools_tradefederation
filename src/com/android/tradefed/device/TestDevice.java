@@ -43,6 +43,7 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.KeyguardControllerState;
+import com.android.tradefed.util.QuotationAwareTokenizer;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.StreamUtil;
@@ -164,6 +165,9 @@ public class TestDevice extends NativeDevice {
     /** Time given to a file to be dumped on device side */
     private static final long DUMPHEAP_TIME = 5000L;
 
+    /** Shell command to get aconfig flags. */
+    private static final String DUMP_DEVICE_ACONFIG_FLAGS_CMD = "device_config list";
+
     /** Timeout in minutes for the package installation */
     static final long INSTALL_TIMEOUT_MINUTES = 4;
     /** Max timeout to output for package installation */
@@ -232,6 +236,107 @@ public class TestDevice extends NativeDevice {
             return false;
         }
         return hasFeature("android.software.app_enumeration");
+    }
+
+    /**
+     * Core implementation of package installation, with retries around {@link
+     * IDevice#installPackage(String, boolean, String...)}
+     *
+     * @param packageFile
+     * @param reinstall
+     * @param extraArgs
+     * @return the response from the installation
+     * @throws DeviceNotAvailableException
+     */
+    private String adbInternalInstallPackage(
+            final File packageFile, final boolean reinstall, final List<String> extraArgs)
+            throws DeviceNotAvailableException {
+        long startTime = System.currentTimeMillis();
+        File tmpAPKFile = null;
+        try {
+            List<String> adbCmd = new ArrayList<>();
+            adbCmd.add("install");
+            if (packageFile.getName().endsWith(APEX_SUFFIX)) {
+                adbCmd.add(APEX_ARG);
+            }
+
+            if (reinstall) {
+                adbCmd.add("-r");
+            }
+            for (String arg : extraArgs) {
+                String[] commandArgs = QuotationAwareTokenizer.tokenizeLine(arg, false);
+                adbCmd.addAll(Arrays.asList(commandArgs));
+            }
+
+            if (packageFile.getName().endsWith(".tmp")) {
+                tmpAPKFile = FileUtil.createTempFile("tmpapkfile", ".apk");
+                boolean success = packageFile.renameTo(tmpAPKFile);
+                if (success) {
+                    adbCmd.add(tmpAPKFile.getAbsolutePath());
+                } else {
+                    throw new DeviceNotAvailableException(
+                            String.format(
+                                    "Failed to convert .tmp file to .apk file: %s",
+                                    packageFile.getAbsolutePath()),
+                            getSerialNumber());
+                }
+            } else {
+                adbCmd.add(packageFile.getAbsolutePath());
+            }
+            long maxTimeoutMs = TimeUnit.MINUTES.toMillis(INSTALL_TIMEOUT_MINUTES);
+            final String[] response = new String[1];
+            DeviceAction installAction =
+                    new DeviceAction() {
+                        @Override
+                        public boolean run() throws InstallException {
+                            try {
+                                CommandResult res =
+                                        executeAdbV2Command(
+                                                maxTimeoutMs,
+                                                new HashMap<>(),
+                                                adbCmd.toArray(new String[0]));
+                                response[0] = handleInstallationResult(res);
+                            } catch (DeviceNotAvailableException e) {
+                                response[0] = e.getMessage();
+                            }
+                            return response[0] == null;
+                        }
+                    };
+            CLog.v(
+                    "Installing package file %s with args %s on %s",
+                    packageFile.getAbsolutePath(), extraArgs.toString(), getSerialNumber());
+            performDeviceAction(
+                    String.format("install %s", packageFile.getAbsolutePath()),
+                    installAction,
+                    MAX_RETRY_ATTEMPTS);
+            List<File> packageFiles = new ArrayList<>();
+            packageFiles.add(packageFile);
+            allowLegacyStorageForApps(packageFiles);
+            return response[0];
+        } catch (IOException e) {
+            CLog.e("Faild to create temp apk file: %s", packageFile.getAbsolutePath());
+            return e.getMessage();
+        } finally {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_COUNT, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.PACKAGE_INSTALL_TIME,
+                    System.currentTimeMillis() - startTime);
+            FileUtil.deleteFile(tmpAPKFile);
+        }
+    }
+
+    private String handleInstallationResult(CommandResult res) {
+        if (res.getStatus() == CommandStatus.SUCCESS) {
+            return null;
+        }
+        // For ADB client side error it show in stderr
+        if (res.getStderr() != null) {
+            return res.getStderr();
+        }
+
+        // For device side error eg.INSTALL_FAILED_ALREADY_EXISTS it will show in stdout.
+        return res.getStdout();
     }
 
     /**
@@ -363,6 +468,9 @@ public class TestDevice extends NativeDevice {
         } finally {
             StreamUtil.cancel(bugreport);
         }
+        try (InputStreamSource source = getLogcatDump()) {
+            listener.testLog(dataName + "_logcat", LogDataType.LOGCAT, source);
+        }
         CLog.d(
                 "logBugreport() was not successful in collecting and logging the bugreport "
                         + "for device %s",
@@ -451,6 +559,7 @@ public class TestDevice extends NativeDevice {
                 CLog.e(
                         "Something went went wrong during bugreportz collection: '%s'",
                         res.getStdout());
+                getDetailLogInfoForBugreportFailed();
                 FileUtil.deleteFile(zipFile);
                 return null;
             }
@@ -478,6 +587,23 @@ public class TestDevice extends NativeDevice {
             // if the device goes away
             CLog.e("Device %s became unresponsive while retrieving bugreport", getSerialNumber());
             return null;
+        }
+    }
+
+    private void getDetailLogInfoForBugreportFailed() {
+        if (getDeviceState() == TestDeviceState.NOT_AVAILABLE) {
+            CLog.w("Device %s is currently not avliable");
+        }
+        CLog.w("Device %s is currently on status: %s", getSerialNumber(), getDeviceState());
+        try {
+            CommandResult res =
+                    executeShellV2Command(
+                            "dumpsys usb", BUGREPORT_TIMEOUT, TimeUnit.MILLISECONDS, 0);
+            CLog.w(
+                    "USB connection info between host and device %s: %s",
+                    getSerialNumber(), res.getStdout());
+        } catch (DeviceNotAvailableException e) {
+            CLog.e("Failed to get usb informaciton for device %s. ", getSerialNumber());
         }
     }
 
@@ -524,7 +650,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInternalInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -579,6 +705,33 @@ public class TestDevice extends NativeDevice {
                     DeviceErrorIdentifier.APK_INSTALLATION_FAILED);
         }
         return true;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String adbInstallPackage(
+            final File packageFile, final boolean reinstall, final String... extraArgs)
+            throws DeviceNotAvailableException {
+        boolean runtimePermissionSupported = isRuntimePermissionSupported();
+        List<String> args = new ArrayList<>(Arrays.asList(extraArgs));
+        // grant all permissions by default if feature is supported
+        if (runtimePermissionSupported) {
+            args.add("-g");
+        }
+        return adbInternalInstallPackage(packageFile, reinstall, args);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String adbInstallPackage(
+            File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
+            throws DeviceNotAvailableException {
+        ensureRuntimePermissionSupported();
+        List<String> args = new ArrayList<>(Arrays.asList(extraArgs));
+        if (grantPermissions) {
+            args.add("-g");
+        }
+        return adbInternalInstallPackage(packageFile, reinstall, args);
     }
 
     /**
@@ -877,8 +1030,7 @@ public class TestDevice extends NativeDevice {
             // Return an error in the buffer
             CLog.e("Error: device reported error for screenshot:");
             CLog.e("stdout: %s\nstderr: %s", result.getStdout(), result.getStderr());
-            return new ByteArrayInputStreamSource(
-                    "Error: device reported null for screenshot.".getBytes());
+            return new ByteArrayInputStreamSource("".getBytes());
         }
         try {
             File tmpScreenshot = pullFile(tmpDevicePath);
@@ -895,8 +1047,7 @@ public class TestDevice extends NativeDevice {
         } finally {
             deleteFile(tmpDevicePath);
         }
-        return new ByteArrayInputStreamSource(
-                "Error: device reported null for screenshot.".getBytes());
+        return new ByteArrayInputStreamSource("".getBytes());
     }
 
     @VisibleForTesting
@@ -1241,7 +1392,6 @@ public class TestDevice extends NativeDevice {
                     CLog.v("framework reboot: can't detect framework running");
                     return false;
                 }
-                notifyRebootStarted();
                 String command = "svc power reboot";
                 String mode = rebootMode.formatRebootCommand(reason);
                 if (mode != null && !mode.isEmpty()) {
@@ -1253,8 +1403,6 @@ public class TestDevice extends NativeDevice {
                     CLog.e(
                             "Reboot was called too early: stdout: %s.\nstderr: %s.",
                             result.getStdout(), result.getStderr());
-                    // notify of this reboot end, since reboot will be retried again at later stage.
-                    notifyRebootEnded();
                     return false;
                 }
             } catch (DeviceUnresponsiveException due) {
@@ -1734,15 +1882,50 @@ public class TestDevice extends NativeDevice {
         }
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public int getRemainingCreatableUserCount(String userType) throws DeviceNotAvailableException {
+        checkApiLevelAgainstNextRelease("getMaxNumberOfUsersSupported(userType)", 36);
+        if (!doesApiLevelHaveNoMaxUsersLimit()) {
+            // Without the flag, this command won't work. But we can adopt the same crude estimation
+            // that CTS tests were using before this was introduced, to preserve pre-flag behaviour.
+            return getMaxNumberOfUsersSupported() - listUsers().size();
+        }
+        String command = "pm get-remaining-user-count --user-type " + userType;
+        String commandOutput = executeShellCommand(command);
+        try {
+            return Integer.parseInt(commandOutput.substring(commandOutput.lastIndexOf(" ")).trim());
+        } catch (NumberFormatException e) {
+            CLog.e("Failed to parse result: %s", commandOutput);
+        }
+        return 0;
+    }
+
     /**
      * {@inheritDoc}
      */
     @Override
+    @Deprecated
     public int getMaxNumberOfUsersSupported() throws DeviceNotAvailableException {
+        return getMaxNumberOfUsersSupported(null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getMaxNumberOfUsersSupported(@Nullable String userType)
+            throws DeviceNotAvailableException {
         String command = "pm get-max-users";
+        if (userType != null) {
+            checkApiLevelAgainstNextRelease("getMaxNumberOfUsersSupported(userType)", 36);
+            if (doesApiLevelHaveNoMaxUsersLimit()) {
+                command += " --user-type " + userType;
+            }
+        }
         String commandOutput = executeShellCommand(command);
         try {
-            return Integer.parseInt(commandOutput.substring(commandOutput.lastIndexOf(" ")).trim());
+            return Integer.parseInt(commandOutput.substring(commandOutput.lastIndexOf(" ")).trim())
+                    // if flag is off on new builds, -1 for the system user.
+                    + (userType != null && !doesApiLevelHaveNoMaxUsersLimit() ? -1 : 0);
         } catch (NumberFormatException e) {
             CLog.e("Failed to parse result: %s", commandOutput);
         }
@@ -1763,9 +1946,8 @@ public class TestDevice extends NativeDevice {
         return 0;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
+    // Remember that this only refers to whether multiple *switchable* users are supported.
     @Override
     public boolean isMultiUserSupported() throws DeviceNotAvailableException {
         checkApiLevelAgainstNextRelease("get-max-running-users", 28);
@@ -1783,6 +1965,7 @@ public class TestDevice extends NativeDevice {
                 return false;
             }
         }
+        // old API version
         return getMaxNumberOfUsersSupported() > 1;
     }
 
@@ -2147,22 +2330,28 @@ public class TestDevice extends NativeDevice {
 
         resetContentProviderSetup();
         long initialTime = getHostCurrentTime();
-        String output = executeShellCommand(switchCommand);
+        long timeoutDeadline = initialTime + timeout;
+        CommandResult res = executeShellV2Command(switchCommand);
+        boolean commandErr = !CommandStatus.SUCCESS.equals(res.getStatus());
         boolean success = userId == getCurrentUser();
-
-        while (!success && (getHostCurrentTime() - initialTime <= timeout)) {
+        while (!commandErr && !success && (getHostCurrentTime() <= timeoutDeadline)) {
             // retry
             RunUtil.getDefault().sleep(getCheckNewUserSleep());
-            output = executeShellCommand(String.format(switchCommand));
+            res = executeShellV2Command(switchCommand);
+            commandErr = !CommandStatus.SUCCESS.equals(res.getStatus());
             success = userId == getCurrentUser();
         }
 
+        if (commandErr) {
+            CLog.e("Faild to switch user due to error: %s", res.getStderr());
+            return false;
+        }
         CLog.d("switchUser took %d ms", getHostCurrentTime() - initialTime);
         if (success) {
             prePostBootSetup();
             return true;
         } else {
-            CLog.e("User did not switch in the given %d timeout: %s", timeout, output);
+            CLog.e("User did not switch in the given %d timeout: %s", timeout, res.getStdout());
             return false;
         }
     }
@@ -2798,7 +2987,7 @@ public class TestDevice extends NativeDevice {
             getRunUtil().allowInterrupt(true);
             // Manually execute the adb action to avoid any kind of recovery
             // since it hard to interrupt the forwarding
-            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false);
+            final String[] fullCmd = buildAdbShellCommand(logwrapperCmd, false, false);
             AdbShellAction adbActionV2 =
                     new AdbShellAction(
                             fullCmd,
@@ -3557,5 +3746,33 @@ public class TestDevice extends NativeDevice {
             throw new DeviceRuntimeException(message, DeviceErrorIdentifier.DEVICE_CRASHED);
         }
         return error;
+    }
+
+    /**
+     * Returns whether the device api level is such that there is no overall user max and supports
+     * per-user-type max value shell commands.
+     */
+    private boolean doesApiLevelHaveNoMaxUsersLimit() throws DeviceNotAvailableException {
+        return getApiLevel() >= 37 || getDeviceConfigFlag(
+                "multiuser/android.multiuser.consistent_max_users");
+    }
+
+    /**
+     * Returns the value corresponding to the given aconfig flag name.
+     * @param flagName fully qualified aconfig flag name, including its namespace,
+     *                 like "namespace/android.area.flagname".
+     */
+    private boolean getDeviceConfigFlag(String flagName) throws DeviceNotAvailableException {
+        // The logic here is derived from android.platform.test.flag.junit.host.DeviceFlags.
+        String deviceConfigList = executeShellCommand(DUMP_DEVICE_ACONFIG_FLAGS_CMD);
+        for (String deviceConfig : deviceConfigList.split("\n")) {
+            if (deviceConfig.contains("=")) {
+                String[] flagNameValue = deviceConfig.split("=", 2);
+                if (flagName.equals(flagNameValue[0])) {
+                    return Boolean.parseBoolean(flagNameValue[1]);
+                }
+            }
+        }
+        return false;
     }
 }

@@ -42,6 +42,7 @@ import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
+import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
@@ -51,6 +52,7 @@ import com.android.tradefed.util.MultiMap;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
@@ -83,6 +85,7 @@ public class ResultDBReporter
     private static final int MAX_SUMMARY_HTML_BYTES = 4096;
 
     private static final int MAX_ERROR_MESSAGE_BYTES = 1024;
+    private static final int MAX_ERROR_TRACE_BYTES = 4096;
     private static final int MAX_SKIP_REASON_MESSAGE_BYTES = 1024;
 
     // Link to redirect to the result page.
@@ -302,6 +305,30 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
+        // Read root invocation and work unit context.
+        String rootInvocationId = context.getAttribute("resultdb_root_invocation_id");
+        String workUnitId = context.getAttribute("resultdb_work_unit_id");
+        String workUnitUpdateToken = context.getAttribute("resultdb_work_unit_update_token");
+        if (!rootInvocationId.isEmpty()) {
+            if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
+                CLog.w(
+                        "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
+                            + " required when resultdb_root_invocation_id is provided %s",
+                        rootInvocationId);
+                return;
+            }
+            CLog.i(
+                    "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
+                            + " update token",
+                    rootInvocationId, workUnitId);
+            CLog.i(
+                    "Disabling ResultDBReporter, because ResultDB work unit support is not"
+                            + " yet implemented in this plugin. Test results will be uploaded"
+                            + " automatically once support is ready.");
+            // TODO(beining): Implement work unit upload support.
+            mDisable = true;
+            return;
+        }
         try {
             // Obtain invocation ID from context.
             String invocationId = context.getAttribute("resultdb_invocation_id");
@@ -484,22 +511,25 @@ public class ResultDBReporter
                 continue;
             }
             TestDescription test = TestDescription.fromString(filter.getTest());
-            // String skipReasonString = ResultDBUtil.testSkipReasonToString(entry.getValue(),
-            // "\n");
+            // Skip reason of demoted test is not likely to exceed the size limit.
+            // But we truncate it just in case.
+            ResultDBUtil.TruncationResult truncatedSkipReason =
+                    ResultDBUtil.truncateString(
+                            entry.getValue().getReason(), MAX_SKIP_REASON_MESSAGE_BYTES);
             SkippedReason skippedReason =
                     SkippedReason.newBuilder()
                             .setKind(SkippedReason.Kind.DEMOTED)
-                            .setReasonMessage(
-                                    ResultDBUtil.truncateString(
-                                            entry.getValue().getReason(),
-                                            MAX_SKIP_REASON_MESSAGE_BYTES))
+                            .setReasonMessage(truncatedSkipReason.getTruncatedString())
                             .build();
             // Some skip reason field doesn't have a dedicated field in ResultDB, put them in the
-            // summary HTML field for now.
+            // summary HTML field for now. This is not likely to exceed the size limit.
+            // But we truncate it just in case.
             String summaryHtml =
                     ResultDBUtil.truncateString(
-                            ResultDBUtil.testSkipReasonToSummaryHtml(entry.getValue(), false),
-                            MAX_SUMMARY_HTML_BYTES);
+                                    ResultDBUtil.testSkipReasonToSummaryHtml(
+                                            entry.getValue(), false),
+                                    MAX_SUMMARY_HTML_BYTES)
+                            .getTruncatedString();
             TestResult currentTest =
                     TestResult.newBuilder()
                             .setTestIdStructured(
@@ -605,6 +635,8 @@ public class ResultDBReporter
             return;
         }
 
+        // Put first line of error message in the skip reason field because Assumption Failure maps
+        // to ResultDB SKIPPED status.
         SkippedReason skippedReason =
                 SkippedReason.newBuilder()
                         .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
@@ -612,13 +644,22 @@ public class ResultDBReporter
                                 extractAndTruncateFirstLine(
                                         failure.getErrorMessage(), MAX_SKIP_REASON_MESSAGE_BYTES))
                         .build();
+        // Put the full error message in the summary HTML field.
+        ResultDBUtil.TruncationResult truncated =
+                ResultDBUtil.truncateString(failure.getErrorMessage(), MAX_SUMMARY_HTML_BYTES);
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
                         .setStatusV2(TestResult.Status.SKIPPED)
                         .setSkippedReason(skippedReason)
+                        .setSummaryHtml(truncated.getTruncatedString())
                         .build();
-        // TODO: Full error message is too long to fit in any test result field.
-        // Upload it as test artifact.
+
+        if (truncated.wasTruncated()) {
+            // Upload the full skip reason as test artifact if it was truncated.
+            Artifact atf =
+                    artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage());
+            mRecorder.enqueueArtifact(atf);
+        }
     }
 
     @Override
@@ -632,9 +673,8 @@ public class ResultDBReporter
         }
 
         String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, true);
-
-        // TODO: Skip reason can be too long to fit in any test result field.
-        // Upload it as test artifact.
+        ResultDBUtil.TruncationResult truncated =
+                ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES);
 
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
@@ -644,40 +684,26 @@ public class ResultDBReporter
                         // Put the skip reason in the summary HTML field, because the SkippedReason
                         // field and FailureReason failure can only be set when the status is
                         // SKIPPED or FAILED, respectively.
-                        .setSummaryHtml(
-                                ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES))
+                        .setSummaryHtml(truncated.getTruncatedString())
                         .build();
+        if (truncated.wasTruncated()) {
+            // Upload the full skip reason as test artifact.
+            Artifact atf = artifactFromString("testSkipped_reason", summaryHtml);
+            mRecorder.enqueueArtifact(atf);
+        }
     }
 
     @Override
     public void testFailed(TestDescription test, String trace) {
-        if (mDisable) {
-            return;
-        }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
-            return;
-        }
-        FailureReason.Error error =
-                FailureReason.Error.newBuilder()
-                        .setMessage(extractAndTruncateFirstLine(trace, MAX_ERROR_MESSAGE_BYTES))
-                        .build();
-        FailureReason failureReason =
-                FailureReason.newBuilder()
-                        .addErrors(error)
-                        .setKind(FailureReason.Kind.ORDINARY)
-                        .build();
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        .setFailureReason(failureReason)
-                        .setStatusV2(TestResult.Status.FAILED)
-                        .build();
-        // TODO: extract local instruction from test description and set in ResultDB test result.
-        // TODO: trace is too long to fit in any test result field. Upload it as test artifact.
+        populateFailedTest(test, trace, FailureStatus.UNSET);
     }
 
     @Override
     public void testFailed(TestDescription test, FailureDescription failure) {
+        populateFailedTest(test, failure.toString(), failure.getFailureStatus());
+    }
+
+    private void populateFailedTest(TestDescription test, String trace, FailureStatus status) {
         if (mDisable) {
             return;
         }
@@ -685,10 +711,13 @@ public class ResultDBReporter
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
         }
+        String truncatedFailureReason = extractAndTruncateFirstLine(trace, MAX_ERROR_MESSAGE_BYTES);
+        ResultDBUtil.TruncationResult truncationResult =
+                ResultDBUtil.truncateString(trace, MAX_ERROR_TRACE_BYTES);
 
         FailureReason.Kind kind = FailureReason.Kind.ORDINARY;
-        if (failure.getFailureStatus() != null) {
-            switch (failure.getFailureStatus()) {
+        if (status != null) {
+            switch (status) {
                 case TIMED_OUT:
                     kind = FailureReason.Kind.TIMEOUT;
                     break;
@@ -702,30 +731,52 @@ public class ResultDBReporter
                     break;
             }
         }
-        String truncatedFailureReason =
-                extractAndTruncateFirstLine(failure.getErrorMessage(), MAX_ERROR_MESSAGE_BYTES);
 
-        FailureReason failureReason =
+        FailureReason reason =
                 FailureReason.newBuilder()
+                        .setKind(kind)
                         .addErrors(
                                 FailureReason.Error.newBuilder()
                                         .setMessage(truncatedFailureReason)
+                                        .setTrace(truncationResult.getTruncatedString())
                                         .build())
-                        .setKind(kind)
                         .build();
 
         TestResult.Builder testResultBuilder =
                 mCurrentTestResult.toBuilder()
-                        .setFailureReason(failureReason)
+                        .setFailureReason(reason)
                         .setStatusV2(TestResult.Status.FAILED);
 
-        // Set the TF error type in the summary HTML.
-        if (failure.getFailureStatus() != null) {
-            testResultBuilder.setSummaryHtml("TF error type: " + failure.getFailureStatus());
+        if (status != null && status != FailureStatus.UNSET) {
+            testResultBuilder.setSummaryHtml("TF error type: " + status);
         }
         mCurrentTestResult = testResultBuilder.build();
+        if (truncationResult.wasTruncated()) {
+            // Upload the full trace as test artifact.
+            Artifact atf = artifactFromString("testFailed_trace", trace);
+            mRecorder.enqueueArtifact(atf);
+        }
         // TODO: extract local instruction from test description and set in ResultDB test result.
-        // TODO: trace is too long to fit in any test result field. Upload it as test artifact.
+    }
+
+    /**
+     * Create an artifact from the given string.
+     *
+     * <p>The artifact will be associated with the current test result if it is not null.
+     */
+    private Artifact artifactFromString(String artifactId, String contents) {
+        ByteString contentsBytes = ByteString.copyFromUtf8(contents);
+        Artifact.Builder ab =
+                Artifact.newBuilder()
+                        .setArtifactId(artifactId)
+                        .setContentType("text/plain")
+                        .setContents(contentsBytes)
+                        .setSizeBytes(contentsBytes.size());
+        if (mCurrentTestResult != null) {
+            ab.setTestIdStructured(mCurrentTestResult.getTestIdStructured())
+                    .setResultId(mCurrentTestResult.getResultId());
+        }
+        return ab.build();
     }
 
     @Override
@@ -796,6 +847,10 @@ public class ResultDBReporter
         return true;
     }
 
+    public boolean isDisabled() {
+        return mDisable;
+    }
+
     /**
      * Extract the first line of the stack trace as the error message, and truncate the string to
      * the given max bytes.
@@ -805,7 +860,7 @@ public class ResultDBReporter
     String extractAndTruncateFirstLine(String trace, int maxBytes) {
         String firstLine = trace.split("[\\r\\n]+", 2)[0];
         if (!firstLine.trim().isEmpty()) {
-            return ResultDBUtil.truncateString(firstLine, maxBytes);
+            return ResultDBUtil.truncateString(firstLine, maxBytes).getTruncatedString();
         }
         return "";
     }

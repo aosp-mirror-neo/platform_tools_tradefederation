@@ -36,7 +36,9 @@ public final class CasUtil {
 
     public static final String CHUNKS_DIR_NAME = "_chunks";
     public static final String CHUNKS_INDEX_FILENAME = "_chunks_index.json";
-    public static final String BOOT_IMAGE_FILENAME = "boot.img";
+    public static final String SYSTEM_IMAGE_FILENAME = "system.img";
+    public static final String SUPER_IMAGE_FILENAME = "super.img";
+    public static final String ANDROID_INFO_FILENAME = "android-info.txt";
     public static final String CAS_LOG_ROOT_NAME = "tf-cas-fuse-log-root";
     private static final Pattern LOG_LINE_PATTERN =
             Pattern.compile(
@@ -103,12 +105,25 @@ public final class CasUtil {
     /**
      * Returns true if the given path is a valid uncompressed device image.
      *
+     * <p>For the most robust and reliable check, verify the existence of (system.img or super.img)
+     * AND android-info.txt.
+     *
+     * <p>system.img/super.img: Confirms that the core OS data is present.
+     *
+     * <p>android-info.txt: Confirms that this is an official build package with metadata describing
+     * the device and build version.
+     *
+     * <p>This combination is extremely unlikely to occur in a directory that isn't an uncompressed
+     * device image and correctly handles cases like the TV build where boot.img is absent.
+     *
      * @param path The absolute path to the device image.
      * @return True if the path is a valid uncompressed device image, false otherwise.
      */
     public static boolean isUncompressedDeviceImage(Path path) {
-        // All device images are expected to have a boot image file.
-        return Files.exists(path.resolve(BOOT_IMAGE_FILENAME));
+        // All device images are expected to have a system or super image file.
+        return (Files.exists(path.resolve(SYSTEM_IMAGE_FILENAME))
+                        || Files.exists(path.resolve(SUPER_IMAGE_FILENAME)))
+                && Files.exists(path.resolve(ANDROID_INFO_FILENAME));
     }
 
     public static void logCasClientVersion(Path clientPath, Consumer<String> versionHandlerFn) {
@@ -189,10 +204,28 @@ public final class CasUtil {
             throws IOException {
         Path logFilePath = logDirPath.resolve(clientName + "." + tag);
         if (!Files.exists(logFilePath)) {
-            CLog.w("CAS log file not found: %s", logFilePath);
+            String filesInDir = getFilesInDir(logDirPath.getParent());
+            CLog.w("CAS log file not found: %s (found: %s)", logFilePath, filesInDir);
             throw new IOException(String.format("CAS log file not found: %s", logFilePath));
         }
         return removeLogHeader(Files.readString(logFilePath));
+    }
+
+    /**
+     * Returns a comma-separated list of files in the given directory.
+     *
+     * @param dirPath The directory path to list the files from.
+     * @return A comma-separated list of files in the given directory. Returns null on error.
+     */
+    private static String getFilesInDir(Path dirPath) {
+        String filesFound = null;
+        try (Stream<Path> files = Files.list(dirPath)) {
+            filesFound =
+                    files.map(p -> p.getFileName().toString()).collect(Collectors.joining(", "));
+        } catch (IOException e) {
+            CLog.e(e);
+        }
+        return filesFound;
     }
 
     /**

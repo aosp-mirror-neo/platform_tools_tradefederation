@@ -15,9 +15,9 @@
  */
 package com.android.tradefed.targetprep;
 
-import static com.google.common.truth.Truth.assertThat;
-
 import static com.android.tradefed.targetprep.UserHelper.USER_SETUP_COMPLETE;
+
+import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertThrows;
 
@@ -172,6 +172,7 @@ public final class CreateUserPreparerTest {
                     /* isRunning= */ false));
 
         mockGetMaxNumberOfUsersSupported(3);
+        mockGetRemainingCreatableUserCount(0);
         mockGetUserInfos(existingUsers);
         Exception cause = mockCreateUserFailure("D'OH!");
 
@@ -214,6 +215,11 @@ public final class CreateUserPreparerTest {
 
     private void mockGetMaxNumberOfUsersSupported(int max) throws Exception {
         mTestDeviceMockHelper.mockGetMaxNumberOfUsersSupported(max);
+    }
+
+    private void mockGetRemainingCreatableUserCount(int count) throws Exception {
+        mTestDeviceMockHelper.mockGetRemainingCreatableUserCount(
+                "android.os.usertype.full.SECONDARY", count);
     }
 
     private void mockSwitchUser(int userId) throws Exception {

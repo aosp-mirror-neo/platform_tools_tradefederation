@@ -26,6 +26,7 @@ import com.android.tradefed.command.CommandScheduler;
 import com.android.tradefed.command.ICommandOptions;
 import com.android.tradefed.command.ICommandScheduler.IScheduledInvocationListener;
 import com.android.tradefed.config.ArgsOptionParser;
+import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.ConfigurationDescriptor;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.DynamicRemoteFileResolver;
@@ -43,6 +44,7 @@ import com.android.tradefed.device.DeviceManager;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.DeviceUnresponsiveException;
 import com.android.tradefed.device.FreeDeviceState;
+import com.android.tradefed.device.HsumHelper.HsumBootStrategy;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.ITestDevice.RecoveryMode;
 import com.android.tradefed.device.NativeDevice;
@@ -51,7 +53,9 @@ import com.android.tradefed.device.RemoteAvdIDevice;
 import com.android.tradefed.device.SnapuserdWaitPhase;
 import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.StubLocalAndroidVirtualDevice;
+import com.android.tradefed.device.TestDevice;
 import com.android.tradefed.device.TestDeviceState;
+import com.android.tradefed.device.UserInfo.UserType;
 import com.android.tradefed.device.cloud.ManagedRemoteDevice;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.cloud.RemoteAndroidVirtualDevice;
@@ -102,6 +106,8 @@ import com.android.tradefed.retry.RetryStrategy;
 import com.android.tradefed.service.TradefedFeatureServer;
 import com.android.tradefed.targetprep.BuildError;
 import com.android.tradefed.targetprep.DeviceFailedToBootError;
+import com.android.tradefed.targetprep.HsumBootStrategyPreparer;
+import com.android.tradefed.targetprep.SwitchUserTargetPreparer;
 import com.android.tradefed.targetprep.TargetSetupError;
 import com.android.tradefed.testtype.ITestInformationReceiver;
 import com.android.tradefed.testtype.SubprocessTfLauncher;
@@ -494,6 +500,7 @@ public class TestInvocation implements ITestInvocation {
                             listener);
                 }
             }
+            long tearDownEndTimestamp = System.currentTimeMillis();
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope(InvocationMetricKey.log_and_release_device.name())) {
                 // Capture last logcat before releasing the device.
@@ -521,12 +528,17 @@ public class TestInvocation implements ITestInvocation {
                         scheduleListener.releaseDevices(context, devicesStates);
                     }
                 }
-                // Log count of allocated devices for test accounting
-                addInvocationMetric(
-                        InvocationMetricKey.DEVICE_COUNT, context.getNumDevicesAllocated());
-                // Track the timestamp when we are done with devices
-                addInvocationMetric(
-                        InvocationMetricKey.DEVICE_DONE_TIMESTAMP, System.currentTimeMillis());
+                long deviceDoneTimestamp = System.currentTimeMillis();
+                if (deviceDoneTimestamp > 0) {
+                    // Log count of allocated devices for test accounting
+                    addInvocationMetric(
+                            InvocationMetricKey.DEVICE_COUNT, context.getNumDevicesAllocated());
+                    // Track the timestamp when we are done with devices.
+                    addInvocationMetric(
+                            InvocationMetricKey.DEVICE_DONE_TIMESTAMP, deviceDoneTimestamp);
+                } else {
+                    CLog.w("Device done timestamp is 0. Skipping logging device usage metrics.");
+                }
             }
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope(InvocationMetricKey.test_cleanup.name())) {
@@ -622,7 +634,13 @@ public class TestInvocation implements ITestInvocation {
                     InvocationMetricLogger.addInvocationMetrics(
                             InvocationMetricKey.TEAR_DOWN_DISK_USAGE, size);
                 }
-                elapsedTime = System.currentTimeMillis() - startTime;
+
+                // Count the time from tearDownEndTimestamp to now as part of "TF TEARDOWN" to avoid
+                // a gap between "TF TEARDOWN" and "TF REPORTING".
+                long now = System.currentTimeMillis();
+                InvocationMetricLogger.addInvocationPairMetrics(
+                        InvocationMetricKey.TEARDOWN_PAIR, tearDownEndTimestamp, now);
+                elapsedTime = now - startTime;
                 reportInvocationEnded(config, context, listener, elapsedTime);
             }
         }
@@ -1092,6 +1110,7 @@ public class TestInvocation implements ITestInvocation {
             }
             // Handle the automated reporting
             applyAutomatedReporters(config);
+            applyDeviceAutomatedSetup(context, config);
 
             if (config.getCommandOptions().delegatedEarlyDeviceRelease()
                     && System.getenv(DelegatedInvocationExecution.DELEGATED_MODE_VAR) != null) {
@@ -1619,6 +1638,48 @@ public class TestInvocation implements ITestInvocation {
     protected void applyAutomatedReporters(IConfiguration config) {
         AutomatedReporters autoReport = new AutomatedReporters();
         autoReport.applyAutomatedReporters(config);
+    }
+
+    protected void applyDeviceAutomatedSetup(IInvocationContext context, IConfiguration config) {
+        if (!config.getCommandOptions().shouldEnableDeviceSpecificSetup()) {
+            CLog.i("Skipping device automated setup due to --no-device-specific-setup");
+            return;
+        }
+        CLog.i("Applying device automated setup");
+        for (ITestDevice device : context.getDevices()) {
+            if (device.getIDevice() instanceof StubDevice) {
+                CLog.i(
+                        "Skipping device automated setup for StubDevice type: %s",
+                        device.getIDevice().getClass().getName());
+                continue;
+            }
+            if (!(device instanceof TestDevice)) {
+                CLog.i(
+                        "Skipping device automated setup for non-TestDevice type: %s",
+                        device.getClass().getName());
+                continue;
+            }
+            try {
+                if (device.isHeadlessSystemUserMode()) {
+                    CLog.d("Applying HSUM setup for device %s", device.getSerialNumber());
+                    String deviceName = context.getDeviceName(device);
+                    if (deviceName == null) {
+                        continue;
+                    }
+                    IDeviceConfiguration deviceConfig = config.getDeviceConfigByName(deviceName);
+                    SwitchUserTargetPreparer switchPrep = new SwitchUserTargetPreparer();
+                    switchPrep.setUserType(UserType.FULL);
+                    deviceConfig.addSpecificConfig(
+                            switchPrep, Configuration.TARGET_PREPARER_TYPE_NAME);
+                    HsumBootStrategyPreparer strategyPrep = new HsumBootStrategyPreparer();
+                    strategyPrep.setHsumBootStrategy(HsumBootStrategy.SWITCH_TO_PREVIOUS_USER);
+                    deviceConfig.addSpecificConfig(
+                            strategyPrep, Configuration.TARGET_PREPARER_TYPE_NAME);
+                }
+            } catch (DeviceNotAvailableException | ConfigurationException dnae) {
+                CLog.e(dnae);
+            }
+        }
     }
 
     private void logExecuteShellCommand(List<ITestDevice> devices, ITestLogger logger) {

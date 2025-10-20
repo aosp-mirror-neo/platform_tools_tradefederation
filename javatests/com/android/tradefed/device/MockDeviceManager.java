@@ -442,4 +442,9 @@ public class MockDeviceManager implements IDeviceManager {
     public void addMonitoringTcpFastbootDevice(String serial, String fastboot_serial) {
         // ignore
     }
+
+    @Override
+    public long getShellCheckCmdTime() {
+        return 10 * 1000;
+    }
 }

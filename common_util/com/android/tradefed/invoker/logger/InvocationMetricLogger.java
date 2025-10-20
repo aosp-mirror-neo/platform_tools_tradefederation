@@ -301,10 +301,13 @@ public class InvocationMetricLogger {
         CAS_MOUNT_SUCCESS_TIME_MS("cas_mount_success_time_ms", true),
         CAS_MOUNT_FAILURE_TIME_MS("cas_mount_failure_time_ms", true),
         CAS_UNMOUNT_GRACEFUL_FAILURE_COUNT("cas_unmount_graceful_failure_count", true),
+        CAS_UNMOUNT_COUNT("cas_unmount_count", true),
         CAS_UNMOUNT_SIGTERM_FAILURE_COUNT("cas_unmount_sigterm_failure_count", true),
         CAS_UNMOUNT_SIGKILL_FAILURE_COUNT("cas_unmount_sigkill_failure_count", true),
         CAS_UNMOUNT_LAZZY_UNMOUNT_FAILURE_COUNT("cas_unmount_lazy_unmount_failure_count", true),
         CAS_UNMOUNT_CLEANUP_FAILURE_COUNT("cas_unmount_cleanup_failure_count", true),
+        CAS_UNMOUNT_DEFENSIC_CLEANUP_STALE_COUNT(
+                "cas_unmount_defensive_cleanup_stale_count", true),
         CAS_UNMOUNT_DEFENSIC_CLEANUP_FAILURE_COUNT(
                 "cas_unmount_defensive_cleanup_failure_count", true),
         // Records CAS converter metrics
@@ -312,6 +315,7 @@ public class InvocationMetricLogger {
         CAS_CONVERTER_SUCCESS_COUNT("cas_converter_success_count", true),
         CAS_CONVERTER_FAILURE_COUNT("cas_converter_failure_count", true),
         CAS_CLIENT_NOT_EXECUTABLE_COUNT("cas_client_not_executable_count", true),
+        CAS_CACHE_DIR_NOT_IN_TEMP_DIR("cas_cache_dir_not_in_temp_dir", false),
 
         // Download Cache
         CACHE_HIT_COUNT("cache_hit_count", true),
@@ -350,7 +354,7 @@ public class InvocationMetricLogger {
         TOTAL_TEST_COUNT("total_test_count", true),
 
         // Metrics to store Device failure signatures
-        DEVICE_ERROR_SIGNATURES("device_failure_signatures", false),
+        DEVICE_ERROR_SIGNATURES("device_failure_signatures", true),
 
         DEVICE_IMAGE_NOT_CHANGED("device_image_not_changed", false),
         IMAGE_CHANGES_IN_KEY_FILE("image_changes_in_key_file", true),
@@ -474,6 +478,7 @@ public class InvocationMetricLogger {
         // Host orchestrator metrics
         CVD_LONG_OPERATION_TIMEOUT_API("cvd_long_operation_timeout_api", true),
         UNSUPPORTED_HOST_ORCHESTRATOR_API("unsupported_host_orchestrator_api", true),
+        HO_CALL_RETRY_COUNT("host_orchestrator_call_retry_count", true),
         ;
 
         private final String mKeyName;

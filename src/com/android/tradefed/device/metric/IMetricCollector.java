@@ -178,26 +178,48 @@ public interface IMetricCollector extends ILogSaverListener, IDisableable {
 
     /**
      * Allows collectors to enable default metrics collection. When default metric collection is
-     * enabled, the collector should only collect metrics when {@link
-     * #collectMetrics(MetricCollectionLevel, String)} is called.
+     * enabled, the collector should only collect at the specified collection level.
      */
     public default void enableDefaultMetricCollection() {}
+
+    /**
+     * Sets the level at which the collector should collect logs regardless of failures.
+     *
+     * <p>NULL level will result in no collection.
+     *
+     * @param level {@link MetricCollectionLevel} at which the logs will be collected.
+     */
+    public default void setAlwaysOnCollectionLevel(MetricCollectionLevel level) {}
+
+    /**
+     * Sets the level at which the collector should collect logs during failures.
+     *
+     * <p>NULL level will result in no collection.
+     *
+     * @param level {@link MetricCollectionLevel} at which the logs will be collected.
+     */
+    public default void setOnFailureCollectionLevel(MetricCollectionLevel level) {}
 
     /** Whether the collector is collecting metrics as part of default metric collection. */
     public default boolean isDefaultMetricCollectionEnabled() {
         return false;
     }
 
-    /**
-     * Callback to collect metrics/logs on demand. Should only be used when {@link
-     * #isDefaultMetricCollectionEnabled()} is true.
-     *
-     * @param level A {@link MetricCollectionLevel}, signalling the point of collection. This level
-     *     will be used by collectors to collect the relevant metrics/logs.
-     * @param name The name that should be used for the collected metric file
-     */
-    public default void collectMetrics(MetricCollectionLevel level, String name)
-            throws DeviceNotAvailableException {}
+    public default MetricCollectionLevel getOnFailureCollectionLevel() {
+        return null;
+    }
+
+    public default MetricCollectionLevel getAlwaysOnCollectionLevel() {
+        return null;
+    }
+
+    /** Sets whether the module had any failures (test case, test run). */
+    public default void setModuleContainsFailure() {}
+
+    /** Returns true if current module contained any test case or test run failures. */
+    public default boolean doesModuleContainFailure() {
+        return false;
+    }
 
     /** Enumeration representing the current level of Metric collection. */
     public enum MetricCollectionLevel {

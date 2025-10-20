@@ -87,6 +87,8 @@ public class MoblyArtifactReporter {
                 type = LogDataType.BUGREPORTZ;
             } else if (cleanName.endsWith("png")) {
                 type = LogDataType.PNG;
+            } else if (cleanName.endsWith("jpg") || cleanName.endsWith("jpeg")) {
+                type = LogDataType.JPEG;
             }
 
             listener.testLog(cleanName, type, dataStream);

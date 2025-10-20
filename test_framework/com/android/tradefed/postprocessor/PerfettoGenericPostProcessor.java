@@ -266,7 +266,9 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         if (perfettoMetricFile.getName().contains("v2")) {
                             TraceSummary.Builder builderV2 = TraceSummary.newBuilder();
                             ALLOW_UNKNOWN_FIELD.merge(bufferedReader, builderV2);
-                            parsedMetrics.putAll(convertPerfettoProtoMessageV2(builderV2.build()));
+                            parsedMetrics.putAll(
+                                    replaceAllMetricPrefix(
+                                            convertPerfettoProtoMessageV2(builderV2.build())));
                         } else {
                             TraceMetrics.Builder builder = TraceMetrics.newBuilder();
                             ALLOW_UNKNOWN_FIELD.merge(bufferedReader, builder);
@@ -279,7 +281,9 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         if (perfettoMetricFile.getName().contains("v2")) {
                             TraceSummary traceSummary =
                                     TraceSummary.parseFrom(new FileInputStream(perfettoMetricFile));
-                            parsedMetrics.putAll(convertPerfettoProtoMessageV2(traceSummary));
+                            parsedMetrics.putAll(
+                                    replaceAllMetricPrefix(
+                                            convertPerfettoProtoMessageV2(traceSummary)));
                         } else {
                             TraceMetrics metricProto = null;
                             metricProto =
@@ -389,8 +393,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         result.putAll(filterMetrics(processedMetrics));
         replacePrefix(result);
         // Generic prefix string is applied to all the metrics parsed from perfetto trace file.
-        replaceAllMetricPrefix(result);
-        return result;
+        return replaceAllMetricPrefix(result);
     }
 
     /**
@@ -429,9 +432,10 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
      *
      * @param processPerfettoMetrics metrics parsed from the perfetto proto file.
      */
-    private void replaceAllMetricPrefix(Map<String, Metric.Builder> processPerfettoMetrics) {
+    private Map<String, Metric.Builder> replaceAllMetricPrefix(
+            Map<String, Metric.Builder> processPerfettoMetrics) {
         if (mAllMetricPrefix == null || mAllMetricPrefix.isEmpty()) {
-            return;
+            return processPerfettoMetrics;
         }
         Map<String, Metric.Builder> finalMetrics = new HashMap<String, Metric.Builder>();
         for (Map.Entry<String, Metric.Builder> metric : processPerfettoMetrics.entrySet()) {
@@ -439,8 +443,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
             finalMetrics.put(newKey, metric.getValue());
             CLog.d("Perfetto trace metric: key: %s value: %s", newKey, metric.getValue());
         }
-        processPerfettoMetrics.clear();
-        processPerfettoMetrics.putAll(finalMetrics);
+        return finalMetrics;
     }
 
     /**
@@ -531,7 +534,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                             String.join(
                                     METRIC_SEP,
                                     entry.getKey().getName().toString(),
-                                    entry.getValue().toString()));
+                                    entry.getValue().toString().replace(' ', '_')));
                     if (mPerfettoPrefixKeyFields.contains(entry.getKey().toString())) {
                         if (!keyPrefixOtherFields.isEmpty()) {
                             keyPrefixOtherFields = keyPrefixOtherFields.concat("-");
@@ -541,7 +544,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                                         String.format(
                                                 "%s-%s",
                                                 entry.getKey().getName().toString(),
-                                                entry.getValue().toString()));
+                                                entry.getValue().toString().replace(' ', '_')));
                     }
 
                     if (mPerfettoPrefixInnerMessagePrefixFields.contains(
@@ -554,7 +557,7 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                                         String.format(
                                                 "%s-%s",
                                                 entry.getKey().getName().toString(),
-                                                entry.getValue().toString()));
+                                                entry.getValue().toString().replace(' ', '_')));
                         prefixSetInCurrentMessage = true;
                         continue;
                     }
@@ -690,7 +693,9 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                 for (Row.Dimension dimension : row.getDimensionList()) {
                     switch (dimension.getValueOneofCase()) {
                         case STRING_VALUE:
-                            dimensionBuilder.append("-").append(dimension.getStringValue());
+                            dimensionBuilder
+                                    .append("-")
+                                    .append(dimension.getStringValue().replace(' ', '_'));
                             break;
                         case INT64_VALUE:
                             dimensionBuilder.append("-").append(dimension.getInt64Value());
@@ -713,7 +718,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         continue;
                     }
                     // Store the value in a list associated with its fully constructed key.
-                    String finalRowKey = bundle.getSpecs(i).getId() + dimensionsKey;
+                    String finalRowKey =
+                            bundle.getSpecs(i).getId().replace(' ', '_') + dimensionsKey;
                     collectedValuesForKey
                             .computeIfAbsent(finalRowKey, k -> new ArrayList<>())
                             .add(rowValue.getDoubleValue());

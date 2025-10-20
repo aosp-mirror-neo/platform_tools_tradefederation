@@ -261,6 +261,21 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
         fakeBuildMetadata.setBuildId(buildId);
         fakeBuildMetadata.setBuildFlavor(flavor);
         initLogSaver(fakeBuildMetadata);
+        if (mTestResultIdentity == null) {
+            try {
+                mTestResultIdentity = fetchTestResultId(context, mUseStubBuild);
+                // Propagate the test_result_id for log saving
+                if (mTestResultIdentity != null
+                        && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
+                    context.addInvocationAttribute(
+                            TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
+                }
+            } catch (RuntimeException e) {
+                CLog.e("Failed to init the test result id:");
+                CLog.e(e);
+                return;
+            }
+        }
     }
 
     /** {@inheritDoc} */
@@ -302,18 +317,20 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
 
             setBuildInfo(build);
             initLogSaver(getBuildInfo());
-            try {
-                mTestResultIdentity = fetchTestResultId(context, mUseStubBuild);
-                // Propagate the test_result_id for log saving
-                if (mTestResultIdentity != null
-                        && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
-                    context.addInvocationAttribute(
-                            TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
+            if (mTestResultIdentity == null) {
+                try {
+                    mTestResultIdentity = fetchTestResultId(context, mUseStubBuild);
+                    // Propagate the test_result_id for log saving
+                    if (mTestResultIdentity != null
+                            && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
+                        context.addInvocationAttribute(
+                                TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
+                    }
+                } catch (RuntimeException e) {
+                    CLog.e("Failed to init the test result id:");
+                    CLog.e(e);
+                    return;
                 }
-            } catch (RuntimeException e) {
-                CLog.e("Failed to init the test result id:");
-                CLog.e(e);
-                return;
             }
 
             if (mPeriodicUpload) {
@@ -442,6 +459,10 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
      * @return test result identify
      */
     TestResultIdentity fetchTestResultIdFromLocalBuild() throws GoogleJsonResponseException {
+        // In case of early init, build info is not set yet.
+        if (getBuildInfo() == null) {
+            return null;
+        }
         String buildId = getBuildInfo().getBuildId();
         String buildTarget = getBuildTarget();
         String attemptId = getBuildAttemptId();
@@ -523,7 +544,11 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                 "Creating new test result from build (%s %s %s)",
                 buildId, buildTarget, buildAttemptId);
         TestResult testResult = new TestResult();
-        testResult.setTestTag(getBuildInfo().getTestTag());
+        if (getBuildInfo() == null) {
+            testResult.setTestTag("stub");
+        } else {
+            testResult.setTestTag(getBuildInfo().getTestTag());
+        }
         try {
             testResult =
                     getClient()
@@ -753,7 +778,10 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
             com.google.api.services.androidbuildinternal.v3.Androidbuildinternal client =
                     getV3Client();
             String contentType = FileUtil.getContentType(filePath);
-            String md5 = FileUtil.calculateMd5(f);
+            String md5;
+            try (CloseableTraceScope ignored = new CloseableTraceScope("md5:" + f.getName())) {
+                md5 = FileUtil.calculateMd5(f);
+            }
             LogDataType type = getFilePathToLogDataTypeMap().get(filePath);
             String resourceId = getRemoteFilePath(f.getName());
             FileContent fileContent = new FileContent(contentType, f);

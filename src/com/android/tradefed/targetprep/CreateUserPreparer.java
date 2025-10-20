@@ -23,8 +23,7 @@ import com.android.tradefed.device.TestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
 
-
-/** Target preparer for creating user and cleaning it up at the end. */
+/** Target preparer for creating a secondary user and cleaning it up at the end. */
 @OptionClass(alias = "create-user-preparer")
 public class CreateUserPreparer extends BaseTargetPreparer {
 

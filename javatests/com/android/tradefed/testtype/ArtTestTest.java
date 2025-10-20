@@ -20,6 +20,9 @@ package com.android.tradefed.testtype;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,7 +37,6 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 
-import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -115,15 +117,27 @@ public class ArtTestTest {
 
         // Implement mocked methods by just always returning SUCCESS (no device is needed).
         CommandResult success = new CommandResult(CommandStatus.SUCCESS);
+        when(mDevice.pushFile(any(), any())).thenReturn(true);
+        when(mDevice.pushDir(any(), any())).thenReturn(true);
+        when(mDevice.executeShellV2Command(any(), anyLong(), any(), anyInt())).thenReturn(success);
         when(mDevice.executeShellV2Command(any())).thenReturn(success);
 
         // Run the test.
         mTest.run(info, mListener);
 
         // Check the recorded behaviour of test.  We expected the following commands to be executed:
-        verify(mDevice).executeShellV2Command("rm -rf /data/local/tmp/art/test");
-        verify(mDevice).executeShellV2Command("sh /data/local/tmp/art/setup.sh");
-        verify(mDevice).executeShellV2Command("sh /data/local/tmp/art/test/1f5cdb07/run.sh");
+        verify(mDevice)
+                .executeShellV2Command(
+                        eq("rm -rf /data/local/tmp/art/test"), anyLong(), any(), anyInt());
+        verify(mDevice)
+                .executeShellV2Command(
+                        eq("sh /data/local/tmp/art/setup.sh"), anyLong(), any(), anyInt());
+        verify(mDevice)
+                .executeShellV2Command(
+                        eq("sh /data/local/tmp/art/test/1f5cdb07/run.sh"),
+                        anyLong(),
+                        any(),
+                        anyInt());
     }
 
     @Test
@@ -142,7 +156,7 @@ public class ArtTestTest {
             assertEquals(0, shard0.mShardIndex);
             assertEquals(2, shard0.mShardCount);
             shard0.mRunnerDir = shard0.extractTarBall(new File(tempDir, "shard0_basedir"));
-            Map<String, JSONObject> testsShard0 = shard0.loadTests();
+            Map<String, ArtTest.Test> testsShard0 = shard0.loadTests();
             assertEquals(3, testsShard0.size());
             assertTrue(testsShard0.containsKey("001-HelloWorld#1f5cdb07"));
             assertTrue(testsShard0.containsKey("003-Bar#1f5cdb09"));
@@ -153,11 +167,59 @@ public class ArtTestTest {
             assertEquals(1, shard1.mShardIndex);
             assertEquals(2, shard1.mShardCount);
             shard1.mRunnerDir = shard1.extractTarBall(new File(tempDir, "shard1_basedir"));
-            Map<String, JSONObject> testsShard1 = shard1.loadTests();
+            Map<String, ArtTest.Test> testsShard1 = shard1.loadTests();
             assertEquals(2, testsShard1.size());
             assertTrue(testsShard1.containsKey("002-Foo#1f5cdb08"));
             assertTrue(testsShard1.containsKey("setup#compile-boot-image"));
 
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    @Test
+    public void testIncludeFilter() throws Exception {
+        ArtTest test = new ArtTest();
+        test.addIncludeFilter("test1");
+        assertTrue(test.shouldIncludeTest("test1"));
+        assertTrue(!test.shouldIncludeTest("test2"));
+
+        test = new ArtTestForTesting();
+        test.addIncludeFilter("001-HelloWorld#1f5cdb07");
+        File tempDir = null;
+        try {
+            tempDir = FileUtil.createTempDir("art-test-sharding");
+            test.mRunnerDir = test.extractTarBall(tempDir);
+            Map<String, ArtTest.Test> tests = test.loadTests();
+            assertTrue(tests.containsKey("001-HelloWorld#1f5cdb07"));
+            assertTrue(!tests.containsKey("002-Foo#1f5cdb08"));
+            assertTrue(!tests.containsKey("003-Bar#1f5cdb09"));
+            assertTrue(tests.containsKey("setup#compile-boot-image"));
+            assertEquals(2, tests.size());
+        } finally {
+            FileUtil.recursiveDelete(tempDir);
+        }
+    }
+
+    @Test
+    public void testExcludeFilter() throws Exception {
+        ArtTest test = new ArtTest();
+        test.addExcludeFilter("test1");
+        assertTrue(!test.shouldIncludeTest("test1"));
+        assertTrue(test.shouldIncludeTest("test2"));
+
+        test = new ArtTestForTesting();
+        test.addExcludeFilter("001-HelloWorld#1f5cdb07");
+        File tempDir = null;
+        try {
+            tempDir = FileUtil.createTempDir("art-test-sharding");
+            test.mRunnerDir = test.extractTarBall(tempDir);
+            Map<String, ArtTest.Test> tests = test.loadTests();
+            assertTrue(!tests.containsKey("001-HelloWorld#1f5cdb07"));
+            assertTrue(tests.containsKey("002-Foo#1f5cdb08"));
+            assertTrue(tests.containsKey("003-Bar#1f5cdb09"));
+            assertTrue(tests.containsKey("setup#compile-boot-image"));
+            assertEquals(3, tests.size());
         } finally {
             FileUtil.recursiveDelete(tempDir);
         }

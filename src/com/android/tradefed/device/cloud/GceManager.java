@@ -40,6 +40,8 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.GoogleApiClientUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.MultiMap;
+import com.android.tradefed.util.RemoteFileUtil;
+import com.android.tradefed.util.RemoteSshUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.avd.AcloudUtil;
 import com.android.tradefed.util.avd.HostOrchestratorUtil;
@@ -401,9 +403,6 @@ public class GceManager {
                 return mGceAvdInfo;
             }
             if (getTestDeviceOptions().getExtraOxygenArgs().containsKey("no_wait_for_boot")) {
-                CLog.d(
-                        "Device leased without waiting for boot to finish. Poll emulator_stderr.txt"
-                                + " for flag `VIRTUAL_DEVICE_BOOT_COMPLETED`");
                 // When leasing without wait for boot to finish, use the time spent so far as the
                 // best estimate of cf_fetch_artifact_time_ms.
                 fetchTime = System.currentTimeMillis() - startTime;
@@ -426,8 +425,14 @@ public class GceManager {
                                     OxygenUtil.getTargetRegion(getTestDeviceOptions()),
                                     getTestDeviceOptions().getOxygenAccountingUser(),
                                     oxygenClient);
+                    CLog.d(
+                            "Device leased without waiting for boot to finish. Wait for device to"
+                                    + " complete boot through Host Orchestrator.");
                     bootSuccess = mHOUtil.deviceBootCompleted(timeout);
                 } else {
+                    CLog.d(
+                            "Device leased without waiting for boot to finish. Poll"
+                                + " emulator_stderr.txt for flag `VIRTUAL_DEVICE_BOOT_COMPLETED`");
                     final String remoteFile =
                             CommonLogRemoteFileUtil.OXYGEN_EMULATOR_LOG_DIR
                                     + "3/emulator_stderr.txt";
@@ -977,8 +982,16 @@ public class GceManager {
         }
         String remoteFilePath = match.group(2);
         File localTmpFile = FileUtil.createTempFile("bugreport-ssh", ".zip");
+        String hostname =
+                options.useOxygenationDevice() ? "localhost" : gceAvd.hostAndPort().getHost();
         if (!RemoteFileUtil.fetchRemoteFile(
-                gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath, localTmpFile)) {
+                hostname,
+                options.getInstanceUser(),
+                options.getSshPrivateKeyPath(),
+                runUtil,
+                REMOTE_FILE_OP_TIMEOUT,
+                remoteFilePath,
+                localTmpFile)) {
             FileUtil.deleteFile(localTmpFile);
             return null;
         }
@@ -1065,7 +1078,13 @@ public class GceManager {
         String remoteFilePath = "./" + new File(deviceFilePath).getName();
         File localTmpFile = FileUtil.createTempFile("bugreport-ssh", ".zip");
         if (!RemoteFileUtil.fetchRemoteFile(
-                gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath, localTmpFile)) {
+                gceAvd.hostAndPort().getHost(),
+                options.getInstanceUser(),
+                options.getSshPrivateKeyPath(),
+                runUtil,
+                REMOTE_FILE_OP_TIMEOUT,
+                remoteFilePath,
+                localTmpFile)) {
             FileUtil.deleteFile(localTmpFile);
             return null;
         }
@@ -1116,11 +1135,47 @@ public class GceManager {
             String remoteFilePath,
             LogDataType type,
             String baseName) {
+        return logNestedRemoteFile(
+                logger, gceAvd, options, runUtil, remoteFilePath, type, baseName, null);
+    }
+
+    /**
+     * Fetch a remote file from a nested instance and log it.
+     *
+     * @param logger The {@link ITestLogger} where to log the file.
+     * @param gceAvd The {@link GceAvdInfo} that describe the device.
+     * @param options a {@link TestDeviceOptions} describing the device options to be used for the
+     *     GCE device.
+     * @param runUtil a {@link IRunUtil} to execute commands.
+     * @param remoteFilePath The remote path where to find the file.
+     * @param type the {@link LogDataType} of the logged file.
+     * @param baseName The base name to use to log the file. If null the actual file name will be
+     *     used.
+     * @param scpArgs extra args to be passed to the scp command
+     * @return whether the file is logged successfully.
+     */
+    public static boolean logNestedRemoteFile(
+            ITestLogger logger,
+            GceAvdInfo gceAvd,
+            TestDeviceOptions options,
+            IRunUtil runUtil,
+            String remoteFilePath,
+            LogDataType type,
+            String baseName,
+            List<String> scpArgs) {
         File remoteFile;
+        String hostname =
+                options.useOxygenationDevice() ? "localhost" : gceAvd.hostAndPort().getHost();
         if (type == LogDataType.DIR) {
             remoteFile =
                     RemoteFileUtil.fetchRemoteDir(
-                            gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath);
+                            hostname,
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
+                            scpArgs,
+                            runUtil,
+                            REMOTE_FILE_OP_TIMEOUT,
+                            remoteFilePath);
 
             if (remoteFile != null && remoteFile.listFiles().length == 0) {
                 // If the retrieved directory is empty, delete it as there is no file to log anyway
@@ -1167,7 +1222,13 @@ public class GceManager {
         } else {
             remoteFile =
                     RemoteFileUtil.fetchRemoteFile(
-                            gceAvd, options, runUtil, REMOTE_FILE_OP_TIMEOUT, remoteFilePath);
+                            hostname,
+                            options.getInstanceUser(),
+                            options.getSshPrivateKeyPath(),
+                            scpArgs,
+                            runUtil,
+                            REMOTE_FILE_OP_TIMEOUT,
+                            remoteFilePath);
             if (remoteFile != null) {
                 if (InstanceType.GCE.equals(options.getInstanceType())
                         || InstanceType.CUTTLEFISH.equals(options.getInstanceType())) {
@@ -1236,7 +1297,13 @@ public class GceManager {
             IRunUtil runUtil,
             long timeoutMs,
             String... command) {
-        return RemoteSshUtil.remoteSshCommandExec(gceAvd, options, runUtil, timeoutMs, command);
+        return RemoteSshUtil.remoteSshCommandExec(
+                options.useOxygenationDevice() ? "localhost" : gceAvd.hostAndPort().getHost(),
+                options.getInstanceUser(),
+                options.getSshPrivateKeyPath(),
+                runUtil,
+                timeoutMs,
+                command);
     }
 
     private static String remoteSshCommandExec(

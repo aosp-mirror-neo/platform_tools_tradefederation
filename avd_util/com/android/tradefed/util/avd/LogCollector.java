@@ -148,7 +148,12 @@ public class LogCollector {
                                             Pattern.compile(".*host_orchestrator.*"),
                                             new AbstractMap.SimpleEntry<>(
                                                     "RESOURCE_EXHAUSTED",
-                                                    "gcp_resource_exhausted")))
+                                                    "gcp_resource_exhausted")),
+                                    new AbstractMap.SimpleEntry<>(
+                                            Pattern.compile(".*host_orchestrator.*"),
+                                            new AbstractMap.SimpleEntry<>(
+                                                    "invalid JSON in cuttlefish.cvd.config",
+                                                    "invalid_cvd_config")))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     /**

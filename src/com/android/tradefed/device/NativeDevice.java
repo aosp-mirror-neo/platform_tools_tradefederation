@@ -77,7 +77,9 @@ import com.android.tradefed.util.KeyguardControllerState;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.ProcessInfo;
 import com.android.tradefed.util.QuotationAwareTokenizer;
+import com.android.tradefed.util.RunInterruptedException;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.SizeLimitedOutputStream;
 import com.android.tradefed.util.StringEscapeUtils;
 import com.android.tradefed.util.SystemUtil;
@@ -108,10 +110,12 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
@@ -119,6 +123,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -222,11 +227,13 @@ public class NativeDevice
      */
     private static final String EXIT_STATUS_DELIMITER = "x";
 
+    private static final String RE_EMULATOR_SN = "emulator-(\\d+)"; // $NON-NLS-1$
     private IConfiguration mConfiguration;
     private IDevice mIDevice;
     private IDeviceRecovery mRecovery = new WaitDeviceRecovery();
     protected final IDeviceStateMonitor mStateMonitor;
     private TestDeviceState mState = TestDeviceState.ONLINE;
+    private String mSerialNumber;
     private final ReentrantLock mFastbootLock = new ReentrantLock();
     private LogcatReceiver mLogcatReceiver;
     private boolean mFastbootEnabled = true;
@@ -279,6 +286,8 @@ public class NativeDevice
      */
     private boolean inRebootCallback = false;
 
+    private boolean mRebootStartNotified = false;
+
     /** If the device is a Microdroid, this refers to the VM process. Otherwise, it is null. */
     private Process mMicrodroidProcess = null;
 
@@ -288,6 +297,9 @@ public class NativeDevice
 
     private long mBatteryFetchTimestamp = 0L;
 
+    private Set<String> mDeviceSupportedFeatures = null;
+
+    private Integer mHostAdbMajorVersion = null;
     // If we increase the number of props, then increase the cache size of mPropertiesCache.
     private final Set<String> propsToPrefetch =
             ImmutableSet.of("ro.build.version.sdk", "ro.build.version.codename", "ro.build.id");
@@ -340,7 +352,7 @@ public class NativeDevice
         }
 
         @Override
-        public boolean run() throws TimeoutException, IOException {
+        public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
             IRunUtil runUtil = getRunUtil();
             if (!mEnvMap.isEmpty()) {
                 runUtil = createRunUtil();
@@ -362,8 +374,15 @@ public class NativeDevice
                 if (mIsShellCommand) {
                     // Interpret as communication failure for shell commands
                     throw new IOException("CommandStatus was FAILED, details in host log");
+                }
+                String stderr = mResult.getStderr();
+                if (stderr != null && stderr.contains("device offline")) {
+                    throw new DeviceNotAvailableException(
+                            String.format("Device went offline: %s", stderr),
+                            getSerialNumber(),
+                            DeviceErrorIdentifier.DEVICE_UNAVAILABLE);
                 } else {
-                    mOutput = mResult.getStdout();
+                    mOutput = mResult.getStderr();
                     return false;
                 }
             }
@@ -378,9 +397,12 @@ public class NativeDevice
 
         private String[] mCmd;
         private long mTimeout;
+        private long mOutputResponseTimeout;
         private File mPipeAsInput; // Used in pushFile, uses local file as input to "content write"
         private OutputStream mPipeToOutput; // Used in pullFile, to pipe content from "content read"
         private OutputStream mPipeToError;
+        private IShellOutputReceiver mReceiver;
+        private boolean mIsCancelByReceiver;
 
         AdbShellAction(
                 String[] cmd,
@@ -393,22 +415,135 @@ public class NativeDevice
             mPipeToOutput = pipeToOutput;
             mPipeToError = pipeToError;
             mTimeout = timeout;
+            mOutputResponseTimeout = 0;
+            mReceiver = null;
+            mIsCancelByReceiver = false;
+        }
+
+        AdbShellAction(
+                String[] cmd,
+                File pipeAsInput,
+                OutputStream pipeToOutput,
+                OutputStream pipeToError,
+                long timeout,
+                long outputTimeout) {
+            mCmd = cmd;
+            mPipeAsInput = pipeAsInput;
+            mPipeToOutput = pipeToOutput;
+            mPipeToError = pipeToError;
+            mTimeout = timeout;
+            mOutputResponseTimeout = outputTimeout;
+            mReceiver = null;
+            mIsCancelByReceiver = false;
+        }
+
+        AdbShellAction(
+                String[] cmd,
+                File pipeAsInput,
+                OutputStream pipeToOutput,
+                OutputStream pipeToError,
+                long timeout,
+                long outputTimeout,
+                IShellOutputReceiver receiver) {
+            mCmd = cmd;
+            mPipeAsInput = pipeAsInput;
+            mPipeToOutput = pipeToOutput;
+            mPipeToError = pipeToError;
+            mTimeout = timeout;
+            mOutputResponseTimeout = outputTimeout;
+            mReceiver = receiver;
+            mIsCancelByReceiver = false;
+        }
+
+        private void logExceptionAndOutput(CommandResult result) {
+            CLog.w("Adb Shell Command : %s", String.join(" ", mCmd));
+            CLog.w("Adb Shell Command exited with status: %s", result.getStatus().toString());
+            CLog.w("Adb Shell Command shell stdout:\n%s\n", result.getStdout());
+            CLog.w("Adb Shell Command shell stderr:\n%s\n", result.getStderr());
         }
 
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
-            if (mPipeAsInput != null) {
-                mResult = getRunUtil().runTimedCmdWithInputRedirect(mTimeout, mPipeAsInput, mCmd);
-            } else {
-                mResult = getRunUtil().runTimedCmd(mTimeout, mPipeToOutput, mPipeToError, mCmd);
+            final Thread commandThread = Thread.currentThread();
+
+            Thread watcher = null;
+            if (mReceiver != null) {
+                // Create a watcher to monite if receiver.cancel() is called.
+                watcher =
+                        new Thread(
+                                () -> {
+                                    try {
+                                        // Poll the receiver's cancellation status.
+                                        while (!mReceiver.isCancelled()) {
+                                            // If the main command thread dies for any reason, the
+                                            // watcher can exit.
+                                            if (!commandThread.isAlive()) {
+                                                return;
+                                            }
+                                            Thread.sleep(250); // Poll every 250ms
+                                        }
+                                        // If we get here, the receiver was cancelled.
+                                        CLog.i(
+                                                "Watcher: Receiver was cancelled. Interrupting"
+                                                        + " command thread.");
+                                        RunUtil.getDefault()
+                                                .interrupt(
+                                                        commandThread,
+                                                        "Cancelled by receiver watcher");
+                                        mIsCancelByReceiver = true;
+                                    } catch (InterruptedException e) {
+                                        // The watcher itself was interrupted, which is fine. Just
+                                        // exit.
+                                        Thread.currentThread().interrupt();
+                                    }
+                                });
+                watcher.setName("AdbShellAction-Watcher");
+                watcher.setDaemon(true); // Ensure it doesn't block JVM exit
+                watcher.start();
             }
+            try {
+                if (mPipeAsInput != null) {
+                    mResult =
+                            getRunUtil().runTimedCmdWithInputRedirect(mTimeout, mPipeAsInput, mCmd);
+                } else if (mOutputResponseTimeout != 0) {
+                    mResult =
+                            getRunUtil()
+                                    .runTimedCmdWithOutputMonitor(
+                                            mTimeout,
+                                            mOutputResponseTimeout,
+                                            mPipeToOutput,
+                                            mPipeToError,
+                                            mCmd);
+                } else {
+                    mResult = getRunUtil().runTimedCmd(mTimeout, mPipeToOutput, mPipeToError, mCmd);
+                }
+            } catch (RunInterruptedException e) {
+                // CATCH THE FRAMEWORK-SPECIFIC EXCEPTION!
+                // This is the expected outcome when our watcher interrupts the thread.
+                CLog.w("RunUtil call was interrupted as expected by watcher: %s", e.getMessage());
+                // We must create a result object since the RunUtil call did not complete.
+                // The status doesn't matter much here because we'll check the
+                // mWasCancelledByReceiver flag.
+                if (mIsCancelByReceiver) {
+                    mResult = new CommandResult(CommandStatus.SUCCESS);
+                } else {
+                    mResult = new CommandResult(CommandStatus.EXCEPTION);
+                    mResult.setStderr(e.getMessage());
+                }
+            }
+
             if (mResult.getStatus() == CommandStatus.EXCEPTION) {
+                logExceptionAndOutput(mResult);
                 throw new IOException(mResult.getStderr());
             } else if (mResult.getStatus() == CommandStatus.TIMED_OUT) {
+                logExceptionAndOutput(mResult);
                 String message =
                         String.format(
                                 "Stdout: %s\nStderr: %s", mResult.getStdout(), mResult.getStderr());
                 throw new TimeoutException(message);
+            }
+            if (mResult.getStatus() != CommandStatus.SUCCESS) {
+                logExceptionAndOutput(mResult);
             }
             String stdErr = mResult.getStderr();
             if (stdErr != null) {
@@ -450,8 +585,6 @@ public class NativeDevice
         // TODO: return more detail AdbCommandRejectedException instead of IOException only,
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
-            // Notify of reboot started for all modes
-            notifyRebootStarted();
             return super.run();
         }
     }
@@ -469,6 +602,7 @@ public class NativeDevice
         throwIfNull(device);
         throwIfNull(stateMonitor);
         mIDevice = device;
+        mSerialNumber = device.getSerialNumber();
         mStateMonitor = stateMonitor;
         mAllocationMonitor = allocationMonitor;
         // Keep a short timeout to expire key in case of large state changes
@@ -620,6 +754,7 @@ public class NativeDevice
         if (!getIDevice().equals(newDevice)) {
             synchronized (currentDevice) {
                 mIDevice = newDevice;
+                mSerialNumber = newDevice.getSerialNumber();
             }
             mStateMonitor.setIDevice(mIDevice);
         }
@@ -630,7 +765,7 @@ public class NativeDevice
      */
     @Override
     public String getSerialNumber() {
-        return getIDevice().getSerialNumber();
+        return mSerialNumber;
     }
 
     @Override
@@ -1034,16 +1169,14 @@ public class NativeDevice
     @Override
     public void executeShellCommand(final String command, final IShellOutputReceiver receiver)
             throws DeviceNotAvailableException {
-        DeviceAction action = new DeviceAction() {
-            @Override
-            public boolean run() throws TimeoutException, IOException,
-                    AdbCommandRejectedException, ShellCommandUnresponsiveException {
-                getIDevice().executeShellCommand(command, receiver,
-                        getCommandTimeout(), TimeUnit.MILLISECONDS);
-                return true;
-            }
-        };
-        performDeviceAction(String.format("shell %s", command), action, MAX_RETRY_ATTEMPTS);
+        executeShellCommand(
+                command,
+                receiver,
+                0,
+                getCommandTimeout(),
+                TimeUnit.MILLISECONDS,
+                MAX_RETRY_ATTEMPTS,
+                true);
     }
 
     /**
@@ -1075,28 +1208,56 @@ public class NativeDevice
             final TimeUnit timeUnit,
             final int retryAttempts)
             throws DeviceNotAvailableException {
-        DeviceAction action =
-                new DeviceAction() {
-                    @Override
-                    public boolean run()
-                            throws TimeoutException, IOException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException {
-                        getIDevice()
-                                .executeShellCommand(
-                                        command,
-                                        receiver,
-                                        maxTimeoutForCommand,
-                                        maxTimeToOutputShellResponse,
-                                        timeUnit);
-                        return true;
-                    }
-                };
-        performDeviceAction(String.format("shell %s", command), action, retryAttempts);
+        executeShellCommand(
+                command,
+                receiver,
+                maxTimeoutForCommand,
+                maxTimeToOutputShellResponse,
+                timeUnit,
+                retryAttempts,
+                false);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    private void executeShellCommand(
+            final String command,
+            final IShellOutputReceiver receiver,
+            final long maxTimeoutForCommand,
+            final long maxTimeToOutputShellResponse,
+            final TimeUnit timeUnit,
+            final int retryAttempts,
+            final boolean skipReceiverWatcher)
+            throws DeviceNotAvailableException {
+        CLog.i("ExecuteShellCommand: %s", command);
+        ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
+        boolean parseExitStatus = !isShellV2Support() && getOptions().useExitStatusWorkaround();
+
+        final String[] fullCmd = buildAdbShellCommand(command, parseExitStatus, true);
+        AdbShellAction adbAction =
+                new AdbShellAction(
+                        fullCmd,
+                        null,
+                        outputReceiverStream,
+                        outputReceiverStream,
+                        timeUnit.toMillis(maxTimeoutForCommand),
+                        timeUnit.toMillis(maxTimeToOutputShellResponse),
+                        skipReceiverWatcher ? null : receiver);
+        try {
+            performDeviceAction(String.format("shell %s", fullCmd[4]), adbAction, retryAttempts);
+        } catch (DeviceNotAvailableException e) {
+            throw e;
+        } finally {
+            receiver.flush();
+        }
+
+        if (parseExitStatus) {
+            postProcessExitStatus(adbAction.mResult);
+        }
+        if (!CommandStatus.SUCCESS.equals(adbAction.mResult.getStatus())) {
+            CLog.e("Execute Shell Command (%s) failed.", command);
+        }
+    }
+
+    /** {@inheritDoc} */
     @Override
     public String executeShellCommand(String command) throws DeviceNotAvailableException {
         CollectingOutputReceiver receiver = new CollectingOutputReceiver();
@@ -1132,6 +1293,30 @@ public class NativeDevice
     @Override
     public CommandResult executeShellV2Command(String cmd) throws DeviceNotAvailableException {
         return executeShellV2Command(cmd, getCommandTimeout(), TimeUnit.MILLISECONDS);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeShellV2Command(String cmd, IShellOutputReceiver receiver)
+            throws DeviceNotAvailableException {
+        ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
+        CommandResult res = null;
+        try {
+            res =
+                    executeShellV2Command(
+                            cmd,
+                            null,
+                            outputReceiverStream,
+                            outputReceiverStream,
+                            getCommandTimeout(),
+                            TimeUnit.MILLISECONDS,
+                            MAX_RETRY_ATTEMPTS);
+        } catch (DeviceNotAvailableException e) {
+            throw e;
+        } finally {
+            receiver.flush();
+        }
+        return res;
     }
 
     /** {@inheritDoc} */
@@ -1209,6 +1394,29 @@ public class NativeDevice
             final TimeUnit timeUnit,
             int retryAttempts)
             throws DeviceNotAvailableException {
+        return executeShellV2Command(
+                cmd,
+                pipeAsInput,
+                pipeToOutput,
+                pipeToError,
+                maxTimeoutForCommand,
+                0,
+                timeUnit,
+                retryAttempts);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public CommandResult executeShellV2Command(
+            String cmd,
+            File pipeAsInput,
+            OutputStream pipeToOutput,
+            OutputStream pipeToError,
+            final long maxTimeoutForCommand,
+            final long maxTimeToOutputShellResponse,
+            final TimeUnit timeUnit,
+            int retryAttempts)
+            throws DeviceNotAvailableException {
         // If the device does not support the v2 shell features. Exit status will not be propagated
         // and stdout/stderr will be merged in stdout.
         //
@@ -1217,23 +1425,98 @@ public class NativeDevice
         //
         // Note that this does *not* call `adb features` on each invocation. ddmlib caches all the
         // adb features on the first query.
-        boolean parseExitStatus =
-                !getIDevice().supportsFeature(IDevice.Feature.SHELL_V2)
-                        && getOptions().useExitStatusWorkaround();
+        boolean parseExitStatus = !isShellV2Support() && getOptions().useExitStatusWorkaround();
 
-        final String[] fullCmd = buildAdbShellCommand(cmd, parseExitStatus);
+        final String[] fullCmd = buildAdbShellCommand(cmd, parseExitStatus, false);
         AdbShellAction adbActionV2 =
                 new AdbShellAction(
                         fullCmd,
                         pipeAsInput,
                         pipeToOutput,
                         pipeToError,
-                        timeUnit.toMillis(maxTimeoutForCommand));
+                        timeUnit.toMillis(maxTimeoutForCommand),
+                        timeUnit.toMillis(maxTimeToOutputShellResponse));
         performDeviceAction(String.format("adb %s", fullCmd[4]), adbActionV2, retryAttempts);
         if (parseExitStatus) {
             postProcessExitStatus(adbActionV2.mResult);
         }
         return adbActionV2.mResult;
+    }
+
+    public boolean isShellV2Support() throws DeviceNotAvailableException {
+        return getHostAdbMajorVersion() >= 29 && getDeviceSupportedFeatures().contains("shell_v2");
+    }
+
+    private int getHostAdbMajorVersion() throws DeviceNotAvailableException {
+        if (mHostAdbMajorVersion != null) {
+            return mHostAdbMajorVersion.intValue();
+        }
+        CommandResult res = executeAdbV2Command("--version");
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            CLog.e("Failed to get host version: %s", res.getStderr());
+            throw new DeviceNotAvailableException(
+                    String.format("Failed to get host version: %s", res.getStderr()),
+                    getSerialNumber());
+        }
+        String output = res.getStdout();
+        Optional<String> versionLine =
+                output.lines().filter(line -> line.trim().startsWith("Version ")).findFirst();
+        if (versionLine.isEmpty()) {
+            throw new DeviceNotAvailableException(
+                    String.format("Could not parse ADB version from output: %s", output),
+                    getSerialNumber());
+        }
+
+        final Pattern majorVersionPattern = Pattern.compile("^Version\\s+(?:[0-9]+:)?(\\d+)\\..*");
+        Matcher matcher = majorVersionPattern.matcher(versionLine.get());
+        if (matcher.find()) {
+            // The first capturing group '(\d+)' contains our major version
+            String majorVersionStr = matcher.group(1);
+            try {
+                mHostAdbMajorVersion = Integer.valueOf(majorVersionStr);
+            } catch (NumberFormatException e) {
+                // This case is highly unlikely if the regex matches, but it's safe to keep
+                throw new DeviceNotAvailableException(
+                        String.format(
+                                "Failed to parse major version '%s' from line: %s",
+                                majorVersionStr, versionLine.get()),
+                        getSerialNumber());
+            }
+        } else {
+            // The line started with "Version " but didn't match our expected pattern
+            throw new DeviceNotAvailableException(
+                    String.format("Could not parse ADB version from line: %s", versionLine.get()),
+                    getSerialNumber());
+        }
+        return mHostAdbMajorVersion.intValue();
+    }
+
+    private boolean isNullDevice() {
+        return getIDevice() instanceof NullDevice || getIDevice() instanceof StubDevice;
+    }
+
+    private Set<String> getDeviceSupportedFeatures() throws DeviceNotAvailableException {
+        if (mDeviceSupportedFeatures != null) {
+            return mDeviceSupportedFeatures;
+        }
+        // Skip the features call for null-device
+        if (isNullDevice()) {
+            mDeviceSupportedFeatures = new LinkedHashSet<>();
+            return mDeviceSupportedFeatures;
+        }
+        CommandResult res = executeAdbV2Command("features");
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            // likely be in fastboot mode
+            CLog.e("Failed to run adb features (likely be in fastboot mode): %s", res.getStderr());
+        }
+        String output = res.getStdout();
+        List<String> lineList =
+                output.lines()
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .collect(Collectors.toList());
+        mDeviceSupportedFeatures = new LinkedHashSet<>(lineList);
+        return mDeviceSupportedFeatures;
     }
 
     private void postProcessExitStatus(@Nonnull CommandResult result) {
@@ -1477,6 +1760,22 @@ public class NativeDevice
         throw new UnsupportedOperationException("No support for Package Manager's features");
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public String adbInstallPackage(
+            final File packageFile, final boolean reinstall, final String... extraArgs)
+            throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for Package Manager's features");
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String adbInstallPackage(
+            File packageFile, boolean reinstall, boolean grantPermissions, String... extraArgs)
+            throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for Package Manager's features");
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -1496,6 +1795,14 @@ public class NativeDevice
     @Override
     public boolean pullFile(final String remoteFilePath, final File localFile, int userId)
             throws DeviceNotAvailableException {
+        return pullFile(remoteFilePath, localFile, userId, getCommandTimeout());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean pullFile(
+            final String remoteFilePath, final File localFile, int userId, long timeout)
+            throws DeviceNotAvailableException {
         long startTime = System.currentTimeMillis();
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.PULL_FILE_COUNT, 1);
 
@@ -1506,7 +1813,7 @@ public class NativeDevice
                     return handler.pullFile(remoteFilePath, localFile);
                 }
             }
-            return pullFileWithAdbCommand(remoteFilePath, localFile);
+            return pullFileWithAdbCommand(remoteFilePath, localFile, timeout);
         } finally {
             long totalTime = System.currentTimeMillis() - startTime;
             InvocationMetricLogger.addInvocationMetrics(
@@ -1579,14 +1886,28 @@ public class NativeDevice
         return pullFile(fullPath);
     }
 
-    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile, long timeout)
             throws DeviceNotAvailableException {
-        List<String> adbPushFileCmd = new ArrayList<>();
-        adbPushFileCmd.add("pull");
-        adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
-        adbPushFileCmd.add(localFile.getAbsolutePath());
-        CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
-        return CommandStatus.SUCCESS.equals(res.getStatus());
+        List<String> adbPullFileCmd = new ArrayList<>();
+        adbPullFileCmd.add("pull");
+        adbPullFileCmd.add(interpolatePathVariables(remoteFilePath));
+        adbPullFileCmd.add(localFile.getAbsolutePath());
+        CommandResult res = executeAdbV2Command(timeout, adbPullFileCmd.toArray(new String[0]));
+        if (CommandStatus.SUCCESS.equals(res.getStatus())) {
+            return true;
+        } else if (CommandStatus.TIMED_OUT.equals(res.getStatus())
+                || CommandStatus.EXCEPTION.equals(res.getStatus())) {
+            throw new DeviceNotAvailableException(
+                    String.format(
+                            "Failed to pull file '%s' due to command timeout or exception: %s",
+                            remoteFilePath, res.getStderr()),
+                    getSerialNumber());
+        } else { // CommandStatus.FAILED
+            CLog.w(
+                    "Failed to pull file '%s'. stdout: %s\nstderr: %s",
+                    remoteFilePath, res.getStdout(), res.getStderr());
+            return false;
+        }
     }
 
     /**
@@ -1660,7 +1981,21 @@ public class NativeDevice
             adbPushFileCmd.add(localFile.getAbsolutePath());
             adbPushFileCmd.add(interpolatePathVariables(remoteFilePath));
             CommandResult res = executeAdbV2Command(adbPushFileCmd.toArray(new String[0]));
-            return CommandStatus.SUCCESS.equals(res.getStatus());
+            if (CommandStatus.SUCCESS.equals(res.getStatus())) {
+                return true;
+            } else if (CommandStatus.TIMED_OUT.equals(res.getStatus())
+                    || CommandStatus.EXCEPTION.equals(res.getStatus())) {
+                throw new DeviceNotAvailableException(
+                        String.format(
+                                "Failed to push file '%s' due to command timeout or exception: %s",
+                                remoteFilePath, res.getStderr()),
+                        getSerialNumber());
+            } else { // CommandStatus.FAILED
+                CLog.w(
+                        "Failed to push file '%s'. stdout: %s\nstderr: %s",
+                        remoteFilePath, res.getStdout(), res.getStderr());
+                return false;
+            }
         } finally {
             long totalTime = System.currentTimeMillis() - startTime;
             InvocationMetricLogger.addInvocationMetrics(
@@ -1968,8 +2303,8 @@ public class NativeDevice
     public IFileEntry getFileEntry(String path) throws DeviceNotAvailableException {
         path = interpolatePathVariables(path);
         String[] pathComponents = path.split(FileListingService.FILE_SEPARATOR);
-        FileListingService service = getFileListingService();
-        IFileEntry rootFile = new FileEntryWrapper(this, service.getRoot());
+        FileEntry root = getRootFile();
+        IFileEntry rootFile = new FileEntryWrapper(this, root);
         return FileEntryWrapper.getDescendant(rootFile, Arrays.asList(pathComponents));
     }
 
@@ -2018,32 +2353,26 @@ public class NativeDevice
     }
 
     /**
-     * Retrieve the {@link FileListingService} for the {@link IDevice}, making multiple attempts
-     * and recovery operations if necessary.
-     * <p/>
-     * This is necessary because {@link IDevice#getFileListingService()} can return
-     * <code>null</code> if device is in fastboot.  The symptom of this condition is that the
-     * current {@link #getIDevice()} is a {@link StubDevice}.
+     * Retrieve the root {@link FileEntry} for the {@link IDevice}, making multiple attempts and
+     * recovery operations if necessary.
      *
-     * @return the {@link FileListingService}
+     * <p>This is necessary because it can return <code>null</code> if device is in fastboot. The
+     * symptom of this condition is that the current {@link #getIDevice()} is a {@link StubDevice}.
+     *
+     * @return the {@link FileEntry}
      * @throws DeviceNotAvailableException if device communication is lost.
      */
-    private FileListingService getFileListingService() throws DeviceNotAvailableException  {
-        final FileListingService[] service = new FileListingService[1];
-        DeviceAction serviceAction = new DeviceAction() {
-            @Override
-            public boolean run() throws IOException, TimeoutException, AdbCommandRejectedException,
-                    ShellCommandUnresponsiveException, InstallException, SyncException {
-                service[0] = getIDevice().getFileListingService();
-                if (service[0] == null) {
-                    // could not get file listing service - must be a stub device - enter recovery
-                    throw new IOException("Could not get file listing service");
-                }
-                return true;
-            }
-        };
-        performDeviceAction("getFileListingService", serviceAction, MAX_RETRY_ATTEMPTS);
-        return service[0];
+    private FileEntry getRootFile() throws DeviceNotAvailableException {
+        CommandResult res = executeShellV2Command("ls /");
+        if (CommandStatus.SUCCESS.equals(res.getStatus())) {
+            return new FileEntry(
+                    null /* parent */,
+                    "" /* name */,
+                    FileListingService.TYPE_DIRECTORY,
+                    true /* isRoot */);
+        }
+        throw new DeviceNotAvailableException(
+                "Could not get the file listing service and entry root file.", getSerialNumber());
     }
 
     /**
@@ -2144,6 +2473,13 @@ public class NativeDevice
     @Override
     public boolean pullDir(String deviceFilePath, File localDir, int userId)
             throws DeviceNotAvailableException {
+        return pullDir(deviceFilePath, localDir, userId, getCommandTimeout());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean pullDir(String deviceFilePath, File localDir, int userId, long timeout)
+            throws DeviceNotAvailableException {
         long startTime = System.currentTimeMillis();
         try {
             if (isSdcardOrEmulated(deviceFilePath)) {
@@ -2155,7 +2491,7 @@ public class NativeDevice
                 }
             }
 
-            return pullDirInternal(deviceFilePath, localDir, userId);
+            return pullDirInternal(deviceFilePath, localDir, userId, timeout);
         } finally {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.PULL_DIR_TIME, System.currentTimeMillis() - startTime);
@@ -2163,7 +2499,7 @@ public class NativeDevice
         }
     }
 
-    private boolean pullDirInternal(String deviceFilePath, File localDir, int userId)
+    private boolean pullDirInternal(String deviceFilePath, File localDir, int userId, long timeout)
             throws DeviceNotAvailableException {
         if (!localDir.isDirectory()) {
             CLog.e("Local path %s is not a directory", localDir.getAbsolutePath());
@@ -2196,7 +2532,7 @@ public class NativeDevice
                     return false;
                 }
                 String deviceSubDir = item.getFullPath();
-                if (!pullDirInternal(deviceSubDir, subDir, userId)) {
+                if (!pullDirInternal(deviceSubDir, subDir, userId, timeout)) {
                     CLog.w("Failed to pull sub directory %s from device, aborting", deviceSubDir);
                     return false;
                 }
@@ -2204,7 +2540,7 @@ public class NativeDevice
                 // handle regular file
                 File localFile = new File(localDir, item.getName());
                 String fullPath = item.getFullPath();
-                if (!pullFileWithAdbCommand(fullPath, localFile)) {
+                if (!pullFileWithAdbCommand(fullPath, localFile, timeout)) {
                     CLog.w("Failed to pull file %s from device, aborting", fullPath);
                     return false;
                 }
@@ -2279,8 +2615,7 @@ public class NativeDevice
     FileEntry[] getFileChildren(final FileEntry remoteFileEntry)
             throws DeviceNotAvailableException {
         // time this operation because its known to hang
-        FileQueryAction action = new FileQueryAction(remoteFileEntry,
-                getIDevice().getFileListingService());
+        FileQueryAction action = new FileQueryAction(remoteFileEntry, this);
         performDeviceAction("buildFileCache", action, 1 /* one retry */);
         return action.mFileContents;
     }
@@ -2289,19 +2624,23 @@ public class NativeDevice
 
         FileEntry[] mFileContents = null;
         private final FileEntry mRemoteFileEntry;
-        private final FileListingService mService;
+        private final INativeDevice mDevice;
 
-        FileQueryAction(FileEntry remoteFileEntry, FileListingService service) {
+        FileQueryAction(FileEntry remoteFileEntry, INativeDevice device) {
             throwIfNull(remoteFileEntry);
-            throwIfNull(service);
+            throwIfNull(device);
             mRemoteFileEntry = remoteFileEntry;
-            mService = service;
+            mDevice = device;
         }
 
         @Override
-        public boolean run() throws TimeoutException, IOException, AdbCommandRejectedException,
-                ShellCommandUnresponsiveException {
-            mFileContents = mService.getChildrenSync(mRemoteFileEntry);
+        public boolean run()
+                throws TimeoutException,
+                        IOException,
+                        AdbCommandRejectedException,
+                        ShellCommandUnresponsiveException,
+                        DeviceNotAvailableException {
+            mFileContents = FileListingService.getChildrenSync(mRemoteFileEntry, mDevice);
             return true;
         }
     }
@@ -2404,7 +2743,7 @@ public class NativeDevice
     @Override
     public CommandResult executeAdbV2Command(long timeout, String... cmdArgs)
             throws DeviceNotAvailableException {
-        return executeAdbV2Command(getCommandTimeout(), new HashMap<>(), cmdArgs);
+        return executeAdbV2Command(timeout, new HashMap<>(), cmdArgs);
     }
 
     /** {@inheritDoc} */
@@ -2618,13 +2957,22 @@ public class NativeDevice
     }
 
     /** Builds the OS command for the given adb shell command session and args */
-    protected String[] buildAdbShellCommand(String command, boolean forceExitStatusDetection) {
+    protected String[] buildAdbShellCommand(
+            String command, boolean forceExitStatusDetection, boolean oldShellCommand) {
         // TODO: implement the shell v2 support in ddmlib itself.
-        String[] commandArgs =
-                QuotationAwareTokenizer.tokenizeLine(
-                        command,
-                        /** No logging */
-                        false);
+        String[] commandArgs;
+        // for any old command from ddmlib executeShellCommand
+        // we will pass it to adb shell command as a single string.
+        if (oldShellCommand) {
+            commandArgs = new String[1];
+            commandArgs[0] = command;
+        } else {
+            commandArgs =
+                    QuotationAwareTokenizer.tokenizeLine(
+                            command,
+                            /* No logging */
+                            false);
+        }
 
         String[] exitStatusProbe;
         if (forceExitStatusDetection) {
@@ -2998,11 +3346,21 @@ public class NativeDevice
                             getOptions().getMaxLogcatDataSize());
             String command =
                     String.format(
-                            "%s -t '%s'", LogcatReceiver.getDefaultLogcatCmd(this), dateFormatted);
-            getIDevice().executeShellCommand(command, largeReceiver);
+                            "\"%s -t '%s'\"",
+                            LogcatReceiver.getDefaultLogcatCmd(this), dateFormatted);
+            ShellOutputReceiverStream outputReceiverStream =
+                    new ShellOutputReceiverStream(largeReceiver);
+
+            executeShellV2Command(
+                    command,
+                    null,
+                    outputReceiverStream,
+                    getCommandTimeout(),
+                    TimeUnit.MILLISECONDS,
+                    0);
+            largeReceiver.flush();
             return largeReceiver.getData();
-        } catch (IOException|AdbCommandRejectedException|
-                ShellCommandUnresponsiveException|TimeoutException e) {
+        } catch (DeviceNotAvailableException e) {
             CLog.w("Failed to get logcat dump from %s: %s", getSerialNumber(), e.getMessage());
             CLog.e(e);
         } finally {
@@ -3029,22 +3387,20 @@ public class NativeDevice
                             "getLogcatDump",
                             getSerialNumber(),
                             getOptions().getMaxLogcatDataSize());
+            ShellOutputReceiverStream outputReceiverStream =
+                    new ShellOutputReceiverStream(largeReceiver);
             // add -d parameter to make this a non blocking call
-            getIDevice()
-                    .executeShellCommand(
-                            LogcatReceiver.getDefaultLogcatCmd(this) + " -d",
-                            largeReceiver,
-                            LOGCAT_DUMP_TIMEOUT,
-                            LOGCAT_DUMP_TIMEOUT,
-                            TimeUnit.MILLISECONDS);
+            String command = LogcatReceiver.getDefaultLogcatCmd(this) + " -d";
+            executeShellV2Command(
+                    command,
+                    null,
+                    outputReceiverStream,
+                    LOGCAT_DUMP_TIMEOUT,
+                    TimeUnit.MILLISECONDS,
+                    0);
+            largeReceiver.flush();
             return largeReceiver.getData();
-        } catch (IOException e) {
-            CLog.w("Failed to get logcat dump from %s: ", getSerialNumber(), e.getMessage());
-        } catch (TimeoutException e) {
-            CLog.w("Failed to get logcat dump from %s: timeout", getSerialNumber());
-        } catch (AdbCommandRejectedException e) {
-            CLog.w("Failed to get logcat dump from %s: ", getSerialNumber(), e.getMessage());
-        } catch (ShellCommandUnresponsiveException e) {
+        } catch (DeviceNotAvailableException e) {
             CLog.w("Failed to get logcat dump from %s: ", getSerialNumber(), e.getMessage());
         } finally {
             if (largeReceiver != null) {
@@ -3647,7 +4003,9 @@ public class NativeDevice
                     "Reboot into Bootloader");
             return;
         }
+        notifyRebootStarted();
         rebootIntoFastbootInternal(true);
+        notifyRebootEnded();
     }
 
     /** {@inheritDoc} */
@@ -3660,7 +4018,9 @@ public class NativeDevice
                     "Reboot into Fastbootd");
             return;
         }
+        notifyRebootStarted();
         rebootIntoFastbootInternal(false);
+        notifyRebootEnded();
     }
 
     /**
@@ -3763,6 +4123,7 @@ public class NativeDevice
             CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot");
             return;
         }
+        notifyRebootStarted();
         internalRebootUntilOnline(reason);
 
         RecoveryMode cachedRecoveryMode = getRecoveryMode();
@@ -3780,8 +4141,6 @@ public class NativeDevice
         }
         postBootSetup();
         postBootWifiSetup();
-        // notify of reboot end here. Full reboots will end here as well as reboots from Bootloader
-        // or Fastboot mode.
         notifyRebootEnded();
     }
 
@@ -3791,6 +4150,7 @@ public class NativeDevice
             CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot Userspace");
             return;
         }
+        notifyRebootStarted();
         rebootUserspaceUntilOnline();
 
         RecoveryMode cachedRecoveryMode = getRecoveryMode();
@@ -3808,6 +4168,7 @@ public class NativeDevice
         waitForDeviceAvailable(mOptions.getRebootTimeout());
         postBootSetup();
         postBootWifiSetup();
+        notifyRebootEnded();
     }
 
     @Override
@@ -3819,13 +4180,10 @@ public class NativeDevice
             return;
         }
         try {
+            notifyRebootStarted();
             internalRebootUntilOnline(null);
         } finally {
-            if (!mDeviceActionReceivers.isEmpty()) {
-                CLog.d(
-                        "DeviceActionReceivers were not notified after rebootUntilOnline on %s.",
-                        getSerialNumber());
-            }
+            notifyRebootEnded();
         }
     }
 
@@ -3839,13 +4197,10 @@ public class NativeDevice
             return;
         }
         try {
+            notifyRebootStarted();
             internalRebootUntilOnline(reason);
         } finally {
-            if (!mDeviceActionReceivers.isEmpty()) {
-                CLog.d(
-                        "DeviceActionReceivers were not notified after rebootUntilOnline on %s.",
-                        getSerialNumber());
-            }
+            notifyRebootEnded();
         }
     }
 
@@ -3879,12 +4234,14 @@ public class NativeDevice
                     "Reboot Userspace Until Online");
             return;
         }
+        notifyRebootStarted();
         doReboot(RebootMode.REBOOT_USERSPACE, null);
         RecoveryMode cachedRecoveryMode = getRecoveryMode();
         setRecoveryMode(RecoveryMode.ONLINE);
         waitForDeviceOnline();
         enableAdbRoot();
         setRecoveryMode(cachedRecoveryMode);
+        notifyRebootEnded();
     }
 
     /**
@@ -3898,6 +4255,7 @@ public class NativeDevice
                     "Reboot into Recovery");
             return;
         }
+        notifyRebootStarted();
         if (isStateBootloaderOrFastbootd()) {
             CLog.w("device %s in fastboot when requesting boot to recovery. " +
                     "Rebooting to userspace first.", getSerialNumber());
@@ -3907,6 +4265,7 @@ public class NativeDevice
         if (!waitForDeviceInRecovery(mOptions.getAdbRecoveryTimeout())) {
             recoverDeviceInRecovery();
         }
+        notifyRebootEnded();
     }
 
 
@@ -3924,6 +4283,7 @@ public class NativeDevice
                     "Reboot into Sideload");
             return;
         }
+        notifyRebootStarted();
         if (isStateBootloaderOrFastbootd()) {
             CLog.w(
                     "device %s in fastboot when requesting boot to sideload. "
@@ -3942,6 +4302,7 @@ public class NativeDevice
             // using recovery mode because sideload is a sub-mode under recovery
             recoverDeviceInRecovery();
         }
+        notifyRebootEnded();
     }
 
     /**
@@ -3956,13 +4317,10 @@ public class NativeDevice
             return;
         }
         try {
+            notifyRebootStarted();
             doReboot(RebootMode.REBOOT_FULL, null);
         } finally {
-            if (!mDeviceActionReceivers.isEmpty()) {
-                CLog.d(
-                        "DeviceActionReceivers were not notified after nonBlockingReboot on %s.",
-                        getSerialNumber());
-            }
+            notifyRebootEnded();
         }
     }
 
@@ -4086,7 +4444,7 @@ public class NativeDevice
         String mode = rebootMode.getAdbRebootCommand(reason);
         String adbRebootCommand = String.format("reboot %s", mode);
         adbRebootCommand = adbRebootCommand.trim();
-        final String[] fullCmd = buildAdbShellCommand(adbRebootCommand, false);
+        final String[] fullCmd = buildAdbShellCommand(adbRebootCommand, false, false);
         return new RebootDeviceAction(
                 rebootMode,
                 reason,
@@ -4738,7 +5096,7 @@ public class NativeDevice
      */
     @Override
     public InputStreamSource getEmulatorOutput() {
-        if (getIDevice().isEmulator()) {
+        if (isEmulator()) {
             if (mEmulatorOutput == null) {
                 CLog.w("Emulator output for %s was not captured in background",
                         getSerialNumber());
@@ -4753,6 +5111,11 @@ public class NativeDevice
             }
         }
         return new ByteArrayInputStreamSource(new byte[0]);
+    }
+
+    /** Returns <code>true</code> if the device is an emulator. */
+    private boolean isEmulator() {
+        return mSerialNumber.matches(RE_EMULATOR_SN);
     }
 
     /**
@@ -5038,11 +5401,23 @@ public class NativeDevice
         throw new UnsupportedOperationException("No support for user's feature.");
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public int getRemainingCreatableUserCount(String userType) throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for user's feature.");
+    }
+
     /**
      * {@inheritDoc}
      */
     @Override
     public int getMaxNumberOfUsersSupported() throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for user's feature.");
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getMaxNumberOfUsersSupported(String userType) throws DeviceNotAvailableException {
         throw new UnsupportedOperationException("No support for user's feature.");
     }
 
@@ -5503,7 +5878,10 @@ public class NativeDevice
         getMonitor().clearTcpFastbootMonitor();
         mConnectionAvd = null;
         mDeviceActionReceivers.clear();
+        inRebootCallback = false;
+        mRebootStartNotified = false;
         mFastbootSerialNumber = null;
+        mDeviceSupportedFeatures = null;
         // Default implementation
         if (getIDevice() instanceof StubDevice) {
             mTrackingSerialNumber = null;
@@ -5599,10 +5977,10 @@ public class NativeDevice
             if (shortDescriptor) {
                 // Return only info that do not require device inspection
                 return new DeviceDescriptor(
-                        idevice.getSerialNumber(),
+                        getSerialNumber(),
                         null,
                         idevice instanceof StubDevice,
-                        idevice.getState(),
+                        getDeviceState().getDdmsState(),
                         getAllocationState(),
                         getDeviceState(),
                         null,
@@ -5631,12 +6009,12 @@ public class NativeDevice
                 hardwareRev = getPropertyWithRecovery(DeviceProperties.HARDWARE_REVISION, false);
             }
             return new DeviceDescriptor(
-                    idevice.getSerialNumber(),
+                    getSerialNumber(),
                     (mTrackingSerialNumber != null)
-                            ? idevice.getSerialNumber() + "[" + mTrackingSerialNumber + "]"
+                            ? getSerialNumber() + "[" + mTrackingSerialNumber + "]"
                             : null,
                     idevice instanceof StubDevice,
-                    idevice.getState(),
+                    getDeviceState().getDdmsState(),
                     getAllocationState(),
                     getDeviceState(),
                     getDisplayString(selector.getDeviceProductType(idevice)),
@@ -5923,22 +6301,19 @@ public class NativeDevice
             return null;
         }
         CollectingOutputReceiver receiver = new CollectingOutputReceiver();
+        ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
         try {
-            mIDevice.executeShellCommand(command, receiver);
-        } catch (IOException | TimeoutException | AdbCommandRejectedException |
-                ShellCommandUnresponsiveException e) {
-            CLog.w(
-                    "Failed to query MAC address for %s by '%s'",
-                    mIDevice.getSerialNumber(), command);
+            executeShellV2Command(command, outputReceiverStream);
+            receiver.flush();
+        } catch (DeviceNotAvailableException e) {
+            CLog.w("Failed to query MAC address for %s by '%s'", getSerialNumber(), command);
             CLog.w(e);
         }
         String output = receiver.getOutput().trim();
         if (isMacAddress(output)) {
             return output;
         }
-        CLog.d(
-                "No valid MAC address queried from device %s by '%s'",
-                mIDevice.getSerialNumber(), command);
+        CLog.d("No valid MAC address queried from device %s by '%s'", getSerialNumber(), command);
         return null;
     }
 
@@ -6124,9 +6499,7 @@ public class NativeDevice
         try {
             return internalGetBattery();
         } catch (DeviceNotAvailableException e) {
-            CLog.w(
-                    "Failed to query battery level for %s: %s",
-                    getIDevice().getSerialNumber(), e.toString());
+            CLog.w("Failed to query battery level for %s: %s", getSerialNumber(), e.toString());
         }
         return null;
     }
@@ -6447,18 +6820,22 @@ public class NativeDevice
      * @throws DeviceNotAvailableException
      */
     protected void notifyRebootStarted() throws DeviceNotAvailableException {
-        try (CloseableTraceScope ignored = new CloseableTraceScope("rebootStartedCallbacks")) {
-            for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
-                try {
-                    inRebootCallback = true;
-                    dar.rebootStarted(this);
-                } catch (DeviceNotAvailableException dnae) {
-                    inRebootCallback = false;
-                    throw dnae;
-                } catch (Exception e) {
-                    logDeviceActionException("notifyRebootStarted", e, true);
-                } finally {
-                    inRebootCallback = false;
+        // we should only notify when the device is going from user mode to other modes.
+        if (!isStateBootloaderOrFastbootd() && !mRebootStartNotified) {
+            try (CloseableTraceScope ignored = new CloseableTraceScope("rebootStartedCallbacks")) {
+                for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
+                    try {
+                        inRebootCallback = true;
+                        dar.rebootStarted(this);
+                    } catch (DeviceNotAvailableException dnae) {
+                        inRebootCallback = false;
+                        throw dnae;
+                    } catch (Exception e) {
+                        logDeviceActionException("notifyRebootStarted", e, true);
+                    } finally {
+                        inRebootCallback = false;
+                        mRebootStartNotified = true;
+                    }
                 }
             }
         }
@@ -6470,18 +6847,22 @@ public class NativeDevice
      * @throws DeviceNotAvailableException
      */
     protected void notifyRebootEnded() throws DeviceNotAvailableException {
-        try (CloseableTraceScope ignored = new CloseableTraceScope("rebootEndedCallbacks")) {
-            for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
-                try {
-                    inRebootCallback = true;
-                    dar.rebootEnded(this);
-                } catch (DeviceNotAvailableException dnae) {
-                    inRebootCallback = false;
-                    throw dnae;
-                } catch (Exception e) {
-                    logDeviceActionException("notifyRebootEnded", e, true);
-                } finally {
-                    inRebootCallback = false;
+        // we should only notify when the devices current state is not fastbootd or bootloader.
+        if (!isStateBootloaderOrFastbootd() && mRebootStartNotified) {
+            try (CloseableTraceScope ignored = new CloseableTraceScope("rebootEndedCallbacks")) {
+                for (IDeviceActionReceiver dar : mDeviceActionReceivers) {
+                    try {
+                        inRebootCallback = true;
+                        dar.rebootEnded(this);
+                    } catch (DeviceNotAvailableException dnae) {
+                        inRebootCallback = false;
+                        throw dnae;
+                    } catch (Exception e) {
+                        logDeviceActionException("notifyRebootEnded", e, true);
+                    } finally {
+                        inRebootCallback = false;
+                        mRebootStartNotified = false;
+                    }
                 }
             }
         }

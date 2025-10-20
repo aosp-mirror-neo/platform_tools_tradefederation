@@ -115,6 +115,11 @@ public class DeviceBatteryLevelCheckerTest {
         public Integer getBattery() {
             return mBatteryLevel.get() == -99 ? null : mBatteryLevel.get();
         }
+
+        @Override
+        public boolean isShellV2Support() throws DeviceNotAvailableException {
+            return true;
+        }
     }
 
     @Before

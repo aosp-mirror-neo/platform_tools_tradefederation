@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
  * <p>Sample format of output expected:
  *
  * <pre>
- * [==========] Running 15 tests from 1 test case.
+ * Messages before the start test run marker [==========] Running 15 tests from 1 test case.
  * [----------] Global test environment set-up.
  * [----------] 15 tests from MessageTest
  * [ RUN      ] MessageTest.DefaultConstructor
@@ -338,7 +338,7 @@ public class GTestResultParser extends MultiLineReceiver {
     private void parse(String line) {
         String message = null;
 
-        if (mTestRunInProgress || line.startsWith(Prefixes.TEST_RUN_MARKER)) {
+        if (mTestRunInProgress || line.contains(Prefixes.TEST_RUN_MARKER)) {
             if (line.startsWith(Prefixes.START_TEST_MARKER)) {
                 // Individual test started
                 message = line.substring(Prefixes.START_TEST_MARKER.length()).trim();
@@ -357,8 +357,7 @@ public class GTestResultParser extends MultiLineReceiver {
                 }
                 processSkippedTag(message);
                 clearCurrentTestResult();
-            }
-            else if (line.contains(Prefixes.OK_TEST_MARKER)) {
+            } else if (line.contains(Prefixes.OK_TEST_MARKER)) {
                 // Individual test completed successfully
                 // Logs from test could offset the OK marker
                 message = line.substring(line.indexOf(Prefixes.OK_TEST_MARKER) +
@@ -371,16 +370,14 @@ public class GTestResultParser extends MultiLineReceiver {
                 }
                 processOKTag(message);
                 clearCurrentTestResult();
-            }
-            else if (line.contains(Prefixes.ALT_OK_MARKER)) {
+            } else if (line.contains(Prefixes.ALT_OK_MARKER)) {
                 message = line.substring(line.indexOf(Prefixes.ALT_OK_MARKER) +
                         Prefixes.ALT_OK_MARKER.length()).trim();
                 // This alternative format does not have a RUN tag, so we fake it.
                 fakeRunMarker(message);
                 processOKTag(message);
                 clearCurrentTestResult();
-            }
-            else if (line.contains(Prefixes.FAILED_TEST_MARKER)) {
+            } else if (line.contains(Prefixes.FAILED_TEST_MARKER)) {
                 // Individual test completed with failure
                 message = line.substring(line.indexOf(Prefixes.FAILED_TEST_MARKER) +
                         Prefixes.FAILED_TEST_MARKER.length()).trim();
@@ -390,29 +387,29 @@ public class GTestResultParser extends MultiLineReceiver {
                 }
                 processFailedTag(message);
                 clearCurrentTestResult();
-            }
-            else if (line.contains(Prefixes.TIMEOUT_MARKER)) {
+            } else if (line.contains(Prefixes.TIMEOUT_MARKER)) {
                 // Individual test timeout is considered a failure
                 message = line.substring(line.indexOf(Prefixes.TIMEOUT_MARKER) +
                         Prefixes.TIMEOUT_MARKER.length()).trim();
                 fakeRunMarker(message);
                 processFailedTag(message);
                 clearCurrentTestResult();
-            }
-            else if (line.startsWith(Prefixes.START_TEST_RUN_MARKER)) {
+            } else if (line.contains(Prefixes.START_TEST_RUN_MARKER)) {
                 // Test run started
                 // Make sure to leave the "Running" in the string
-                message = line.substring(Prefixes.TEST_RUN_MARKER.length()).trim();
+                message =
+                        line.substring(
+                                        line.indexOf(Prefixes.START_TEST_RUN_MARKER)
+                                                + Prefixes.TEST_RUN_MARKER.length())
+                                .trim();
                 processRunStartedTag(message);
-            }
-            else if (line.startsWith(Prefixes.TEST_RUN_MARKER)) {
+            } else if (line.startsWith(Prefixes.TEST_RUN_MARKER)) {
                 // Test run ended
                 // This is for the end of the test suite run, so make sure this else-if is after the
                 // check for START_TEST_SUITE_MARKER
                 message = line.substring(Prefixes.TEST_RUN_MARKER.length()).trim();
                 processRunCompletedTag(message);
-            }
-            else if (testInProgress()) {
+            } else if (testInProgress()) {
                 // Note this does not handle the case of an error outside an actual test run
                 appendTestOutputLine(line);
             }

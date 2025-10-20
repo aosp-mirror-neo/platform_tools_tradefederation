@@ -45,7 +45,6 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -92,12 +91,11 @@ public final class RunOnPrivateProfileTargetPreparerTest {
         mPreparer.setProfileUserType(USERTYPE_PROFILE_PRIVATE);
         mPreparer.setTradefedUserType(PRIVATE_PROFILE);
 
-        ArrayList<Integer> userIds = new ArrayList<>();
-        userIds.add(0);
-
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(2);
-        when(mTestInfo.getDevice().listUsers()).thenReturn(userIds);
-        when(mTestInfo.getDevice().getApiLevel()).thenReturn(34);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(1);
+        when(mTestInfo.getDevice().getApiLevel()).thenReturn(37);
     }
 
     @Test
@@ -105,6 +103,8 @@ public final class RunOnPrivateProfileTargetPreparerTest {
         when(mTestInfo.getDevice().getApiLevel()).thenReturn(30);
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND)).thenReturn(
                 SAMPLE_DUMPSYS_USER_CAN_NOT_ADD_PS);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(0);
         mPreparer.setUp(mTestInfo);
 
         verify(mTestInfo.properties(), never()).put(eq(RUN_TESTS_AS_USER_KEY), any());
@@ -114,6 +114,8 @@ public final class RunOnPrivateProfileTargetPreparerTest {
     public void setUp_doesNotSupportPrivateUser_doesNotCreateUser() throws Exception {
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND)).thenReturn(
                 SAMPLE_DUMPSYS_USER_CAN_NOT_ADD_PS);
+        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(0);
         mPreparer.setUp(mTestInfo);
         verify(mTestInfo.getDevice(), never()).executeShellCommand(
                 argThat(argument -> argument.contains("pm create-user")));
@@ -273,7 +275,8 @@ public final class RunOnPrivateProfileTargetPreparerTest {
 
     @Test
     public void setUp_doesNotSupportAdditionalUsers_doesNotChangeTestUser() throws Exception {
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(0);
 
         mPreparer.setUp(mTestInfo);
 
@@ -286,7 +289,8 @@ public final class RunOnPrivateProfileTargetPreparerTest {
             throws Exception {
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND)).thenReturn(
                 SAMPLE_DUMPSYS_USER_CAN_ADD_PS);
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(0);
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 11,
@@ -322,7 +326,8 @@ public final class RunOnPrivateProfileTargetPreparerTest {
             throws Exception {
         when(mTestInfo.getDevice().executeShellCommand(DUMPSYS_USER_COMMAND)).thenReturn(
                 SAMPLE_DUMPSYS_USER_CAN_ADD_PS);
-        when(mTestInfo.getDevice().getMaxNumberOfUsersSupported()).thenReturn(1);
+        when(mTestInfo.getDevice().getRemainingCreatableUserCount(eq(USERTYPE_PROFILE_PRIVATE)))
+                .thenReturn(0);
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 11,

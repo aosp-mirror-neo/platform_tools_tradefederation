@@ -20,6 +20,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
@@ -56,7 +57,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.AdditionalAnswers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -130,6 +130,11 @@ public class NativeDeviceTest {
             when(mMockContentProviderHandler.getUserId()).thenReturn(userId);
             return mMockContentProviderHandler;
         }
+
+        @Override
+        public boolean isShellV2Support() throws DeviceNotAvailableException {
+            return true;
+        }
     }
 
     @Before
@@ -139,7 +144,6 @@ public class NativeDeviceTest {
         mHostOptions = new HostOptions();
 
         when(mMockIDevice.getSerialNumber()).thenReturn(MOCK_DEVICE_SERIAL);
-        when(mMockIDevice.supportsFeature(IDevice.Feature.SHELL_V2)).thenReturn(true);
 
         // A TestDevice with a no-op recoverDevice() implementation
         mTestDevice =
@@ -529,7 +533,8 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+                    protected boolean pullFileWithAdbCommand(
+                            String remoteFilePath, File localFile, long timeout)
                             throws DeviceNotAvailableException {
                         try {
                             // Just touch the file to make it appear.
@@ -607,7 +612,8 @@ public class NativeDeviceTest {
                     }
 
                     @Override
-                    protected boolean pullFileWithAdbCommand(String remoteFilePath, File localFile)
+                    protected boolean pullFileWithAdbCommand(
+                            String remoteFilePath, File localFile, long timeout)
                             throws DeviceNotAvailableException {
                         if (mFirstPull) {
                             mFirstPull = false;
@@ -2405,7 +2411,7 @@ public class NativeDeviceTest {
     /** Test that {@link NativeDevice#getDeviceDescriptor()} returns the proper information. */
     @Test
     public void testGetDeviceDescriptor() {
-        final String serial = "Test";
+        final String serial = "serial";
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -2466,6 +2472,7 @@ public class NativeDeviceTest {
 
         CommandResult commandRes = new CommandResult();
         commandRes.setStatus(CommandStatus.FAILED);
+        commandRes.setStderr("device offline");
         when(mMockRunUtil.runTimedCmd(
                         Mockito.anyLong(),
                         Mockito.eq("adb"),
@@ -2476,7 +2483,9 @@ public class NativeDeviceTest {
                         Mockito.anyString()))
                 .thenReturn(commandRes);
         try {
-            boolean res = mTestDevice.pullFile(fakeRemotePath, tmpFile);
+            assertThrows(
+                    DeviceNotAvailableException.class,
+                    () -> mTestDevice.pullFile(fakeRemotePath, tmpFile));
             verify(mMockRunUtil, times(1))
                     .runTimedCmd(
                             Mockito.anyLong(),
@@ -2486,7 +2495,6 @@ public class NativeDeviceTest {
                             Mockito.eq("pull"),
                             Mockito.eq("/test/"),
                             Mockito.anyString());
-            assertFalse(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
         }
@@ -2659,6 +2667,7 @@ public class NativeDeviceTest {
         File tmpFile = FileUtil.createTempFile("push", ".test");
         CommandResult commandRes = new CommandResult();
         commandRes.setStatus(CommandStatus.FAILED);
+        commandRes.setStderr("device offline");
         when(mMockRunUtil.runTimedCmd(
                         Mockito.anyLong(),
                         Mockito.eq("adb"),
@@ -2669,7 +2678,9 @@ public class NativeDeviceTest {
                         Mockito.eq("/test/")))
                 .thenReturn(commandRes);
         try {
-            boolean res = mTestDevice.pushFile(tmpFile, fakeRemotePath);
+            assertThrows(
+                    DeviceNotAvailableException.class,
+                    () -> mTestDevice.pushFile(tmpFile, fakeRemotePath));
             verify(mMockRunUtil, times(1))
                     .runTimedCmd(
                             Mockito.anyLong(),
@@ -2679,7 +2690,6 @@ public class NativeDeviceTest {
                             Mockito.eq("push"),
                             Mockito.anyString(),
                             Mockito.eq("/test/"));
-            assertFalse(res);
         } finally {
             FileUtil.deleteFile(tmpFile);
         }
@@ -2689,7 +2699,14 @@ public class NativeDeviceTest {
     public void testDeleteFile_withUserId() throws Exception {
         int testUserId = 99;
         String remotePath = NativeDevice.SD_CARD + "deleteTest";
-
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public String executeShellCommand(String command)
+                            throws DeviceNotAvailableException {
+                        return "delete file";
+                    }
+                };
         mTestDevice.deleteFile(remotePath, testUserId);
 
         assertEquals(mMockContentProviderHandler.getUserId().intValue(), testUserId);
@@ -2704,6 +2721,12 @@ public class NativeDeviceTest {
                     @Override
                     public int getCurrentUser() throws DeviceNotAvailableException {
                         return currentUserId;
+                    }
+
+                    @Override
+                    public String executeShellCommand(String command)
+                            throws DeviceNotAvailableException {
+                        return "delete file";
                     }
                 };
         String remotePath = NativeDevice.SD_CARD + "deleteTest";
@@ -3192,16 +3215,6 @@ public class NativeDeviceTest {
     @Test
     public void testGetMacAddress() throws Exception {
         String address = "58:a2:b5:7d:49:24";
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        receiver.addOutput(address.getBytes(), 0, address.length());
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3222,6 +3235,17 @@ public class NativeDeviceTest {
                     @Override
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        try {
+                            output.write(address.getBytes(), 0, address.length());
+                        } catch (IOException e) {
+                            return null;
+                        }
+                        return null;
                     }
                 };
 
@@ -3239,16 +3263,6 @@ public class NativeDeviceTest {
     /** Test querying a device MAC address but failing to do so */
     @Test
     public void testGetMacAddress_failure() throws Exception {
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        throw new IOException();
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3269,6 +3283,12 @@ public class NativeDeviceTest {
                     @Override
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        throw new DeviceNotAvailableException();
                     }
                 };
 
@@ -3381,16 +3401,33 @@ public class NativeDeviceTest {
 
         SimpleDateFormat format = new SimpleDateFormat("MM-dd HH:mm:ss.SSS");
         String dateFormatted = format.format(new Date(date));
+        String cmd = String.format("logcat -b all -v threadtime -t '%s'", dateFormatted);
+        CommandResult res = new CommandResult();
+        res.setStatus(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq(cmd)))
+                .thenReturn(res);
 
-        InputStreamSource res = mTestDevice.getLogcatSince(date);
-        StreamUtil.close(res);
+        InputStreamSource result = mTestDevice.getLogcatSince(date);
+        StreamUtil.close(result);
 
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq(
-                                String.format(
-                                        "logcat -b all -v threadtime -t '%s'", dateFormatted)),
-                        Mockito.any());
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq(cmd));
     }
 
     /**
@@ -3401,14 +3438,30 @@ public class NativeDeviceTest {
     public void testGetLogcatSinceOnSdkOver24() throws Exception {
         long date = 1512990942012L;
         setGetPropertyExpectation("ro.build.version.sdk", "24");
-
-        InputStreamSource res = mTestDevice.getLogcatSince(date);
-        StreamUtil.close(res);
-
-        verify(mMockIDevice)
-                .executeShellCommand(
-                        Mockito.eq("logcat -b all -v threadtime,uid -t '1512990942.012'"),
-                        Mockito.any());
+        CommandResult res = new CommandResult();
+        res.setStatus(CommandStatus.SUCCESS);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq("logcat -b all -v threadtime,uid -t '1512990942.012'")))
+                .thenReturn(res);
+        InputStreamSource result = mTestDevice.getLogcatSince(date);
+        StreamUtil.close(result);
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.any(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq("logcat -b all -v threadtime,uid -t '1512990942.012'"));
     }
 
     @Test
@@ -3582,7 +3635,22 @@ public class NativeDeviceTest {
     public void testExecuteShellV2Command_exit_status_workaround() throws Exception {
         OutputStream stdout = null;
         OutputStream stderr = null;
-        when(mMockIDevice.supportsFeature(IDevice.Feature.SHELL_V2)).thenReturn(false);
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public boolean isShellV2Support() throws DeviceNotAvailableException {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean recoverDevice() throws DeviceNotAvailableException {
+                        // ignore
+                        return true;
+                    }
+                };
+        mTestDevice.setRecovery(mMockRecovery);
+        mTestDevice.setCommandTimeout(100);
+        mTestDevice.setLogStartDelay(-1);
         OptionSetter deviceOptionSetter = new OptionSetter(mTestDevice.getOptions());
         deviceOptionSetter.setOptionValue("exit-status-workaround", "true");
         CommandResult res = new CommandResult();
@@ -3825,16 +3893,6 @@ public class NativeDeviceTest {
     @Test
     public void testGetFastbootSerialNumber_non_root_tcp_adb() throws Exception {
         String address = "00:30:1b:ba:81:28";
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        receiver.addOutput(address.getBytes(), 0, address.length());
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3866,6 +3924,17 @@ public class NativeDeviceTest {
                     public boolean disableAdbRoot() throws DeviceNotAvailableException {
                         return true;
                     }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        try {
+                            output.write(address.getBytes(), 0, address.length());
+                        } catch (IOException e) {
+                            return null;
+                        }
+                        return null;
+                    }
                 };
         assertEquals(
                 "tcp:fe80:0:0:0:230:1bff:feba:8128%en0", mTestDevice.getFastbootSerialNumber());
@@ -3875,16 +3944,6 @@ public class NativeDeviceTest {
     @Test
     public void testGetFastbootSerialNumber_root_tcp_adb() throws Exception {
         String address = "00:30:1b:ba:81:28";
-        IDevice device =
-                new StubDevice(MOCK_DEVICE_SERIAL) {
-                    @Override
-                    public void executeShellCommand(String command, IShellOutputReceiver receiver)
-                            throws TimeoutException, AdbCommandRejectedException,
-                                    ShellCommandUnresponsiveException, IOException {
-                        receiver.addOutput(address.getBytes(), 0, address.length());
-                    }
-                };
-        mMockIDevice = mock(IDevice.class, AdditionalAnswers.delegatesTo(device));
         mTestDevice =
                 new TestableAndroidNativeDevice() {
                     @Override
@@ -3905,6 +3964,17 @@ public class NativeDeviceTest {
                     @Override
                     public boolean isAdbRoot() throws DeviceNotAvailableException {
                         return true;
+                    }
+
+                    @Override
+                    public CommandResult executeShellV2Command(String command, OutputStream output)
+                            throws DeviceNotAvailableException {
+                        try {
+                            output.write(address.getBytes(), 0, address.length());
+                        } catch (IOException e) {
+                            return null;
+                        }
+                        return null;
                     }
                 };
         assertEquals(

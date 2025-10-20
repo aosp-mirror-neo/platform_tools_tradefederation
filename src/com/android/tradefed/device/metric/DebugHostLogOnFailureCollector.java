@@ -24,6 +24,8 @@ import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.log.ILeveledLogOutput;
 import com.android.tradefed.log.LogRegistry;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.metrics.proto.MetricMeasurement;
+import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.SnapshotInputStreamSource;
@@ -31,8 +33,12 @@ import com.android.tradefed.result.TestDescription;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 
-/** Collector that will gather and log the host-side logs when a test case failure occurs. */
+/**
+ * Collector that will gather and log the host-side logs when a test case failure occurs. If default
+ * collection is enabled, it will collect host logs at the specified levels.
+ */
 public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
 
     private static final String NAME_FORMAT = "%s-debug-hostlog-on-failure";
@@ -41,11 +47,14 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
     private int mCurrentCount = 0;
     private boolean mFirstThrottle = true;
     private LogOffsets mLogOffsets = new LogOffsets();
+    private boolean mCurrentTestFailed = false;
+    private boolean mCurrentTestRunFailed = false;
 
     @Override
     public void onTestRunStart(DeviceMetricData runData) {
         mCurrentCount = 0;
         mFirstThrottle = true;
+        mCurrentTestFailed = false;
         collectCurrentOffsets(TEST_RUN);
     }
 
@@ -54,6 +63,7 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
         if (isDefaultMetricCollectionEnabled()) {
             collectCurrentOffsets(TEST_CASE);
         }
+        mCurrentTestFailed = false;
     }
 
     @Override
@@ -65,17 +75,63 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
 
     @Override
     public void onTestFail(DeviceMetricData testData, TestDescription test) {
-        // do not collect during default collection. It will be manually collected.
         if (!isDefaultMetricCollectionEnabled()) {
-            if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                if (mFirstThrottle) {
-                    CLog.w("Throttle capture of host_log-on-failure due to too many failures.");
-                    mFirstThrottle = false;
-                }
-                return;
-            }
             collectHostLog(TEST_RUN, test.toString());
-            mCurrentCount++;
+        } else {
+            if (MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                collectHostLog(TEST_CASE, "test_level-" + test.toString());
+            }
+        }
+        mCurrentTestFailed = true;
+    }
+
+    @Override
+    public void onTestRunFailed(DeviceMetricData testData, FailureDescription failure)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                collectHostLog(TEST_RUN, "test_run_level-" + getRunName());
+            }
+        }
+        mCurrentTestRunFailed = true;
+    }
+
+    @Override
+    public void onTestEnd(
+            DeviceMetricData testData, Map<String, MetricMeasurement.Metric> currentTestCaseMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_CASE.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestFailed
+                        || !MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                    collectHostLog(TEST_CASE, "test_level-" + getTestName());
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onTestRunEnd(
+            DeviceMetricData runData, Map<String, MetricMeasurement.Metric> currentRunMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_RUN.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestRunFailed
+                        || !MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                    collectHostLog(TEST_RUN, "test_run_level-" + getRunName());
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onTestModuleEnded() throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.MODULE.equals(getAlwaysOnCollectionLevel())
+                    || (MetricCollectionLevel.MODULE.equals(getOnFailureCollectionLevel())
+                            && doesModuleContainFailure())) {
+                collectHostLog(MODULE, "module_level-" + getModuleName());
+            }
         }
     }
 
@@ -86,6 +142,15 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
     }
 
     private void collectHostLog(MetricCollectionLevel level, String name) {
+        if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
+            if (mFirstThrottle) {
+                CLog.w("Throttle capture of host_log-on-failure due to too many failures.");
+                mFirstThrottle = false;
+            }
+            return;
+        }
+        mCurrentCount++;
+
         Integer offset = mLogOffsets.getOffset(level);
         if (offset == null) {
             return;
@@ -125,44 +190,5 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
     @Override
     public boolean captureModuleLevel() {
         return true;
-    }
-
-    @Override
-    public void collectMetrics(MetricCollectionLevel level, String name) {
-        switch (level) {
-            case TEST_CASE:
-                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                    if (mFirstThrottle) {
-                        CLog.w(
-                                "Throttle capture of host_log-on-failure due to too many"
-                                        + " failures.");
-                        mFirstThrottle = false;
-                    }
-                    return;
-                }
-                mCurrentCount++;
-                name = "test-level-" + name;
-                break;
-            case TEST_RUN:
-                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                    if (mFirstThrottle) {
-                        CLog.w(
-                                "Throttle capture of host_log-on-failure due to too many"
-                                        + " failures.");
-                        mFirstThrottle = false;
-                    }
-                    return;
-                }
-                mCurrentCount++;
-                name = "test-run-level-" + name;
-                break;
-            case MODULE:
-                name = "module-level-" + name;
-                break;
-            default:
-                // Should never happen
-                break;
-        }
-        collectHostLog(level, name);
     }
 }

@@ -319,4 +319,7 @@ public interface IDeviceManager {
     public default boolean isFileSystemMountCheckEnabled() {
         return false;
     }
+
+    /** Gets the timeout in ms of shell availability check command. */
+    public long getShellCheckCmdTime();
 }

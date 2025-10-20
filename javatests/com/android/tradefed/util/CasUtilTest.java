@@ -124,19 +124,48 @@ public class CasUtilTest {
     @Test
     public void isUncompressedDeviceImage_success() throws IOException {
         File mountPoint = tempFolder.newFolder("uncompressed_device_image");
-        tempFolder.newFile("uncompressed_device_image/boot.img");
+        tempFolder.newFile("uncompressed_device_image/" + CasUtil.SYSTEM_IMAGE_FILENAME);
+        tempFolder.newFile("uncompressed_device_image/" + CasUtil.ANDROID_INFO_FILENAME);
 
         assertTrue(
-                "Should return true for an uncompressed device image containing boot.img.",
+                "Should return true for an uncompressed device image containing system.img and"
+                        + " android-info.txt.",
                 CasUtil.isUncompressedDeviceImage(mountPoint.toPath()));
     }
 
     @Test
-    public void isUncompressedDeviceImage_missingBootImage() throws IOException {
+    public void isUncompressedDeviceImage_withSuperImage_success() throws IOException {
+        File mountPoint = tempFolder.newFolder("uncompressed_device_image_with_super");
+        tempFolder.newFile("uncompressed_device_image_with_super/" + CasUtil.SUPER_IMAGE_FILENAME);
+        tempFolder.newFile(
+                "uncompressed_device_image_with_super/" + CasUtil.ANDROID_INFO_FILENAME);
+
+        assertTrue(
+                "Should return true for an uncompressed device image containing super.img and"
+                        + " android-info.txt.",
+                CasUtil.isUncompressedDeviceImage(mountPoint.toPath()));
+    }
+
+    @Test
+    public void isUncompressedDeviceImage_missingSystemAndSuperImage() throws IOException {
         File mountPoint = tempFolder.newFolder("not_uncompressed_device_image");
+        tempFolder.newFile("not_uncompressed_device_image/" + CasUtil.ANDROID_INFO_FILENAME);
 
         assertFalse(
-                "Should return false if the uncompressed device image does not contain boot.img.",
+                "Should return false if the uncompressed device image does not contain system.img"
+                        + " or super.img.",
+                CasUtil.isUncompressedDeviceImage(mountPoint.toPath()));
+    }
+
+    @Test
+    public void isUncompressedDeviceImage_missingAndroidInfo() throws IOException {
+        File mountPoint = tempFolder.newFolder("not_uncompressed_device_image_2");
+        tempFolder.newFile("not_uncompressed_device_image_2/" + CasUtil.SYSTEM_IMAGE_FILENAME);
+        tempFolder.newFile("not_uncompressed_device_image_2/" + CasUtil.SUPER_IMAGE_FILENAME);
+
+        assertFalse(
+                "Should return false if the uncompressed device image does not contain"
+                        + " android-info.txt.",
                 CasUtil.isUncompressedDeviceImage(mountPoint.toPath()));
     }
 
@@ -219,5 +248,4 @@ public class CasUtilTest {
         assertThat(log).isEqualTo(expectedlog);
         assertThat(Files.exists(logDir)).isFalse();
     }
-
 }

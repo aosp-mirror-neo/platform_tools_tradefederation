@@ -111,9 +111,9 @@ public class RecorderClient implements IRecorderClient {
 
     private String getServerAddress(Boolean isStaging) {
         if (isStaging) {
-            return "staging.results.api.cr.dev";
+            return "staging.results.api.luci.app";
         }
-        return "results.api.cr.dev";
+        return "results.api.luci.app";
     }
 
     // Interceptor that adds the update token to requests.

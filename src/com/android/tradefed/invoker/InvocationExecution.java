@@ -90,6 +90,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.PrettyPrintDelimiter;
 import com.android.tradefed.util.RunInterruptedException;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.SystemUtil.EnvVariable;
 import com.android.tradefed.util.TimeUtil;
@@ -100,8 +101,10 @@ import com.google.common.base.Strings;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
@@ -371,8 +374,32 @@ public class InvocationExecution implements IInvocationExecution {
             } finally {
                 long end = System.currentTimeMillis();
                 InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.SETUP_END, end);
-                InvocationMetricLogger.addInvocationPairMetrics(
-                        InvocationMetricKey.SETUP_PAIR, start, end);
+                // In some cases categorize the metric for actionability
+                boolean recategorize =
+                        testInfo.getContext().getBuildInfos().size() > 0
+                                && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildFlavor())
+                                && !Strings.isNullOrEmpty(testInfo.getBuildInfo().getBuildBranch())
+                                && (checkInternalCategorization(
+                                                testInfo.getBuildInfo().getBuildFlavor())
+                                        || testInfo.getBuildInfo()
+                                                .getBuildBranch()
+                                                .contains("release")
+                                        || testInfo.getBuildInfo()
+                                                .getBuildFlavor()
+                                                .endsWith("-user")
+                                        || testInfo.getBuildInfo()
+                                                .getBuildFlavor()
+                                                .endsWith("coverage"));
+                if (recategorize) {
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.TEST_SETUP_PAIR, start, end);
+                    // Keep a 0 pair to avoid empty field.
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.SETUP_PAIR, end, end);
+                } else {
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.SETUP_PAIR, start, end);
+                }
             }
             long startPreparer = System.currentTimeMillis();
             try (CloseableTraceScope ignored =
@@ -405,6 +432,25 @@ public class InvocationExecution implements IInvocationExecution {
                 reportLogs(device, listener, Stage.SETUP);
             }
         }
+    }
+
+    private boolean checkInternalCategorization(String buildFlavor) {
+        try (InputStream resStream =
+                ITestSuite.class.getResourceAsStream("/infra/product_categorization.txt")) {
+            if (resStream == null) {
+                return false;
+            }
+            List<String> products =
+                    Arrays.asList(StreamUtil.getStringFromStream(resStream).split("\n"));
+            for (String product : products) {
+                if (buildFlavor.contains(product)) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            CLog.e(e);
+        }
+        return false;
     }
 
     private void runLabPreparersSetup(
@@ -655,6 +701,19 @@ public class InvocationExecution implements IInvocationExecution {
         }
         long start = System.currentTimeMillis();
         customizeDevicePreInvocation(config, context);
+        // Under some circumstances, we account toward the test rather than the common setup.
+        boolean reportAsTestSetup = false;
+        if (config.getCoverageOptions().isCoverageEnabled()) {
+            reportAsTestSetup = true;
+        }
+        for (ITestDevice device : context.getDevices()) {
+            for (String option : device.getOptions().getGceDriverParams()) {
+                if (option.contains("--kernel")) {
+                    reportAsTestSetup = true;
+                    break;
+                }
+            }
+        }
 
         // Multi-device test scenario
         Integer multiDeviceCount = config.getCommandOptions().getMultiDeviceCount();
@@ -668,6 +727,7 @@ public class InvocationExecution implements IInvocationExecution {
         if (multiDeviceCount != null && multiDeviceCount != 1 && allVirtualDevices) {
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope("runMultiVirtualDevicesPreInvocationSetup")) {
+                reportAsTestSetup = true;
                 runMultiVirtualDevicesPreInvocationSetup(context, config, logger);
             } catch (TargetSetupError e) {
                 // TODO(b/353826394): Refactor when avd_util wrapping is ready.
@@ -729,8 +789,13 @@ public class InvocationExecution implements IInvocationExecution {
             }
         }
         // Also report device pre invocation into setup
-        InvocationMetricLogger.addInvocationPairMetrics(
-                InvocationMetricKey.SETUP_PAIR, start, System.currentTimeMillis());
+        if (reportAsTestSetup) {
+            InvocationMetricLogger.addInvocationPairMetrics(
+                    InvocationMetricKey.TEST_SETUP_PAIR, start, System.currentTimeMillis());
+        } else {
+            InvocationMetricLogger.addInvocationPairMetrics(
+                    InvocationMetricKey.SETUP_PAIR, start, System.currentTimeMillis());
+        }
     }
 
     /**
@@ -776,6 +841,12 @@ public class InvocationExecution implements IInvocationExecution {
                     gceAvdInfoList.get(i), devices.get(i).getSerialNumber());
             // Use the most common basic interface for device connection setup
             NativeDevice device = (NativeDevice) devices.get(i);
+
+            // Fail the setup if GceAvdInfo is invalid
+            if (gceAvdInfoList.get(i).hostAndPort() == null) {
+                throw new TargetSetupError(
+                        gceAvdInfoList.get(i).getErrors(), gceAvdInfoList.get(i).getErrorType());
+            }
 
             device.setConnectionAvdInfo(gceAvdInfoList.get(i));
             device.preInvocationSetup(buildInfos.get(i), context.getAttributes());

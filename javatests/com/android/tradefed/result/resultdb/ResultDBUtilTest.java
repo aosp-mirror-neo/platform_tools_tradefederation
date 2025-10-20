@@ -44,13 +44,19 @@ public final class ResultDBUtilTest {
     @Test
     public void truncateString() {
         // Test cases for BMP characters.
-        assertThat(ResultDBUtil.truncateString("abc", 3)).isEqualTo("abc");
-        assertThat(ResultDBUtil.truncateString("abc", 2)).isEqualTo("ab");
-        assertThat(ResultDBUtil.truncateString("abc", 1)).isEqualTo("a");
+        assertThat(ResultDBUtil.truncateString("abc", 3))
+                .isEqualTo(new ResultDBUtil.TruncationResult("abc", false));
+        assertThat(ResultDBUtil.truncateString("abc", 2))
+                .isEqualTo(new ResultDBUtil.TruncationResult("ab", true));
+        assertThat(ResultDBUtil.truncateString("abc", 1))
+                .isEqualTo(new ResultDBUtil.TruncationResult("a", true));
         // Test cases for surrogate pairs. 🌍 is a 4-byte in UTF-8.
-        assertThat(ResultDBUtil.truncateString("Hello 🌍!", 8)).isEqualTo("Hello ");
-        assertThat(ResultDBUtil.truncateString("Hello 🌍!", 10)).isEqualTo("Hello 🌍");
-        assertThat(ResultDBUtil.truncateString("Hello 🌍!", 11)).isEqualTo("Hello 🌍!");
+        assertThat(ResultDBUtil.truncateString("Hello 🌍!", 8))
+                .isEqualTo(new ResultDBUtil.TruncationResult("Hello ", true));
+        assertThat(ResultDBUtil.truncateString("Hello 🌍!", 10))
+                .isEqualTo(new ResultDBUtil.TruncationResult("Hello 🌍", true));
+        assertThat(ResultDBUtil.truncateString("Hello 🌍!", 11))
+                .isEqualTo(new ResultDBUtil.TruncationResult("Hello 🌍!", false));
     }
 
     @Test

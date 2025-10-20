@@ -79,6 +79,9 @@ public class InspectionUtil {
     private static final LinkedHashMap<String, ErrorIdentifier> ERROR_SIGNATURE_TO_IDENTIFIER_MAP =
             Stream.of(
                             new AbstractMap.SimpleEntry<>(
+                                    "ho_call_failed",
+                                    InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_HO_CALL_FAILED),
+                            new AbstractMap.SimpleEntry<>(
                                     "bluetooth_failed",
                                     InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_BLUETOOTH),
                             new AbstractMap.SimpleEntry<>(
@@ -105,7 +108,11 @@ public class InspectionUtil {
                             new AbstractMap.SimpleEntry<>(
                                     "gcp_resource_exhausted",
                                     InfraErrorIdentifier
-                                            .CUTTLEFISH_LAUNCH_FAILURE_GCP_RESOURCE_EXHAUSTED))
+                                            .CUTTLEFISH_LAUNCH_FAILURE_GCP_RESOURCE_EXHAUSTED),
+                            new AbstractMap.SimpleEntry<>(
+                                    "invalid_cvd_config",
+                                    InfraErrorIdentifier
+                                            .CUTTLEFISH_LAUNCH_FAILURE_INVALID_CVD_CONFIG))
                     .collect(
                             Collectors.toMap(
                                     Map.Entry::getKey,

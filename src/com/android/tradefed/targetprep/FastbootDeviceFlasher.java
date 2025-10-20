@@ -1272,6 +1272,16 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
             if (errorIdentifier == null) {
                 errorIdentifier = DeviceErrorIdentifier.ERROR_AFTER_FLASHING;
             }
+            try {
+                CLog.w(
+                        "Fastboot command %s failed. Dumping dmesg from device %s.",
+                        cmdArgs[0], device.getSerialNumber());
+                CommandResult dmesgResult = device.executeFastbootCommand("getvar", "dmesg");
+                CLog.w("fastboot getvar dmesg stdout: %s", dmesgResult.getStdout());
+                CLog.w("fastboot getvar dmesg stderr: %s", dmesgResult.getStderr());
+            } catch (DeviceNotAvailableException e) {
+                CLog.w("Could not get dmesg from %s: %s", device.getSerialNumber(), e.getMessage());
+            }
             throw new TargetSetupError(
                     String.format(
                             "fastboot command %s failed in device %s. stdout: %s, stderr: %s",

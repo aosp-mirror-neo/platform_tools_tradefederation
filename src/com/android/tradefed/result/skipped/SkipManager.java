@@ -110,13 +110,24 @@ public class SkipManager implements IDisableable {
                             + " caching.")
     private boolean mEnableImageGranularityStrategy = false;
 
+    @Option(
+            name = "enable-build-key-granularity-strategy",
+            description =
+                    "Whether or not to enable the build key granularity strategy for analysis and"
+                            + " caching.")
+    private boolean mEnableBuildKeyGranularityStrategy = false;
+
     private enum ImageGranularityStrategy {
         // Caching key is computed using digests from all partitions.
         FULL_IMAGE,
         // Caching key is computed using digests from system and vendor partitions.
         SYSTEM_VENDOR,
+        // Caching key is computed using digests from the system partition only.
+        SYSTEM_ONLY,
         // Caching key is computed using digests from the vendor partition only.
-        VENDOR_ONLY
+        VENDOR_ONLY,
+        // Caching key is computed without partition digests.
+        NO_PARTITION
     }
 
     // Device image partitions to take into account based on image granularity strategy.
@@ -135,7 +146,10 @@ public class SkipManager implements IDisableable {
                 ImageGranularityStrategy.SYSTEM_VENDOR,
                 ImmutableSet.of(DeviceImagePartition.SYSTEM, DeviceImagePartition.VENDOR));
         STRATEGY_TO_IMAGE_PARTITIONS.put(
+                ImageGranularityStrategy.SYSTEM_ONLY, ImmutableSet.of(DeviceImagePartition.SYSTEM));
+        STRATEGY_TO_IMAGE_PARTITIONS.put(
                 ImageGranularityStrategy.VENDOR_ONLY, ImmutableSet.of(DeviceImagePartition.VENDOR));
+        STRATEGY_TO_IMAGE_PARTITIONS.put(ImageGranularityStrategy.NO_PARTITION, ImmutableSet.of());
     }
 
     // Contains the filter and reason for demotion
@@ -148,7 +162,9 @@ public class SkipManager implements IDisableable {
     private List<String> mDependencyFiles = new ArrayList<String>();
 
     private String mReasonForSkippingInvocation = "SkipManager decided to skip.";
-    private ImageGranularityStrategy mImageGranularityStrategy =
+    private ImageGranularityStrategy mDeviceImageGranularityStrategy =
+            ImageGranularityStrategy.FULL_IMAGE;
+    private ImageGranularityStrategy mBuildKeyGranularityStrategy =
             ImageGranularityStrategy.FULL_IMAGE;
     private Set<String> mUnchangedModules = new HashSet<>();
     private Map<String, Digest> mImageFileToDigest = new LinkedHashMap<>();
@@ -156,8 +172,10 @@ public class SkipManager implements IDisableable {
 
     /** Setup and initialize the skip manager. */
     public void setup(IConfiguration config, IInvocationContext context) {
-        mImageGranularityStrategy = getImageGranularityStrategy(config.getCommandLine());
-        CLog.d("Image granularity strategy is: %s", mImageGranularityStrategy);
+        initializeImageGranularityStrategies(config.getCommandLine());
+        CLog.d(
+                "The granularity strategies for device image and build key are %s and %s",
+                mDeviceImageGranularityStrategy, mBuildKeyGranularityStrategy);
         if (config.getCommandOptions().getInvocationData().containsKey("subprocess")) {
             // Information is going to flow through GlobalFilters mechanism
             return;
@@ -184,22 +202,36 @@ public class SkipManager implements IDisableable {
     }
 
     public Map<String, Digest> getImageToDigest() {
-        Set<DeviceImagePartition> deviceImagePartitions =
-                STRATEGY_TO_IMAGE_PARTITIONS.get(mImageGranularityStrategy);
-        if (deviceImagePartitions != null) {
-            for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
-                // Filters out the partition digests we're not interested in.
-                if (!deviceImagePartitions.contains(imagePartition)) {
-                    mImageFileToDigest.remove(imagePartition.getCacheKeyName());
-                }
-            }
-        }
+        filterPartitionDigests(AnalysisMethod.DEVICE_IMAGE, mDeviceImageGranularityStrategy);
+        filterPartitionDigests(AnalysisMethod.BUILD_KEY, mBuildKeyGranularityStrategy);
         CLog.d("Final device digests are: %s", mImageFileToDigest);
         return mImageFileToDigest;
     }
 
-    /** Parses the command line and returns the image granularity strategy. */
-    private ImageGranularityStrategy getImageGranularityStrategy(String commandLine) {
+    private void filterPartitionDigests(
+            AnalysisMethod analysisMethod, ImageGranularityStrategy imageGranularityStrategy) {
+        Set<DeviceImagePartition> deviceImagePartitions =
+                STRATEGY_TO_IMAGE_PARTITIONS.get(imageGranularityStrategy);
+        if (deviceImagePartitions != null) {
+            for (DeviceImagePartition imagePartition : DeviceImagePartition.values()) {
+                // Filters out the partition digests we're not interested in.
+                if (!deviceImagePartitions.contains(imagePartition)) {
+                    mImageFileToDigest
+                            .keySet()
+                            .removeIf(
+                                    keyName ->
+                                            keyName.startsWith(analysisMethod.name())
+                                                    && keyName.endsWith(
+                                                            imagePartition.getCacheKeyName()));
+                }
+            }
+        }
+    }
+
+    /** Parses the command line and initialize the image granularity strategies. */
+    private void initializeImageGranularityStrategies(String commandLine) {
+        mDeviceImageGranularityStrategy = ImageGranularityStrategy.FULL_IMAGE;
+        mBuildKeyGranularityStrategy = ImageGranularityStrategy.FULL_IMAGE;
         if (mEnableImageGranularityStrategy && commandLine != null) {
             try {
                 List<String> fullCommandLineArgs =
@@ -218,19 +250,29 @@ public class SkipManager implements IDisableable {
                             || ("android-cts.zip".equals(ctsParserSettings.mCtsPackageName)
                                     && "cts-on-gsi".equals(ctsParserSettings.mConfigName))) {
                         // The VENDOR_ONLY strategy is applicable to all plans in VTS and cts-on-gsi
-                        // plan in CTS.
-                        return ImageGranularityStrategy.VENDOR_ONLY;
+                        // plan in CTS for device image.
+                        mDeviceImageGranularityStrategy = ImageGranularityStrategy.VENDOR_ONLY;
+                        if (mEnableBuildKeyGranularityStrategy) {
+                            // The NO_PARTITION strategy is applicable to VTS for build key.
+                            if ("android-vts.zip".equals(ctsParserSettings.mCtsPackageName)) {
+                                mBuildKeyGranularityStrategy =
+                                        ImageGranularityStrategy.NO_PARTITION;
+                            } else {
+                                // The SYSTEM_ONLY strategy is applicable to cts-on-gsi plan for
+                                // build key.
+                                mBuildKeyGranularityStrategy = ImageGranularityStrategy.SYSTEM_ONLY;
+                            }
+                        }
                     } else if ("android-cts.zip".equals(ctsParserSettings.mCtsPackageName)) {
                         // The SYSTEM_VENDOR strategy is applicable to all plans in CTS except for
                         // cts-on-gsi.
-                        return ImageGranularityStrategy.SYSTEM_VENDOR;
+                        mDeviceImageGranularityStrategy = ImageGranularityStrategy.SYSTEM_VENDOR;
                     }
                 }
             } catch (ConfigurationException ignore) {
                 CLog.e(ignore);
             }
         }
-        return ImageGranularityStrategy.FULL_IMAGE;
     }
 
     @VisibleForTesting
@@ -328,7 +370,12 @@ public class SkipManager implements IDisableable {
                             mModulesDiscovered,
                             mDependencyFiles,
                             mAnalysisLevel);
-            return buildAnalysisDecision(information, analyzer.analyzeArtifacts());
+            try {
+                return buildAnalysisDecision(information, analyzer.analyzeArtifacts());
+            } catch (RuntimeException e) {
+                CLog.e(e);
+                return false;
+            }
         }
     }
 

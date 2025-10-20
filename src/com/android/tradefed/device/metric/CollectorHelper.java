@@ -45,6 +45,12 @@ public class CollectorHelper {
                 IMetricCollector clone =
                         collector.getClass().getDeclaredConstructor().newInstance();
                 OptionCopier.copyOptionsNoThrow(collector, clone);
+                // copy default log collection values too
+                if (collector.isDefaultMetricCollectionEnabled()) {
+                    clone.enableDefaultMetricCollection();
+                }
+                clone.setAlwaysOnCollectionLevel(collector.getAlwaysOnCollectionLevel());
+                clone.setOnFailureCollectionLevel(collector.getOnFailureCollectionLevel());
                 cloneList.add(clone);
             } catch (InstantiationException
                     | IllegalAccessException

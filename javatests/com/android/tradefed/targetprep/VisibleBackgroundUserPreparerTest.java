@@ -318,6 +318,7 @@ public final class VisibleBackgroundUserPreparerTest {
                                         /* isRunning= */ false));
 
         mockGetMaxNumberOfUsersSupported(3);
+        mockGetRemainingCreatableUserCount(0);
         mockGetUserInfos(existingUsers);
         Exception cause = mockCreateUserFailure("D'OH!");
 
@@ -372,6 +373,11 @@ public final class VisibleBackgroundUserPreparerTest {
 
     private void mockGetMaxNumberOfUsersSupported(int max) throws Exception {
         mTestDeviceMockHelper.mockGetMaxNumberOfUsersSupported(max);
+    }
+
+    private void mockGetRemainingCreatableUserCount(int count) throws Exception {
+        mTestDeviceMockHelper.mockGetRemainingCreatableUserCount(
+                "android.os.usertype.full.SECONDARY", count);
     }
 
     private void mockStartUserVisibleOnBackground(int userId, int displayId) throws Exception {

@@ -20,6 +20,7 @@ package luci.resultdb.v1;
 
 import "google/api/field_behavior.proto";
 import public "tools/tradefederation/core/proto/resultdb/common.proto";
+import public "tools/tradefederation/core/proto/resultdb/test_exoneration.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_metadata.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_result.proto";
 import public "tools/tradefederation/core/proto/resultdb/test_verdict.proto";

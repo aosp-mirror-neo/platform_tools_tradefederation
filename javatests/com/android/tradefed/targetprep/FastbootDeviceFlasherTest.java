@@ -843,6 +843,8 @@ public class FastbootDeviceFlasherTest {
         CommandResult res = new CommandResult(CommandStatus.SUCCESS);
         res.setStderr("FAILED to flash device.");
         res.setStdout("");
+        when(mMockDevice.executeFastbootCommand("getvar", "dmesg"))
+                .thenReturn(new CommandResult(CommandStatus.SUCCESS));
 
         try {
             mFlasher.handleFastbootResult(mMockDevice, res, "update");
@@ -864,12 +866,61 @@ public class FastbootDeviceFlasherTest {
                     + " /fastboot-ramdisk/fastboot_userdata_AxRPjp with template boot.img: No such"
                     + " file or directory");
         res.setStdout("");
+        when(mMockDevice.executeFastbootCommand("getvar", "dmesg"))
+                .thenReturn(new CommandResult(CommandStatus.SUCCESS));
 
         try {
             mFlasher.handleFastbootResult(mMockDevice, res, "update");
             fail("Expected TargetSetupError not thrown.");
         } catch (TargetSetupError e) {
             assertEquals(InfraErrorIdentifier.NO_DISK_SPACE, e.getErrorId());
+        }
+    }
+
+    /**
+     * Test {@link FastbootDeviceFlasher#handleFastbootResult(ITestDevice, CommandResult,
+     * String...)} when fastboot failed and dmesg is collected.
+     */
+    @Test
+    public void testHandleFastbootResult_fastbootFailed_dmesg() throws Exception {
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStderr("FAILED to flash device.");
+        res.setStdout("");
+
+        CommandResult dmesgResult = new CommandResult(CommandStatus.SUCCESS);
+        dmesgResult.setStdout("dmesg output");
+        dmesgResult.setStderr("dmesg stderr");
+        when(mMockDevice.executeFastbootCommand("getvar", "dmesg")).thenReturn(dmesgResult);
+
+        try {
+            mFlasher.handleFastbootResult(mMockDevice, res, "update");
+            fail("Expected TargetSetupError not thrown.");
+        } catch (TargetSetupError e) {
+            assertEquals(DeviceErrorIdentifier.ERROR_AFTER_FLASHING, e.getErrorId());
+            verify(mMockDevice).executeFastbootCommand("getvar", "dmesg");
+        }
+    }
+
+    /**
+     * Test {@link FastbootDeviceFlasher#handleFastbootResult(ITestDevice, CommandResult,
+     * String...)} when fastboot failed and dmesg collection fails.
+     */
+    @Test
+    public void testHandleFastbootResult_fastbootFailed_dmesgDnae() throws Exception {
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStderr("FAILED to flash device.");
+        res.setStdout("");
+
+        when(mMockDevice.executeFastbootCommand("getvar", "dmesg"))
+                .thenThrow(new DeviceNotAvailableException("test", "serial"));
+
+        try {
+            mFlasher.handleFastbootResult(mMockDevice, res, "update");
+            fail("Expected TargetSetupError not thrown.");
+        } catch (TargetSetupError e) {
+            assertEquals(DeviceErrorIdentifier.ERROR_AFTER_FLASHING, e.getErrorId());
+            // The DNAE should be caught and logged, but the original error is preserved.
+            verify(mMockDevice).executeFastbootCommand("getvar", "dmesg");
         }
     }
 

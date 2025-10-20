@@ -38,8 +38,10 @@ import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.connection.AbstractConnection;
 import com.android.tradefed.device.connection.AdbTcpConnection;
+import com.android.tradefed.device.metric.AutoLogCollector;
 import com.android.tradefed.device.metric.CollectorHelper;
 import com.android.tradefed.device.metric.IMetricCollector;
+import com.android.tradefed.device.metric.IMetricCollector.MetricCollectionLevel;
 import com.android.tradefed.device.metric.IMetricCollectorReceiver;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.error.IHarnessException;
@@ -428,6 +430,27 @@ public abstract class ITestSuite
                             + " config.")
     private boolean mKeepPostProcessorOrder = false;
 
+    @Option(
+            name = "enable-default-logs",
+            description = "Whether to collect debugging logs by default.")
+    private boolean mEnableDefaultLogs = false;
+
+    @Option(
+            name = "log-level-on-failure",
+            description =
+                    "A map to change the default log level of a AutoLogCollector at which logs will"
+                            + " be collected during failures.")
+    private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelOnFailure = new LinkedHashMap<>();
+
+    @Option(
+            name = "log-level-always-on",
+            description =
+                    "A map to change the default log level of a AutoLogCollector at which logs will"
+                            + " be collected regardless of failures.")
+    private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelAlwaysOn = new LinkedHashMap<>();
+
+    private boolean mCurrentModuleFailedCheckers = false;
+
     public enum IsolatedModuleGrade {
         REBOOT_ISOLATED, // Reboot was done before the test.
         FULLY_ISOLATED; // Test received a fresh device.
@@ -444,6 +467,7 @@ public abstract class ITestSuite
     private List<ISystemStatusChecker> mSystemStatusCheckers;
     private IInvocationContext mContext;
     private List<IMetricCollector> mMetricCollectors;
+    private List<IMetricCollector> mDefaultLogCollectors;
     private IConfiguration mMainConfiguration;
     private Set<IAbi> mAbis = new LinkedHashSet<>();
 
@@ -905,12 +929,19 @@ public abstract class ITestSuite
         if (mSkipContext == null) {
             mSkipContext = SkipFeature.getSkipContext();
         }
+
+        mDefaultLogCollectors = populateDefaultLogCollectors();
+
         /** Run all the module, make sure to reduce the list to release resources as we go. */
         while (!mRunModules.isEmpty()) {
             ModuleDefinition module = mRunModules.remove(0);
+            List<IMetricCollector> clonedDefaultCollectors =
+                    CollectorHelper.cloneCollectors(mDefaultLogCollectors);
+            module.setDefaultLogCollectors(clonedDefaultCollectors);
             mModuleInProgress = module;
             boolean moduleStartReported = false;
             boolean moduleEndReported = false;
+            mCurrentModuleFailedCheckers = false;
             ITestInvocationListener listenerWithCollectors = null;
             try {
                 if (!shouldModuleRun(module)) {
@@ -940,21 +971,7 @@ public abstract class ITestSuite
                         }
                         stageTestArtifacts(mDevice, moduleNames);
                     }
-                    // Populate the module context with devices and builds
-                    for (String deviceName : mContext.getDeviceConfigNames()) {
-                        module.getModuleInvocationContext()
-                                .addAllocatedDevice(deviceName, mContext.getDevice(deviceName));
-                        module.getModuleInvocationContext()
-                                .addDeviceBuildInfo(deviceName, mContext.getBuildInfo(deviceName));
-                    }
-                    // Add isolation status before module start for reporting
-                    if (!IsolationGrade.NOT_ISOLATED.equals(
-                            CurrentInvocation.moduleCurrentIsolation())) {
-                        module.getModuleInvocationContext()
-                                .addInvocationAttribute(
-                                        ModuleDefinition.MODULE_ISOLATED,
-                                        CurrentInvocation.moduleCurrentIsolation().toString());
-                    }
+                    populateModuleContextWithDeviceBuildAndIsolation(module);
                     // Unify invocation level listeners, module listeners and module post-processors
                     ITestInvocationListener allListenersWithoutLogSaver =
                             listenerWithPostProcessors(module, listener, moduleListeners);
@@ -975,8 +992,12 @@ public abstract class ITestSuite
                     if (module.getModuleConfiguration().getMetricCollectors() != null) {
                         allCollectors.addAll(module.getModuleConfiguration().getMetricCollectors());
                     }
-                    for (IMetricCollector collector :
-                            CollectorHelper.cloneCollectors(allCollectors)) {
+                    allCollectors = CollectorHelper.cloneCollectors(allCollectors);
+
+                    if (clonedDefaultCollectors != null) {
+                        allCollectors.addAll(clonedDefaultCollectors);
+                    }
+                    for (IMetricCollector collector : allCollectors) {
                         if (collector.isDisabled()) {
                             CLog.d("%s has been disabled. Skipping.", collector);
                         } else if (!collector.captureModuleLevel()) {
@@ -1015,6 +1036,7 @@ public abstract class ITestSuite
                     }
                     if (!shouldSkipModule
                             && mMainConfiguration.getCommandOptions().shouldUploadCacheResults()
+                            && moduleConfig != null
                             && moduleDir != null
                             && mMainConfiguration.getCommandOptions().getRemoteCacheInstanceName()
                                     != null) {
@@ -1060,12 +1082,8 @@ public abstract class ITestSuite
                         // TODO(b/372243975): report logs even while applying caching
                         try (InputStreamSource source =
                                 new FileInputStreamSource(moduleConfig, deleteRightAway)) {
-                            if (mInLocalRetry) {
-                                CLog.v("Skip module-configuration logging in local retry.");
-                            } else {
-                                allListenersWithLogSaver.testLog(
-                                        "module-configuration", LogDataType.HARNESS_CONFIG, source);
-                            }
+                            allListenersWithLogSaver.testLog(
+                                    "module-configuration", LogDataType.HARNESS_CONFIG, source);
                         }
                     }
                     TestInformation moduleInfo =
@@ -1105,7 +1123,7 @@ public abstract class ITestSuite
                         if (mMainConfiguration.getCommandOptions().shouldUploadCacheResults()
                                 && moduleReporter != null) {
                             File protoResults = moduleReporter.getOutputFile();
-                            if (!moduleReporter.stopCaching()) {
+                            if (!moduleReporter.stopCaching() && moduleConfig != null) {
                                 SuiteResultCacheUtil.uploadModuleResults(
                                         mMainConfiguration,
                                         testInfo,
@@ -1153,6 +1171,12 @@ public abstract class ITestSuite
                 // if module end not reported(no DNAE happened), report it now
                 if (moduleStartReported && !moduleEndReported) {
                     if (listenerWithCollectors != null) {
+                        if (clonedDefaultCollectors != null
+                                && (module.hasModuleFailed() || mCurrentModuleFailedCheckers)) {
+                            for (IMetricCollector logCollector : clonedDefaultCollectors) {
+                                logCollector.setModuleContainsFailure();
+                            }
+                        }
                         listenerWithCollectors.testModuleEnded();
                     } else {
                         listener.testModuleEnded();
@@ -1161,6 +1185,78 @@ public abstract class ITestSuite
                 // clear out module invocation context since we are now done with module
                 // execution
                 mModuleInProgress = null;
+            }
+        }
+    }
+
+    private List<IMetricCollector> populateDefaultLogCollectors() {
+        if (!mEnableDefaultLogs) {
+            return null;
+        }
+        List<IMetricCollector> defaultCollectors = new LinkedList<>();
+        addDefaultCollector(AutoLogCollector.LOGCAT_ON_FAILURE, defaultCollectors);
+        addDefaultCollector(AutoLogCollector.HOSTLOG_ON_FAILURE, defaultCollectors);
+        addDefaultCollector(AutoLogCollector.SCREENSHOT_ON_FAILURE, defaultCollectors);
+        addDefaultCollector(AutoLogCollector.BUGREPORTZ_ON_FAILURE, defaultCollectors);
+
+        return defaultCollectors;
+    }
+
+    private void addDefaultCollector(
+            AutoLogCollector type, List<IMetricCollector> defaultLogCollectors) {
+        // Skip adding if collection is disabled for both always-on and failure case.
+        MetricCollectionLevel alwaysOnLevel = mLogLevelAlwaysOn.get(type);
+        MetricCollectionLevel onFailureLevel = mLogLevelOnFailure.get(type);
+        if (alwaysOnLevel != null
+                && onFailureLevel != null
+                && MetricCollectionLevel.NULL.equals(alwaysOnLevel)
+                && MetricCollectionLevel.NULL.equals(onFailureLevel)) {
+            return;
+        }
+        IMetricCollector logCollector = type.getInstanceForValue();
+        logCollector.enableDefaultMetricCollection();
+        // set always on levels
+        if (alwaysOnLevel != null) {
+            logCollector.setAlwaysOnCollectionLevel(alwaysOnLevel);
+        } else {
+            // set default always on level if not provided.
+            if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
+            } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
+            } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
+            } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
+            }
+        }
+        // set on failure levels
+        if (onFailureLevel != null) {
+            logCollector.setOnFailureCollectionLevel(onFailureLevel);
+        } else {
+            // set default on failure level if not provided.
+            if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+            } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+            } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+            } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.MODULE);
+            }
+        }
+        defaultLogCollectors.add(logCollector);
+
+        // remove duplicated invocation level collectors
+        Iterator<IMetricCollector> itr = mMetricCollectors.iterator();
+        while (itr.hasNext()) {
+            IMetricCollector invocationMetricCollector = itr.next();
+            if (invocationMetricCollector.getClass().equals(logCollector.getClass())) {
+                itr.remove();
+                CLog.d(
+                        "Removing duplicated invocation level log collector %s in favor of default"
+                                + " log collection.",
+                        type);
             }
         }
     }
@@ -1228,6 +1324,10 @@ public abstract class ITestSuite
 
     /** Log the module configuration. */
     private File dumpModuleConfig(ModuleDefinition module) {
+        if (mInLocalRetry) {
+            CLog.v("Skip module-configuration dumping in local retry.");
+            return null;
+        }
         boolean restore = false;
         try {
             File configFile =
@@ -1243,12 +1343,10 @@ public abstract class ITestSuite
             }
             try (FileOutputStream stream = new FileOutputStream(configFile);
                     PrintWriter pw = new PrintWriter(stream, true)) {
-                module.getModuleConfiguration()
-                        .dumpXml(
-                                pw,
-                                new ArrayList<String>(Configuration.NON_MODULE_OBJECTS),
-                                true,
-                                false);
+                List<String> excludedObjects =
+                        new ArrayList<String>(Configuration.NON_MODULE_OBJECTS);
+                excludedObjects.add(Configuration.COVERAGE_OPTIONS_TYPE_NAME);
+                module.getModuleConfiguration().dumpXml(pw, excludedObjects, true, false);
                 pw.flush();
                 return configFile;
             } finally {
@@ -1323,7 +1421,6 @@ public abstract class ITestSuite
      * @param module The {@link ModuleDefinition} to be ran.
      * @param moduleInfo The {@link TestInformation} for the module.
      * @param allListeners The {@link ITestInvocationListener} where to report results
-     * @param failureListener special listener that we add to collect information on failures.
      * @throws DeviceNotAvailableException
      */
     private void runSingleModule(
@@ -1545,6 +1642,10 @@ public abstract class ITestSuite
             Map<String, String> failures,
             long startTime,
             ITestInvocationListener listener) {
+        // collect default logs even if system status checker reporting is disabled.
+        if (!failures.isEmpty()) {
+            mCurrentModuleFailedCheckers = true;
+        }
         if (!mReportSystemChecker) {
             // do not log here, otherwise it could be very verbose.
             return;
@@ -1620,6 +1721,7 @@ public abstract class ITestSuite
                 suite.mIsSharded = true;
                 suite.mDirectModule = m;
                 suite.setSkipContext(skipContext);
+                suite.setInvocationContext(testInfo.getContext());
                 splitTests.add(suite);
             }
             // return the list of ITestSuite with their ModuleDefinition assigned
@@ -1792,7 +1894,25 @@ public abstract class ITestSuite
 
         while (!runModules.isEmpty()) {
             ModuleDefinition module = runModules.remove(0);
+            populateModuleContextWithDeviceBuildAndIsolation(module);
             module.reportNotExecuted(listener, message);
+        }
+    }
+
+    private void populateModuleContextWithDeviceBuildAndIsolation(ModuleDefinition module) {
+        // Populate the module context with devices and builds
+        for (String deviceName : mContext.getDeviceConfigNames()) {
+            module.getModuleInvocationContext()
+                    .addAllocatedDevice(deviceName, mContext.getDevice(deviceName));
+            module.getModuleInvocationContext()
+                    .addDeviceBuildInfo(deviceName, mContext.getBuildInfo(deviceName));
+        }
+        // Add isolation status before module start for reporting
+        if (!IsolationGrade.NOT_ISOLATED.equals(CurrentInvocation.moduleCurrentIsolation())) {
+            module.getModuleInvocationContext()
+                    .addInvocationAttribute(
+                            ModuleDefinition.MODULE_ISOLATED,
+                            CurrentInvocation.moduleCurrentIsolation().toString());
         }
     }
 

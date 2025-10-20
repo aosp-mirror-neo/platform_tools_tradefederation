@@ -34,6 +34,7 @@ import com.android.tradefed.build.content.ArtifactDetailsTest;
 import com.android.tradefed.build.content.ContentAnalysisResultsTest;
 import com.android.tradefed.build.content.DeviceImagePartitionTest;
 import com.android.tradefed.build.content.DeviceMerkleTreeTest;
+import com.android.tradefed.build.content.ImageContentAnalyzerTest;
 import com.android.tradefed.build.content.TestContentAnalyzerTest;
 import com.android.tradefed.cache.MerkleTreeTest;
 import com.android.tradefed.cache.UploadManifestTest;
@@ -94,12 +95,14 @@ import com.android.tradefed.device.DeviceSelectionOptionsTest;
 import com.android.tradefed.device.DeviceStateMonitorTest;
 import com.android.tradefed.device.DumpsysPackageReceiverTest;
 import com.android.tradefed.device.FastbootHelperTest;
+import com.android.tradefed.device.HsumHelperTest;
 import com.android.tradefed.device.LocalAndroidVirtualDeviceTest;
 import com.android.tradefed.device.ManagedDeviceListTest;
 import com.android.tradefed.device.ManagedTestDeviceFactoryTest;
 import com.android.tradefed.device.NativeDeviceTest;
 import com.android.tradefed.device.RemoteAndroidDeviceTest;
 import com.android.tradefed.device.TestDeviceTest;
+import com.android.tradefed.device.UserSwitcherTest;
 import com.android.tradefed.device.WaitDeviceRecoveryTest;
 import com.android.tradefed.device.WifiCommandUtilTest;
 import com.android.tradefed.device.WifiHelperTest;
@@ -111,7 +114,6 @@ import com.android.tradefed.device.cloud.GceSshTunnelMonitorTest;
 import com.android.tradefed.device.cloud.NestedRemoteDeviceTest;
 import com.android.tradefed.device.cloud.OxygenUtilTest;
 import com.android.tradefed.device.cloud.RemoteAndroidVirtualDeviceTest;
-import com.android.tradefed.device.cloud.RemoteFileUtilTest;
 import com.android.tradefed.device.connection.AdbSshConnectionTest;
 import com.android.tradefed.device.connection.AdbTcpConnectionTest;
 import com.android.tradefed.device.contentprovider.ContentProviderHandlerTest;
@@ -278,9 +280,12 @@ import com.android.tradefed.suite.checker.baseline.SettingsBaselineSetterTest;
 import com.android.tradefed.targetprep.AllTestAppsInstallSetupTest;
 import com.android.tradefed.targetprep.AoaTargetPreparerTest;
 import com.android.tradefed.targetprep.AppSetupTest;
+import com.android.tradefed.targetprep.BaseSwitchUserTargetPreparerTest;
 import com.android.tradefed.targetprep.BaseTargetPreparerTest;
 import com.android.tradefed.targetprep.CompileBootImageWithSpeedTargetPreparerTest;
 import com.android.tradefed.targetprep.CreateUserPreparerTest;
+import com.android.tradefed.targetprep.CrosDutTopologyPreparerTest;
+import com.android.tradefed.targetprep.CrosLsNexusPreparerTest;
 import com.android.tradefed.targetprep.DefaultTestsZipInstallerTest;
 import com.android.tradefed.targetprep.DeviceActionTargetPreparerTest;
 import com.android.tradefed.targetprep.DeviceFlashPreparerTest;
@@ -288,6 +293,7 @@ import com.android.tradefed.targetprep.DeviceOwnerTargetPreparerTest;
 import com.android.tradefed.targetprep.DeviceSetupTest;
 import com.android.tradefed.targetprep.DeviceStorageFillerTest;
 import com.android.tradefed.targetprep.DeviceStringPusherTest;
+import com.android.tradefed.targetprep.DexMetadataExtractorTest;
 import com.android.tradefed.targetprep.DisableSELinuxTargetPreparerTest;
 import com.android.tradefed.targetprep.DynamicSystemPreparerTest;
 import com.android.tradefed.targetprep.FastbootCommandPreparerTest;
@@ -476,6 +482,7 @@ import com.android.tradefed.util.PsParserTest;
 import com.android.tradefed.util.PythonVirtualenvHelperTest;
 import com.android.tradefed.util.QuotationAwareTokenizerTest;
 import com.android.tradefed.util.RegexTrieTest;
+import com.android.tradefed.util.RemoteFileUtilTest;
 import com.android.tradefed.util.RemoteZipTest;
 import com.android.tradefed.util.RequestUtilTest;
 import com.android.tradefed.util.ResourceUtilTest;
@@ -523,6 +530,9 @@ import com.android.tradefed.util.testmapping.TestMappingTest;
 import com.android.tradefed.util.zip.CentralDirectoryInfoTest;
 import com.android.tradefed.util.zip.MergedZipEntryCollectionTest;
 
+import com.google.android.tradefed.build.AndroidBuildArtifactHelperTest;
+import com.google.android.tradefed.result.CoverageMetadataCollectorTest;
+
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
@@ -539,6 +549,7 @@ import org.junit.runners.Suite.SuiteClasses;
     ServiceAccountKeyCredentialFactoryTest.class,
 
     // build
+    AndroidBuildArtifactHelperTest.class,
     AppDeviceBuildInfoTest.class,
     BootstrapBuildProviderTest.class,
     BuildInfoTest.class,
@@ -560,6 +571,7 @@ import org.junit.runners.Suite.SuiteClasses;
     ContentAnalysisResultsTest.class,
     DeviceImagePartitionTest.class,
     DeviceMerkleTreeTest.class,
+    ImageContentAnalyzerTest.class,
     TestContentAnalyzerTest.class,
 
     // cache
@@ -644,6 +656,7 @@ import org.junit.runners.Suite.SuiteClasses;
     DeviceStateMonitorTest.class,
     DumpsysPackageReceiverTest.class,
     FastbootHelperTest.class,
+    HsumHelperTest.class,
     LocalAndroidVirtualDeviceTest.class,
     ManagedDeviceListTest.class,
     ManagedTestDeviceFactoryTest.class,
@@ -652,6 +665,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PropertyChangerTest.class,
     TargetFileUtilsTest.class,
     TestDeviceTest.class,
+    UserSwitcherTest.class,
     WaitDeviceRecoveryTest.class,
     WifiHelperTest.class,
     WifiCommandUtilTest.class,
@@ -665,7 +679,6 @@ import org.junit.runners.Suite.SuiteClasses;
     NestedRemoteDeviceTest.class,
     OxygenUtilTest.class,
     RemoteAndroidVirtualDeviceTest.class,
-    RemoteFileUtilTest.class,
 
     // device.connection
     AdbSshConnectionTest.class,
@@ -802,6 +815,7 @@ import org.junit.runners.Suite.SuiteClasses;
     CollectingTestListenerTest.class,
     ConsoleResultReporterTest.class,
     CountingTestResultListenerTest.class,
+    CoverageMetadataCollectorTest.class,
     DeviceFileReporterTest.class,
     FailureDescriptionTest.class,
     FileSystemLogSaverTest.class,
@@ -861,8 +875,11 @@ import org.junit.runners.Suite.SuiteClasses;
     AoaTargetPreparerTest.class,
     AppSetupTest.class,
     BaseTargetPreparerTest.class,
+    BaseSwitchUserTargetPreparerTest.class,
     CompileBootImageWithSpeedTargetPreparerTest.class,
     CreateUserPreparerTest.class,
+    CrosLsNexusPreparerTest.class,
+    CrosDutTopologyPreparerTest.class,
     DefaultTestsZipInstallerTest.class,
     DeviceActionTargetPreparerTest.class,
     DeviceFlashPreparerTest.class,
@@ -870,6 +887,7 @@ import org.junit.runners.Suite.SuiteClasses;
     DeviceSetupTest.class,
     DeviceStorageFillerTest.class,
     DeviceStringPusherTest.class,
+    DexMetadataExtractorTest.class,
     DisableSELinuxTargetPreparerTest.class,
     DynamicSystemPreparerTest.class,
     FastbootCommandPreparerTest.class,
@@ -1123,6 +1141,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PythonVirtualenvHelperTest.class,
     QuotationAwareTokenizerTest.class,
     RegexTrieTest.class,
+    RemoteFileUtilTest.class,
     RemoteZipTest.class,
     ResourceUtilTest.class,
     RestApiHelperTest.class,

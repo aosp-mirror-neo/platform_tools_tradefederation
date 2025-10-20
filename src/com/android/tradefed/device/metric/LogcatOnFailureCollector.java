@@ -35,7 +35,10 @@ import com.android.tradefed.util.RunUtil;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Collector that will capture and log a logcat when a test case fails. */
+/**
+ * Collector that will capture and log a logcat when a test case or test run fails. If default
+ * collection is enabled, it will collect host logs at the specified levels.
+ */
 public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
 
     private static final int MAX_LOGCAT_SIZE_BYTES = 4 * 1024 * 1024;
@@ -58,6 +61,8 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
     private boolean runInitDone = false;
     private int mCurrentCount = 0;
     private boolean mFirstThrottle = true;
+    private boolean mCurrentTestFailed = false;
+    private boolean mCurrentTestRunFailed = false;
 
     @Override
     public void onTestRunStartBlocking() throws DeviceNotAvailableException {
@@ -86,16 +91,13 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
         }
         mCurrentCount = 0;
         mFirstThrottle = true;
-        // do not re-init at TestRun level during default collection. It will be done at
-        // moduleStart.
-        if (!isDefaultMetricCollectionEnabled()) {
-            for (ITestDevice device : getRealDevices()) {
-                if (getApiLevelNoThrow(device) < API_LIMIT) {
-                    continue;
-                }
-                // In case of multiple runs for the same test runner, re-init the receiver.
-                initReceiver(device);
+        mCurrentTestRunFailed = false;
+        for (ITestDevice device : getRealDevices()) {
+            if (getApiLevelNoThrow(device) < API_LIMIT) {
+                continue;
             }
+            // In case of multiple runs for the same test runner, re-init the receiver.
+            initReceiver(device);
         }
         // Get the current offset of the buffer to be able to query later
         collectCurrentOffsets(MetricCollectionLevel.TEST_RUN);
@@ -106,12 +108,15 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
         if (isDefaultMetricCollectionEnabled()) {
             collectCurrentOffsets(MetricCollectionLevel.TEST_CASE);
         }
+        mCurrentTestFailed = false;
     }
 
     @Override
     public void onTestModuleStarted() throws DeviceNotAvailableException {
         if (isDefaultMetricCollectionEnabled()) {
             // re-init the receiver at module level during default collection
+            // NOTE: during default collection, we want to init the receivers at test run level
+            // and also at module level, since two separate instances of collector will be used.
             for (ITestDevice device : getRealDevices()) {
                 if (getApiLevelNoThrow(device) < API_LIMIT) {
                     continue;
@@ -126,49 +131,86 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
     @Override
     public void onTestFail(DeviceMetricData testData, TestDescription test)
             throws DeviceNotAvailableException {
-        if (isDefaultMetricCollectionEnabled()) {
-            // do not collect during default collection. It will be manually collected.
-            return;
+        mCurrentTestFailed = true;
+        if (!isDefaultMetricCollectionEnabled()) {
+            // Delay slightly for the error to get in the logcat
+            getRunUtil().sleep(100);
+            // During non-default collection, start collecting from test run offset
+            collectAndLog(test.toString(), MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
+        } else if (MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+            getRunUtil().sleep(100);
+            collectAndLog(
+                    "test_level-" + test.toString(),
+                    MAX_LOGCAT_SIZE_BYTES,
+                    MetricCollectionLevel.TEST_CASE);
         }
-        if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-            if (mFirstThrottle) {
-                CLog.w("Throttle capture of logcat-on-failure due to too many failures.");
-                mFirstThrottle = false;
-            }
-            return;
-        }
-        // Delay slightly for the error to get in the logcat
-        getRunUtil().sleep(100);
-        // During non-default collection, start collecting from test run offset
-        collectAndLog(test.toString(), MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
-        mCurrentCount++;
     }
 
     @Override
     public void onTestRunFailed(DeviceMetricData testData, FailureDescription failure)
             throws DeviceNotAvailableException {
-        if (isDefaultMetricCollectionEnabled()) {
-            // do not collect during default collection. It will be manually collected.
-            return;
+        mCurrentTestRunFailed = true;
+        if (!isDefaultMetricCollectionEnabled()) {
+            // Delay slightly for the error to get in the logcat
+            getRunUtil().sleep(100);
+            collectAndLog("run-failure", MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
+        } else if (MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+            getRunUtil().sleep(100);
+            collectAndLog(
+                    "test_run_level-" + getRunName(),
+                    MAX_LOGCAT_SIZE_BYTES,
+                    MetricCollectionLevel.TEST_RUN);
         }
-        // Delay slightly for the error to get in the logcat
-        getRunUtil().sleep(100);
-        // TODO: Improve the name
-        collectAndLog("run-failure", MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
     }
 
     @Override
-    public void onTestRunEnd(DeviceMetricData runData, Map<String, Metric> currentRunMetrics) {
-        // During default collection, do not clear receivers until testModuleEnded.
-        if (!isDefaultMetricCollectionEnabled()) {
-            clearReceivers();
+    public void onTestEnd(DeviceMetricData testData, Map<String, Metric> currentTestCaseMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_CASE.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestFailed
+                        || !MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
+                    getRunUtil().sleep(100);
+                    collectAndLog(
+                            "test_level-" + getTestName(),
+                            MAX_LOGCAT_SIZE_BYTES,
+                            MetricCollectionLevel.TEST_CASE);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onTestRunEnd(DeviceMetricData runData, Map<String, Metric> currentRunMetrics)
+            throws DeviceNotAvailableException {
+        if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.TEST_RUN.equals(getAlwaysOnCollectionLevel())) {
+                if (!mCurrentTestRunFailed
+                        || !MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
+                    getRunUtil().sleep(100);
+                    collectAndLog(
+                            "test_run_level-" + getRunName(),
+                            MAX_LOGCAT_SIZE_BYTES,
+                            MetricCollectionLevel.TEST_RUN);
+                }
+            }
         }
         runInitDone = false;
+        clearReceivers();
     }
 
     @Override
     public void onTestModuleEnded() throws DeviceNotAvailableException {
         if (isDefaultMetricCollectionEnabled()) {
+            if (MetricCollectionLevel.MODULE.equals(getAlwaysOnCollectionLevel())
+                    || (MetricCollectionLevel.MODULE.equals(getOnFailureCollectionLevel())
+                            && doesModuleContainFailure())) {
+                getRunUtil().sleep(100);
+                collectAndLog(
+                        "module_level-" + getModuleName(),
+                        MODULE_MAX_LOGCAT_SIZE_BYTES,
+                        MetricCollectionLevel.MODULE);
+            }
             clearReceivers();
         }
     }
@@ -192,6 +234,14 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
 
     protected void collectAndLog(String testName, int size, MetricCollectionLevel level)
             throws DeviceNotAvailableException {
+        if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
+            if (mFirstThrottle) {
+                CLog.w("Throttle capture of logcat-on-failure due to too many failures.");
+                mFirstThrottle = false;
+            }
+            return;
+        }
+        mCurrentCount++;
         for (ITestDevice device : getRealDevices()) {
             boolean isDeviceOnline = isDeviceOnline(device);
             ILogcatReceiver receiver = mLogcatReceivers.get(device);
@@ -288,44 +338,6 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
                 LogOffsets logOffset = mOffset.get(device);
                 logOffset.setOffset(offset, level);
             }
-        }
-    }
-
-    @Override
-    public void collectMetrics(MetricCollectionLevel level, String name)
-            throws DeviceNotAvailableException {
-        // Delay slightly for the error to get in the logcat
-        getRunUtil().sleep(100);
-
-        switch (level) {
-            case TEST_CASE:
-                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                    if (mFirstThrottle) {
-                        CLog.w("Throttle capture of logcat-on-failure due to too many failures.");
-                        mFirstThrottle = false;
-                    }
-                    return;
-                }
-                collectAndLog("test-level-" + name, MAX_LOGCAT_SIZE_BYTES, level);
-                mCurrentCount++;
-                break;
-            case TEST_RUN:
-                if (mCurrentCount > THROTTLE_LIMIT_PER_RUN) {
-                    if (mFirstThrottle) {
-                        CLog.w("Throttle capture of logcat-on-failure due to too many failures.");
-                        mFirstThrottle = false;
-                    }
-                    return;
-                }
-                collectAndLog("test-run-level-" + name, MAX_LOGCAT_SIZE_BYTES, level);
-                mCurrentCount++;
-                break;
-            case MODULE:
-                collectAndLog("module-level-" + name, MODULE_MAX_LOGCAT_SIZE_BYTES, level);
-                break;
-            default:
-                CLog.d("Trying to collect for a NULL level. Skipping.");
-                break;
         }
     }
 

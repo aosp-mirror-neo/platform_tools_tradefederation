@@ -20,6 +20,7 @@ import com.android.tradefed.device.DeviceFoldableState;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.TestErrorIdentifier;
 import com.android.tradefed.targetprep.BaseTargetPreparer;
@@ -55,6 +56,8 @@ public class FoldableModePreparer extends BaseTargetPreparer {
         }
         CommandResult result = testInformation.getDevice().executeShellV2Command(
                 String.format("cmd device_state state %s", mStateIdentifier));
+        CLog.d("device_state: stdout: %s", result.getStdout());
+        CLog.d("device_state: stderr: %s", result.getStderr());
         if (!CommandStatus.SUCCESS.equals(result.getStatus())) {
             throw new TargetSetupError(
                     String.format("Could not set device_state %s. stderr: %s",

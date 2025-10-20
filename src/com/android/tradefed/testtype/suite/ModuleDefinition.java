@@ -177,6 +177,8 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
     private IBuildInfo mBuild;
     private ITestDevice mDevice;
     private List<IMetricCollector> mRunMetricCollectors = new ArrayList<>();
+
+    private List<IMetricCollector> mDefaultLogCollectors = new ArrayList<>();
     private boolean mCollectTestsOnly = false;
 
     private List<TestRunResult> mTestsResults = new ArrayList<>();
@@ -217,6 +219,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
     private boolean mUseModuleResultsForwarder = false;
 
     private boolean mRemoveModuleBuffering = false;
+    private boolean mHasFailures = false;
 
     @VisibleForTesting
     public ModuleDefinition() {
@@ -411,6 +414,31 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
             return;
         }
         mRunMetricCollectors.addAll(collectors);
+    }
+
+    public void setDefaultLogCollectors(List<IMetricCollector> collectors) {
+        if (collectors == null) {
+            return;
+        }
+        mDefaultLogCollectors.addAll(collectors);
+        // remove any duplicated module collectors
+        removeDuplicatedModuleCollectors();
+    }
+
+    private void removeDuplicatedModuleCollectors() {
+        Iterator<IMetricCollector> itr = mModuleConfiguration.getMetricCollectors().iterator();
+        while (itr.hasNext()) {
+            IMetricCollector moduleMetricCollector = itr.next();
+            for (IMetricCollector logCollector : mDefaultLogCollectors) {
+                if (moduleMetricCollector.getClass().equals(logCollector.getClass())) {
+                    itr.remove();
+                    CLog.d(
+                            "Removing duplicated module level log collector %s in favor of default"
+                                    + " log collection.",
+                            moduleMetricCollector.getClass().getName());
+                }
+            }
+        }
     }
 
     /** Pass the invocation log saver to the module so it can use it if necessary. */
@@ -638,6 +666,14 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                     CurrentInvocation.setCurrentRunner(null);
                     mInternalTestConfiguration.cleanConfigurationData();
                     mInternalTestConfiguration = null;
+                    // record any failures
+                    if (mCurrentTestWrapper.getResultListener().hasFailedTests()
+                            || mCurrentTestWrapper
+                                    .getResultListener()
+                                    .getCurrentRunResults()
+                                    .isRunFailure()) {
+                        mHasFailures = true;
+                    }
                     if (mMergeAttempts) {
                         // A single module can generate several test runs
                         mTestsResults.addAll(mCurrentTestWrapper.getFinalTestRunResults());
@@ -820,6 +856,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
         retriableTest.setModuleId(getId());
         retriableTest.setMarkTestsSkipped(skipTestCases);
         retriableTest.setMetricCollectors(mRunMetricCollectors);
+        retriableTest.setDefaultLogCollectors(mDefaultLogCollectors);
         retriableTest.setModuleConfig(mModuleConfiguration);
         retriableTest.setInvocationContext(mModuleInvocationContext);
         retriableTest.setLogSaver(mLogSaver);
@@ -1293,7 +1330,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
 
     /** Returns True if a testRunFailure has been called on the module * */
     public boolean hasModuleFailed() {
-        return mIsFailedModule;
+        return mIsFailedModule || mHasFailures;
     }
 
     public Set<TokenProperty> getRequiredTokens(TestInformation testInfo) {

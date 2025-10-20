@@ -28,6 +28,7 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.testtype.coverage.CoverageOptions;
 import com.android.tradefed.util.AbiUtils;
+import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.FileUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -276,12 +277,18 @@ public class GTest extends GTestBase implements IDeviceTest {
         testDevice.pushString(String.format("#!/bin/bash\n%s", cmd), tmpFileDevice);
         // force file to be executable
         testDevice.executeShellCommand(String.format("chmod 755 %s", tmpFileDevice));
-        testDevice.executeShellCommand(
-                String.format("sh %s", tmpFileDevice),
-                resultParser,
-                getMaxTestTimeMs() /* maxTimeToShellOutputResponse */,
-                TimeUnit.MILLISECONDS,
-                0 /* retry attempts */);
+        CommandResult result =
+                testDevice.executeShellV2Command(
+                        String.format("sh %s", tmpFileDevice),
+                        null,
+                        null,
+                        null,
+                        0,
+                        getMaxTestTimeMs() /* maxTimeToShellOutputResponse */,
+                        TimeUnit.MILLISECONDS,
+                        0 /* retry attempts */);
+        byte[] outputBytes = result.getStdout().getBytes();
+        resultParser.addOutput(outputBytes, 0, outputBytes.length);
         testDevice.deleteFile(tmpFileDevice);
     }
 
@@ -350,12 +357,18 @@ public class GTest extends GTestBase implements IDeviceTest {
             String cmd = getGTestCmdLine(fullPath, flags);
             // ensure that command is not too long for adb
             if (cmd.length() < GTEST_CMD_CHAR_LIMIT) {
-                testDevice.executeShellCommand(
-                        cmd,
-                        resultParser,
-                        getMaxTestTimeMs() /* maxTimeToShellOutputResponse */,
-                        TimeUnit.MILLISECONDS,
-                        0 /* retryAttempts */);
+                CommandResult result =
+                        testDevice.executeShellV2Command(
+                                cmd,
+                                null,
+                                null,
+                                null,
+                                0,
+                                getMaxTestTimeMs(),
+                                TimeUnit.MILLISECONDS,
+                                0);
+                byte[] outputBytes = result.getStdout().getBytes();
+                resultParser.addOutput(outputBytes, 0, outputBytes.length);
             } else {
                 // wrap adb shell command in script if command is too long for direct execution
                 executeCommandByScript(testDevice, cmd, resultParser);

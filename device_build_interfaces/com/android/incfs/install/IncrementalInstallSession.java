@@ -59,7 +59,7 @@ import java.util.concurrent.TimeUnit;
  *
  *         // Wait a maximum of 45 seconds for the install to finish.
  *         session.waitForInstallCompleted(45, TimeUnit.SECONDS);
- * }</pre>
+ * }}</pre>
  */
 public class IncrementalInstallSession implements AutoCloseable {
     public static class Builder {
