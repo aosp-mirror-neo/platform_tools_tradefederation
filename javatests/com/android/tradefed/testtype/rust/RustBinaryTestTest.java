@@ -32,6 +32,8 @@ import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.testtype.coverage.CoverageOptions;
+import com.android.tradefed.util.CommandResult;
+import com.android.tradefed.util.CommandStatus;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -248,6 +250,18 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.isDirectory(testPath2)).thenReturn(false);
         when(mMockITestDevice.isExecutable(testPath2)).thenReturn(true);
 
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
         mockCountTests(testPath1, runListOutput(3));
         mockTestRunStarted("test1", 3);
         mockShellCommand(test1);
@@ -288,6 +302,19 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.isDirectory(notModulePath)).thenReturn(false);
         when(mMockITestDevice.isExecutable(notModulePath)).thenReturn(true);
 
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
+
         mockCountTests(modulePath, runListOutput(1));
         mockTestRunStarted("test1", 1);
         mockShellCommand(modulePath);
@@ -321,6 +348,18 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.getChildren(testPath)).thenReturn(files);
         String[] files2 = new String[] {"test1"};
         when(mMockITestDevice.getChildren(subDirPath)).thenReturn(files2);
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
 
         mockCountTests(test1Path, runListOutput(5));
         mockTestRunStarted("test1", 5);
@@ -347,7 +386,18 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.getChildren(testPath)).thenReturn(files);
         when(mMockITestDevice.isDirectory(testPath1)).thenReturn(false);
         when(mMockITestDevice.isExecutable(testPath1)).thenReturn(true);
-
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
         mockCountTests(testPath1, runListOutput(3));
         mockTestRunStarted("test1", 3);
         mockShellCommand("LLVM_PROFILE_FILE=/data/local/tmp/clang-%m.profraw ");
@@ -374,6 +424,19 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.getChildren(testPath)).thenReturn(files);
         when(mMockITestDevice.isDirectory(testPath1)).thenReturn(false);
         when(mMockITestDevice.isExecutable(testPath1)).thenReturn(true);
+
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
 
         for (String filter : filterStrings) {
             mockCountTests(testPath1, runListOutput(3), "", filter);
@@ -440,6 +503,19 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.isDirectory(testPath1)).thenReturn(false);
         when(mMockITestDevice.isExecutable(testPath1)).thenReturn(true);
 
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
+
         mockCountTests(testPath1, runListOutput(42), "--option", "");
         mockTestRunStarted("test1", 42);
         mockShellCommand(testPath1 + " --option");
@@ -464,19 +540,33 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.getChildren(testPath)).thenReturn(files);
         when(mMockITestDevice.isDirectory(testPath1)).thenReturn(false);
         when(mMockITestDevice.isExecutable(testPath1)).thenReturn(true);
-
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
         callReplayRunVerify();
 
         // Verify that the LD_LIBRARY_PATH environment variable is specified, and it's right before
         // the command for executing the test.
         verify(mMockITestDevice, Mockito.atLeastOnce())
-                .executeShellCommand(
+                .executeShellV2Command(
                         Mockito.contains(
                                 "RUST_BACKTRACE=full LD_LIBRARY_PATH=/library/path"
                                         + " /data/local/tmp/test1"),
-                        Mockito.same(mMockReceiver),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
                         Mockito.anyLong(),
-                        (TimeUnit) Mockito.any(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
                         Mockito.anyInt());
     }
 
@@ -501,6 +591,18 @@ public class RustBinaryTestTest {
         when(mMockITestDevice.isExecutable(testPath1)).thenReturn(true);
         when(mMockITestDevice.isDirectory(testPath2)).thenReturn(false);
         when(mMockITestDevice.isExecutable(testPath2)).thenReturn(true);
+        CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+        res.setStdout("");
+        when(mMockITestDevice.executeShellV2Command(
+                        Mockito.anyString(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.anyLong(),
+                        Mockito.anyLong(),
+                        Mockito.any(),
+                        Mockito.anyInt()))
+                .thenReturn(res);
 
         mockCountBenchmarks(testPath1, runListBenchmarksOutput(3));
         mockTestRunStarted("test1", 3);

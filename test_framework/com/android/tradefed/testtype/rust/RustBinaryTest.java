@@ -33,6 +33,7 @@ import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.testtype.IDeviceTest;
 import com.android.tradefed.testtype.ITestCollector;
+import com.android.tradefed.util.CommandResult;
 
 import java.io.File;
 import java.util.HashMap;
@@ -204,12 +205,18 @@ public class RustBinaryTest extends RustTestBase
 
         commandBuilder.deleteCharAt(commandBuilder.length() - 1);
 
-        mDevice.executeShellCommand(
-                commandBuilder.toString(),
-                receiver,
-                mTestTimeout,
-                TimeUnit.MILLISECONDS,
-                0 /* retryAttempts */);
+        CommandResult result =
+                mDevice.executeShellV2Command(
+                        commandBuilder.toString(),
+                        null,
+                        null,
+                        null,
+                        0,
+                        mTestTimeout,
+                        TimeUnit.MILLISECONDS,
+                        0);
+        byte[] outputBytes = result.getStdout().getBytes();
+        receiver.addOutput(outputBytes, 0, outputBytes.length);
     }
 
     /**

@@ -84,13 +84,13 @@ public class RustTestResultParser extends MultiLineReceiver {
     static final String SKIPPED_ENTRY = "Skipped";
     // Failed but without stacktrace tests in mTestResultCache
     static final String FAILED_ENTRY = "FailedNoStack";
-
+    private static final Pattern ANSI_ESCAPE_PATTERN = Pattern.compile("\u001B\\[[0-9;]*m");
     static final Pattern COMPLETE_PATTERN =
             Pattern.compile("test result: (.*) (\\d+) passed; (\\d+) failed; (\\d+) ignored;.*");
 
     static final Pattern RUST_ONE_LINE_RESULT =
             Pattern.compile(
-                    "test (\\S*) (?:- should panic )? *\\.\\.\\. (\\S*)(?: <(\\d+\\.\\d+)s>)?");
+                    "test (\\S*) (?:- should panic )? *\\.\\.\\. *(\\S*)(?: <(\\d+\\.\\d+)s>)?");
     static final Pattern RUST_IGNORE_RESULT =
             Pattern.compile("test (\\S*) +(?:- should panic )?\\.\\.\\. (ignored).*");
     static final Pattern RUNNING_PATTERN = Pattern.compile("running (.*) test[s]?");
@@ -132,7 +132,9 @@ public class RustTestResultParser extends MultiLineReceiver {
             mTrackLogsBeforeRunStart.addAll(Arrays.asList(lines));
         }
 
-        for (String line : lines) {
+        for (String rawLine : lines) {
+            String line = ANSI_ESCAPE_PATTERN.matcher(rawLine).replaceAll("");
+
             if (lineMatchesPattern(line, RUST_IGNORE_RESULT)) {
                 mCurrentTestName = mCurrentMatcher.group(1);
                 mCurrentTestStatus = mCurrentMatcher.group(2);
@@ -168,7 +170,7 @@ public class RustTestResultParser extends MultiLineReceiver {
                     mCurrentTestTrace = null;
                 }
             } else if (mCurrentTestTrace != null) {
-                mCurrentTestTrace.append(line).append('\n');
+                mCurrentTestTrace.append(rawLine).append('\n');
             }
         }
     }
