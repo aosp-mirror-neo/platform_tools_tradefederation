@@ -37,6 +37,9 @@ import com.proto.tradefed.invocation.NewTestCommandResponse;
 import com.proto.tradefed.invocation.StopInvocationRequest;
 import com.proto.tradefed.invocation.StopInvocationResponse;
 
+import io.grpc.Server;
+import io.grpc.stub.StreamObserver;
+
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,9 +54,6 @@ import org.mockito.junit.MockitoRule;
 
 import java.io.File;
 import java.util.Arrays;
-
-import io.grpc.Server;
-import io.grpc.stub.StreamObserver;
 
 /** Unit tests for {@link TestInvocationManagementServer}. */
 @RunWith(JUnit4.class)
@@ -124,7 +124,7 @@ public class TestInvocationManagementServerTest {
         verify(mRequestObserver).onNext(mResponseCaptor.capture());
         NewTestCommandResponse response = mResponseCaptor.getValue();
         assertThat(response.getInvocationId()).isEmpty();
-        assertThat(response.getCommandErrorInfo()).isNotNull();
+        assertThat(response.hasCommandErrorInfo()).isTrue();
         assertThat(response.getCommandErrorInfo().getErrorName())
                 .isEqualTo(InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR.name());
         assertThat(response.getCommandErrorInfo().getErrorCode())

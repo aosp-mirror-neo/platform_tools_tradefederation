@@ -16,7 +16,8 @@
 package com.android.tradefed.result.proto;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 import com.android.tradefed.config.ConfigurationDescriptor;
 import com.android.tradefed.invoker.IInvocationContext;
@@ -102,8 +103,8 @@ public class ProtoResultReporterTest {
         mReporter.invocationEnded(500L);
 
         //  ------ Verify that everything was populated ------
-        assertNotNull(mFinalRecord.getTestRecordId());
-        assertNotNull(mFinalRecord.getDebugInfo());
+        assertNotEquals(mFinalRecord.getTestRecordId(), "");
+        assertTrue(mFinalRecord.hasDebugInfo());
 
         // The invocation has 2 modules
         assertEquals(2, mFinalRecord.getChildrenCount());
@@ -163,13 +164,13 @@ public class ProtoResultReporterTest {
         mReporter.invocationEnded(500L);
 
         //  ------ Verify that everything was populated ------
-        assertNotNull(mFinalRecord.getTestRecordId());
-        assertNotNull(mFinalRecord.getDebugInfo());
+        assertNotEquals(mFinalRecord.getTestRecordId(), "");
+        assertTrue(mFinalRecord.hasDebugInfo());
 
         DebugInfo invocFailure = mFinalRecord.getDebugInfo();
         assertEquals("error", invocFailure.getErrorMessage());
         assertEquals(FailureStatus.INFRA_FAILURE, invocFailure.getFailureStatus());
-        assertNotNull(invocFailure.getDebugInfoContext());
+        assertTrue(invocFailure.hasDebugInfoContext());
         DebugInfoContext debugContext = invocFailure.getDebugInfoContext();
         String serializedException = debugContext.getErrorType();
         NullPointerException npe =

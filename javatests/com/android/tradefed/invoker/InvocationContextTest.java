@@ -183,7 +183,7 @@ public class InvocationContextTest {
         context.setModuleInvocationContext(moduleContext);
 
         Context protoContext = context.toProto();
-        assertNotNull(protoContext.getModuleContext());
+        assertTrue(protoContext.hasModuleContext());
 
         // Check the deserialize
         InvocationContext deserialized = InvocationContext.fromProto(protoContext);
