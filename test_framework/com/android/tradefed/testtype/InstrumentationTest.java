@@ -356,6 +356,11 @@ public class InstrumentationTest
                             + "an SDK context instead of the sandbox context.")
     protected boolean mInstrumentSdkInSandbox = false;
 
+    @Option(
+            name = "instrument-in-pcc",
+            description = "If set to true, will exclusively run the test in PCC sandbox")
+    protected boolean mInstrumentInPcc = false;
+
     private IAbi mAbi = null;
 
     private Collection<String> mInstallArgs = new ArrayList<>();
@@ -692,6 +697,10 @@ public class InstrumentationTest
         }
         if (mInstrumentSdkSandbox) {
             runOptions.add("--instrument-sdk-sandbox");
+        }
+
+        if (mInstrumentInPcc) {
+            runOptions.add("--instrument-in-pcc");
         }
 
         if (abiName != null && getDevice().getApiLevel() > 20) {
