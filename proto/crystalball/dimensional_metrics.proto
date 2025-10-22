@@ -91,6 +91,10 @@ message DimensionalMetric {
     RawValues raw_values = 2;
     ComputedStatistics computed_statistics = 3;
   }
+
+  // A pre-computed, flattened key for backward compatibility with legacy
+  // systems. It's constructed from the metric ID and dimension values.
+  string legacy_metric_key = 4;
 }
 
 // A wrapper for a list of raw, measured values.
