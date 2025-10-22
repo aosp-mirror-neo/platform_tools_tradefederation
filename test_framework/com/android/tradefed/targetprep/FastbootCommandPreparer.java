@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.android.tradefed.log.LogUtil.CLog;
 
 /** Target preparer that triggers fastboot and sends fastboot commands. */
 @OptionClass(alias = "fastboot-command-preparer")
@@ -88,6 +89,11 @@ public final class FastbootCommandPreparer extends BaseTargetPreparer {
                             device.getDeviceDescriptor(),
                             InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
                 }
+                CLog.i(
+                        "FastbootCommandPreparer",
+                        String.format(
+                                "Command %s succeeded, stdout = [%s], stderr = [%s].",
+                                cmd, result.getStdout(), result.getStderr()));
             }
             exitFastboot(device);
         }
