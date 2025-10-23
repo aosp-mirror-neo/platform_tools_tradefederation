@@ -82,7 +82,9 @@ public class ImageContentAnalyzer {
                             "/boot_otas/boot_ota_16k.zip",
                             // b/431643974
                             "/lib/egl/libGLES_mali.so",
-                            "/lib64/egl/libGLES_mali.so")) {
+                            "/lib64/egl/libGLES_mali.so",
+                            // b/451525832
+                            "SYSTEM/apex/com.google.android.virt.apex")) {
                 removed = allDescriptors.removeIf(d -> d.path.endsWith(path)) || removed;
             }
             if (removed) {
