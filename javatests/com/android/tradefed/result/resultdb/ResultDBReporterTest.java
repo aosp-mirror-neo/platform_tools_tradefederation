@@ -35,7 +35,6 @@ import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.result.skipped.SkipManager;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
-
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
@@ -481,21 +480,25 @@ public class ResultDBReporterTest {
                                                 .build())
                                 .setResultId("1234abcd-00001")
                                 .setGcsUri("gs://test/test.log")
+                                .setArtifactType("TEXT")
                                 .build(),
                         Artifact.newBuilder()
                                 .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
                                 .setContentType("text/plain")
                                 .setGcsUri("gs://test/test-run.log")
+                                .setArtifactType("TEXT")
                                 .build(),
                         Artifact.newBuilder()
                                 .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
                                 .setContentType("image/png")
                                 .setGcsUri("gs://test/invocation.log")
+                                .setArtifactType("PNG")
                                 .build(),
                         Artifact.newBuilder()
                                 .setArtifactId("18274/stub/inv_9000/new.log_9000.dat")
                                 .setContentType("text/plain")
                                 .setGcsUri("gs://test/new.log")
+                                .setArtifactType("TEXT")
                                 .setSizeBytes(101)
                                 .build());
     }
