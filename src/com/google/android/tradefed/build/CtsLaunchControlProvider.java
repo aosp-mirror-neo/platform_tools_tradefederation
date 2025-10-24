@@ -226,6 +226,10 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
                 IBuildInfo.REMOTE_FILE_VERSION);
     }
 
+    void setCtsForceTestDiscoveryMetadataMode(boolean forceMetadataMode) {
+        mCtsForceTestDiscoveryMetadataMode = forceMetadataMode;
+    }
+
     @Override
     protected RemoteBuildInfo queryForBuild() throws BuildRetrievalError {
         RemoteBuildInfo ctsBuild = super.queryForBuild();
@@ -318,16 +322,19 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
         mPartialDownloadMode = PartialDownloadMode.PartialDownloadTestModules;
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricLogger.InvocationMetricKey.XTS_PARTIAL_DOWNLOAD_TOTAL_COUNT, 1);
-        boolean metadataMode = mCtsForceTestDiscoveryMetadataMode;
+        boolean testRequiresMetadataMode = false;
+
         String commandLine = getConfiguration().getCommandLine();
         if ((commandLine.contains(ITestSuite.MODULE_METADATA_INCLUDE_FILTER)
                         || commandLine.contains("multi-device-count"))
                 && !commandLine.contains("--" + BaseTestSuite.INCLUDE_FILTER_OPTION)
                 && !commandLine.contains(
                         "--compatibility:" + BaseTestSuite.INCLUDE_FILTER_OPTION)) {
-            metadataMode = true;
+            testRequiresMetadataMode = true;
         }
 
+        boolean metadataMode =
+                mCtsForceTestDiscoveryMetadataMode || testRequiresMetadataMode;
         CLog.d("metadataMode: %s", metadataMode);
         // Partial download necessities from the cts zip first
         List<String> necessities = new ArrayList<>();
