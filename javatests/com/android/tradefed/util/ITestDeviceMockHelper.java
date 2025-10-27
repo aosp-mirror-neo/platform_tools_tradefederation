@@ -77,6 +77,10 @@ public final class ITestDeviceMockHelper {
         when(mMockDevice.createUser(any())).thenReturn(userId);
     }
 
+    public void mockCreateUser(String name, int userId) throws Exception {
+        when(mMockDevice.createUser(eq(name))).thenReturn(userId);
+    }
+
     public IllegalStateException mockCreateUserFailure(String message) throws Exception {
         IllegalStateException e = new IllegalStateException(message);
         when(mMockDevice.createUser(any())).thenThrow(e);
@@ -107,6 +111,40 @@ public final class ITestDeviceMockHelper {
 
     public void verifyUserCreated() throws Exception {
         verify(mMockDevice).createUser(any());
+    }
+
+    public void verifyUserCreated(String name) throws Exception {
+        verify(mMockDevice).createUser(eq(name));
+    }
+
+    public void verifySetPin(int userId, String pin) throws Exception {
+        verify(mMockDevice)
+                .executeShellCommand(
+                        eq(String.format("locksettings set-pin --user %d %s", userId, pin)));
+    }
+
+    public void verifySetLockscreenEnabled(int userId, boolean enabled) throws Exception {
+        verify(mMockDevice)
+                .executeShellCommand(
+                        eq(
+                                String.format(
+                                        "locksettings set-lockscreen-enabled --user %d %s",
+                                        userId, enabled)));
+    }
+
+    public void verifyNoLockscreenCommand(int userId) throws Exception {
+        verify(mMockDevice, never())
+                .executeShellCommand(
+                        eq(
+                                String.format(
+                                        "locksettings set-lockscreen-enabled --user %d true",
+                                        userId)));
+        verify(mMockDevice, never())
+                .executeShellCommand(
+                        eq(
+                                String.format(
+                                        "locksettings set-lockscreen-enabled --user %d false",
+                                        userId)));
     }
 
     public void verifyNoUserSwitched() throws Exception {

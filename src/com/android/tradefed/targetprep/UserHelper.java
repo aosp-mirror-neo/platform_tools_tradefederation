@@ -40,8 +40,14 @@ public final class UserHelper {
     /** Create a new secondary user, or reuse an existing one if applicable. */
     public static int createUser(ITestDevice device, boolean reuseTestUser)
             throws DeviceNotAvailableException, TargetSetupError {
+        return createUser(device, reuseTestUser, null);
+    }
+
+    /** Create a new secondary user, or reuse an existing one if applicable. */
+    public static int createUser(ITestDevice device, boolean reuseTestUser, String userName)
+            throws DeviceNotAvailableException, TargetSetupError {
         if (reuseTestUser) {
-            Integer existingTFUser = findExistingTradefedUser(device);
+            Integer existingTFUser = findExistingTradefedUser(device, userName);
             if (existingTFUser != null) {
                 return existingTFUser;
             }
@@ -50,7 +56,7 @@ public final class UserHelper {
         cleanupOldUsersIfLimitReached(device);
 
         try {
-            int userId = device.createUser(TF_CREATED_USER);
+            int userId = device.createUser(userName != null ? userName : TF_CREATED_USER);
             CLog.d("Marking user %d as setup complete", userId);
             device.setSetting(userId, "secure", USER_SETUP_COMPLETE, "1");
             return userId;
@@ -121,10 +127,16 @@ public final class UserHelper {
 
     private static Integer findExistingTradefedUser(ITestDevice device)
             throws DeviceNotAvailableException {
-        for (Map.Entry<Integer, UserInfo> entry : device.getUserInfos().entrySet()) {
-            String userName = entry.getValue().userName();
+        return findExistingTradefedUser(device, null);
+    }
 
-            if (userName != null && userName.equals(TF_CREATED_USER)) {
+    private static Integer findExistingTradefedUser(ITestDevice device, String userName)
+            throws DeviceNotAvailableException {
+        for (Map.Entry<Integer, UserInfo> entry : device.getUserInfos().entrySet()) {
+            String existingUserName = entry.getValue().userName();
+            String expectedUserName = userName != null ? userName : TF_CREATED_USER;
+
+            if (existingUserName != null && existingUserName.equals(expectedUserName)) {
                 return entry.getKey();
             }
         }
