@@ -135,6 +135,8 @@ public class CasFileDownloader implements IFileDownloader {
     private boolean mCasKeepChunks = false; // Keep chunks around for chunked artifacts.
     private boolean mCasChunksOnly = false; // Download chunks only for chunked artifacts.
 
+    private boolean mServiceAccountEmailLogged = false;
+
     public void setCasRpcTimeout(
             long casRpcTimeout,
             long casGetCapabilitiesTimeout,
@@ -583,11 +585,17 @@ public class CasFileDownloader implements IFileDownloader {
             }
         }
         try {
-            if (result.getStderr() != null
-                    && result.getStderr().contains("no space left on device")) {
-                throw new BuildRetrievalError(
-                        String.format("No space left on device.\n%s", result.getStderr()),
-                        InfraErrorIdentifier.NO_DISK_SPACE);
+            if (result.getStderr() != null) {
+                if (result.getStderr().contains("no space left on device")) {
+                    throw new BuildRetrievalError(
+                            String.format("No space left on device.\n%s", result.getStderr()),
+                            InfraErrorIdentifier.NO_DISK_SPACE);
+                }
+                if (result.getStderr().contains("rpc error: code = PermissionDenied")) {
+                    // One possible cause is the GCE service account is not authorized to download
+                    // from CAS. Log the service account email for debugging.
+                    logGceServiceAccountEmail();
+                }
             }
             if (CommandStatus.TIMED_OUT.equals(result.getStatus())) {
                 InvocationMetricLogger.addInvocationMetrics(
@@ -699,6 +707,29 @@ public class CasFileDownloader implements IFileDownloader {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_LOCAL_CACHE_TYPE, mCasLocalCacheType);
         }
+    }
+
+    private void logGceServiceAccountEmail() {
+        if (mServiceAccountEmailLogged) {
+            return;
+        }
+        mServiceAccountEmailLogged = true;
+
+        // This command is used within a Google Compute Engine (GCE) virtual machine to retrieve the
+        // email address of the default service account associated with that VM instance. It queries
+        // the GCE Metadata Server, which is a special service accessible from within the VM.
+        List<String> commandArgs =
+                new ArrayList<>(
+                        Arrays.asList(
+                                "/usr/bin/curl",
+                                "-H",
+                                "Metadata-Flavor: Google",
+                                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
+                                "-s"));
+        CommandResult result =
+                mRunUtil.runTimedCmd(
+                        5000, commandArgs.toArray(new String[0]));
+        CLog.i("Retrieve GCE service account. %s", result.toString());
     }
 
     private String getInvocationId(String remoteFilePath) {
