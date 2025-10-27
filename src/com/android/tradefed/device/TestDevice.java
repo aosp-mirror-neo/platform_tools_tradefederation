@@ -667,7 +667,7 @@ public class TestDevice extends NativeDevice {
         }
         args.add("--user");
         args.add(Integer.toString(userId));
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInternalInstallPackage(packageFile, reinstall, args);
     }
 
     /** {@inheritDoc} */

@@ -119,6 +119,12 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
             description = "Delay the download of module until after sharding.")
     private boolean mDelayDownloadInSharding = false;
 
+    @Option(
+            name = "cts-force-test-discovery-metadata-mode",
+            description =
+                    "Force the test discovery to be in metadata mode.")
+    private boolean mCtsForceTestDiscoveryMetadataMode = false;
+
     private Map<String, String> mExtraWithPath = new HashMap<String, String>();
     private List<File> mFileCreated = new ArrayList<File>();
     private final boolean mIsFuseUtilAvailable = getFuseUtil().canMountZip();
@@ -220,6 +226,10 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
                 IBuildInfo.REMOTE_FILE_VERSION);
     }
 
+    void setCtsForceTestDiscoveryMetadataMode(boolean forceMetadataMode) {
+        mCtsForceTestDiscoveryMetadataMode = forceMetadataMode;
+    }
+
     @Override
     protected RemoteBuildInfo queryForBuild() throws BuildRetrievalError {
         RemoteBuildInfo ctsBuild = super.queryForBuild();
@@ -312,16 +322,20 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
         mPartialDownloadMode = PartialDownloadMode.PartialDownloadTestModules;
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricLogger.InvocationMetricKey.XTS_PARTIAL_DOWNLOAD_TOTAL_COUNT, 1);
-        boolean metadataMode = false;
+        boolean testRequiresMetadataMode = false;
+
         String commandLine = getConfiguration().getCommandLine();
         if ((commandLine.contains(ITestSuite.MODULE_METADATA_INCLUDE_FILTER)
                         || commandLine.contains("multi-device-count"))
                 && !commandLine.contains("--" + BaseTestSuite.INCLUDE_FILTER_OPTION)
                 && !commandLine.contains(
                         "--compatibility:" + BaseTestSuite.INCLUDE_FILTER_OPTION)) {
-            metadataMode = true;
+            testRequiresMetadataMode = true;
         }
 
+        boolean metadataMode =
+                mCtsForceTestDiscoveryMetadataMode || testRequiresMetadataMode;
+        CLog.d("metadataMode: %s", metadataMode);
         // Partial download necessities from the cts zip first
         List<String> necessities = new ArrayList<>();
         String ctsPackageName = mCtsPackageName.substring(0, mCtsPackageName.length() - 4);

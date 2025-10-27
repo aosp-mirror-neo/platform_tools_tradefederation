@@ -40,8 +40,9 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.RunUtil;
 
-import difflib.DiffUtils;
-import difflib.Patch;
+import com.github.difflib.DiffUtils;
+import com.github.difflib.UnifiedDiffUtils;
+import com.github.difflib.patch.Patch;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -697,7 +698,7 @@ public class ArtRunTest
         try {
             Patch<String> diff = DiffUtils.diff(expectedLines, actualLines);
             List<String> unifiedDiff =
-                    DiffUtils.generateUnifiedDiff(
+                    UnifiedDiffUtils.generateUnifiedDiff(
                             expectedFileName, actualFileName, expectedLines, diff, 3);
             StringBuilder diffOutput = new StringBuilder();
             for (String delta : unifiedDiff) {

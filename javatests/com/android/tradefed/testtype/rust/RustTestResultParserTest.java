@@ -76,7 +76,7 @@ public class RustTestResultParserTest extends RustParserTestBase {
             "test some_test -  should panic ... ok <0.000s>",
             "test some_test - something else ... ok <0.000s>",
             "test  other-test ... fail <0.000s>",
-            "test any ...  FAIL",
+            "test any ..  FAIL",
             "test some_test .. other",
             "test some_test ... other strings",
             "test some_test .... ok",

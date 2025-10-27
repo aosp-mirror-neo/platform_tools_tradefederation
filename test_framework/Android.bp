@@ -26,7 +26,7 @@ tradefed_java_library_host {
         ":tradefed-isolation",
     ],
     static_libs: [
-        "diffutils-prebuilt-jar",
+        "java_diff_utils",
         "perfetto_metrics-full",
         "trace_summary-full",
         "test-composers",

@@ -140,6 +140,12 @@ public class CtsDeviceLaunchControlProvider extends DeviceLaunchControlProvider
                     "List of package_name:branch combinations where partial download will be used.")
     private Set<String> mPartialDownloadDefaultRollout = new LinkedHashSet<>();
 
+    @Option(
+            name = "cts-force-test-discovery-metadata-mode",
+            description =
+                    "Force the test discovery to be in metadata mode.")
+    private boolean mCtsForceTestDiscoveryMetadataMode = false;
+
     private CtsLaunchControlProvider mCtsLcProvider;
     private IFileDownloader mCtsDownloader;
 
@@ -155,6 +161,8 @@ public class CtsDeviceLaunchControlProvider extends DeviceLaunchControlProvider
             // TODO: this is a bit of a hack. consider moving this logic to launch control server
             mCtsLcProvider = createCtsLcProvider();
             mCtsLcProvider.setTestTag(getTestTag());
+            mCtsLcProvider.setCtsForceTestDiscoveryMetadataMode(
+                    mCtsForceTestDiscoveryMetadataMode);
             if (mCtsBranch == null) {
                 // get CTS build from same branch as device build
                 mCtsBranch = getBranch();

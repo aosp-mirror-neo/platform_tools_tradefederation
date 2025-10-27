@@ -152,6 +152,9 @@ public class SkipManager implements IDisableable {
         STRATEGY_TO_IMAGE_PARTITIONS.put(ImageGranularityStrategy.NO_PARTITION, ImmutableSet.of());
     }
 
+    private static final Set<String> CTS_ON_GSI_CONFIG_NAMES =
+            ImmutableSet.of("cts-on-gsi", "high-roi-cts-on-gsi-normal", "high-roi-cts-on-gsi-gps");
+
     // Contains the filter and reason for demotion
     private final Map<String, SkipReason> mDemotionFilters = new LinkedHashMap<>();
 
@@ -248,7 +251,8 @@ public class SkipManager implements IDisableable {
                         && ctsParserSettings.mConfigName != null) {
                     if ("android-vts.zip".equals(ctsParserSettings.mCtsPackageName)
                             || ("android-cts.zip".equals(ctsParserSettings.mCtsPackageName)
-                                    && "cts-on-gsi".equals(ctsParserSettings.mConfigName))) {
+                                    && CTS_ON_GSI_CONFIG_NAMES.contains(
+                                            ctsParserSettings.mConfigName))) {
                         // The VENDOR_ONLY strategy is applicable to all plans in VTS and cts-on-gsi
                         // plan in CTS for device image.
                         mDeviceImageGranularityStrategy = ImageGranularityStrategy.VENDOR_ONLY;
