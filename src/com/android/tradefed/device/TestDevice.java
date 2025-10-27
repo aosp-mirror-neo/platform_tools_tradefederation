@@ -1885,7 +1885,6 @@ public class TestDevice extends NativeDevice {
     /** {@inheritDoc} */
     @Override
     public int getRemainingCreatableUserCount(String userType) throws DeviceNotAvailableException {
-        checkApiLevelAgainstNextRelease("getMaxNumberOfUsersSupported(userType)", 36);
         if (!doesApiLevelHaveNoMaxUsersLimit()) {
             // Without the flag, this command won't work. But we can adopt the same crude estimation
             // that CTS tests were using before this was introduced, to preserve pre-flag behaviour.
@@ -1916,10 +1915,13 @@ public class TestDevice extends NativeDevice {
             throws DeviceNotAvailableException {
         String command = "pm get-max-users";
         if (userType != null) {
-            checkApiLevelAgainstNextRelease("getMaxNumberOfUsersSupported(userType)", 36);
             if (doesApiLevelHaveNoMaxUsersLimit()) {
                 command += " --user-type " + userType;
             }
+            // Note that, if the device doesn't reach this api level, the user-type parameter won't
+            // work. But we can still crudely estimate the max in such a case by reporting what
+            // (back then) was the overall max, and subtracting off 1 for the system user, below.
+            // This preserves the old parameterless getMaxNumberOfUsersSupported() behaviour.
         }
         String commandOutput = executeShellCommand(command);
         try {
