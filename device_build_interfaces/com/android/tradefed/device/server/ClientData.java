@@ -18,7 +18,6 @@ package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.ddmlib.IDevice;
 import com.android.tradefed.device.server.HeapSegment.HeapSegmentElement;
 
 import java.nio.BufferUnderflowException;
@@ -866,10 +865,6 @@ public class ClientData {
      */
     @Nullable
     public String getPackageName() {
-        // Use the reported package name if the version (R+) supports it.
-        if (mClient.getDevice().supportsFeature(IDevice.Feature.REAL_PKG_NAME)) {
-            return mClientNames.mPackageName;
-        }
         // Try to infer the package name.
         // Check for multi-process app name that might have a following format -
         // "$applicationId:$processName"
