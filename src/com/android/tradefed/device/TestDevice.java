@@ -619,7 +619,7 @@ public class TestDevice extends NativeDevice {
         if (runtimePermissionSupported) {
             args.add("-g");
         }
-        return internalInstallPackage(packageFile, reinstall, args);
+        return adbInternalInstallPackage(packageFile, reinstall, args);
     }
 
     /**
