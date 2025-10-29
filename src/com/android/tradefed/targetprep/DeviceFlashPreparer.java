@@ -435,7 +435,7 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                 flasher.setExtraMetadata(mFlasherMetadata);
                 mFlasher = flasher;
                 if (mIncrementalImageUtil != null
-                        && checkAntiRollback(flasher, device, deviceBuild)) {
+                        && flasher.checkAntiRollback(device, deviceBuild)) {
                     CLog.d("Avoid incremental flashing due to Anti-rollback situation");
                     useIncrementalFlashing = false;
                     mIncrementalImageUtil = null;
@@ -641,12 +641,6 @@ public abstract class DeviceFlashPreparer extends BaseTargetPreparer
                             deviceBuild.getBuildBranch(),
                             deviceBuild.getBuildFlavor());
         }
-    }
-
-    protected boolean checkAntiRollback(
-            IDeviceFlasher flasher, ITestDevice device, IDeviceBuildInfo deviceBuild)
-            throws DeviceNotAvailableException {
-        return false;
     }
 
     /**

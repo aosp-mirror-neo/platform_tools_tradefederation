@@ -211,4 +211,10 @@ public interface IDeviceFlasher {
     public default void setExtraMetadata(Map<String, String> metadata) {
         // Empty on purpose
     }
+
+    /** Check whether an anti-rollback was triggered. */
+    public default boolean checkAntiRollback(ITestDevice device, IDeviceBuildInfo deviceBuild)
+            throws DeviceNotAvailableException {
+        return false;
+    }
 }
