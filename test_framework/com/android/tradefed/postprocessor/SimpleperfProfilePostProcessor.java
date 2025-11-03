@@ -62,7 +62,7 @@ public class SimpleperfProfilePostProcessor extends BasePostProcessor {
             name = "post-processor-timeout",
             description = "Timeout for the post processor to run.",
             isTimeVal = true)
-    private long mPostProcessorTimeout = TimeUnit.MINUTES.toMillis(5);
+    private long mPostProcessorTimeout = TimeUnit.MINUTES.toMillis(20);
 
     private File mPostProcessorBinary;
     private Map<String, File> mTestArtifactFilePathMap = new HashMap<>();
