@@ -33,6 +33,7 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
+import com.android.tradefed.util.ResourceUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.TimeUtil;
 import com.google.android.tradefed.build.LCUtil;
@@ -134,6 +135,9 @@ public class CasFileDownloader implements IFileDownloader {
     private boolean mCanFuseMountArtifact = false; // Overrules mCasKeepChunks and mCasChunksOnly.
     private boolean mCasKeepChunks = false; // Keep chunks around for chunked artifacts.
     private boolean mCasChunksOnly = false; // Download chunks only for chunked artifacts.
+
+    private static final String ADC_CREDENTIALS_RES = "/util/adc_credentials.sh";
+    private boolean mAdcCredentialsLogged = false;
 
     public void setCasRpcTimeout(
             long casRpcTimeout,
@@ -583,11 +587,16 @@ public class CasFileDownloader implements IFileDownloader {
             }
         }
         try {
-            if (result.getStderr() != null
-                    && result.getStderr().contains("no space left on device")) {
-                throw new BuildRetrievalError(
-                        String.format("No space left on device.\n%s", result.getStderr()),
-                        InfraErrorIdentifier.NO_DISK_SPACE);
+            if (result.getStderr() != null) {
+                if (result.getStderr().contains("no space left on device")) {
+                    throw new BuildRetrievalError(
+                            String.format("No space left on device.\n%s", result.getStderr()),
+                            InfraErrorIdentifier.NO_DISK_SPACE);
+                }
+                if (result.getStderr().contains("rpc error: code = PermissionDenied")) {
+                    // Log the ADC credentials for troubleshooting.
+                    logAdcCredentials();
+                }
             }
             if (CommandStatus.TIMED_OUT.equals(result.getStatus())) {
                 InvocationMetricLogger.addInvocationMetrics(
@@ -699,6 +708,27 @@ public class CasFileDownloader implements IFileDownloader {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_LOCAL_CACHE_TYPE, mCasLocalCacheType);
         }
+    }
+
+    private void logAdcCredentials() {
+        if (mAdcCredentialsLogged) {
+            return;
+        }
+        mAdcCredentialsLogged = true;
+
+        String scriptPath = "";
+        try {
+            // This script is used to check the ADC credentials inside the VM.
+            File scriptFile = FileUtil.createTempFile("adc_credentials", ".sh");
+            scriptPath = scriptFile.getAbsolutePath();
+            ResourceUtil.extractResourceToFile(ADC_CREDENTIALS_RES, scriptFile);
+            FileUtil.ensureGroupRWX(scriptFile);
+        } catch (IOException e) {
+            CLog.e(e);
+            return;
+        }
+        CommandResult result = mRunUtil.runTimedCmd(10000, scriptPath);
+        CLog.i("ADC credentials inside VM. %s", result.toString());
     }
 
     private String getInvocationId(String remoteFilePath) {

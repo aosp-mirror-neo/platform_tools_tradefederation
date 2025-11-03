@@ -234,6 +234,7 @@ public class ResultDBReporter
                         .setGcsUri(gcsUri)
                         .setContentType(contentType)
                         .setSizeBytes(logFile.getSize())
+                        .setArtifactType(logFile.getType().toString())
                         .build();
 
         if (mUploadQueueFinalized) {

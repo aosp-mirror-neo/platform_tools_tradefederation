@@ -335,6 +335,7 @@ public class LaunchControlProvider
             description = "Keed chunks around after cas download for chunked artifacts.")
     private boolean mForceDisableCasFuseMount = false;
 
+    @Deprecated
     @Option(
             name = "cas-keep-chunks",
             description =
@@ -342,12 +343,14 @@ public class LaunchControlProvider
                             + " feature rollout only.")
     private boolean mCasKeepChunks = false;
 
+    /** Deprecated. Use force-disable-cas-fuse-mount to disable cas fuse mount. */
+    @Deprecated
     @Option(
             name = "cas-chunks-only",
             description =
                     "Download chunks only for chunked artifacts, for Tradefed feature rollout"
                             + " only.")
-    private boolean mCasChunksOnly = false;
+    private boolean mCasChunksOnly = true;
 
     @Option(
             name = "force-disable-cas-chunk-dir",
