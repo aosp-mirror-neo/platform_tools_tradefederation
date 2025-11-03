@@ -19,6 +19,7 @@ import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.content.ArtifactDetails.ArtifactFileDescriptor;
 import com.android.tradefed.build.content.ContentAnalysisContext.AnalysisMethod;
+import com.android.tradefed.config.ConfigurationUtil;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
@@ -33,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -231,6 +233,14 @@ public class TestContentAnalyzer {
                 }
                 if (moduleDir.list().length == 0) {
                     // Skip empty directories
+                    continue;
+                }
+                Set<File> configFiles =
+                        ConfigurationUtil.getConfigNamesFileFromDirs(
+                                null, Arrays.asList(moduleDir));
+                if (configFiles.isEmpty()) {
+                    // Skip the directory if no config files are present.
+                    CLog.d("Fails to detect the config file in directory %s.", moduleDir.getName());
                     continue;
                 }
                 String relativeModulePath =
