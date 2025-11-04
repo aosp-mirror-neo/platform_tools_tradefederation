@@ -986,7 +986,7 @@ public class NativeDevice
             return true;
         }
         CLog.e(
-                "Something went wrong went setting property %s (command: %s): %s",
+                "Something went wrong when setting property %s (command: %s): %s",
                 propKey, setPropCmd, result.getStderr());
         return false;
     }
