@@ -262,7 +262,10 @@ public class IsolatedHostTest
             if (!this.debug) {
                 mServer.setSoTimeout(mSocketTimeout);
             }
-            artifactsDir = FileUtil.createTempDir("robolectric-screenshot-artifacts");
+            artifactsDir =
+                    mRavenwoodResources
+                            ? FileUtil.createTempDir("ravenwood-artifacts")
+                            : FileUtil.createTempDir("robolectric-screenshot-artifacts");
             Set<File> classpathFiles = this.getClasspathFiles();
             String classpath = this.compileClassPath(classpathFiles);
             List<String> cmdArgs = this.compileCommandArgs(classpath, artifactsDir);
@@ -461,6 +464,8 @@ public class IsolatedHostTest
                     "-Dandroid.ravenwood.runtime_path="
                             + getRavenwoodRuntimeDir(findTestDirectory()).getAbsolutePath()
                             + "/");
+            cmdArgs.add(
+                    "-Dandroid.ravenwood.artifacts_path=" + artifactsDir.getAbsolutePath() + "/");
         }
 
         if (this.debug) {
