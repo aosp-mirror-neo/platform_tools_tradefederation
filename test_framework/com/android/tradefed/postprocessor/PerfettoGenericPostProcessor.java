@@ -16,11 +16,16 @@
 
 package com.android.tradefed.postprocessor;
 
+import com.android.tradefed.postprocessor.util.PerfettoV2MetricConverterUtil;
+import com.android.tradefed.postprocessor.util.PerfettoV2ToDimensionalMetricConverter;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.MetricReport;
 import com.android.tradefed.metrics.proto.MetricMeasurement.DataType;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.result.FileInputStreamSource;
+import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.FileUtil;
@@ -179,6 +184,12 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                             + "definition is not found. One of [json|none]")
     private AlternativeParseFormat mAlternativeParseFormat = AlternativeParseFormat.none;
 
+    @Option(
+            name = "enable-dimensional-metrics",
+            description =
+                    "Enable conversion of Perfetto v2 metrics to Crystalball dimensional metrics.")
+    private boolean mEnableDimensionalMetrics = false;
+
     // Matches 1.73, 1.73E+2
     private Pattern mNumberWithExponentPattern =
             Pattern.compile("[-+]?[0-9]*[\\.]?[0-9]+([eE][-+]?[0-9]+)?");
@@ -196,14 +207,14 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
             HashMap<String, Metric> testMetrics,
             Map<String, LogFile> testLogs) {
         buildMetricFilterPatterns();
-        return processPerfettoMetrics(filterPerfeticMetricFiles(testLogs));
+        return processPerfettoMetrics(filterPerfeticMetricFiles(testLogs), testDescription);
     }
 
     @Override
     public Map<String, Metric.Builder> processRunMetricsAndLogs(
             HashMap<String, Metric> rawMetrics, Map<String, LogFile> runLogs) {
         buildMetricFilterPatterns();
-        return processPerfettoMetrics(filterPerfeticMetricFiles(runLogs));
+        return processPerfettoMetrics(filterPerfeticMetricFiles(runLogs), null);
     }
 
     /**
@@ -235,8 +246,14 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
      * @param perfettoMetricFiles perfetto metric files to be processed.
      * @return key, value pairs processed from the metrics.
      */
-    private Map<String, Metric.Builder> processPerfettoMetrics(List<File> perfettoMetricFiles) {
+    private Map<String, Metric.Builder> processPerfettoMetrics(
+            List<File> perfettoMetricFiles, TestDescription testDescription) {
         Map<String, Metric.Builder> parsedMetrics = new HashMap<>();
+        MetricReport.Builder reportBuilder = MetricReport.newBuilder();
+        PerfettoV2ToDimensionalMetricConverter converter = null;
+        if (mEnableDimensionalMetrics) {
+            converter = new PerfettoV2ToDimensionalMetricConverter();
+        }
         long startTime = System.currentTimeMillis();
         File uncompressedDir = null;
         for (File perfettoMetricFile : perfettoMetricFiles) {
@@ -266,9 +283,16 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         if (perfettoMetricFile.getName().contains("v2")) {
                             TraceSummary.Builder builderV2 = TraceSummary.newBuilder();
                             ALLOW_UNKNOWN_FIELD.merge(bufferedReader, builderV2);
+                            TraceSummary summary = builderV2.build();
+                            if (mEnableDimensionalMetrics) {
+                                MetricReport partialReport =
+                                        converter.convert(summary, testDescription);
+                                if (partialReport != null) {
+                                    reportBuilder.mergeFrom(partialReport);
+                                }
+                            }
                             parsedMetrics.putAll(
-                                    replaceAllMetricPrefix(
-                                            convertPerfettoProtoMessageV2(builderV2.build())));
+                                    replaceAllMetricPrefix(convertPerfettoProtoMessageV2(summary)));
                         } else {
                             TraceMetrics.Builder builder = TraceMetrics.newBuilder();
                             ALLOW_UNKNOWN_FIELD.merge(bufferedReader, builder);
@@ -281,6 +305,13 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         if (perfettoMetricFile.getName().contains("v2")) {
                             TraceSummary traceSummary =
                                     TraceSummary.parseFrom(new FileInputStream(perfettoMetricFile));
+                            if (mEnableDimensionalMetrics) {
+                                MetricReport partialReport =
+                                        converter.convert(traceSummary, testDescription);
+                                if (partialReport != null) {
+                                    reportBuilder.mergeFrom(partialReport);
+                                }
+                            }
                             parsedMetrics.putAll(
                                     replaceAllMetricPrefix(
                                             convertPerfettoProtoMessageV2(traceSummary)));
@@ -313,6 +344,27 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
             } finally {
                 // Delete the uncompressed perfetto metric proto file directory.
                 FileUtil.recursiveDelete(uncompressedDir);
+            }
+        }
+
+        if (reportBuilder.getTestMetricResultsCount() > 0) {
+            File dimensionalMetricFile = null;
+            try {
+                dimensionalMetricFile = FileUtil.createTempFile("metrics_report", ".textproto");
+                String reportContent = TextFormat.printer().printToString(reportBuilder.build());
+                FileUtil.writeToFile(reportContent, dimensionalMetricFile);
+
+                try (FileInputStreamSource source =
+                        new FileInputStreamSource(dimensionalMetricFile, true)) {
+                    testLog(
+                            dimensionalMetricFile.getName(),
+                            LogDataType.CB_METRICS_REPORT_FILE,
+                            source);
+                }
+            } catch (IOException e) {
+                CLog.e(e);
+            } finally {
+                FileUtil.deleteFile(dimensionalMetricFile);
             }
         }
 
@@ -689,29 +741,6 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         Map<String, ArrayList<Double>> collectedValuesForKey = new HashMap<>();
         for (TraceMetricV2Bundle bundle : reportMessage.getMetricBundlesList()) {
             for (Row row : bundle.getRowList()) {
-                StringBuilder dimensionBuilder = new StringBuilder();
-                for (Row.Dimension dimension : row.getDimensionList()) {
-                    switch (dimension.getValueOneofCase()) {
-                        case STRING_VALUE:
-                            dimensionBuilder
-                                    .append("-")
-                                    .append(dimension.getStringValue().replace(' ', '_'));
-                            break;
-                        case INT64_VALUE:
-                            dimensionBuilder.append("-").append(dimension.getInt64Value());
-                            break;
-                        case DOUBLE_VALUE:
-                            dimensionBuilder.append("-").append(dimension.getDoubleValue());
-                            break;
-                        case NULL_VALUE:
-                            dimensionBuilder.append("-").append("null");
-                            break;
-                        default:
-                            dimensionBuilder.append("-").append("unknown");
-                            break;
-                    }
-                }
-                String dimensionsKey = dimensionBuilder.toString();
                 for (int i = 0; i < row.getValuesCount(); i++) {
                     Row.Value rowValue = row.getValues(i);
                     if (rowValue.hasNullValue()) {
@@ -719,7 +748,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                     }
                     // Store the value in a list associated with its fully constructed key.
                     String finalRowKey =
-                            bundle.getSpecs(i).getId().replace(' ', '_') + dimensionsKey;
+                            PerfettoV2MetricConverterUtil.createLegacyMetricKey(
+                                    bundle.getSpecs(i).getId(), row.getDimensionList());
                     collectedValuesForKey
                             .computeIfAbsent(finalRowKey, k -> new ArrayList<>())
                             .add(rowValue.getDoubleValue());
