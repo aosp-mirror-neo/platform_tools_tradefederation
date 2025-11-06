@@ -93,6 +93,7 @@ public class CasFileDownloader implements IFileDownloader {
     private static final String STATS_CHUNK_RESTORE_KEY = "chunk_restore_time_ms";
     private static final String STATS_DOWNLOAD_ERROR_KEY = "download_error";
     private static final String STATS_E2E_TIME_KEY = "e2e_time_ms";
+    private static final String STATS_NOTES_KEY = "notes";
 
     // Keys of environment variables to set local cache options.
     // Will read from the environment variables if set for easiler experiment, will move to
@@ -953,6 +954,11 @@ public class CasFileDownloader implements IFileDownloader {
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.CAS_DOWNLOAD_E2E_TIME,
                 statsObject.optString(STATS_E2E_TIME_KEY, "0"));
+        if (statsObject.has(STATS_NOTES_KEY) && !statsObject.optString(STATS_NOTES_KEY).isEmpty()) {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_DOWNLOAD_NOTES,
+                    statsObject.getString(STATS_NOTES_KEY));
+        }
     }
 
     private void loadDigests(Path digestPath) throws JSONException, IOException {
