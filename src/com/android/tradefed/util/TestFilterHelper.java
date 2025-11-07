@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
@@ -41,16 +42,16 @@ import java.util.regex.PatternSyntaxException;
 public class TestFilterHelper {
 
     /** The include filters of the test name to run */
-    private Set<String> mIncludeFilters = new HashSet<>();
+    private Set<String> mIncludeFilters = new LinkedHashSet<>();
 
     /** The exclude filters of the test name to run */
-    private Set<String> mExcludeFilters = new HashSet<>();
+    private Set<String> mExcludeFilters = new LinkedHashSet<>();
 
     /** The include annotations of the test to run */
-    private Set<String> mIncludeAnnotations = new HashSet<>();
+    private Set<String> mIncludeAnnotations = new LinkedHashSet<>();
 
     /** The exclude annotations of the test to run */
-    private Set<String> mExcludeAnnotations = new HashSet<>();
+    private Set<String> mExcludeAnnotations = new LinkedHashSet<>();
 
     public TestFilterHelper() {
     }
