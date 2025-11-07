@@ -84,16 +84,16 @@ public class AFlagsTargetPreparerTest {
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/f2=false");
 
         mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command("aflags list");
-        verify(mDevice).executeShellV2Command("aflags enable 'f1'");
-        verify(mDevice).executeShellV2Command("aflags disable 'f2'");
+        verify(mDevice).executeShellV2Command("su root aflags list");
+        verify(mDevice).executeShellV2Command("su root aflags enable 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags disable 'f2'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
 
         clearInvocations(mDevice);
         mPreparer.tearDown(mTestInfo, null);
-        verify(mDevice).executeShellV2Command("aflags unset 'f1'");
-        verify(mDevice).executeShellV2Command("aflags unset 'f2'");
+        verify(mDevice).executeShellV2Command("su root aflags unset 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags unset 'f2'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
     }
@@ -122,16 +122,16 @@ public class AFlagsTargetPreparerTest {
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/f2=false");
 
         mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command("aflags list");
-        verify(mDevice).executeShellV2Command("aflags enable 'f1'");
-        verify(mDevice).executeShellV2Command("aflags disable 'f2'");
+        verify(mDevice).executeShellV2Command("su root aflags list");
+        verify(mDevice).executeShellV2Command("su root aflags enable 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags disable 'f2'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
 
         clearInvocations(mDevice);
         mPreparer.tearDown(mTestInfo, null);
-        verify(mDevice).executeShellV2Command("aflags disable 'f1'");
-        verify(mDevice).executeShellV2Command("aflags enable 'f2'");
+        verify(mDevice).executeShellV2Command("su root aflags disable 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags enable 'f2'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
     }
@@ -160,16 +160,16 @@ public class AFlagsTargetPreparerTest {
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/f2=false");
 
         mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command("aflags list");
-        verify(mDevice).executeShellV2Command("aflags enable 'f1'");
-        verify(mDevice).executeShellV2Command("aflags disable 'f2'");
+        verify(mDevice).executeShellV2Command("su root aflags list");
+        verify(mDevice).executeShellV2Command("su root aflags enable 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags disable 'f2'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
 
         clearInvocations(mDevice);
         mPreparer.tearDown(mTestInfo, null);
-        verify(mDevice).executeShellV2Command("aflags unset 'f1'");
-        verify(mDevice).executeShellV2Command("aflags unset 'f2'");
+        verify(mDevice).executeShellV2Command("su root aflags unset 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags unset 'f2'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
     }
@@ -214,7 +214,7 @@ public class AFlagsTargetPreparerTest {
         new OptionSetter(mPreparer).setOptionValue("flag-value", "namespace/f2=true");
 
         mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command("aflags list");
+        verify(mDevice).executeShellV2Command("su root aflags list");
         verifyNoMoreInteractions(mDevice);
 
         clearInvocations(mDevice);
@@ -247,14 +247,14 @@ public class AFlagsTargetPreparerTest {
         new OptionSetter(mPreparer).setOptionValue("force-set", "true");
 
         mPreparer.setUp(mTestInfo);
-        verify(mDevice).executeShellV2Command("aflags list");
-        verify(mDevice).executeShellV2Command("aflags disable 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags list");
+        verify(mDevice).executeShellV2Command("su root aflags disable 'f1'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
 
         clearInvocations(mDevice);
         mPreparer.tearDown(mTestInfo, null);
-        verify(mDevice).executeShellV2Command("aflags unset 'f1'");
+        verify(mDevice).executeShellV2Command("su root aflags unset 'f1'");
         verify(mDevice).reboot();
         verifyNoMoreInteractions(mDevice);
     }

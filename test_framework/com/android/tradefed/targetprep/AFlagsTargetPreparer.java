@@ -156,13 +156,13 @@ public class AFlagsTargetPreparer extends BaseTargetPreparer {
         for (Map.Entry<String, AFlagsFeatureFlag.State> flag : flagsToSet.entrySet()) {
             switch (flag.getValue()) {
                 case DISABLED:
-                    runCommand(device, String.format("aflags disable '%s'", flag.getKey()));
+                    runCommand(device, String.format("su root aflags disable '%s'", flag.getKey()));
                     break;
                 case ENABLED:
-                    runCommand(device, String.format("aflags enable '%s'", flag.getKey()));
+                    runCommand(device, String.format("su root aflags enable '%s'", flag.getKey()));
                     break;
                 case NONE:
-                    runCommand(device, String.format("aflags unset '%s'", flag.getKey()));
+                    runCommand(device, String.format("su root aflags unset '%s'", flag.getKey()));
                     break;
             }
         }
@@ -170,7 +170,7 @@ public class AFlagsTargetPreparer extends BaseTargetPreparer {
 
     private Map<String, AFlagsFeatureFlag> listFlags(ITestDevice device)
             throws DeviceNotAvailableException, TargetSetupError {
-        String values = runCommand(device, "aflags list");
+        String values = runCommand(device, "su root aflags list");
         try (ByteArrayInputStream stream = new ByteArrayInputStream(values.getBytes());
                 BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
             return parseFlags(reader.lines());
