@@ -73,11 +73,13 @@ public final class CreateUserPreparerTest {
         verifyUserCreated();
         verifyUserSettings(5, USER_SETUP_COMPLETE, "1");
         verifyUserSwitched(5);
+        mockGetCurrentUser(5);
 
         mockSwitchUser(10);
         mPreparer.tearDown(mTestInfo, /* e= */ null);
         verifyUserRemoved(5);
         verifyUserSwitched(10);
+        mockGetCurrentUser(10);
     }
 
     @Test
@@ -106,11 +108,13 @@ public final class CreateUserPreparerTest {
         // We should reuse the existing, not create a new user.
         verifyNoUserCreated();
         verifyUserSwitched(13);
+        mockGetCurrentUser(13);
 
         mPreparer.tearDown(mTestInfo, /* e= */ null);
         // We should keep the user for the next module to reuse.
         verifyUserNotRemoved(13);
         verifyUserSwitched(0);
+        mockGetCurrentUser(0);
     }
 
     @Test
@@ -134,11 +138,13 @@ public final class CreateUserPreparerTest {
         mPreparer.setUp(mTestInfo);
         verifyUserCreated();
         verifyUserSwitched(12);
+        mockGetCurrentUser(12);
 
         mPreparer.tearDown(mTestInfo, /* e= */ null);
         // Newly created user is kept to reuse it in the next run.
         verifyUserNotRemoved(12);
         verifyUserSwitched(0);
+        mockGetCurrentUser(0);
     }
 
     @Test
@@ -242,8 +248,162 @@ public final class CreateUserPreparerTest {
         mTestDeviceMockHelper.verifyNoUserCreated();
     }
 
+    @Test
+    public void testSetUp_tearDown_userName() throws Exception {
+        setParam("user-name", "test-user");
+        mockGetCurrentUser(10);
+        mockCreateUser("test-user", 15);
+        mockSwitchUser(15);
+        mockStartUser(15);
+        mPreparer.setUp(mTestInfo);
+        verifyUserCreated("test-user");
+        verifyUserSettings(15, USER_SETUP_COMPLETE, "1");
+        verifyUserSwitched(15);
+        mockGetCurrentUser(15);
+
+        mockSwitchUser(10);
+        mPreparer.tearDown(mTestInfo, /* e= */ null);
+        verifyUserRemoved(15);
+        verifyUserSwitched(10);
+        mockGetCurrentUser(10);
+    }
+
+    @Test
+    public void testSetUp_tearDown_userPin() throws Exception {
+        setParam("user-pin", "1234");
+        mockGetCurrentUser(10);
+        mockCreateUser(15);
+        mockSwitchUser(15);
+        mockStartUser(15);
+        mPreparer.setUp(mTestInfo);
+        verifyUserCreated();
+        verifyUserSettings(15, USER_SETUP_COMPLETE, "1");
+        verifySetPin(15, "1234");
+        verifyUserSwitched(15);
+        mockGetCurrentUser(15);
+
+        mockSwitchUser(10);
+        mPreparer.tearDown(mTestInfo, /* e= */ null);
+        verifyUserRemoved(15);
+        verifyUserSwitched(10);
+        mockGetCurrentUser(10);
+    }
+
+    @Test
+    public void testSetUp_tearDown_noSwitchUser() throws Exception {
+        setParam("switch-user", "false");
+        mockGetCurrentUser(10);
+        mockCreateUser(15);
+        mPreparer.setUp(mTestInfo);
+        verifyUserCreated();
+        verifyUserSettings(15, USER_SETUP_COMPLETE, "1");
+        verifyNoUserSwitched();
+
+        mPreparer.tearDown(mTestInfo, /* e= */ null);
+        verifyUserRemoved(15);
+        verifyNoUserSwitched();
+    }
+
+    @Test
+    public void testSetUp_tearDown_enableLockscreen() throws Exception {
+        setParam("enable-lockscreen", "true");
+        mockGetCurrentUser(10);
+        mockCreateUser(15);
+        mockSwitchUser(15);
+        mockStartUser(15);
+        mPreparer.setUp(mTestInfo);
+        verifyUserCreated();
+        verifyUserSettings(15, USER_SETUP_COMPLETE, "1");
+        verifySetLockscreenEnabled(15, true);
+        verifyUserSwitched(15);
+        mockGetCurrentUser(15);
+
+        mockSwitchUser(10);
+        mPreparer.tearDown(mTestInfo, /* e= */ null);
+        verifyUserRemoved(15);
+        verifyUserSwitched(10);
+        mockGetCurrentUser(10);
+    }
+
+    @Test
+    public void testSetUp_tearDown_disableLockscreen() throws Exception {
+        setParam("enable-lockscreen", "false");
+        mockGetCurrentUser(10);
+        mockCreateUser(15);
+        mockSwitchUser(15);
+        mockStartUser(15);
+        mPreparer.setUp(mTestInfo);
+        verifyUserCreated();
+        verifyUserSettings(15, USER_SETUP_COMPLETE, "1");
+        verifyNoLockscreenCommand(15);
+        verifyUserSwitched(15);
+        mockGetCurrentUser(15);
+
+        mockSwitchUser(10);
+        mPreparer.tearDown(mTestInfo, /* e= */ null);
+        verifyUserRemoved(15);
+        verifyUserSwitched(10);
+        mockGetCurrentUser(10);
+    }
+
+    @Test
+    public void testSetUp_tearDown_reuseTestUser_userName() throws Exception {
+        setParam("reuse-test-user", "true");
+        setParam("user-name", "test-user");
+
+        Map<Integer, UserInfo> existingUsers =
+                Map.of(
+                        0,
+                        new UserInfo(
+                                /* id= */ 0,
+                                /* userName= */ null,
+                                /* flags= */ 0x00000013,
+                                /* isRunning= */ true),
+                        13,
+                        new UserInfo(
+                                /* id= */ 13, "test-user", /* flags= */ 0, /* isRunning= */ false));
+
+        mockGetUserInfos(existingUsers);
+        mockGetCurrentUser(0);
+        mockSwitchUser(13);
+        mockStartUser(13);
+        mockSwitchUser(0);
+
+        mPreparer.setUp(mTestInfo);
+        // We should reuse the existing, not create a new user.
+        verifyNoUserCreated();
+        verifyUserSwitched(13);
+        mockGetCurrentUser(13);
+
+        mPreparer.tearDown(mTestInfo, null);
+        // We should keep the user for the next module to reuse.
+        verifyUserNotRemoved(13);
+        verifyUserSwitched(0);
+        mockGetCurrentUser(0);
+    }
+
+    private void mockCreateUser(String name, int userId) throws Exception {
+        mTestDeviceMockHelper.mockCreateUser(name, userId);
+    }
+
     private void verifyUserCreated() throws Exception {
         mTestDeviceMockHelper.verifyUserCreated();
+    }
+
+    private void verifyUserCreated(String name) throws Exception {
+        mTestDeviceMockHelper.verifyUserCreated(name);
+    }
+
+    private void verifySetPin(int userId, String pin) throws Exception {
+        mTestDeviceMockHelper.verifySetPin(userId, pin);
+    }
+
+    private void verifySetLockscreenEnabled(int userId, boolean enabled) throws Exception {
+        mTestDeviceMockHelper.verifySetLockscreenEnabled(userId, enabled);
+    }
+
+    private void verifyNoLockscreenCommand(int userId) throws Exception {
+        mTestDeviceMockHelper.verifyNoLockscreenCommand(userId);
     }
 
     private void verifyNoUserSwitched() throws Exception {

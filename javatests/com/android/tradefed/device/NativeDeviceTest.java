@@ -2699,14 +2699,7 @@ public class NativeDeviceTest {
     public void testDeleteFile_withUserId() throws Exception {
         int testUserId = 99;
         String remotePath = NativeDevice.SD_CARD + "deleteTest";
-        mTestDevice =
-                new TestableAndroidNativeDevice() {
-                    @Override
-                    public String executeShellCommand(String command)
-                            throws DeviceNotAvailableException {
-                        return "delete file";
-                    }
-                };
+
         mTestDevice.deleteFile(remotePath, testUserId);
 
         assertEquals(mMockContentProviderHandler.getUserId().intValue(), testUserId);
@@ -2721,12 +2714,6 @@ public class NativeDeviceTest {
                     @Override
                     public int getCurrentUser() throws DeviceNotAvailableException {
                         return currentUserId;
-                    }
-
-                    @Override
-                    public String executeShellCommand(String command)
-                            throws DeviceNotAvailableException {
-                        return "delete file";
                     }
                 };
         String remotePath = NativeDevice.SD_CARD + "deleteTest";

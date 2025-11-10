@@ -333,8 +333,7 @@ public class CasFileDownloader implements IFileDownloader {
                                 + " downloader.\n"
                                 + "Error: %s",
                         remoteFilePath, e.getMessage());
-                InvocationMetricLogger.addInvocationMetrics(
-                        InvocationMetricKey.CAS_DOWNLOAD_FILE_FAIL_COUNT, 1);
+                recordFileFailCountMetric(e);
             } catch (CasDigestConfigurationException e) {
                 CLog.w(
                         "Failed to download file %s from CAS, fallback to the original"
@@ -350,6 +349,15 @@ public class CasFileDownloader implements IFileDownloader {
         } catch (BuildRetrievalError e) {
             FileUtil.recursiveDelete(destFile);
             throw e;
+        }
+    }
+
+    private void recordFileFailCountMetric(CasDownloadException e) {
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_DOWNLOAD_FILE_FAIL_COUNT, 1);
+        if (e.getMessage().contains("rpc error: code = NotFound")) {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.CAS_DOWNLOAD_FILE_NOT_FOUND_COUNT, 1);
         }
     }
 
@@ -370,8 +378,7 @@ public class CasFileDownloader implements IFileDownloader {
                         "Failed to download file %s from CAS, fallback to the original"
                                 + " downloader. Error: %s",
                         relativeRemotePath, e.getMessage());
-                InvocationMetricLogger.addInvocationMetrics(
-                        InvocationMetricKey.CAS_DOWNLOAD_FILE_FAIL_COUNT, 1);
+                recordFileFailCountMetric(e);
             } catch (CasDigestConfigurationException e) {
                 CLog.w(
                         "Failed to download file %s from CAS, fallback to the original"
@@ -426,8 +433,7 @@ public class CasFileDownloader implements IFileDownloader {
                         "Failed to download file %s with include/exclude filters from CAS, "
                                 + "fallback to the original downloader. Error: %s",
                         remoteFilePath, e.getMessage());
-                InvocationMetricLogger.addInvocationMetrics(
-                        InvocationMetricKey.CAS_DOWNLOAD_FILE_FAIL_COUNT, 1);
+                recordFileFailCountMetric(e);
             } catch (CasDigestConfigurationException e) {
                 CLog.w(
                         "Failed to download file %s with include/exclude filters from CAS, "

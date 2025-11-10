@@ -114,16 +114,39 @@ public class PerfettoTraceRecorder {
                             "perfetto -c %s --txt -o %s --background",
                             ON_DEVICE_CONFIG_PATH, onDeviceTracePath);
 
-            // Run the command and get the PID
-            CommandResult result =
-                    device.executeShellV2Command(
-                            "nohup " + startCmd + " > /dev/null 2>&1 & echo $!");
-            if (result.getStatus() != CommandStatus.SUCCESS) {
-                CLog.e("Failed to start perfetto: %s", result.getStderr());
+            // Run the command to start perfetto in the background
+            device.executeShellV2Command("nohup " + startCmd + " > /dev/null 2>&1 &");
+
+            // Give the process a moment to start and open the file
+            RunUtil.getDefault().sleep(500); // Small delay
+
+            // Find the PID using lsof
+            CommandResult lsofResult = device.executeShellV2Command("lsof " + onDeviceTracePath);
+            if (lsofResult.getStatus() != CommandStatus.SUCCESS) {
+                CLog.e("Failed to find perfetto PID using lsof for file: %s", onDeviceTracePath);
+                CLog.e("lsof stderr: %s", lsofResult.getStderr());
                 return;
             }
 
-            String pidStr = result.getStdout().trim();
+            String lsofOutput = lsofResult.getStdout();
+            String[] lines = lsofOutput.split("\\n");
+            String pidStr = null;
+
+            // Find the line for the 'perfetto' command
+            for (String line : lines) {
+                String[] fields = line.trim().split("\\s+");
+                // Ensure the line has enough fields and the first field is "perfetto"
+                if (fields.length > 1 && "perfetto".equals(fields[0])) {
+                    pidStr = fields[1];
+                    break; // Found it, no need to continue
+                }
+            }
+
+            if (pidStr == null) {
+                CLog.e("Could not find 'perfetto' process in lsof output: %s", lsofOutput);
+                return;
+            }
+
             try {
                 long pid = Long.parseLong(pidStr);
                 deviceTraceMetadata.setPerfettoPid(pid);
@@ -131,10 +154,9 @@ public class PerfettoTraceRecorder {
                         "Perfetto started in background with PID: %s on device %s",
                         pid, device.getSerialNumber());
             } catch (NumberFormatException e) {
-                CLog.e("Failed to parse PID from output: %s", pidStr);
+                CLog.e("Failed to parse PID from lsof output: %s", pidStr);
                 return;
             }
-
             deviceMetadataMap.put(device, deviceTraceMetadata);
 
         } catch (DeviceNotAvailableException e) {
@@ -277,12 +299,25 @@ public class PerfettoTraceRecorder {
 
     // In PerfettoTraceRecorder.java
     @VisibleForTesting
-    boolean isProcessRunning(ITestDevice device, long pid)
-            throws DeviceNotAvailableException {
-        // Check if the process ID exists in the /proc directory
-        CommandResult result = device.executeShellV2Command(String.format("test -d /proc/%d", pid));
-        // Command succeeds (exit code 0) if the directory exists
-        return result.getStatus() == CommandStatus.SUCCESS && result.getExitCode() == 0;
+    boolean isProcessRunning(ITestDevice device, long pid) throws DeviceNotAvailableException {
+        CommandResult result =
+                device.executeShellV2Command(String.format("cat /proc/%d/status", pid));
+        if (result.getStatus() != CommandStatus.SUCCESS || result.getExitCode() != 0) {
+            // If we can't read the status file, the process is not running.
+            return false;
+        }
+        String statusContent = result.getStdout();
+        // Look for the "State:" line.
+        for (String line : statusContent.split("\n")) {
+            if (line.startsWith("State:")) {
+                // The process is considered "running" if it's not a zombie.
+                // "Z (zombie)" is a terminal state.
+                String state = line.split("\\s+")[1];
+                return !state.equals("Z");
+            }
+        }
+        // If we can't find the state, assume it's not running.
+        return false;
     }
 
     /** Stores metadata related to a trace running on an {@link ITestDevice}. */

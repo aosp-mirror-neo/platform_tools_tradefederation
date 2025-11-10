@@ -28,11 +28,25 @@ import com.android.tradefed.log.LogUtil.CLog;
 public class CreateUserPreparer extends BaseTargetPreparer {
 
     @Option(
+            name = "enable-lockscreen",
+            description = "Whether to enable the lockscreen for the created user.")
+    private boolean mEnableLockscreen = false;
+
+    @Option(
             name = "reuse-test-user",
             description =
                     "Whether or not to reuse already created tradefed test user, or remove them "
                             + " and re-create them between module runs.")
     private boolean mReuseTestUser;
+
+    @Option(name = "switch-user", description = "Whether to switch to the new user after creation.")
+    private boolean mSwitchUser = true;
+
+    @Option(name = "user-name", description = "The name to give the created user.")
+    private String mUserName = null;
+
+    @Option(name = "user-pin", description = "The PIN to set for the created user.")
+    private String mUserPin = null;
 
     private Integer mOriginalUser;
     private Integer mCreatedUserId;
@@ -49,9 +63,24 @@ public class CreateUserPreparer extends BaseTargetPreparer {
         }
         CLog.i("setUp(): mOriginalUser=%d, mReuseTestUser=%b", mOriginalUser, mReuseTestUser);
 
-        mCreatedUserId = UserHelper.createUser(device, mReuseTestUser);
+        mCreatedUserId = UserHelper.createUser(device, mReuseTestUser, mUserName);
 
-        switchCurrentUser(device, mCreatedUserId);
+        if (mUserPin != null) {
+            // It is OK to execute shell commands directly for options that are only
+            // enabled for specific tests through @Options .
+            device.executeShellCommand(
+                    String.format("locksettings set-pin --user %d %s", mCreatedUserId, mUserPin));
+        }
+
+        if (mEnableLockscreen) {
+            device.executeShellCommand(
+                    String.format(
+                            "locksettings set-lockscreen-enabled --user %d true", mCreatedUserId));
+        }
+
+        if (mSwitchUser) {
+            switchCurrentUser(device, mCreatedUserId);
+        }
 
         device.waitForDeviceAvailable();
         device.postBootSetup();
@@ -87,7 +116,9 @@ public class CreateUserPreparer extends BaseTargetPreparer {
             CLog.d("Skipping teardown because original user is null");
             return;
         }
-        switchBackToOriginalUser(device);
+        if (device.getCurrentUser() != mOriginalUser) {
+            switchBackToOriginalUser(device);
+        }
 
         if (!mReuseTestUser) {
             device.removeUser(mCreatedUserId);

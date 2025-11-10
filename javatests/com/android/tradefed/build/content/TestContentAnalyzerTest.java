@@ -127,8 +127,9 @@ public class TestContentAnalyzerTest {
         testCases.mkdirs();
         new File(testCases, "module1").mkdirs();
         new File(testCases, "module1/someapk.apk").createNewFile();
+        generateConfigurationFile(testCases, "module1/module1.config");
         new File(testCases, "module2").mkdirs();
-        new File(testCases, "module2/otherfile.xml").createNewFile();
+        generateConfigurationFile(testCases, "module2/otherfile.xml");
         mBuildInfo.setFile(BuildInfoFileKey.ROOT_DIRECTORY, rootDir, "P8888");
         ContentInformation contentInfo =
                 new ContentInformation(
@@ -164,7 +165,7 @@ public class TestContentAnalyzerTest {
         new File(testCases, "module1").mkdirs();
         new File(testCases, "module1/someapk.apk").createNewFile();
         new File(testCases, "module2").mkdirs();
-        new File(testCases, "module2/otherfile.xml").createNewFile();
+        generateConfigurationFile(testCases, "module2/otherfile.xml");
         mBuildInfo.setFile(BuildInfoFileKey.ROOT_DIRECTORY, rootDir, "P8888");
         ContentInformation contentInfo =
                 new ContentInformation(
@@ -199,7 +200,7 @@ public class TestContentAnalyzerTest {
         File testCases = new File(rootDir, "testcases");
         testCases.mkdirs();
         new File(testCases, "module2").mkdirs();
-        new File(testCases, "module2/otherfile.xml").createNewFile();
+        generateConfigurationFile(testCases, "module2/otherfile.xml");
         mBuildInfo.setFile(BuildInfoFileKey.ROOT_DIRECTORY, rootDir, "P8888");
         ContentInformation contentInfo =
                 new ContentInformation(
@@ -308,5 +309,29 @@ public class TestContentAnalyzerTest {
                     + "]";
         FileUtil.writeToFile(currentContent, content);
         return content;
+    }
+
+    private File generateConfigurationFile(File dir, String subPath) throws IOException {
+        File configFile = new File(dir, subPath);
+        String configContent =
+                "<configuration description=\"Config for the test CTS config "
+                        + "change test cases\">\n"
+                        + "    <option name=\"test-suite-tag\" value=\"cts\" />\n"
+                        + "    <option name=\"config-descriptor:metadata\" key=\"component\" "
+                        + "value=\"framework\" />\n"
+                        + "\n"
+                        + "    <target_preparer class=\"com.android.tradefed.targetprep.suite"
+                        + ".SuiteApkInstaller\">\n"
+                        + "        <option name=\"cleanup-apks\" value=\"true\" />\n"
+                        + "        <option name=\"test-file-name\" value=\"module.apk\" />\n"
+                        + "    </target_preparer>\n"
+                        + "    <test class=\"com.android.compatibility.common.tradefed.testtype"
+                        + ".JarHostTest\" >\n"
+                        + "        <option name=\"jar\" value=\"module.jar\" "
+                        + "/>\n"
+                        + "    </test>\n"
+                        + "</configuration>";
+        FileUtil.writeToFile(configContent, configFile);
+        return configFile;
     }
 }

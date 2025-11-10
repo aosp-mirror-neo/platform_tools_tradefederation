@@ -19,15 +19,31 @@ package com.android.tradefed.postprocessor;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.MockitoAnnotations.initMocks;
 
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Dimension;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.DimensionalMetric;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.MetricRecord;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.MetricReport;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Polarity;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.RawValues;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Source;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.TestIdentifier;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.TestMetricResult;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Unit;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Value;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.DataType;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.postprocessor.PerfettoGenericPostProcessor.METRIC_FILE_FORMAT;
 import com.android.tradefed.result.ITestInvocationListener;
+import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
@@ -49,9 +65,10 @@ import perfetto.protos.PerfettoMergedMetrics.TraceMetrics;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -614,9 +631,7 @@ public class PerfettoGenericPostProcessorTest {
         testLogs.put(
                 PREFIX_OPTION_VALUE,
                 new LogFile(
-                        perfettoV2MetricProtoFile.getAbsolutePath(),
-                        "some.url",
-                        LogDataType.TEXTPB));
+                        perfettoV2MetricProtoFile.getAbsolutePath(), "some.url", LogDataType.ZIP));
         Map<String, Metric.Builder> parsedV2Metrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
@@ -636,6 +651,52 @@ public class PerfettoGenericPostProcessorTest {
                 parsedV2Metrics, "biz-(Paused)KernelPreparation-12907-456", 345.0);
         assertMetricsContainDouble(
                 parsedV2Metrics, "biz-(Paused)MarkingPause-1234567890-234", 321.0);
+    }
+
+    @Test
+    public void testDimensionalReport_v2Metrics() throws Throwable {
+        setupPerfettoV2MetricFile(METRIC_FILE_FORMAT.text, true);
+
+        mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
+        mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
+        mOptionSetter.setOptionValue("enable-dimensional-metrics", "true");
+
+        Map<String, LogFile> testLogs = new HashMap<>();
+        testLogs.put(
+                PREFIX_OPTION_VALUE,
+                new LogFile(
+                        perfettoV2MetricProtoFile.getAbsolutePath(), "some.url", LogDataType.ZIP));
+
+        final MetricReport[] capturedReport = new MetricReport[1];
+        doAnswer(
+                        (invocation) -> {
+                            InputStreamSource source = invocation.getArgument(2);
+                            try {
+                                try (BufferedReader reader =
+                                        new BufferedReader(
+                                                new InputStreamReader(
+                                                        source.createInputStream()))) {
+                                    MetricReport.Builder builder = MetricReport.newBuilder();
+                                    TextFormat.merge(reader, builder);
+                                    capturedReport[0] = builder.build();
+                                }
+                            } finally {
+                                source.cancel(); // Clean up the source
+                            }
+                            return null;
+                        })
+                .when(mListener)
+                .testLog(
+                        startsWith("metrics_report"),
+                        eq(LogDataType.CB_METRICS_REPORT_FILE),
+                        any());
+
+        mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
+
+        // Build expected report for comparison
+        MetricReport expectedReport = buildExpectedDimensionalReport();
+
+        assertEquals(expectedReport, capturedReport[0]);
     }
 
     /**
@@ -913,7 +974,8 @@ public class PerfettoGenericPostProcessorTest {
         if (format.equals(METRIC_FILE_FORMAT.binary)) {
             File perfettoBinaryFile = FileUtil.createTempFile("metric_perfetto_binary", ".pb");
             try (BufferedReader bufferedReader =
-                    new BufferedReader(new FileReader(perfettoMetricProtoFile))) {
+                    new BufferedReader(
+                            new InputStreamReader(new FileInputStream(perfettoMetricProtoFile)))) {
                 TraceMetrics.Builder builder = TraceMetrics.newBuilder();
                 TextFormat.merge(bufferedReader, builder);
                 builder.build().writeTo(new FileOutputStream(perfettoBinaryFile));
@@ -947,6 +1009,10 @@ public class PerfettoGenericPostProcessorTest {
                 "metric_bundles {\n"
                         + "  specs {\n"
                         + "    id: \"foo_bar\"\n"
+                        + "    value: \"double_value\"\n"
+                        + "    dimensions: \"process\"\n"
+                        + "    unit: TIME_NANOS\n"
+                        + "    polarity: LOWER_IS_BETTER\n"
                         + "  }\n"
                         + "  row {\n"
                         + "    dimension {\n"
@@ -976,9 +1042,21 @@ public class PerfettoGenericPostProcessorTest {
                         + "metric_bundles {\n"
                         + "  specs {\n"
                         + "    id: \"baza\"\n"
+                        + "    value: \"double_value\"\n"
+                        + "    dimensions: \"state\"\n"
+                        + "    dimensions: \"id\"\n"
+                        + "    dimensions: \"value\"\n"
+                        + "    unit: TIME_MILLIS\n"
+                        + "    polarity: HIGHER_IS_BETTER\n"
                         + "  }\n"
                         + "  specs {\n"
                         + "    id: \"biz\"\n"
+                        + "    value: \"double_value\"\n"
+                        + "    dimensions: \"state\"\n"
+                        + "    dimensions: \"id\"\n"
+                        + "    dimensions: \"value\"\n"
+                        + "    unit: COUNT\n"
+                        + "    polarity: NOT_APPLICABLE\n"
                         + "  }\n"
                         + "  row {\n"
                         + "    dimension {\n"
@@ -1047,7 +1125,9 @@ public class PerfettoGenericPostProcessorTest {
         if (format.equals(METRIC_FILE_FORMAT.binary)) {
             File perfettoBinaryFile = FileUtil.createTempFile("metric_v2_perfetto_binary", ".pb");
             try (BufferedReader bufferedReader =
-                    new BufferedReader(new FileReader(perfettoV2MetricProtoFile))) {
+                    new BufferedReader(
+                            new InputStreamReader(
+                                    new FileInputStream(perfettoV2MetricProtoFile)))) {
                 TraceMetrics.Builder builder = TraceMetrics.newBuilder();
                 TextFormat.merge(bufferedReader, builder);
                 builder.build().writeTo(new FileOutputStream(perfettoBinaryFile));
@@ -1075,10 +1155,12 @@ public class PerfettoGenericPostProcessorTest {
         File compressedFile = FileUtil.createTempFile("compressed_temp", ".zip");
         try {
             ZipUtil.createZip(decompressedFile, compressedFile);
+            // Only delete on success
+            decompressedFile.delete();
         } catch (IOException ioe) {
             CLog.e("Unable to gzip the file.");
-        } finally {
-            decompressedFile.delete();
+            // Rethrow to fail test clearly
+            throw ioe;
         }
         return compressedFile;
     }
@@ -1147,5 +1229,188 @@ public class PerfettoGenericPostProcessorTest {
                                                                 .getMeasurements()
                                                                 .getDoubleValues()
                                                                 .getDoubleValueList())));
+    }
+
+    private MetricReport buildExpectedDimensionalReport() {
+        MetricRecord fooBarRecord =
+                MetricRecord.newBuilder()
+                        .setMetricId("foo_bar")
+                        .setHumanReadableName("foo_bar")
+                        .setUnit(Unit.TIME_NANOS)
+                        .setPolarity(Polarity.LOWER_IS_BETTER)
+                        .setSource(Source.PERFETTO_V2)
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("process")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setStringValue(
+                                                                                ".ShannonImsService")))
+                                        .setRawValues(
+                                                RawValues.newBuilder()
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(123.0))
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(456.0)))
+                                        .setLegacyMetricKey("foo_bar-.ShannonImsService"))
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("process")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setStringValue("null")))
+                                        .setRawValues(
+                                                RawValues.newBuilder()
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(
+                                                                                10464441.0)))
+                                        .setLegacyMetricKey("foo_bar-null"))
+                        .build();
+
+        MetricRecord bazaRecord =
+                MetricRecord.newBuilder()
+                        .setMetricId("baza")
+                        .setHumanReadableName("baza")
+                        .setUnit(Unit.TIME_MILLIS)
+                        .setPolarity(Polarity.HIGHER_IS_BETTER)
+                        .setSource(Source.PERFETTO_V2)
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("id")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setIntValue(1234567890)))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("state")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setStringValue(
+                                                                                "(Paused)KernelPreparation")))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("value")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(123.0)))
+                                        .setRawValues(
+                                                RawValues.newBuilder()
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(260051.0)))
+                                        .setLegacyMetricKey(
+                                                "baza-(Paused)KernelPreparation-1234567890-123.0"))
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("id")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setIntValue(12907)))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("state")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setStringValue(
+                                                                                "(Paused)KernelPreparation")))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("value")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(456.0)))
+                                        .setRawValues(
+                                                RawValues.newBuilder()
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(158854.0)))
+                                        .setLegacyMetricKey(
+                                                "baza-(Paused)KernelPreparation-12907-456.0"))
+                        .build();
+        MetricRecord bizRecord =
+                MetricRecord.newBuilder()
+                        .setMetricId("biz")
+                        .setHumanReadableName("biz")
+                        .setUnit(Unit.COUNT)
+                        .setPolarity(Polarity.NOT_APPLICABLE)
+                        .setSource(Source.PERFETTO_V2)
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("id")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setIntValue(12907)))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("state")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setStringValue(
+                                                                                "(Paused)KernelPreparation")))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("value")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(456.0)))
+                                        .setRawValues(
+                                                RawValues.newBuilder()
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(345.0)))
+                                        .setLegacyMetricKey(
+                                                "biz-(Paused)KernelPreparation-12907-456.0"))
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("id")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setIntValue(1234567890)))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("state")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setStringValue(
+                                                                                "(Paused)MarkingPause")))
+                                        .addDimensions(
+                                                Dimension.newBuilder()
+                                                        .setKey("value")
+                                                        .setValue(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(234.0)))
+                                        .setRawValues(
+                                                RawValues.newBuilder()
+                                                        .addValues(
+                                                                Value.newBuilder()
+                                                                        .setDoubleValue(321.0)))
+                                        .setLegacyMetricKey(
+                                                "biz-(Paused)MarkingPause-1234567890-234.0"))
+                        .build();
+
+        TestMetricResult testResult =
+                TestMetricResult.newBuilder()
+                        .setIdentifier(TestIdentifier.getDefaultInstance())
+                        .addMetricRecords(fooBarRecord)
+                        .addMetricRecords(bazaRecord)
+                        .addMetricRecords(bizRecord)
+                        .build();
+
+        return MetricReport.newBuilder().addTestMetricResults(testResult).build();
     }
 }

@@ -210,6 +210,8 @@ import com.android.tradefed.postprocessor.PerfettoTracePostProcessorTest;
 import com.android.tradefed.postprocessor.StatsdBeforeAfterGaugeMetricPostProcessorTest;
 import com.android.tradefed.postprocessor.StatsdEventMetricPostProcessorTest;
 import com.android.tradefed.postprocessor.StatsdGenericPostProcessorTest;
+import com.android.tradefed.postprocessor.util.PerfettoV2MetricConverterUtilTest;
+import com.android.tradefed.postprocessor.util.PerfettoV2ToDimensionalMetricConverterTest;
 import com.android.tradefed.result.ATestFileSystemLogSaverTest;
 import com.android.tradefed.result.BugreportCollectorTest;
 import com.android.tradefed.result.CollectingTestListenerTest;
@@ -808,6 +810,10 @@ import org.junit.runners.Suite.SuiteClasses;
     StatsdBeforeAfterGaugeMetricPostProcessorTest.class,
     StatsdEventMetricPostProcessorTest.class,
     StatsdGenericPostProcessorTest.class,
+
+    // postprocessor.util
+    PerfettoV2ToDimensionalMetricConverterTest.class,
+    PerfettoV2MetricConverterUtilTest.class,
 
     // result
     ATestFileSystemLogSaverTest.class,
