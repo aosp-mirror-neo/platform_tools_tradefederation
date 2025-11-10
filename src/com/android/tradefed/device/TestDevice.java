@@ -633,7 +633,7 @@ public class TestDevice extends NativeDevice {
         if (grantPermissions) {
             args.add("-g");
         }
-        return adbInternalInstallPackage(packageFile, reinstall, args);
+        return internalInstallPackage(packageFile, reinstall, args);
     }
 
     /**
