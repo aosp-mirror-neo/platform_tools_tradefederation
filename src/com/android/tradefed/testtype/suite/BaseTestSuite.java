@@ -17,6 +17,7 @@ package com.android.tradefed.testtype.suite;
 
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.build.IBuildInfo;
+import com.android.tradefed.command.ICommandOptions;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.Option.Importance;
@@ -219,6 +220,12 @@ public class BaseTestSuite extends ITestSuite {
                             + "given module defined in include-filter.")
     private boolean mLoadConfigsWithIncludeFilters = false;
 
+    @Option(
+            name = "use-include-filter-order",
+            description =
+                    "Organize the test execution by the order specified in the include filter.")
+    private boolean mUseIncludeFilterOrder = false;
+
     private SuiteModuleLoader mModuleRepo;
     private Map<String, LinkedHashSet<SuiteTestFilter>> mIncludeFiltersParsed =
             new LinkedHashMap<>();
@@ -235,6 +242,23 @@ public class BaseTestSuite extends ITestSuite {
     /** {@inheritDoc} */
     @Override
     public LinkedHashMap<String, IConfiguration> loadTests() {
+        if (mUseIncludeFilterOrder) {
+            ICommandOptions options = getConfiguration().getCommandOptions();
+            if (options.getOptimizeMainlineTest()
+                    || (options.getShardCount() != null && options.getShardCount() > 1)
+                    || options.shouldUseDynamicSharding()
+                    || options.shouldUseEvenModuleSharding()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "'use-include-filter-order' was enabled with incompatible"
+                                    + " 'optimize-mainline-test': %s, 'shard-count': %s,"
+                                    + " 'dynamic-sharding': %s, 'use-even-module-sharding': %s.",
+                                options.getOptimizeMainlineTest(),
+                                options.getShardCount(),
+                                options.shouldUseDynamicSharding(),
+                                options.shouldUseEvenModuleSharding()));
+            }
+        }
         try {
             File testsDir = getTestsDir();
             try {
@@ -348,6 +372,7 @@ public class BaseTestSuite extends ITestSuite {
             mModuleRepo.setExcludedModuleParameters(mExcludedModuleParameters);
             mModuleRepo.setFoldableStates(mFoldableStates);
             mModuleRepo.setLoadConfigsWithIncludeFilters(mLoadConfigsWithIncludeFilters);
+            mModuleRepo.setUseIncludeFilterOrder(mUseIncludeFilterOrder);
 
             List<File> testsDirectories = new ArrayList<>();
 

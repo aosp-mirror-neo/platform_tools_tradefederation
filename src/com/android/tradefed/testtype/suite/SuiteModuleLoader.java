@@ -92,6 +92,7 @@ public class SuiteModuleLoader {
     private boolean mIgnoreNonPreloadedMainlineModule = false;
     private boolean mAllowOptionalParameterizedModules = false;
     private boolean mLoadConfigsWithIncludeFilters = false;
+    private boolean mUseIncludeFilterOrder = false;
     private ModuleParameters mForcedModuleParameter = null;
     private Set<ModuleParameters> mExcludedModuleParameters = new HashSet<>();
     private Set<DeviceFoldableState> mFoldableStates = new LinkedHashSet<>();
@@ -152,6 +153,14 @@ public class SuiteModuleLoader {
     /** Sets whether or not to load test config based on the given include-filter. */
     public final void setLoadConfigsWithIncludeFilters(boolean allowed) {
         mLoadConfigsWithIncludeFilters = allowed;
+    }
+
+    /**
+     * Sets whether or not to organize the test execution by the order specified in the include
+     * filter.
+     */
+    public final void setUseIncludeFilterOrder(boolean useIncludeFilterOrder) {
+        mUseIncludeFilterOrder = useIncludeFilterOrder;
     }
 
     /** Sets the only {@link ModuleParameters} type that should be run. */
@@ -224,6 +233,17 @@ public class SuiteModuleLoader {
         // Ensure stable initial order of configurations.
         Collections.sort(listConfigFiles);
         toRun.putAll(loadConfigsFromSpecifiedPaths(listConfigFiles, abis, suiteTag));
+
+        if (mUseIncludeFilterOrder) {
+            // Reorder configurations to match the module sequence defined in the include filter.
+            LinkedHashMap<String, IConfiguration> sortedToRun = new LinkedHashMap<>();
+            for (String moduleId : mIncludeFilters.keySet()) {
+                if (toRun.containsKey(moduleId)) {
+                    sortedToRun.put(moduleId, toRun.get(moduleId));
+                }
+            }
+            toRun = sortedToRun;
+        }
         return toRun;
     }
 
