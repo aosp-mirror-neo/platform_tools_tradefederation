@@ -73,6 +73,7 @@ public class CasFileDownloader implements IFileDownloader {
     // update lab host configurations once the E2E workflow is verified.
     @VisibleForTesting static final String CAS_JSON_KEY = "gcs-json-key";
 
+    private static final int MAX_ERROR_LOG_LENGTH = 1024; // 1KB, p85 = 167
     private static final String CAS_CLIENT_NAME = "cas_downloader";
     private static final String DIGEST_KEY_INSTANCE = "cas_instance";
     private static final String DIGEST_KEY_SERVICE = "cas_service";
@@ -904,6 +905,10 @@ public class CasFileDownloader implements IFileDownloader {
         JSONObject statsObject = new JSONObject(jsonString);
         String casError = statsObject.optString(STATS_DOWNLOAD_ERROR_KEY);
         if (!casError.isEmpty()) {
+            // The error message can be excessive long, so we only log the first part.
+            if (casError.length() > MAX_ERROR_LOG_LENGTH) {
+                casError = casError.substring(0, MAX_ERROR_LOG_LENGTH) + "....";
+            }
             CLog.d("Cas error: %s", casError);
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_ERRORS, casError.replace(",", " "));
