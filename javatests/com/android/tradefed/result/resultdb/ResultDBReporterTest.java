@@ -35,6 +35,7 @@ import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.proto.TestRecordProto;
 import com.android.tradefed.result.skipped.SkipManager;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
+
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
@@ -65,6 +66,11 @@ public class ResultDBReporterTest {
         }
 
         @Override
+        TestResultHandler createTestResultHandler() {
+            return new TestResultHandlerTester();
+        }
+
+        @Override
         IRecorderClient createRecorderClient(
                 String invocationId, String updateToken, Boolean isStaging) {
             return mRecorder;
@@ -83,6 +89,12 @@ public class ResultDBReporterTest {
         @Override
         String randomUUIDString() {
             return "result_id";
+        }
+    }
+
+    private class TestResultHandlerTester extends TestResultHandler {
+        public TestResultHandlerTester() {
+            super();
         }
 
         @Override

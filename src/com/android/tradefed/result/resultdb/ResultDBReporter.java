@@ -15,14 +15,8 @@
  */
 package com.android.tradefed.result.resultdb;
 
-import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.CreateInvocationRequest;
-import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.Invocation;
-import com.android.resultdb.proto.SkippedReason;
-import com.android.resultdb.proto.StringPair;
-import com.android.resultdb.proto.TestIdentifier;
-import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.IConfiguration;
@@ -42,35 +36,14 @@ import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
-import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
-import com.android.tradefed.testtype.suite.ModuleDefinition;
-import com.android.tradefed.testtype.suite.SuiteTestFilter;
-import com.android.tradefed.util.MultiMap;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.util.Durations;
-import com.google.protobuf.util.Timestamps;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Result reporter that uploads test results to ResultDB. */
 @OptionClass(alias = "resultdb-reporter")
@@ -82,25 +55,8 @@ public class ResultDBReporter
 
     private static final String BUILD_ENV_INVOCATION_CONTEXT_KEY = "android-build-environment";
 
-    private static final int MAX_SUMMARY_HTML_BYTES = 4096;
-
-    private static final int MAX_ERROR_MESSAGE_BYTES = 1024;
-    private static final int MAX_ERROR_TRACE_BYTES = 4096;
-    private static final int MAX_SKIP_REASON_MESSAGE_BYTES = 1024;
-
     // Link to redirect to the result page.
     private static final String RESULT_LINK = "https://ci.chromium.org/ui/inv/invocations/%s";
-
-    // Set containing the allowed variant module parameter keys
-    private static final Set<String> ALLOWED_MODULE_PARAMETERS =
-            ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
-    // Tag name for the test mapping source
-    private static final String TEST_MAPPING_TAG = "test_mapping_source";
-
-    // Pattern to extract artifact id from logsaver URL.
-    private static final Pattern LOGSAVER_PATTERN =
-            Pattern.compile(
-                    "https:\\/\\/android-build.googleplex.com\\/builds\\/.+\\/.+\\/.+\\/.+\\/tests\\/\\d+\\/(.+)");
 
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
@@ -119,19 +75,15 @@ public class ResultDBReporter
 
     // Common variant values for all test in this TF invocation.
     private Variant mBaseVariant;
-    // Module level variant for test in the same test module.
-    private Variant mModuleVariant;
-    private String mCurrentModule;
-    private IInvocationContext mModuleContext;
-    private TestResult mCurrentTestResult;
-    // Counter for generate test result ID.
-    private AtomicInteger mResultCounter = new AtomicInteger(0);
-    // Base for generate test result ID.
-    private String mResultIdBase;
-    // No more log associations can be added to the upload queue after this set to true.
-    private boolean mUploadQueueFinalized = false;
-    // A map from resource ID to TestArtifact.
-    private Map<String, Artifact> mTestArtifacts = new ConcurrentHashMap<>();
+
+    private final TestResultHandler mTestResultHandler = createTestResultHandler();
+    private final WorkUnitHandler mWorkUnitHandler = new WorkUnitHandler();
+    private final TestArtifactHandler mTestArtifactHandler = new TestArtifactHandler();
+
+    @VisibleForTesting
+    TestResultHandler createTestResultHandler() {
+        return new TestResultHandler();
+    }
 
     @Override
     public void setConfiguration(IConfiguration configuration) {
@@ -148,33 +100,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-
-        String resourceId = getAntsResourceId(logFile);
-        if (resourceId.isEmpty()) {
-            // Ignore logs with empty resource id.
-            return;
-        }
-        Artifact.Builder artifactBuilder = Artifact.newBuilder().setArtifactId(resourceId);
-
-        CLog.v(
-                "Received association %s %s %s %s",
-                dataName, resourceId, logFile.getPath(), logFile.getUrl());
-
-        if (mCurrentTestResult != null) {
-            TestIdentifier testId = mCurrentTestResult.getTestIdStructured();
-
-            artifactBuilder
-                    .setTestIdStructured(
-                            TestIdentifier.newBuilder()
-                                    .setModuleName(testId.getModuleName())
-                                    .setModuleScheme(testId.getModuleScheme())
-                                    .setCoarseName(testId.getCoarseName())
-                                    .setFineName(testId.getFineName())
-                                    .setCaseName(testId.getCaseName()))
-                    .setResultId(mCurrentTestResult.getResultId());
-        }
-        mTestArtifacts.put(resourceId, artifactBuilder.build());
-        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
+        mTestArtifactHandler.logAssociation(
+                dataName, logFile, mTestResultHandler.getCurrentTestResult());
     }
 
     /**
@@ -212,61 +139,7 @@ public class ResultDBReporter
                     resourceId, storagePath);
             return;
         }
-        CLog.v("Uploading storage path %s %s", resourceId, storagePath);
-        Artifact artifact = mTestArtifacts.remove(resourceId);
-        if (artifact == null) {
-            // If the artifact is not found, it means the log association is not called before.
-            // Upload the artifact to the top work unit.
-            CLog.d(
-                    "Artifact for resource ID %s not found, upload to the top work unit.",
-                    resourceId);
-            artifact = Artifact.newBuilder().setArtifactId(resourceId).build();
-        }
-        if (!storagePath.matches("^/bigstore/([^/]+)/.+$")) {
-            return;
-        }
-        // The storage path is a valid bigstore path, set the artifact to with GCS URI.
-        String contentType = logFile.getType().getContentType();
-        // Convert storage path to GCS URI.
-        String gcsUri = storagePath.replaceFirst("^/bigstore/", "gs://");
-        artifact =
-                artifact.toBuilder()
-                        .setGcsUri(gcsUri)
-                        .setContentType(contentType)
-                        .setSizeBytes(logFile.getSize())
-                        .setArtifactType(logFile.getType().toString())
-                        .build();
-
-        if (mUploadQueueFinalized) {
-            // If the upload queue is finalized, make block call to upload the artifact directly.
-            CLog.d("Upload queue is finalized, has been called, upload the artifact directly.");
-            mRecorder.uploadArtifact(artifact);
-            return;
-        }
-        // Queue the artifact for upload.
-        mRecorder.enqueueArtifact(artifact);
-    }
-
-    // Returns the AnTS artifact resource ID.
-    private String getAntsResourceId(LogFile logFile) {
-        // We need to decode the resourceId because the backend expects that it is unencoded,
-        // but TF gives as the url that is already encoded.
-        String resourceId = "";
-        if (logFile.getUrl() == null) {
-            resourceId = "";
-        } else {
-            Matcher m = LOGSAVER_PATTERN.matcher(logFile.getUrl());
-            if (!m.find()) {
-                resourceId = "";
-            } else {
-                try {
-                    resourceId = new URI(m.group(1)).getPath();
-                } catch (URISyntaxException e) {
-                    // ignore
-                }
-            }
-        }
-        return resourceId;
+        mTestArtifactHandler.uploadStoragePath(resourceId, storagePath, logFile, mRecorder);
     }
 
     @Override
@@ -291,15 +164,6 @@ public class ResultDBReporter
         return RecorderClient.createWithNewInvocation(request, isStaging);
     }
 
-    // Generate a random hexadecimal string of length 8.
-    @VisibleForTesting
-    String randomHexString() throws NoSuchAlgorithmException {
-        SecureRandom random = SecureRandom.getInstance("SHA1PRNG");
-        byte[] bytes = new byte[4];
-        random.nextBytes(bytes);
-        return ResultDBUtil.bytesToHex(bytes);
-    }
-
     @Override
     public void invocationStarted(IInvocationContext context) {
         if (mDisable) {
@@ -314,7 +178,7 @@ public class ResultDBReporter
             if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
                 CLog.w(
                         "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
-                            + " required when resultdb_root_invocation_id is provided %s",
+                                + " required when resultdb_root_invocation_id is provided %s",
                         rootInvocationId);
                 return;
             }
@@ -367,16 +231,9 @@ public class ResultDBReporter
                 // Make sure we cancel the client, otherwise it will leak a thread since
                 // invocationEnded will be skipped.
                 mRecorder.finalizeUpload();
-                mUploadQueueFinalized = true;
+                mTestArtifactHandler.setUploadQueueFinalized();
             }
             throw new RuntimeException(e);
-        }
-        try {
-            mResultIdBase = this.randomHexString();
-        } catch (NoSuchAlgorithmException e) {
-            mDisable = true;
-            CLog.e("Failed to generate random result ID base.");
-            return;
         }
         // Variant contains properties in go/consistent-test-identifiers, excluding
         // properties in ResultDB test identifier.
@@ -426,7 +283,7 @@ public class ResultDBReporter
             return;
         }
         mRecorder.finalizeUpload();
-        mUploadQueueFinalized = true;
+        mTestArtifactHandler.setUploadQueueFinalized();
         if (mManageInvocation) {
             mRecorder.finalizeInvocation();
         }
@@ -440,31 +297,15 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mModuleContext = moduleContext;
-        // Extract module informations.
-        mCurrentModule = moduleContext.getConfigurationDescriptor().getModuleName();
-        mModuleVariant = getModuleVariant(moduleContext.getAttributes());
-    }
-
-    /*
-     * Only module-abi and module-param are used in the variant, so filter other values.
-     */
-    private Variant getModuleVariant(MultiMap<String, String> properties) {
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        for (Map.Entry<String, String> property : properties.entries()) {
-            if (ALLOWED_MODULE_PARAMETERS.contains(property.getKey())) {
-                variantBuilder.putDef(
-                        ResultDBUtil.makeValidKey(property.getKey()), property.getValue());
-            }
-        }
-        return variantBuilder.build();
+        mWorkUnitHandler.testModuleStarted(moduleContext);
     }
 
     @Override
     public void testModuleEnded() {
-        // Clear module context.
-        mModuleContext = null;
-        mModuleVariant = null;
+        if (mDisable) {
+            return;
+        }
+        mWorkUnitHandler.testModuleEnded();
     }
 
     @Override
@@ -474,79 +315,17 @@ public class ResultDBReporter
             return;
         }
         try {
-            reportDemotedTests();
+            mTestResultHandler.reportDemotedTests(
+                    mConfiguration,
+                    mWorkUnitHandler.getModuleContext(),
+                    currentTimestamp(),
+                    mBaseVariant,
+                    mWorkUnitHandler.getModuleVariant(),
+                    mWorkUnitHandler.getCurrentModule(),
+                    mRecorder);
         } catch (RuntimeException e) {
             CLog.e("error during skip reporting:");
             CLog.e(e);
-        }
-    }
-
-    private void reportDemotedTests() {
-        String moduleAbi = null;
-        String moduleName = null;
-        if (mModuleContext != null) {
-            moduleAbi = mModuleContext.getAttribute(ModuleDefinition.MODULE_ABI);
-            moduleName = mModuleContext.getAttribute(ModuleDefinition.MODULE_NAME);
-        }
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        if (mModuleVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mModuleVariant);
-        }
-        if (mBaseVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
-        }
-        for (Entry<String, SkipReason> entry :
-                mConfiguration.getSkipManager().getDemotedTests().entrySet()) {
-            String key = entry.getKey();
-            SuiteTestFilter filter = SuiteTestFilter.createFrom(key);
-            // If module filter has an ABI, we expect the filter to match it to be applicable
-            // not having it is a bit ambiguous so we default to report for all abi similar
-            // to how filters are applied.
-            if (filter.getAbi() != null && !filter.getAbi().equals(moduleAbi)) {
-                continue;
-            }
-            if (!filter.getName().equals(moduleName)) {
-                continue;
-            }
-            if (filter.getTest() == null) {
-                continue;
-            }
-            TestDescription test = TestDescription.fromString(filter.getTest());
-            // Skip reason of demoted test is not likely to exceed the size limit.
-            // But we truncate it just in case.
-            ResultDBUtil.TruncationResult truncatedSkipReason =
-                    ResultDBUtil.truncateString(
-                            entry.getValue().getReason(), MAX_SKIP_REASON_MESSAGE_BYTES);
-            SkippedReason skippedReason =
-                    SkippedReason.newBuilder()
-                            .setKind(SkippedReason.Kind.DEMOTED)
-                            .setReasonMessage(truncatedSkipReason.getTruncatedString())
-                            .build();
-            // Some skip reason field doesn't have a dedicated field in ResultDB, put them in the
-            // summary HTML field for now. This is not likely to exceed the size limit.
-            // But we truncate it just in case.
-            String summaryHtml =
-                    ResultDBUtil.truncateString(
-                                    ResultDBUtil.testSkipReasonToSummaryHtml(
-                                            entry.getValue(), false),
-                                    MAX_SUMMARY_HTML_BYTES)
-                            .getTruncatedString();
-            TestResult currentTest =
-                    TestResult.newBuilder()
-                            .setTestIdStructured(
-                                    ResultDBUtil.toTestIdentifier(
-                                            mCurrentModule, variantBuilder.build(), test))
-                            .setResultId(
-                                    String.format(
-                                            "%s-%05d",
-                                            mResultIdBase, mResultCounter.incrementAndGet()))
-                            .setStartTime(Timestamps.fromMillis(currentTimestamp()))
-                            .setStatusV2(TestResult.Status.SKIPPED)
-                            .setSkippedReason(skippedReason)
-                            .setSummaryHtml(summaryHtml)
-                            .build();
-            mRecorder.enqueueTestResult(currentTest);
-            CLog.d("Backfilled %s SKIPPED", currentTest);
         }
     }
 
@@ -600,25 +379,12 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        if (mModuleVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mModuleVariant);
-        }
-        if (mBaseVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
-        }
-
-        mCurrentTestResult =
-                TestResult.newBuilder()
-                        .setTestIdStructured(
-                                ResultDBUtil.toTestIdentifier(
-                                        mCurrentModule, variantBuilder.build(), test))
-                        .setResultId(
-                                String.format(
-                                        "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
-                        .setStartTime(Timestamps.fromMillis(startTime))
-                        .setStatusV2(TestResult.Status.PASSED)
-                        .build();
+        mTestResultHandler.testStarted(
+                test,
+                startTime,
+                mWorkUnitHandler.getCurrentModule(),
+                mBaseVariant,
+                mWorkUnitHandler.getModuleVariant());
     }
 
     @Override
@@ -631,36 +397,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
-            return;
-        }
-
-        // Put first line of error message in the skip reason field because Assumption Failure maps
-        // to ResultDB SKIPPED status.
-        SkippedReason skippedReason =
-                SkippedReason.newBuilder()
-                        .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
-                        .setReasonMessage(
-                                extractAndTruncateFirstLine(
-                                        failure.getErrorMessage(), MAX_SKIP_REASON_MESSAGE_BYTES))
-                        .build();
-        // Put the full error message in the summary HTML field.
-        ResultDBUtil.TruncationResult truncated =
-                ResultDBUtil.truncateString(failure.getErrorMessage(), MAX_SUMMARY_HTML_BYTES);
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        .setStatusV2(TestResult.Status.SKIPPED)
-                        .setSkippedReason(skippedReason)
-                        .setSummaryHtml(truncated.getTruncatedString())
-                        .build();
-
-        if (truncated.wasTruncated()) {
-            // Upload the full skip reason as test artifact if it was truncated.
-            Artifact atf =
-                    artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage());
-            mRecorder.enqueueArtifact(atf);
-        }
+        mTestResultHandler.testAssumptionFailure(test, failure, mRecorder);
     }
 
     @Override
@@ -668,116 +405,23 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
-            return;
-        }
-
-        String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, true);
-        ResultDBUtil.TruncationResult truncated =
-                ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES);
-
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        // Execution errored is used for tests that did not run to completion,
-                        // because an infrastructure error precluded it from doing so.
-                        .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
-                        // Put the skip reason in the summary HTML field, because the SkippedReason
-                        // field and FailureReason failure can only be set when the status is
-                        // SKIPPED or FAILED, respectively.
-                        .setSummaryHtml(truncated.getTruncatedString())
-                        .build();
-        if (truncated.wasTruncated()) {
-            // Upload the full skip reason as test artifact.
-            Artifact atf = artifactFromString("testSkipped_reason", summaryHtml);
-            mRecorder.enqueueArtifact(atf);
-        }
+        mTestResultHandler.testSkipped(test, reason, mRecorder);
     }
 
     @Override
     public void testFailed(TestDescription test, String trace) {
-        populateFailedTest(test, trace, FailureStatus.UNSET);
+        if (mDisable) {
+            return;
+        }
+        mTestResultHandler.testFailed(test, FailureDescription.create(trace), mRecorder);
     }
 
     @Override
     public void testFailed(TestDescription test, FailureDescription failure) {
-        populateFailedTest(test, failure.toString(), failure.getFailureStatus());
-    }
-
-    private void populateFailedTest(TestDescription test, String trace, FailureStatus status) {
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
-            return;
-        }
-        String truncatedFailureReason = extractAndTruncateFirstLine(trace, MAX_ERROR_MESSAGE_BYTES);
-        ResultDBUtil.TruncationResult truncationResult =
-                ResultDBUtil.truncateString(trace, MAX_ERROR_TRACE_BYTES);
-
-        FailureReason.Kind kind = FailureReason.Kind.ORDINARY;
-        if (status != null) {
-            switch (status) {
-                case TIMED_OUT:
-                    kind = FailureReason.Kind.TIMEOUT;
-                    break;
-                case CANCELLED:
-                case INFRA_FAILURE:
-                case SYSTEM_UNDER_TEST_CRASHED:
-                    kind = FailureReason.Kind.CRASH;
-                    break;
-                default:
-                    kind = FailureReason.Kind.ORDINARY;
-                    break;
-            }
-        }
-
-        FailureReason reason =
-                FailureReason.newBuilder()
-                        .setKind(kind)
-                        .addErrors(
-                                FailureReason.Error.newBuilder()
-                                        .setMessage(truncatedFailureReason)
-                                        .setTrace(truncationResult.getTruncatedString())
-                                        .build())
-                        .build();
-
-        TestResult.Builder testResultBuilder =
-                mCurrentTestResult.toBuilder()
-                        .setFailureReason(reason)
-                        .setStatusV2(TestResult.Status.FAILED);
-
-        if (status != null && status != FailureStatus.UNSET) {
-            testResultBuilder.setSummaryHtml("TF error type: " + status);
-        }
-        mCurrentTestResult = testResultBuilder.build();
-        if (truncationResult.wasTruncated()) {
-            // Upload the full trace as test artifact.
-            Artifact atf = artifactFromString("testFailed_trace", trace);
-            mRecorder.enqueueArtifact(atf);
-        }
-        // TODO: extract local instruction from test description and set in ResultDB test result.
-    }
-
-    /**
-     * Create an artifact from the given string.
-     *
-     * <p>The artifact will be associated with the current test result if it is not null.
-     */
-    private Artifact artifactFromString(String artifactId, String contents) {
-        ByteString contentsBytes = ByteString.copyFromUtf8(contents);
-        Artifact.Builder ab =
-                Artifact.newBuilder()
-                        .setArtifactId(artifactId)
-                        .setContentType("text/plain")
-                        .setContents(contentsBytes)
-                        .setSizeBytes(contentsBytes.size());
-        if (mCurrentTestResult != null) {
-            ab.setTestIdStructured(mCurrentTestResult.getTestIdStructured())
-                    .setResultId(mCurrentTestResult.getResultId());
-        }
-        return ab.build();
+        mTestResultHandler.testFailed(test, failure, mRecorder);
     }
 
     @Override
@@ -785,17 +429,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testIgnored(%s) without a valid testStart before.", test);
-            return;
-        }
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        .setStatusV2(TestResult.Status.SKIPPED)
-                        .setSkippedReason(
-                                SkippedReason.newBuilder()
-                                        .setKind(SkippedReason.Kind.DISABLED_AT_DECLARATION))
-                        .build();
+        mTestResultHandler.testIgnored(test);
     }
 
     @Override
@@ -812,35 +446,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        long startTimeMillis = Timestamps.toMillis(mCurrentTestResult.getStartTime());
-        TestResult.Builder testResultBuilder =
-                mCurrentTestResult.toBuilder()
-                        .setDuration(Durations.fromMillis(endTime - startTimeMillis));
-
-        // Add test mapping sources to test result as tags.
-        if (testMetrics.get(TEST_MAPPING_TAG) != null) {
-            // Get Test Mapping sources from string formatting with list such as "[path1, path2]".
-            // Note: Some test mapping sources may not be recorded. This is because a test module
-            // can be defined across multiple TEST_MAPPING files, and TF doesn't run it again if
-            // it's passed in the previous run.
-            String testMappingMeasurement =
-                    testMetrics
-                            .get(TEST_MAPPING_TAG)
-                            .getMeasurements()
-                            .getSingleString()
-                            .replaceAll("^\\[| |\\]$", "");
-            List<String> testMappingSources = Arrays.asList(testMappingMeasurement.split(","));
-
-            for (String testMappingSource : testMappingSources) {
-                testResultBuilder.addTags(
-                        StringPair.newBuilder()
-                                .setKey(ResultDBUtil.makeValidKey(TEST_MAPPING_TAG))
-                                .setValue(testMappingSource));
-            }
-        }
-        mCurrentTestResult = testResultBuilder.build();
-        mRecorder.enqueueTestResult(mCurrentTestResult);
-        mCurrentTestResult = null;
+        mTestResultHandler.testEnded(test, endTime, testMetrics, mRecorder);
     }
 
     @Override
@@ -850,19 +456,5 @@ public class ResultDBReporter
 
     public boolean isDisabled() {
         return mDisable;
-    }
-
-    /**
-     * Extract the first line of the stack trace as the error message, and truncate the string to
-     * the given max bytes.
-     *
-     * <p>In most cases, this ends up being the exception + error message.
-     */
-    String extractAndTruncateFirstLine(String trace, int maxBytes) {
-        String firstLine = trace.split("[\\r\\n]+", 2)[0];
-        if (!firstLine.trim().isEmpty()) {
-            return ResultDBUtil.truncateString(firstLine, maxBytes).getTruncatedString();
-        }
-        return "";
     }
 }
