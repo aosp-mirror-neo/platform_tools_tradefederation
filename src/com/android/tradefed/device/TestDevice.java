@@ -2231,6 +2231,30 @@ public class TestDevice extends NativeDevice {
                 "cmd user is-user-visible --display %d %d", displayId, userId);
     }
 
+    @Override
+    public int getUserVisibleOnDisplay(int displayId) throws DeviceNotAvailableException {
+        checkApiLevelAgainstNextRelease("getUserVisibleOnDisplay", 34);
+
+        if (!isVisibleBackgroundUsersSupported()) {
+            CLog.e("Visible background users are not supported on this device");
+            return INVALID_USER_ID;
+        }
+
+        // Note: Utilize this car specific cmd for now only because this cmd is not in Core and we
+        // need to accommodate Automotive OEMs adopting past releases.
+        // TODO(b/443148169): Move this cmd to Core so that future releases can stop relying on car
+        // specifc cmd.
+        String command = String.format("cmd car_service get-user-by-display %d", displayId);
+        String commandOutput = executeShellCommand(command);
+        try {
+            int visibleUserId = Integer.parseInt(commandOutput.trim());
+            return visibleUserId;
+        } catch (NumberFormatException e) {
+            CLog.e("Failed to parse result: %s", commandOutput);
+        }
+        return INVALID_USER_ID;
+    }
+
     private Matcher findUserInfo(String pmListUsersOutput) {
         Pattern pattern = Pattern.compile(USER_PATTERN);
         Matcher matcher = pattern.matcher(pmListUsersOutput);

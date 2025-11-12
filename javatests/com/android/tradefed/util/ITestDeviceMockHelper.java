@@ -43,6 +43,10 @@ public final class ITestDeviceMockHelper {
         when(mMockDevice.getCurrentUser()).thenReturn(userId);
     }
 
+    public void mockGetUserVisibleOnDisplay(int displayId, Integer userId) throws Exception {
+        when(mMockDevice.getUserVisibleOnDisplay(eq(displayId))).thenReturn(userId);
+    }
+
     public void mockGetUserInfos(Map<Integer, UserInfo> existingUsers) throws Exception {
         when(mMockDevice.getUserInfos()).thenReturn(existingUsers);
     }

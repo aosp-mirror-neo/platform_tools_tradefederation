@@ -85,19 +85,22 @@ public final class VisibleBackgroundUserPreparerTest {
     @Test
     public void testSetUp_tearDown_noDisplayAvailable() throws Exception {
         mockListDisplayIdsForStartingVisibleBackgroundUsers(Collections.emptySet());
-        mockCreateUser(42);
 
         TargetSetupError e = assertThrows(TargetSetupError.class, () -> mPreparer.setUp(mTestInfo));
-        assertThat(e).hasMessageThat().containsMatch("No display.*available.* .*42.*");
+        assertThat(e).hasMessageThat().containsMatch("No display.*available.*");
 
         mPreparer.tearDown(mTestInfo, /* e= */ null);
-        verifyUserRemoved(42);
+        // If no display is available, the test will fail right there, no user will be created to
+        // run the test.
+        verifyNoUserCreated();
+        verifyNoUserRemoved();
         verifyNoUserSwitched();
     }
 
     @Test
     public void testSetUp_tearDown() throws Exception {
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         mockCreateUser(42);
         mockStartUserVisibleOnBackground(42, 108);
 
@@ -115,8 +118,30 @@ public final class VisibleBackgroundUserPreparerTest {
     }
 
     @Test
+    public void testSetUp_tearDown_reuseExistingVisibleBackgroundUser() throws Exception {
+        mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        // An existing visible background user is found on the display as the user visible on the
+        // display (user 42) is not the current foreground user (user 10).
+        // Just use the existing user to run the test and no new user needs to be created.
+        mockGetUserVisibleOnDisplay(108, 42);
+        mockGetCurrentUser(10);
+
+        mPreparer.setUp(mTestInfo);
+        verifyNoUserCreated();
+        verifyNoUserStartedVisibleOnBackground();
+        verifyTestInfoProperty(RUN_TESTS_AS_USER_KEY, "42");
+        verifyNoUserSwitched();
+
+        mPreparer.tearDown(mTestInfo, /* e= */ null);
+        verifyNoUserStopped();
+        verifyNoUserRemoved();
+        verifyNoUserSwitched();
+    }
+
+    @Test
     public void testSetUp_specificDisplayByOption() throws Exception {
         setParam("display-id", "108");
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         mockCreateUser(42);
         mockStartUserVisibleOnBackground(42, 108);
 
@@ -131,6 +156,7 @@ public final class VisibleBackgroundUserPreparerTest {
     public void testSetUp_specificDisplayBySetter() throws Exception {
         setParam("display-id", "666");
         mPreparer.setDisplayId(108);
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         mockCreateUser(42);
         mockStartUserVisibleOnBackground(42, 108);
 
@@ -147,6 +173,7 @@ public final class VisibleBackgroundUserPreparerTest {
                     throws Exception {
         mockIsVisibleBackgroundUsersOnDefaultDisplaySupported(false);
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(0, 108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(0, 10);
         mockCreateUser(42);
         mockStartUserVisibleOnBackground(42, 0);
 
@@ -163,6 +190,7 @@ public final class VisibleBackgroundUserPreparerTest {
                     throws Exception {
         mockIsVisibleBackgroundUsersOnDefaultDisplaySupported(true);
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(0, 108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         mockCreateUser(42);
         mockStartUserVisibleOnBackground(42, 108);
 
@@ -178,6 +206,7 @@ public final class VisibleBackgroundUserPreparerTest {
             throws Exception {
         mockIsVisibleBackgroundUsersOnDefaultDisplaySupported(true);
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(0));
+        mockNoExistingVisibleBackgroundUserOnDisplay(0, 10);
         mockCreateUser(42);
         mockStartUserVisibleOnBackground(42, 108);
 
@@ -197,6 +226,7 @@ public final class VisibleBackgroundUserPreparerTest {
     public void testSetUp_tearDown_reuseTestUser_invisible() throws Exception {
         setParam("reuse-test-user", "true");
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         Map<Integer, UserInfo> existingUsers =
                 Map.of(
                         0,
@@ -232,6 +262,8 @@ public final class VisibleBackgroundUserPreparerTest {
     public void testSetUp_tearDown_reuseTestUser_alreadyVisible() throws Exception {
         setParam("reuse-test-user", "true");
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockGetUserVisibleOnDisplay(108, 42);
+        mockGetCurrentUser(10);
         Map<Integer, UserInfo> existingUsers =
                 Map.of(
                         0,
@@ -247,7 +279,6 @@ public final class VisibleBackgroundUserPreparerTest {
                                         /* flags= */ 0,
                                         /* isRunning= */ false));
         mockGetUserInfos(existingUsers);
-        mockIsUserVisibleOnDisplay(42, 108);
 
         mPreparer.setUp(mTestInfo);
         // We should reuse the existing, not create a new user.
@@ -268,6 +299,7 @@ public final class VisibleBackgroundUserPreparerTest {
     public void testSetUp_tearDown_reuseTestUser_noExistingTestUser() throws Exception {
         setParam("reuse-test-user", "true");
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         Map<Integer, UserInfo> existingUsers =
                 Map.of(
                         0,
@@ -296,6 +328,8 @@ public final class VisibleBackgroundUserPreparerTest {
 
     @Test
     public void testSetUp_maxUsersReached() throws Exception {
+        mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         Map<Integer, UserInfo> existingUsers =
                 Map.of(
                         0,
@@ -332,6 +366,8 @@ public final class VisibleBackgroundUserPreparerTest {
 
     @Test
     public void testSetUp_createUserfailed() throws Exception {
+        mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         Exception cause = mockCreateUserFailure("D'OH!");
 
         TargetSetupError e = assertThrows(TargetSetupError.class, () -> mPreparer.setUp(mTestInfo));
@@ -342,6 +378,7 @@ public final class VisibleBackgroundUserPreparerTest {
     @Test
     public void testSetUp_starUserFailed() throws Exception {
         mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
         mockCreateUser(12);
         mockStartUserVisibleOnBackground(42, 108, /*result= */ false);
 
@@ -413,6 +450,31 @@ public final class VisibleBackgroundUserPreparerTest {
     private void mockListDisplayIdsForStartingVisibleBackgroundUsers(Set<Integer> displays)
             throws Exception {
         mTestDeviceMockHelper.mockListDisplayIdsForStartingVisibleBackgroundUsers(displays);
+    }
+
+    private void mockGetCurrentUser(int userId) throws Exception {
+        mTestDeviceMockHelper.mockGetCurrentUser(userId);
+    }
+
+    private void mockGetUserVisibleOnDisplay(int displayId, int userId) throws Exception {
+        mTestDeviceMockHelper.mockGetUserVisibleOnDisplay(displayId, userId);
+    }
+
+    /**
+     * Mocks a scenario where no existing visible background user is found on the specified display.
+     *
+     * <p>{@code getUserByDisplay} returns the visible user on the display. It could be the current
+     * foreground user or a visible background user. In this scenario, the user visible on the
+     * display matches the current foreground user ({@code currentUser}), indicating no existing
+     * visible background user on this display.
+     *
+     * @param displayId The display ID.
+     * @param currentUser The ID of the current foreground user.
+     */
+    private void mockNoExistingVisibleBackgroundUserOnDisplay(int displayId, int currentUser)
+            throws Exception {
+        mockGetUserVisibleOnDisplay(displayId, currentUser);
+        mockGetCurrentUser(currentUser);
     }
 
     private void verifyNoUserCreated() throws Exception {
