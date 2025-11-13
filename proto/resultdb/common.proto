@@ -421,9 +421,16 @@ message SubmittedAndroidBuild {
 
 // Specifies the source code that was tested.
 message Sources {
-  // The base version of code sources checked out. Mandatory.
+  // The base version of code sources checked out.
+  // This is used for various purposes, including test history, changepoint
+  // analysis and comparative log analysis.
+  //
+  // In local testing scenarios where the base checkout is unknown, this
+  // may be left blank. If it is not specified, the aforementioned features
+  // will not work for this result.
   oneof base_sources {
-    // The base version of code sources checked out.
+    // A commit from a gitiles repository. Commits are numbered using
+    // goto.google.com/git-numberer.
     GitilesCommit gitiles_commit = 1;
 
     // The submitted Android Build ID that describes the base code sources tested.
@@ -448,6 +455,9 @@ message Sources {
   //
   // Cherry-picking a changelist on top of the base checkout is not considered
   // making the sources dirty as it is reported separately in `changelists` above.
+  //
+  // In case no `base_sources` are reported, e.g. when running tests locally where
+  // the sources are unknown, this must always be true.
   bool is_dirty = 3;
 }
 
@@ -537,4 +547,157 @@ enum WorkUnitView {
 
   // Include all fields, including extended_properties.
   WORK_UNIT_VIEW_FULL = 2;
+}
+
+// Represents the process definition of a root invocation.
+message RootInvocationDefinition {
+  // The system name that namespaces the process definition name.
+  // Please use kebab-case as per https://google.aip.dev/126#alternatives.
+  //
+  // For example, "atp", "bazel" or "buildbucket".
+  //
+  // Limit of 64 bytes of UTF-8.
+  // Required.
+  string system = 1;
+
+  // The name used to identify the set of tests being executed.
+  //
+  // For example, "v2/adb-team/adb/adb_integration".
+  //
+  // Limit 256 bytes of UTF-8.
+  // Required.
+  string name = 2;
+
+  // Represents a key-value map of properties that differentiate
+  // definitions with the same name and system.
+  message Properties {
+    // The key-value pairs. May be left empty.
+    //
+    // Keys must satisfy regex: ^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$ and have a max length of 64 bytes.
+    // Values must be valid UTF-8, in Unicode Normalization Form C, printable characters only, and have a
+    // max length of 256 bytes.
+    //
+    // The total size of properties in this collection as measured by proto.Size()
+    // is limited to 1 KiB.
+    map<string, string> def = 1;
+  }
+
+  // A key-value map of properties the scheduler uses to differentiate between
+  // definitions with the same name and system. For example 'cluster_id' and
+  // 'run_target' for ATP.
+  //
+  // In the Recorder APIs, this field is required (although the contained `def`
+  // may be left empty).
+  Properties properties = 3;
+
+  // Base64-encoded hash of the properties.
+  //
+  // In the Recorder APIs, this field is OUTPUT_ONLY and will be
+  // automatically computed from the provided properties (do not set it yourself).
+  // In the context of ResultDB Query RPCs accepting this type as a request filter,
+  // this field may be specified as an alternative to setting properties.
+  string properties_hash = 4;
+}
+
+// Represents a set of artifacts produced from source code.
+message BuildDescriptor {
+  oneof definition {
+    AndroidBuildDescriptor android_build = 1;
+    // In future, other build definitions, can be defined here,
+    // such as those based on buildbucket builds or GCS folders.
+  }
+}
+
+// Represents a build from Android Build (go/ab).
+//
+// Except for submitted builds, this will be different from the
+// Source's SubmittedAndroidBuild.
+//
+// For pending builds ("P" builds):
+// - specify the pending build here
+// - specify the pending build's reference build in sources.submitted_android_build,
+//   and the pending build's included changelists in sources.changelists.
+//
+// For local ("L") and external ("E") builds:
+// - specify the local/external build here
+// - if you have a reference build, specify it in sources.submitted_android_build,
+//   otherwise leave it blank.
+message AndroidBuildDescriptor {
+  // The Android Build API data realm.
+  // This is usually `prod`.
+  // Required.
+  string data_realm = 1;
+
+  // The branch. For example, `git_main`.
+  // Limited to 255 bytes.
+  // Required.
+  string branch = 2;
+
+  // The build target. For example, `cf_x86_phone-userdebug`.
+  // Limited to 255 bytes.
+  // Required.
+  string build_target = 3;
+
+  // The build identifier, such as "12345678", "P81983588" or "L17635075".
+  // Limited to 32 bytes.
+  // Required.
+  string build_id = 4;
+}
+
+// ProducerResource represents the identity of the resource that produced a
+// root invocation or work unit, e.g. an ATP test run or swarming task.
+//
+// This structure is a deviation from https://google.aip.dev/122#full-resource-names
+// owing to:
+// - the desire to capture the deployment of a system we are talking about (both
+//   test and production deployments could talk to the same instance of ResultDB)
+// - the lack of good API service names for many services (https://google.aip.dev/9#api-service-name)
+//   which was leading to API endpoints being substited contrary to AIP-122.
+//   While endpoints makes it possible to distinguish dev and prod, it makes it
+//   harder for downstream systems to understand the type of producer resource
+//   (and to e.g. filter to only ATP runs). API endpoints are also unstable
+//   and subject to change.
+// Rather than invent a new set of API service names, we use a short name that
+// cannot be confused with an endpoint. While use of DNS names is superior solution
+// in large systems to deconflict naming, we operate a relatively smaller scale
+// so believe a short name is workable.
+message ProducerResource {
+  // The name of the system that is producing the resource.
+  //
+  // For LUCI, this should be "buildbucket" or "swarming".
+  // For Android, it is the scheduler like "atp", "ants-relay", "atest" or "bazel".
+  //
+  // Values should use kebab-case as per https://google.aip.dev/126#alternatives.
+  //
+  // Total length limited to 50 bytes. Required.
+  string system = 1;
+
+  // The data realm of the producing resource.
+  //
+  // This is used to identify the location of the producing resource, i.e. whether it is
+  // in the production data set, or a test data set, or another data set, for linking
+  // purposes.
+  //
+  // For Google3, prefer to use a value from go/data-realm in lower-case (e.g. "prod").
+  // For buildbucket, use the value "prod" for production and "test" for development.
+  // For swarming, use the swarming instance name (e.g. "chromeos-swarming" or "chromium-swarm-dev").
+  //
+  // Total length limited to 100 bytes. Required.
+  string data_realm = 2;
+
+  // The AIP-122 resource name of the producer resource.
+  //
+  // See: https://google.aip.dev/122
+  //
+  // The format is typically defined by the producing system. If the producing
+  // system does not follow AIP-122, an AIP-122-like format is invented for it.
+  //
+  // Examples:
+  // - atp: `runs/{RUN_ID}`
+  // - swarming: `tasks/deadbeef`
+  // - buildbucket: 'builds/1234567890`
+  //
+  // Total length limited to 1000 bytes. Resource names must be in Unicode
+  // normalization form C. Required.
+  string name = 3;
 }
