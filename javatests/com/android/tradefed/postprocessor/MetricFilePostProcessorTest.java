@@ -21,7 +21,10 @@ import static org.junit.Assert.assertTrue;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.result.LogDataType;
+import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
+import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MetricUtility;
 
 import org.junit.Before;
@@ -30,6 +33,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -220,5 +224,37 @@ public class MetricFilePostProcessorTest {
         assertFalse(mTestableMetricUtil.isRunMetricAggregated);
         assertTrue(mTestableMetricUtil.isTestMetricAggregated);
         assertTrue(mTestableMetricUtil.isMetricWrittenToFile);
+    }
+
+    @Test
+    public void processDimensionalMetrics() throws ConfigurationException, IOException {
+        OptionSetter setter = new OptionSetter(mMetricFilePostProcessor);
+        setter.setOptionValue("aggregate-dimensional-metrics", "true");
+
+        HashMap<String, Metric> testMetrics = new HashMap<>();
+        Map<String, LogFile> testLogs = new HashMap<>();
+        File dimensionalMetricsFile = FileUtil.createTempFile("dimensional-metrics", ".txt");
+        LogFile dimensionalMetricsLogFile =
+                new LogFile(
+                        dimensionalMetricsFile.getAbsolutePath(),
+                        "url",
+                        false,
+                        LogDataType.CB_METRICS_REPORT_FILE,
+                        0L);
+        testLogs.put("dimensional-metrics-file", dimensionalMetricsLogFile);
+        File otherFile = FileUtil.createTempFile("other-file", ".txt");
+        LogFile otherLogFile =
+                new LogFile(otherFile.getAbsolutePath(), "url", false, LogDataType.TEXT, 0L);
+        testLogs.put("other-log-file", otherLogFile);
+
+        try {
+            mMetricFilePostProcessor.processTestMetricsAndLogs(TEST_1, testMetrics, testLogs);
+            Map<String, Metric.Builder> runMetrics =
+                    mMetricFilePostProcessor.processRunMetricsAndLogs(new HashMap<>(), null);
+            assertTrue(runMetrics.isEmpty());
+        } finally {
+            FileUtil.deleteFile(dimensionalMetricsFile);
+            FileUtil.deleteFile(otherFile);
+        }
     }
 }
