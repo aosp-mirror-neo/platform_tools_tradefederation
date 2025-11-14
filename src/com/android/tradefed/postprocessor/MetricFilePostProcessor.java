@@ -50,39 +50,52 @@ public class MetricFilePostProcessor extends BasePostProcessor {
     private static final String AGGREGATE_TEST_SUFFIX = "_aggregate_test_metrics";
     private static final String AGGREGATE_RUN_SUFFIX = "_aggregate_run_metrics";
 
-    @Option(name = "enable-per-test-log", description = "Set this flag to false to disable"
-            + " writing the per test metrics to a file.")
-    private boolean mIsPerTestLogEnabled= true;
+    @Option(
+            name = "enable-per-test-log",
+            description =
+                    "Set this flag to false to disable"
+                            + " writing the per test metrics to a file.")
+    private boolean mIsPerTestLogEnabled = true;
 
-    @Option(name = "enable-run-log", description = "Set this flag to false to disable"
-            + " writing the run metrics to a file.")
-    private boolean mIsRunLogEnabled= true;
+    @Option(
+            name = "enable-run-log",
+            description =
+                    "Set this flag to false to disable" + " writing the run metrics to a file.")
+    private boolean mIsRunLogEnabled = true;
 
-    @Option(name = "aggregate-similar-tests", description = "To aggregate the metrics from test"
-            + " cases which differ only by iteration number or having the same test name."
-            + " Used only in context with the microbenchmark test runner. Set this flag to false"
-            + " to disable aggregating the metrics.")
-    private boolean mAggregateSimilarTests= false;
+    @Option(
+            name = "aggregate-similar-tests",
+            description =
+                    "To aggregate the metrics from test cases which differ only by iteration number"
+                            + " or having the same test name. Used only in context with the"
+                            + " microbenchmark test runner. Set this flag to false to disable"
+                            + " aggregating the metrics.")
+    private boolean mAggregateSimilarTests = false;
 
-    @Option(name = "aggregate-run-metrics", description = "Aggregate run metrics which has more"
-            + " than one value.")
-    private boolean mAggregateRunMetrics= false;
+    @Option(
+            name = "aggregate-run-metrics",
+            description = "Aggregate run metrics which has more" + " than one value.")
+    private boolean mAggregateRunMetrics = false;
 
-    @Option(name = "test-iteration-separator", description = "Separator used in between the test"
-            + " class name and the iteration number.")
+    @Option(
+            name = "test-iteration-separator",
+            description =
+                    "Separator used in between the test" + " class name and the iteration number.")
     private String mTestIterationSeparator = "$";
 
-    @Option(name = "report-percentiles", description = "Additional percentiles of each metric to"
-            + " report in integers in the 0 - 100 range. Can be repeated.")
+    @Option(
+            name = "report-percentiles",
+            description =
+                    "Additional percentiles of each metric to"
+                            + " report in integers in the 0 - 100 range. Can be repeated.")
     private Set<Integer> mPercentiles = new HashSet<>();
 
     @Option(
-            name = "test-iterations",
+            name = "use-test-iterations-for-stats",
             description =
-                    "The number of test iterations, used for aggregating metrics where a metric is "
-                            + " not always produced. If set to 0, the count of metrics will be used"
-                            + " instead.")
-    private int mTestIterations = 0;
+                    "Use the actual test iterations when computing the stats instead of using the"
+                        + " metric count.")
+    private boolean mEnableCountTestIterations = false;
 
     @Option(
             name = "strict-include-metric-filter",
@@ -101,8 +114,7 @@ public class MetricFilePostProcessor extends BasePostProcessor {
     private MetricUtility mMetricUtil = new MetricUtility();
     private ArrayList<LogFile> mDimensionalMetricFiles = new ArrayList<>();
 
-    public MetricFilePostProcessor() {
-    }
+    public MetricFilePostProcessor() {}
 
     @VisibleForTesting
     public MetricFilePostProcessor(MetricUtility metricUtil) {
@@ -165,12 +177,15 @@ public class MetricFilePostProcessor extends BasePostProcessor {
 
         // Aggregate similar tests metric at the run level, write it to results file and upload it.
         if (mAggregateSimilarTests) {
-            File aggregateTestResultsFile = mMetricUtil
-                    .aggregateStoredTestMetricsAndWriteToFile(getRunName() + AGGREGATE_TEST_SUFFIX);
+            File aggregateTestResultsFile =
+                    mMetricUtil.aggregateStoredTestMetricsAndWriteToFile(
+                            getRunName() + AGGREGATE_TEST_SUFFIX);
             if (aggregateTestResultsFile != null) {
-                try (InputStreamSource source = new FileInputStreamSource(aggregateTestResultsFile,
-                        true)) {
-                    testLog(aggregateTestResultsFile.getName(), LogDataType.CB_METRICS_FILE,
+                try (InputStreamSource source =
+                        new FileInputStreamSource(aggregateTestResultsFile, true)) {
+                    testLog(
+                            aggregateTestResultsFile.getName(),
+                            LogDataType.CB_METRICS_FILE,
                             source);
                 }
             }
@@ -194,14 +209,10 @@ public class MetricFilePostProcessor extends BasePostProcessor {
      * @param testId
      */
     public void writeMetricFile(Map<String, Metric> metrics, String testId) {
-        Map<String, String> compatibleMetrics = TfMetricProtoUtil
-                .compatibleConvert(metrics);
-        File metricFile = mMetricUtil.writeResultsToFile(testId, testId,
-                compatibleMetrics,
-                null);
+        Map<String, String> compatibleMetrics = TfMetricProtoUtil.compatibleConvert(metrics);
+        File metricFile = mMetricUtil.writeResultsToFile(testId, testId, compatibleMetrics, null);
         if (metricFile != null) {
-            try (InputStreamSource source = new FileInputStreamSource(metricFile,
-                    true)) {
+            try (InputStreamSource source = new FileInputStreamSource(metricFile, true)) {
                 testLog(metricFile.getName(), LogDataType.CB_METRICS_FILE, source);
             }
         }
@@ -212,6 +223,6 @@ public class MetricFilePostProcessor extends BasePostProcessor {
         mMetricUtil.setPercentiles(mPercentiles);
         mMetricUtil.setIterationSeparator(mTestIterationSeparator);
         mMetricUtil.buildMetricFilterPatterns(mStrictIncludeRegEx);
-        mMetricUtil.setTestIterations(mTestIterations);
+        mMetricUtil.setCountTestIterationsFlag(mEnableCountTestIterations);
     }
 }
