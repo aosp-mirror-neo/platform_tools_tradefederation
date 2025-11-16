@@ -265,11 +265,20 @@ public class ContentBasedHelper {
         // key properly
         if (hostPackageTarget != null && hostPackageBuildId != null) {
             AndroidBuildArtifactHelper helper = new AndroidBuildArtifactHelper("prod");
-            RemoteBuildInfo info =
-                    helper.queryForBuildById(
-                            null, hostPackageBuildId, hostPackageTarget, "linux", null, null);
+            RemoteBuildInfo info = null;
+            try {
+                // Do not throw exception if host package build info failed to be retrieved, as that
+                // will fail the whole test. hostPackageBuildId could be the name of the branch for
+                // cvd to use the LKGB.
+                info =
+                        helper.queryForBuildById(
+                                null, hostPackageBuildId, hostPackageTarget, "linux", null, null);
+            } catch (BuildRetrievalError e) {
+                CLog.e(e);
+            }
             if (info == null) {
                 CLog.w("Failed to query info for the host package target.");
+                return null;
             }
             ContentInformation information =
                     ContentBasedHelper.getContentInformation(
