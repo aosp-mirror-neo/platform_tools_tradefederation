@@ -3105,8 +3105,6 @@ public class TestDevice extends NativeDevice {
                                 builder.mApkPath,
                                 outApkIdsigPath,
                                 builder.mInstanceImg,
-                                "--config-path",
-                                builder.mConfigPath,
                                 dumpDt));
         if (isVirtFeatureEnabled("com.android.kvm.LLPVM_CHANGES")) {
             args.add("--instance-id-file");
@@ -3123,7 +3121,14 @@ public class TestDevice extends NativeDevice {
             args.add("--devices");
             args.add(path);
         }
-
+        if (builder.mConfigPath != null) {
+            args.add("--config-path");
+            args.add(builder.mConfigPath);
+        }
+        if (builder.mPayloadBinaryName != null) {
+            args.add("--payload-binary-name");
+            args.add(builder.mPayloadBinaryName);
+        }
         // Run the VM
         String cid = null;
         Process process = null;
@@ -3445,6 +3450,7 @@ public class TestDevice extends NativeDevice {
         private File mApkFile;
         private String mApkPath;
         private String mConfigPath;
+        private String mPayloadBinaryName;
         private String mDebugLevel;
         private int mMemoryMib;
         private Integer mNumCpus;
@@ -3464,11 +3470,21 @@ public class TestDevice extends NativeDevice {
         private String mName;
         private String mDumpDt;
 
-        /** Creates a builder for the given APK/apkPath and the payload config file in APK. */
-        private MicrodroidBuilder(File apkFile, String apkPath, @Nonnull String configPath) {
+        /** Creates a builder for the given APK/apkPath. */
+        private MicrodroidBuilder(
+                File apkFile, String apkPath, String configPath, String payloadBinaryName) {
+            if (configPath == null && payloadBinaryName == null) {
+                throw new IllegalArgumentException("Either configPath or payloadBinaryName must be"
+                        + " specified");
+            }
+            if (configPath != null && payloadBinaryName != null) {
+                throw new IllegalArgumentException("Only one of configPath or payloadBinaryName"
+                        + " can be specified");
+            }
             mApkFile = apkFile;
             mApkPath = apkPath;
             mConfigPath = configPath;
+            mPayloadBinaryName = payloadBinaryName;
             mDebugLevel = null;
             mMemoryMib = 0;
             mNumCpus = null;
@@ -3488,7 +3504,7 @@ public class TestDevice extends NativeDevice {
         /** Creates a Microdroid builder for the given APK and the payload config file in APK. */
         public static MicrodroidBuilder fromFile(
                 @Nonnull File apkFile, @Nonnull String configPath) {
-            return new MicrodroidBuilder(apkFile, null, configPath);
+            return new MicrodroidBuilder(apkFile, null, configPath, null);
         }
 
         /**
@@ -3496,7 +3512,15 @@ public class TestDevice extends NativeDevice {
          */
         public static MicrodroidBuilder fromDevicePath(
                 @Nonnull String apkPath, @Nonnull String configPath) {
-            return new MicrodroidBuilder(null, apkPath, configPath);
+            return new MicrodroidBuilder(null, apkPath, configPath, null);
+        }
+
+        /**
+         * Creates a Microdroid builder for the given apkPath and the payload binary name in APK.
+         */
+        public static MicrodroidBuilder fromDevicePathWithPayloadBinaryName(
+                @Nonnull String apkPath, @Nonnull String payloadBinaryName) {
+            return new MicrodroidBuilder(null, apkPath, null, payloadBinaryName);
         }
 
         /**
