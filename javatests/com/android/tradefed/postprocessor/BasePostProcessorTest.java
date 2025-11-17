@@ -70,13 +70,19 @@ public class BasePostProcessorTest {
         public static final String TEST_DATA_NAME = DATA_NAME_PREFIX + "test-data-name";
         public static final String RUN_DATA_NAME = DATA_NAME_PREFIX + "run-data-name";
         public static final String ALL_DATA_NAME = DATA_NAME_PREFIX + "all-data-name";
+        public static final String CB_REPORT_DATA_NAME = DATA_NAME_PREFIX + "cb-report-data-name";
         public static final String FILE_PREFIX = "file-";
 
         private boolean mSavesFile = false;
+        private boolean mSavesCbMetricsReportFile = false;
         private boolean mSetUp = false;
 
         public void setSavesFile() {
             mSavesFile = true;
+        }
+
+        public void setSavesCbMetricsReportFile() {
+            mSavesCbMetricsReportFile = true;
         }
 
         @Override
@@ -108,6 +114,12 @@ public class BasePostProcessorTest {
                         FILE_PREFIX + dataName,
                         TfMetricProtoUtil.stringToMetric(testLogs.get(dataName).getUrl())
                                 .toBuilder());
+            }
+            if (mSavesCbMetricsReportFile) {
+                testLog(
+                        CB_REPORT_DATA_NAME,
+                        LogDataType.CB_METRICS_REPORT_FILE,
+                        new ByteArrayInputStreamSource(CB_REPORT_DATA_NAME.getBytes()));
             }
             if (mSavesFile) {
                 testLog(
@@ -224,6 +236,7 @@ public class BasePostProcessorTest {
     private LogFile mTestLog2;
     private LogFile mRunLog1;
     private LogFile mRunLog2;
+    private LogFile mCbReportLog;
 
     private TestablePostProcessor mProcessor;
     @Mock ILogSaverListener mMockListener;
@@ -261,6 +274,11 @@ public class BasePostProcessorTest {
                         folder.newFile("run-log-path-2").getPath(),
                         "run-log-path-2",
                         LogDataType.TEXT);
+        mCbReportLog =
+                new LogFile(
+                        folder.newFile("cb-report-log-path-1").getPath(),
+                        "cb-report-log-path-1",
+                        LogDataType.CB_METRICS_REPORT_FILE);
 
         mProcessor = new TestablePostProcessor();
 
@@ -272,6 +290,11 @@ public class BasePostProcessorTest {
                 .thenReturn(mRunLog1);
         when(mMockLogSaver.saveLogData(Mockito.eq(RUN_DATA_NAME_2), Mockito.any(), Mockito.any()))
                 .thenReturn(mRunLog2);
+        when(mMockLogSaver.saveLogData(
+                        Mockito.eq(TestablePostProcessor.CB_REPORT_DATA_NAME),
+                        Mockito.any(),
+                        Mockito.any()))
+                .thenReturn(mCbReportLog);
 
         // A nice mock is used here as this test involves more complex interactions with the
         // listener but only cares about a subset of it.
@@ -932,6 +955,33 @@ public class BasePostProcessorTest {
                         Mockito.any(),
                         Mockito.any(),
                         Mockito.any());
+    }
+
+    @Test
+    public void testCbMetricsReportFileIsAssociatedDuringPostProcessing() throws IOException {
+        mProcessor.setSavesCbMetricsReportFile();
+
+        LogSaverResultForwarder listener =
+                new LogSaverResultForwarder(
+                        mMockLogSaver, Arrays.asList(mProcessor.init(mMockListener)), mMockConfig);
+        listener.testRunStarted(RUN_NAME, 1);
+        listener.testStarted(TEST_DESCRIPTION);
+        listener.testEnded(TEST_DESCRIPTION, new HashMap<String, Metric>());
+        listener.testRunEnded(0L, new HashMap<String, Metric>());
+
+        verify(mMockListener).testRunEnded(Mockito.anyLong(), mCapture.capture());
+
+        Map<String, Metric> runMetrics = mCapture.getValue();
+        String expectedKey =
+                TestablePostProcessor.FILE_PREFIX
+                        + String.join(
+                                "-",
+                                TEST_DESCRIPTION.toString(),
+                                TestablePostProcessor.CB_REPORT_DATA_NAME);
+        assertTrue(runMetrics.containsKey(expectedKey));
+        assertEquals(
+                mCbReportLog.getUrl(),
+                runMetrics.get(expectedKey).getMeasurements().getSingleString());
     }
 
     @Test

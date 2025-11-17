@@ -419,17 +419,25 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
      */
     @Override
     public final void logAssociation(String dataName, LogFile logFile) {
-        // Only associate files created outside of the current post processor.
-        if (!mIsPostProcessing) {
-            LogFile copyFile = mCopiedLogs.remove(dataName);
-            if (copyFile != null) {
-                mToDelete.add(copyFile);
-                // mCurrentTest is null only outside the scope of a test.
-                if (mCurrentTest != null) {
-                    mTestLogs.get(mCurrentTest).put(dataName, copyFile);
-                } else {
-                    mRunLogs.put(dataName, copyFile);
-                }
+        LogFile fileToAssociate = null;
+        if (mIsPostProcessing) {
+            // Associate files created during post-processing only if they are dimensional metrics
+            // report files.
+            if (LogDataType.CB_METRICS_REPORT_FILE.equals(logFile.getType())) {
+                fileToAssociate = copyLogFile(logFile);
+            }
+        } else {
+            // Only associate files created outside of the current post processor.
+            fileToAssociate = mCopiedLogs.remove(dataName);
+        }
+
+        if (fileToAssociate != null) {
+            mToDelete.add(fileToAssociate);
+            // mCurrentTest is null only outside the scope of a test.
+            if (mCurrentTest != null) {
+                mTestLogs.get(mCurrentTest).put(dataName, fileToAssociate);
+            } else {
+                mRunLogs.put(dataName, fileToAssociate);
             }
         }
 

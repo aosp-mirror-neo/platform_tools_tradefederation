@@ -18,6 +18,7 @@ package com.android.tradefed.postprocessor;
 import com.android.annotations.VisibleForTesting;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric.Builder;
 import com.android.tradefed.result.FileInputStreamSource;
@@ -27,8 +28,8 @@ import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.MetricUtility;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
-
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -90,7 +91,15 @@ public class MetricFilePostProcessor extends BasePostProcessor {
                             + " test metrics and aggregated metrics.")
     private Set<String> mStrictIncludeRegEx = new HashSet<>();
 
+    @Option(
+            name = "aggregate-dimensional-metrics",
+            description =
+                    "Aggregate dimensional metrics from Crystalball metric report files into count"
+                            + " metrics.")
+    private boolean mAggregateDimensionalMetrics = false;
+
     private MetricUtility mMetricUtil = new MetricUtility();
+    private ArrayList<LogFile> mDimensionalMetricFiles = new ArrayList<>();
 
     public MetricFilePostProcessor() {
     }
@@ -110,6 +119,14 @@ public class MetricFilePostProcessor extends BasePostProcessor {
         // test run.
         if (mAggregateSimilarTests) {
             mMetricUtil.storeTestMetrics(testDescription, testMetrics);
+        }
+
+        if (mAggregateDimensionalMetrics) {
+            for (LogFile logFile : testLogs.values()) {
+                if (LogDataType.CB_METRICS_REPORT_FILE.equals(logFile.getType())) {
+                    mDimensionalMetricFiles.add(logFile);
+                }
+            }
         }
 
         // Write test metric to a file and log it.
@@ -157,6 +174,15 @@ public class MetricFilePostProcessor extends BasePostProcessor {
                             source);
                 }
             }
+        }
+
+        if (mAggregateDimensionalMetrics) {
+            CLog.i("Aggregating dimensional metrics.");
+            // TODO(449231849): Implement aggregation of dimensional metrics.
+            for (LogFile logFile : mDimensionalMetricFiles) {
+                CLog.i("Found dimensional metrics report: %s", logFile.getPath());
+            }
+            mDimensionalMetricFiles.clear();
         }
         return new HashMap<String, Builder>();
     }

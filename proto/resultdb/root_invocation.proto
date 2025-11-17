@@ -28,6 +28,7 @@ option java_package = "com.android.resultdb.proto";
 option java_multiple_files = true;
 
 // A top-level container of test results.
+// Next ID: 26.
 message RootInvocation {
   // The resource name of this root invocation.
   // Format: `rootInvocations/{ROOT_INVOCATION_ID}`
@@ -47,38 +48,98 @@ message RootInvocation {
     (google.api.field_behavior) = IMMUTABLE
   ];
 
-  enum State {
-    // The default value. This value is used if the state is omitted.
-    STATE_UNSPECIFIED = 0;
+  // Indicates whether the root invocation, and its work units, are immutable.
+  enum FinalizationState {
+    // The default value. This value is used if the finalization state is omitted.
+    FINALIZATION_STATE_UNSPECIFIED = 0;
 
     // The root invocation is mutable.
     ACTIVE = 1;
 
     // The root invocation is in the process of moving to the FINALIZED state.
-    // This will happen automatically soon after all of its directly or
-    // indirectly included invocations become inactive.
+    // This will happen automatically as soon as the root work unit
+    // becomes FINALIZING.
     //
-    // In this state, the root invocation record itself is immutable, but its
-    // contained work units may still be mutable.
+    // In this state, the root invocation and root work unit records are immutable,
+    // but its contained work units may still be mutable.
     FINALIZING = 2;
 
-    // The invocation is immutable and no longer accepts new results
-    // directly or indirectly.
+    // The root invocation is immutable and no longer accepts new results
+    // directly or indirectly. This will happen automatically as soon as the
+    // root work unit becomes FINALIZED.
     FINALIZED = 3;
   }
 
-  // Current state of the root invocation.
+  // Current finalization state of the root invocation. This is an output only
+  // field and is based on the finalization state of the root work unit.
+  FinalizationState finalization_state = 3 [
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
+
+  // The execution state of the root invocation.
+  enum State {
+    // The default value. This value is unused.
+    STATE_UNSPECIFIED = 0;
+
+    // Non-final states.
+
+    // The root invocation has not yet started running.
+    PENDING = 1;
+
+    // The root invocation is currently running.
+    RUNNING = 2;
+
+    // Final states. When transitioned to one of these states, the
+    // the root invocation will also start to finalize (become immutable).
+
+    // Can be used as a bitmask to identify final states.
+    FINAL_STATE_MASK = 4;
+
+    // The root invocation completed successfully.
+    //
+    // This status means results are complete and correct, i.e.:
+    // - all tests to be run (or skipped) were identified.
+    // - test results were successfully uploaded to ResultDB
+    //   for each such test.
+    //
+    // This status generally does not say anything about the test content;
+    // tests could have FAILED, some could have even failed to
+    // produce a result (EXECUTION_ERRORED).
+    SUCCEEDED = 12; // 8 | FINAL_STATE_MASK
+
+    // The root invocation determined no tests need to be run.
+    // For example, the build dependency graph indicates the CL did
+    // not modify the module to be tested.
+    // This status usually indicates no test results were uploaded.
+    SKIPPED = 20; // 16 | FINAL_STATE_MASK
+
+    // The root invocation encountered an error, which was not resolved
+    // by retry.
+    //
+    // This status means the results may be incomplete.
+    FAILED = 36; // 32 | FINAL_STATE_MASK
+
+    // The root invocation never started or may be incomplete, because
+    // an external factor requested its cancellation (e.g. presubmit
+    // run was no longer needed).
+    CANCELLED = 68; // 64 | FINAL_STATE_MASK
+  }
+
+  // The overall state of the root invocation. This is an output only
+  // field and is based on the state of the root work unit.
   //
-  // At creation time, this can be set to ACTIVE or FINALIZING (if all fields
-  // are known at creation time). When updating or via the FinalizeRootInvocation
-  // RPC, the state can also be updated from ACTIVE to FINALIZING.
+  // See also: https://google.aip.dev/216.
+  State state = 17 [
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
+
+  // A summary of the final state of the root invocation, to be displayed on the UI.
+  // MUST be escaped prior to rendering on the UI.
   //
-  // In all other cases, this field should be treated as output only. ResultDB
-  // will automatically transition the invocation to FINALIZING when the provided
-  // `deadline` expires (if the invocation is not already in FINALIZING state).
-  // FINALIZING invocations will transition onward to FINALIZED when all included
-  // work units are FINALIZED.
-  State state = 3;
+  // This is an output only field and based on the summary of the root work unit.
+  string summary_markdown = 18 [
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
 
   // The realm of the root invocation. This controls the ACLs that apply to the
   // root invocation and its contents.
@@ -109,7 +170,7 @@ message RootInvocation {
     (google.api.field_behavior) = IMMUTABLE
   ];
 
-  // When the work unit was last updated.
+  // When the root invocation was last updated.
   // Output only.
   google.protobuf.Timestamp last_updated = 20 [
     (google.api.field_behavior) = OUTPUT_ONLY
@@ -117,15 +178,16 @@ message RootInvocation {
 
   // == Finalization ===========================================================
 
-  // When the invocation started to finalize, i.e. transitioned to FINALIZING
-  // state. This means the invocation is immutable but directly or indirectly
-  // included invocations may not be.
+  // When the invocation started to finalize, i.e. transitioned to a finalization
+  // state of FINALIZING. This means the invocation is immutable but directly or
+  // indirectly included invocations may not be.
   //
   // Output only.
   google.protobuf.Timestamp finalize_start_time = 7
       [ (google.api.field_behavior) = OUTPUT_ONLY ];
 
-  // When the invocation was finalized, i.e. transitioned to FINALIZED state.
+  // When the invocation was finalized, i.e. transitioned to a finalization state
+  // of FINALIZED.
   // If this field is set, implies that the invocation is finalized. This
   // means the invocation and directly or indirectly included invocations
   // are immutable.
@@ -134,37 +196,34 @@ message RootInvocation {
   google.protobuf.Timestamp finalize_time = 8
       [ (google.api.field_behavior) = OUTPUT_ONLY ];
 
-  // Timestamp when the invocation will be forcefully finalized.
-  // Can be extended with UpdateRootInvocation until finalized.
-  google.protobuf.Timestamp deadline = 9;
+  // == General ================================================================
 
-  // Full name of the resource that produced results in this root invocation.
-  // See also https://aip.dev/122#full-resource-names
-  // Typical examples:
-  // - Swarming task: "//chromium-swarm.appspot.com/tasks/deadbeef"
-  // - Buildbucket build: "//cr-buildbucket.appspot.com/builds/1234567890".
+  // The resource that produced results in this root invocation.
+  ProducerResource producer_resource = 25 [
+    (google.api.field_behavior) = IMMUTABLE,
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
+
+  // The process definition of the root invocation. Root invocations with the same
+  // definition share the same root invocation history.
   //
-  // Total length limited to 2000 bytes. Resource names must be in Unicode
-  // normalization form C.
-  string producer_resource = 10 [ (google.api.field_behavior) = IMMUTABLE ];
+  // Setting this field is recommended but can be elided in case of local and
+  // other emphemeral test runs which are not suitable to be plotted into a history.
+  RootInvocationDefinition definition = 21;
 
   // The code sources which were tested by this root invocation.
   // This is used to index test results for test history, and for
   // related analyses (e.g. culprit analysis / changepoint analyses).
+  //
+  // Required.
   Sources sources = 11;
 
-  // Whether the code sources specified by sources are final (immutable).
-  //
-  // To facilitate rapid export of invocations inheriting sources from this
-  // root invocation, this property should be set to true as soon as possible
-  // after the root invocation's sources are fixed. In most cases, clients
-  // will want to set this property to true at the same time as they set
-  // sources.
-  //
-  // This field is client owned. Consistent with https://google.aip.dev/129,
-  // it will not be forced to true when the invocation starts to finalize, even
-  // if its effective value will always be true at that point.
-  bool sources_final = 12;
+  // The primary build which was tested by this root invocation.
+  BuildDescriptor primary_build = 23;
+
+  // Extra builds which were tested by this root invocation.
+  // Limit of 10 extra builds.
+  repeated BuildDescriptor extra_builds = 24;
 
   // Root invocation-level string key-value pairs.
   // A key can be repeated.
@@ -206,6 +265,55 @@ message RootInvocation {
   // presubmit checks, such as to validate they are not flaky.
   string baseline_id = 15;
 
+  // StreamingExportState controls the operation of streaming (low-latency)
+  // exports from the root invocation. Streaming exports are designed to
+  // commence while the root invocation is still running.
+  enum StreamingExportState {
+    // The default value. Do not use this value.
+    STREAMING_EXPORT_STATE_UNSPECIFIED = 0;
+
+    // The metadata fields on the root invocation have not yet been set (or
+    // are not yet set to their final values). The streaming exports can
+    // not start yet.
+    //
+    // While this option is set, test result exports to downstream clients
+    // will be delayed. Please set this value to METADATA_FINAL as soon as
+    // practicable.
+    //
+    // See documentation on `streaming_export_state` for a definition of
+    // the metadata fields.
+    WAIT_FOR_METADATA = 1;
+
+    // The metadata fields on the root invocation have been set and can be made
+    // immutable. Streaming exports can commence.
+    //
+    // See documentation on `streaming_export_state` for a definition of
+    // the metadata fields.
+    METADATA_FINAL = 2;
+  }
+
+  // Controls the operation of streaming exports.
+  //
+  // Various clients (e.g. changepoint analysis, presubmit flake suppression
+  // systems) rely on having timely access to test result data for their
+  // performance and request uploaders set this field to `METADATA_FINAL`
+  // as soon as practicable.
+  //
+  // Before METADATA_FINAL can be set, the following metadata fields on the
+  // root invocation must have been populated with their final values:
+  // - `definition`
+  // - `sources`
+  // - `primary_build`
+  // - `extra_builds`
+  //
+  // This field is client owned. Consistent with https://google.aip.dev/129,
+  // it will not be forced to METADATA_FINAL when the root invocation starts
+  // to finalize (but exports will start anyway at this point, if they
+  // were not started earlier).
+  //
+  // Required.
+  StreamingExportState streaming_export_state = 19;
+
   // This checksum is computed by the server based on the value of other
   // fields, and may be sent on update requests to ensure the client
   // has an up-to-date value before proceeding.
@@ -215,7 +323,7 @@ message RootInvocation {
 
 // The following request message appears below as GetRootInvocation is
 // implemented by both the ResultDB and Recorder service. They are
-// implemented by both services for client ergonomics and to seperate
+// implemented by both services for client ergonomics and to separate
 // the recorder and reader-side failure domains. In the recorder service,
 // the Get methods facilitate atomic updates using etags for optimistic
 // concurrency control.
