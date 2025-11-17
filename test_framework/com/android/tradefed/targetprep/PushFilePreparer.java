@@ -145,6 +145,12 @@ public class PushFilePreparer extends BaseTargetPreparer
                             + "so that files could be pushed there too")
     private boolean mRemountVendor = false;
 
+    @Option(
+            name = "adb-command-timeout",
+            description = "time to wait for an adb command.",
+            isTimeVal = true)
+    private long mAdbCommandTimeout = -1;
+
     private Set<String> mFilesPushed = null;
     /** If the preparer is part of a module, we can use the test module name as a search criteria */
     private String mModuleName = null;
@@ -394,10 +400,26 @@ public class PushFilePreparer extends BaseTargetPreparer
         }
 
         Map<String, File> remoteToLocalMapping = getPushSpecs(device);
-        for (String remotePath : remoteToLocalMapping.keySet()) {
-            File local = remoteToLocalMapping.get(remotePath);
-            CLog.d("Trying to push local '%s' to remote '%s'", local.getPath(), remotePath);
-            evaluatePushingPair(device, testInfo.getBuildInfo(), local, remotePath);
+        long prevAdbTimeout = -1;
+        boolean timeoutChanged = false;
+        try {
+            if (mAdbCommandTimeout > 0) {
+                prevAdbTimeout = device.getOptions().getAdbCommandTimeout();
+                CLog.d(
+                        "Overriding default adb-command-timeout. Prev: %d Current: %d .",
+                        prevAdbTimeout, mAdbCommandTimeout);
+                device.getOptions().setAdbCommandTimeout(mAdbCommandTimeout);
+                timeoutChanged = true;
+            }
+            for (String remotePath : remoteToLocalMapping.keySet()) {
+                File local = remoteToLocalMapping.get(remotePath);
+                CLog.d("Trying to push local '%s' to remote '%s'", local.getPath(), remotePath);
+                evaluatePushingPair(device, testInfo.getBuildInfo(), local, remotePath);
+            }
+        } finally {
+            if (timeoutChanged) {
+                device.getOptions().setAdbCommandTimeout(prevAdbTimeout);
+            }
         }
 
         for (String command : mPostPushCommands) {
