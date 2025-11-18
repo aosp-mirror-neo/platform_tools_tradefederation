@@ -433,7 +433,7 @@ public abstract class ITestSuite
     @Option(
             name = "enable-default-logs",
             description = "Whether to collect debugging logs by default.")
-    private boolean mEnableDefaultLogs = false;
+    private boolean mEnableDefaultLogs = true;
 
     @Option(
             name = "log-level-on-failure",
@@ -1223,7 +1223,7 @@ public abstract class ITestSuite
             if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
                 logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
             } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
-                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
                 logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
@@ -1238,11 +1238,11 @@ public abstract class ITestSuite
             if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
                 logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
             } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
-                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
-                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
-                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.MODULE);
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.NULL);
             }
         }
 
