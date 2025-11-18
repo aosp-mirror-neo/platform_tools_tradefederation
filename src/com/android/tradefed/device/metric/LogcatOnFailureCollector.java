@@ -133,12 +133,9 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
             throws DeviceNotAvailableException {
         mCurrentTestFailed = true;
         if (!isDefaultMetricCollectionEnabled()) {
-            // Delay slightly for the error to get in the logcat
-            getRunUtil().sleep(100);
             // During non-default collection, start collecting from test run offset
             collectAndLog(test.toString(), MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
         } else if (MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
-            getRunUtil().sleep(100);
             collectAndLog(
                     "test_level-" + test.toString(),
                     MAX_LOGCAT_SIZE_BYTES,
@@ -151,11 +148,8 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
             throws DeviceNotAvailableException {
         mCurrentTestRunFailed = true;
         if (!isDefaultMetricCollectionEnabled()) {
-            // Delay slightly for the error to get in the logcat
-            getRunUtil().sleep(100);
             collectAndLog("run-failure", MAX_LOGCAT_SIZE_BYTES, MetricCollectionLevel.TEST_RUN);
         } else if (MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
-            getRunUtil().sleep(100);
             collectAndLog(
                     "test_run_level-" + getRunName(),
                     MAX_LOGCAT_SIZE_BYTES,
@@ -170,7 +164,6 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
             if (MetricCollectionLevel.TEST_CASE.equals(getAlwaysOnCollectionLevel())) {
                 if (!mCurrentTestFailed
                         || !MetricCollectionLevel.TEST_CASE.equals(getOnFailureCollectionLevel())) {
-                    getRunUtil().sleep(100);
                     collectAndLog(
                             "test_level-" + getTestName(),
                             MAX_LOGCAT_SIZE_BYTES,
@@ -187,7 +180,6 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
             if (MetricCollectionLevel.TEST_RUN.equals(getAlwaysOnCollectionLevel())) {
                 if (!mCurrentTestRunFailed
                         || !MetricCollectionLevel.TEST_RUN.equals(getOnFailureCollectionLevel())) {
-                    getRunUtil().sleep(100);
                     collectAndLog(
                             "test_run_level-" + getRunName(),
                             MAX_LOGCAT_SIZE_BYTES,
@@ -205,7 +197,6 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
             if (MetricCollectionLevel.MODULE.equals(getAlwaysOnCollectionLevel())
                     || (MetricCollectionLevel.MODULE.equals(getOnFailureCollectionLevel())
                             && doesModuleContainFailure())) {
-                getRunUtil().sleep(100);
                 collectAndLog(
                         "module_level-" + getModuleName(),
                         MODULE_MAX_LOGCAT_SIZE_BYTES,
@@ -241,6 +232,8 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
             }
             return;
         }
+        // Delay slightly for the error to get in the logcat
+        getRunUtil().sleep(100);
         mCurrentCount++;
         for (ITestDevice device : getRealDevices()) {
             boolean isDeviceOnline = isDeviceOnline(device);
@@ -326,6 +319,10 @@ public class LogcatOnFailureCollector extends BaseDeviceMetricCollector {
 
     /** Get the current offset of the buffer to be able to query later. */
     private void collectCurrentOffsets(MetricCollectionLevel level) {
+        // Do not collect offset if throttle limit has already reached.
+        if (!mFirstThrottle) {
+            return;
+        }
         for (ITestDevice device : getRealDevices()) {
             try (InputStreamSource data = mLogcatReceivers.get(device).getLogcatData()) {
                 int offset = (int) data.size();
