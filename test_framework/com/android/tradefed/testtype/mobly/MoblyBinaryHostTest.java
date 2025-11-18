@@ -777,6 +777,9 @@ public class MoblyBinaryHostTest
     IRunUtil getRunUtil() {
         if (mRunUtil == null) {
             mRunUtil = new RunUtil();
+            // avoid inheriting LD_LIBRARY_PATH from parent process since it may cause Python
+            // binaries to fail to find shared libraries or symbols.
+            mRunUtil.unsetEnvVariable("LD_LIBRARY_PATH");
         }
         return mRunUtil;
     }
