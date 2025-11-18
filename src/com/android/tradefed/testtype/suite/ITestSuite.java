@@ -1245,18 +1245,26 @@ public abstract class ITestSuite
                 logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.MODULE);
             }
         }
-        defaultLogCollectors.add(logCollector);
 
+        // do not add collector if we are not collecting at any level by default.
+        if (logCollector.getAlwaysOnCollectionLevel().equals(MetricCollectionLevel.NULL)
+                && logCollector.getOnFailureCollectionLevel().equals(MetricCollectionLevel.NULL)) {
+            return;
+        }
+
+        defaultLogCollectors.add(logCollector);
         // remove duplicated invocation level collectors
-        Iterator<IMetricCollector> itr = mMetricCollectors.iterator();
-        while (itr.hasNext()) {
-            IMetricCollector invocationMetricCollector = itr.next();
-            if (invocationMetricCollector.getClass().equals(logCollector.getClass())) {
-                itr.remove();
-                CLog.d(
-                        "Removing duplicated invocation level log collector %s in favor of default"
-                                + " log collection.",
-                        type);
+        if (mMetricCollectors != null) {
+            Iterator<IMetricCollector> itr = mMetricCollectors.iterator();
+            while (itr.hasNext()) {
+                IMetricCollector invocationMetricCollector = itr.next();
+                if (invocationMetricCollector.getClass().equals(logCollector.getClass())) {
+                    itr.remove();
+                    CLog.d(
+                            "Removing duplicated invocation level log collector %s in favor of"
+                                    + " default log collection.",
+                            type);
+                }
             }
         }
     }
