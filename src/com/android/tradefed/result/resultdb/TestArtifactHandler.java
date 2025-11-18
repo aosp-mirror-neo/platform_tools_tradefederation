@@ -69,7 +69,10 @@ class TestArtifactHandler {
 
     /** Upload artifact with the storage path to ResultDB. */
     public void uploadStoragePath(
-            String resourceId, String storagePath, LogFile logFile, IRecorderClient recorder) {
+            String resourceId,
+            String storagePath,
+            LogFile logFile,
+            IRecorderClientLegacy recorder) {
         CLog.v("Uploading storage path %s %s", resourceId, storagePath);
         Artifact artifact = mTestArtifacts.remove(resourceId);
         if (artifact == null) {
@@ -95,14 +98,17 @@ class TestArtifactHandler {
                         .setArtifactType(logFile.getType().toString())
                         .build();
 
-        if (mUploadQueueFinalized) {
-            // If the upload queue is finalized, make block call to upload the artifact directly.
-            CLog.d("Upload queue is finalized, has been called, upload the artifact directly.");
-            recorder.uploadArtifact(artifact);
-            return;
+        if (recorder != null) {
+            if (mUploadQueueFinalized) {
+                // If the upload queue is finalized, make block call to upload the artifact
+                // directly.
+                CLog.d("Upload queue is finalized, has been called, upload the artifact directly.");
+                recorder.uploadArtifact(artifact);
+                return;
+            }
+            // Queue the artifact for upload.
+            recorder.enqueueArtifact(artifact);
         }
-        // Queue the artifact for upload.
-        recorder.enqueueArtifact(artifact);
     }
 
     public void setUploadQueueFinalized() {

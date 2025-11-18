@@ -106,7 +106,7 @@ class TestResultHandler {
             TestDescription test,
             long endTime,
             HashMap<String, MetricMeasurement.Metric> testMetrics,
-            IRecorderClient recorder) {
+            IRecorderClientLegacy recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testEnded(%s) without a valid testStart before.", test);
             return;
@@ -140,12 +140,14 @@ class TestResultHandler {
         }
 
         mCurrentTestResult = testResultBuilder.build();
-        recorder.enqueueTestResult(mCurrentTestResult);
+        if (recorder != null) {
+            recorder.enqueueTestResult(mCurrentTestResult);
+        }
         mCurrentTestResult = null;
     }
 
     public void testFailed(
-            TestDescription test, FailureDescription failure, IRecorderClient recorder) {
+            TestDescription test, FailureDescription failure, IRecorderClientLegacy recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
@@ -196,13 +198,16 @@ class TestResultHandler {
 
         if (truncationResult.wasTruncated()) {
             // Upload the full trace as test artifact.
-            recorder.enqueueArtifact(artifactFromString("testFailed_trace", trace));
+            if (recorder != null) {
+                recorder.enqueueArtifact(artifactFromString("testFailed_trace", trace));
+            }
         }
         // TODO: extract local instruction from test description and set in ResultDB test result.
 
     }
 
-    public void testSkipped(TestDescription test, SkipReason reason, IRecorderClient recorder) {
+    public void testSkipped(
+            TestDescription test, SkipReason reason, IRecorderClientLegacy recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
             return;
@@ -225,12 +230,14 @@ class TestResultHandler {
         if (truncated.wasTruncated()) {
             // Upload the full skip reason as test artifact.
             Artifact atf = artifactFromString("testSkipped_reason", summaryHtml);
-            recorder.enqueueArtifact(atf);
+            if (recorder != null) {
+                recorder.enqueueArtifact(atf);
+            }
         }
     }
 
     public void testAssumptionFailure(
-            TestDescription test, FailureDescription failure, IRecorderClient recorder) {
+            TestDescription test, FailureDescription failure, IRecorderClientLegacy recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
             return;
@@ -259,8 +266,11 @@ class TestResultHandler {
 
         if (truncated.wasTruncated()) {
             // Upload the full skip reason as test artifact if it was truncated.
-            recorder.enqueueArtifact(
-                    artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage()));
+            if (recorder != null) {
+                recorder.enqueueArtifact(
+                        artifactFromString(
+                                "testAssumptionFailure_reason", failure.getErrorMessage()));
+            }
         }
     }
 
@@ -323,7 +333,7 @@ class TestResultHandler {
             Variant baseVariant,
             Variant moduleVariant,
             String currentModule,
-            IRecorderClient recorder) {
+            IRecorderClientLegacy recorder) {
         String moduleAbi = null;
         String moduleName = null;
         if (moduleContext != null) {
@@ -387,8 +397,10 @@ class TestResultHandler {
                             .setSkippedReason(skippedReason)
                             .setSummaryHtml(summaryHtml)
                             .build();
-            recorder.enqueueTestResult(currentTest);
-            CLog.d("Backfilled %s SKIPPED", currentTest);
+            if (recorder != null) {
+                recorder.enqueueTestResult(currentTest);
+                CLog.d("Backfilled %s SKIPPED", currentTest);
+            }
         }
     }
 }

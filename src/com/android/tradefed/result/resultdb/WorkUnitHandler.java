@@ -27,6 +27,9 @@ import java.util.Map;
 /** Handles Module level and test run level states, and work unit reporting for ResultDB. */
 class WorkUnitHandler {
 
+    public static final String MODULE_WORK_UNIT_TYPE = "TF_MODULE";
+    public static final String TEST_RUN_WORK_UNIT_TYPE = "TF_TEST_RUN";
+    public static final String TF_INVOCATION_WORK_UNIT_TYPE = "TF_INVOCATION";
     // Set containing the allowed variant module parameter keys
     private static final ImmutableSet<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);

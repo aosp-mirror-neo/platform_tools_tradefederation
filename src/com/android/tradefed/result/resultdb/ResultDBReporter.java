@@ -15,9 +15,13 @@
  */
 package com.android.tradefed.result.resultdb;
 
-import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.Invocation;
+import com.android.resultdb.proto.ProducerResource;
+import com.android.resultdb.proto.RootInvocation;
+import com.android.resultdb.proto.Sources;
+import com.android.resultdb.proto.SubmittedAndroidBuild;
 import com.android.resultdb.proto.Variant;
+import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
@@ -39,8 +43,10 @@ import com.android.tradefed.result.TestSummary;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
 
+import com.google.android.tradefed.build.AbLocalBuildProvider;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.protobuf.FieldMask;
 
 import java.util.HashMap;
 import java.util.UUID;
@@ -69,12 +75,19 @@ public class ResultDBReporter
 
     private IConfiguration mConfiguration;
     private String mInvocationId;
+    private String mTopWorkUnitId;
+    private String mRootInvocationId;
     // Set to true if the reporter is responsible for updating and finalizing the invocation.
     private boolean mManageInvocation = false;
+
+    // A legacy recorder client that uploading test results to legacy invocation.
+    private IRecorderClientLegacy mRecorderLegacy;
+    // A recorder client that uploading test results to work unit.
     private IRecorderClient mRecorder;
 
     // Common variant values for all test in this TF invocation.
     private Variant mBaseVariant;
+    private boolean mIsStaging = false;
 
     private final TestResultHandler mTestResultHandler = createTestResultHandler();
     private final WorkUnitHandler mWorkUnitHandler = new WorkUnitHandler();
@@ -133,13 +146,13 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mRecorder == null) {
+        if (mRecorderLegacy == null) {
             CLog.w(
                     "Recorder is not initialized, skipping upload storage path %s %s",
                     resourceId, storagePath);
             return;
         }
-        mTestArtifactHandler.uploadStoragePath(resourceId, storagePath, logFile, mRecorder);
+        mTestArtifactHandler.uploadStoragePath(resourceId, storagePath, logFile, mRecorderLegacy);
     }
 
     @Override
@@ -154,14 +167,30 @@ public class ResultDBReporter
     }
 
     @VisibleForTesting
-    IRecorderClient createRecorderClient(
+    IRecorderClientLegacy createRecorderClientLegacy(
             String invocationId, String updateToken, Boolean isStaging) {
-        return RecorderClient.create(invocationId, updateToken, isStaging);
+        return RecorderClient.createLegacy(invocationId, updateToken, isStaging);
     }
 
     @VisibleForTesting
-    IRecorderClient createRecorderClient(CreateInvocationRequest request, Boolean isStaging) {
-        return RecorderClient.createWithNewInvocation(request, isStaging);
+    IRecorderClientLegacy createRecorderClientLegacy(
+            String invocationId, Invocation invocation, Boolean isStaging) {
+        return RecorderClient.createLegacyWithNewInvocation(invocationId, invocation, isStaging);
+    }
+
+    @VisibleForTesting
+    IRecorderClient createRecorderClient(
+            String rootInvocationId, String updateToken, Boolean isStaging) {
+        return RecorderClient.create(rootInvocationId, updateToken, isStaging);
+    }
+
+    @VisibleForTesting
+    IRecorderClient createRecorderClient(
+            String rootInvocationId,
+            RootInvocation rootInvocation,
+            WorkUnit rootWorkUnit,
+            Boolean isStaging) {
+        return RecorderClient.create(rootInvocationId, rootInvocation, rootWorkUnit, isStaging);
     }
 
     @Override
@@ -170,37 +199,172 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
-        // Read root invocation and work unit context.
-        String rootInvocationId = context.getAttribute("resultdb_root_invocation_id");
-        String workUnitId = context.getAttribute("resultdb_work_unit_id");
-        String workUnitUpdateToken = context.getAttribute("resultdb_work_unit_update_token");
-        if (!rootInvocationId.isEmpty()) {
-            if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
-                CLog.w(
-                        "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
-                                + " required when resultdb_root_invocation_id is provided %s",
-                        rootInvocationId);
-                return;
-            }
-            CLog.i(
-                    "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
-                            + " update token",
-                    rootInvocationId, workUnitId);
-            CLog.i(
-                    "Disabling ResultDBReporter, because ResultDB work unit support is not"
-                            + " yet implemented in this plugin. Test results will be uploaded"
-                            + " automatically once support is ready.");
-            // TODO(beining): Implement work unit upload support.
+        Variant.Builder baseVariantBuilder =
+                Variant.newBuilder()
+                        .putDef("scheduler", "ATP") // ATP is the only scheduler supported for now.
+                        .putDef("name", Strings.nullToEmpty(context.getTestTag()));
+
+        IBuildInfo primaryBuild = getPrimaryBuild(context);
+        if (primaryBuild != null) {
+            baseVariantBuilder =
+                    baseVariantBuilder
+                            .putDef("build_provider", "androidbuild")
+                            .putDef("branch", Strings.nullToEmpty(primaryBuild.getBuildBranch()))
+                            .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
+        }
+        // TODO: Remove the base variant. Root invocation now has new fields that is more
+        // appropriate these properties, eg. source, producer_resource.
+        mBaseVariant = baseVariantBuilder.build();
+        mIsStaging = isStaging(context);
+
+        boolean successLegacy = initRecorderLegacy(context);
+        boolean success = initRecorder(context);
+        if (!success && !successLegacy) {
             mDisable = true;
+            CLog.i("ResultDBReporter is disabled");
             return;
         }
+        CLog.logAndDisplay(LogLevel.INFO, "Result link: %s", getResultLinks());
+    }
+
+    private String getResultLinks() {
+        String host = "";
+        if (mIsStaging) {
+            host = "https://luci-milo-dev.appspot.com/";
+        } else {
+            host = "https://ci.chromium.org";
+        }
+        String legacyLink = String.format("%s/ui/inv/%s", host, mInvocationId);
+        if (!Strings.isNullOrEmpty(mRootInvocationId)) {
+            return String.format("%s/ui/test-investigate/invocations/%s", host, mRootInvocationId)
+                    + "\n"
+                    + legacyLink;
+        }
+        return legacyLink;
+    }
+
+    private IBuildInfo getPrimaryBuild(IInvocationContext context) {
+        if (context.getBuildInfos().isEmpty()) {
+            return null;
+        }
+        if (context.getBuildInfo(AbLocalBuildProvider.LOCAL_BUILD) != null) {
+            return context.getBuildInfo(AbLocalBuildProvider.LOCAL_BUILD);
+        }
+        return context.getBuildInfos().get(0);
+    }
+
+    /**
+     * Initializes the ResultDB client with root invocation, work unit information from the context.
+     *
+     * @return true if the client is initialized successfully, false otherwise. If it succeeds,
+     *     mRecorder, mRootInvocationId and mTopWorkUnitId are set, otherwise none of them is set.
+     */
+    private boolean initRecorder(IInvocationContext context) {
+        try {
+            // Read root invocation and work unit context.
+            String rootInvocationId = context.getAttribute("resultdb_root_invocation_id");
+            String workUnitId = context.getAttribute("resultdb_work_unit_id");
+            String workUnitUpdateToken = context.getAttribute("resultdb_work_unit_update_token");
+
+            if (!rootInvocationId.isEmpty()) {
+                if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
+                    CLog.w(
+                            "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
+                                    + " required when resultdb_root_invocation_id is provided %s",
+                            rootInvocationId);
+                    return false;
+                }
+                CLog.i(
+                        "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
+                                + " update token",
+                        rootInvocationId, workUnitId);
+                mTopWorkUnitId = workUnitId;
+                mRootInvocationId = rootInvocationId;
+                mRecorder =
+                        createRecorderClient(
+                                rootInvocationId, workUnitUpdateToken, isStaging(context));
+            } else if (mCreateLocalInvocation) {
+                IBuildInfo primaryBuild = getPrimaryBuild(context);
+                if (primaryBuild == null) {
+                    CLog.w("No primary build found, skipping ResultDBReporter initialization.");
+                    return false;
+                }
+                String branch =
+                        primaryBuild.getBuildBranch() != null
+                                ? primaryBuild.getBuildBranch()
+                                : "unknown";
+                // TODO: Update the sources field with the correct information. Set temporary data
+                // to unblock upload.
+                Sources sources =
+                        Sources.newBuilder()
+                                .setSubmittedAndroidBuild(
+                                        SubmittedAndroidBuild.newBuilder()
+                                                .setDataRealm("prod")
+                                                .setBranch(branch)
+                                                .setBuildId(
+                                                        Long.parseLong(primaryBuild.getBuildId()))
+                                                .build())
+                                .build();
+                ProducerResource producerResource =
+                        ProducerResource.newBuilder()
+                                .setSystem("tradefed")
+                                .setDataRealm("prod")
+                                .setName("runs/" + randomUUIDString())
+                                .build();
+                RootInvocation rootInvocation =
+                        RootInvocation.newBuilder()
+                                .setRealm("android:ants-experiment")
+                                .setSources(sources)
+                                .setStreamingExportState(
+                                        RootInvocation.StreamingExportState.WAIT_FOR_METADATA)
+                                .setProducerResource(producerResource)
+                                .build();
+                mRootInvocationId = "u-" + randomUUIDString().toString();
+
+                WorkUnit rootWorkUnit =
+                        WorkUnit.newBuilder()
+                                .setState(WorkUnit.State.RUNNING)
+                                .setKind(WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE)
+                                .build();
+                mRecorder =
+                        createRecorderClient(
+                                mRootInvocationId,
+                                rootInvocation,
+                                rootWorkUnit,
+                                isStaging(context));
+                mTopWorkUnitId = "root"; // Top work unit is the root work unit.
+                mManageInvocation = true;
+            } else {
+                CLog.i(
+                        "ResultDBReporter is disabled as root invocation ID, work unit ID and"
+                                + " update token are not provided.");
+                return false;
+            }
+        } catch (RuntimeException e) {
+            CLog.e("Failed to create ResultDB client. Error: %s", e.getMessage());
+            mRecorder = null;
+            mRootInvocationId = null;
+            mTopWorkUnitId = null;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Initializes the ResultDB client with legacy invocation information from the context.
+     *
+     * @return true if the client is initialized successfully, false otherwise. If it succeeds,
+     *     mInvocationId and mRecorderLegacy are set, otherwise none of them is set.
+     */
+    private boolean initRecorderLegacy(IInvocationContext context) {
         try {
             // Obtain invocation ID from context.
             String invocationId = context.getAttribute("resultdb_invocation_id");
             String updateToken = context.getAttribute("resultdb_invocation_update_token");
             if (!invocationId.isEmpty() && !updateToken.isEmpty()) {
                 mInvocationId = invocationId;
-                mRecorder = createRecorderClient(invocationId, updateToken, isStaging(context));
+                mRecorderLegacy =
+                        createRecorderClientLegacy(invocationId, updateToken, isStaging(context));
             } else if (mCreateLocalInvocation) {
                 Invocation invocation =
                         Invocation.newBuilder()
@@ -208,53 +372,28 @@ public class ResultDBReporter
                                 .setIsExportRoot(true)
                                 .build();
                 mInvocationId = "u-" + randomUUIDString().toString();
-                mRecorder =
-                        createRecorderClient(
-                                CreateInvocationRequest.newBuilder()
-                                        .setInvocation(invocation)
-                                        .setInvocationId(mInvocationId)
-                                        .build(),
-                                isStaging(context));
+                mRecorderLegacy =
+                        createRecorderClientLegacy(mInvocationId, invocation, isStaging(context));
                 mManageInvocation = true;
-
             } else {
-                mDisable = true;
                 CLog.i(
                         "ResultDBReporter is disabled as invocation ID or update token is not"
                                 + " provided.");
-                return;
+                return false;
             }
         } catch (RuntimeException e) {
-            mDisable = true;
-            CLog.e("Failed to create ResultDB client.");
-            if (mRecorder != null) {
+            CLog.e("Failed to create ResultDB client legacy. Error: %s", e.getMessage());
+            if (mRecorderLegacy != null) {
                 // Make sure we cancel the client, otherwise it will leak a thread since
                 // invocationEnded will be skipped.
-                mRecorder.finalizeUpload();
+                mRecorderLegacy.finalizeUpload();
                 mTestArtifactHandler.setUploadQueueFinalized();
             }
-            throw new RuntimeException(e);
+            mRecorderLegacy = null;
+            mInvocationId = null;
+            return false;
         }
-        // Variant contains properties in go/consistent-test-identifiers, excluding
-        // properties in ResultDB test identifier.
-        // TODO: Add Test definition properties eg. cluster_id.
-        Variant.Builder mBaseVariantBuilder =
-                Variant.newBuilder()
-                        .putDef("scheduler", "ATP") // ATP is the only scheduler supported for now.
-                        .putDef("name", Strings.nullToEmpty(context.getTestTag()));
-
-        if (!context.getBuildInfos().isEmpty()) {
-            IBuildInfo primaryBuild = context.getBuildInfos().get(0);
-            mBaseVariantBuilder =
-                    mBaseVariantBuilder
-                            .putDef("build_provider", "androidbuild")
-                            .putDef("branch", Strings.nullToEmpty(primaryBuild.getBuildBranch()))
-                            .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
-        }
-        mBaseVariant = mBaseVariantBuilder.build();
-
-        CLog.logAndDisplay(
-                LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
+        return true;
     }
 
     private Boolean isStaging(IInvocationContext context) {
@@ -282,13 +421,27 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mRecorder.finalizeUpload();
-        mTestArtifactHandler.setUploadQueueFinalized();
-        if (mManageInvocation) {
-            mRecorder.finalizeInvocation();
+        if (mRecorderLegacy != null) {
+            mRecorderLegacy.finalizeUpload();
+            mTestArtifactHandler.setUploadQueueFinalized();
+            if (mManageInvocation) {
+                mRecorderLegacy.finalizeInvocation();
+            }
         }
-        CLog.logAndDisplay(
-                LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
+        if (mRecorder != null) {
+            if (mManageInvocation) {
+                mRecorder.updateWorkUnit(
+                        WorkUnit.newBuilder()
+                                .setName(
+                                        String.format(
+                                                "rootInvocations/%s/workUnits/root",
+                                                mRootInvocationId))
+                                .setState(WorkUnit.State.SUCCEEDED)
+                                .build(),
+                        FieldMask.newBuilder().addPaths("state").build());
+            }
+        }
+        CLog.logAndDisplay(LogLevel.INFO, "Result link: %s", getResultLinks());
         // TODO: Update ResultDB invocation with information from TF invocation.
     }
 
@@ -322,7 +475,7 @@ public class ResultDBReporter
                     mBaseVariant,
                     mWorkUnitHandler.getModuleVariant(),
                     mWorkUnitHandler.getCurrentModule(),
-                    mRecorder);
+                    mRecorderLegacy);
         } catch (RuntimeException e) {
             CLog.e("error during skip reporting:");
             CLog.e(e);
@@ -397,7 +550,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testAssumptionFailure(test, failure, mRecorder);
+        mTestResultHandler.testAssumptionFailure(test, failure, mRecorderLegacy);
     }
 
     @Override
@@ -405,7 +558,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testSkipped(test, reason, mRecorder);
+        mTestResultHandler.testSkipped(test, reason, mRecorderLegacy);
     }
 
     @Override
@@ -413,7 +566,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testFailed(test, FailureDescription.create(trace), mRecorder);
+        mTestResultHandler.testFailed(test, FailureDescription.create(trace), mRecorderLegacy);
     }
 
     @Override
@@ -421,7 +574,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testFailed(test, failure, mRecorder);
+        mTestResultHandler.testFailed(test, failure, mRecorderLegacy);
     }
 
     @Override
@@ -446,7 +599,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testEnded(test, endTime, testMetrics, mRecorder);
+        mTestResultHandler.testEnded(test, endTime, testMetrics, mRecorderLegacy);
     }
 
     @Override
