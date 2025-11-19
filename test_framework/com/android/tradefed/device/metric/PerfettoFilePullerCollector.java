@@ -69,6 +69,12 @@ public class PerfettoFilePullerCollector extends FilePullerDeviceMetricCollector
             isTimeVal = true)
     private long mCompressResponseTimeoutMs = TimeUnit.SECONDS.toMillis(30);
 
+    @Option(
+            name = "adb-command-timeout",
+            description = "time to wait for an adb command.",
+            isTimeVal = true)
+    private long mAdbCommandTimeout = -1;
+
     /**
      * Pull the file from the specified path in the device. Pull the compressed content of the
      * perfetto file if the compress perfetto option is enabled.
@@ -83,7 +89,23 @@ public class PerfettoFilePullerCollector extends FilePullerDeviceMetricCollector
     protected File retrieveFile(ITestDevice device, String remoteFilePath, int userId)
             throws DeviceNotAvailableException {
         if (!mCompressPerfetto) {
-            return super.retrieveFile(device, remoteFilePath, userId);
+            long prevAdbTimeout = -1;
+            boolean timeoutChanged = false;
+            try {
+                if (mAdbCommandTimeout > 0) {
+                    prevAdbTimeout = device.getOptions().getAdbCommandTimeout();
+                    CLog.d(
+                            "Overriding default adb-command-timeout. Prev: %d Current: %d .",
+                            prevAdbTimeout, mAdbCommandTimeout);
+                    device.getOptions().setAdbCommandTimeout(mAdbCommandTimeout);
+                    timeoutChanged = true;
+                }
+                return super.retrieveFile(device, remoteFilePath, userId);
+            } finally {
+                if (timeoutChanged) {
+                    device.getOptions().setAdbCommandTimeout(prevAdbTimeout);
+                }
+            }
         }
         File perfettoCompressedFile = null;
         String filePathInDevice = remoteFilePath;
