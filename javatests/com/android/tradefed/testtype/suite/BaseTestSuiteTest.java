@@ -26,6 +26,8 @@ import static org.mockito.Mockito.when;
 import com.android.ddmlib.IDevice;
 import com.android.tradefed.build.DeviceBuildInfo;
 import com.android.tradefed.build.IDeviceBuildInfo;
+import com.android.tradefed.command.CommandOptions;
+import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.ConfigurationDef;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.OptionSetter;
@@ -59,10 +61,12 @@ import org.mockito.MockitoAnnotations;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /** Unit tests for {@link BaseTestSuite}. */
@@ -802,6 +806,40 @@ public class BaseTestSuiteTest {
         reuseTestUser.setAccessible(true);
         assertTrue(reuseTestUser.getBoolean(config.getTargetPreparers().get(0)));
         reuseTestUser.setAccessible(false);
+    }
+
+    /** Test for {@link BaseTestSuite#loadTests()} with the use include filter order enabled. */
+    @Test
+    public void testLoadTests_useIncludeFilterOrder() throws Exception {
+        File gestureModuleDir =
+                FileUtil.createTempDir("CtsGestureTestCases", mBuildInfo.getTestsDir());
+        createConfig(gestureModuleDir, "CtsGestureTestCases.config");
+        File netModuleDir = FileUtil.createTempDir("CtsNetTestCases", mBuildInfo.getTestsDir());
+        createConfig(netModuleDir, "CtsNetTestCases.config");
+
+        IConfiguration configuration = new Configuration("stub", "stub");
+        CommandOptions options = new CommandOptions();
+        OptionSetter optionsSetter = new OptionSetter(options);
+        optionsSetter.setOptionValue("dynamic-sharding", "false");
+        configuration.setCommandOptions(options);
+        mRunner.setConfiguration(configuration);
+
+        OptionSetter runnerSetter = new OptionSetter(mRunner);
+        runnerSetter.setOptionValue("skip-loading-config-jar", "true");
+        runnerSetter.setOptionValue("use-include-filter-order", "true");
+        runnerSetter.setOptionValue("include-filter", "CtsNetTestCases");
+        runnerSetter.setOptionValue("include-filter", "armeabi-v7a CtsGestureTestCases");
+        runnerSetter.setOptionValue("include-filter", "arm64-v8a CtsGestureTestCases");
+
+        mRunner.reevaluateFilters();
+
+        LinkedHashMap<String, IConfiguration> configMap = mRunner.loadTests();
+        assertEquals(4, configMap.size());
+        List<String> sortedModuleIds = new ArrayList<>(configMap.keySet());
+        assertEquals("arm64-v8a CtsNetTestCases", sortedModuleIds.get(0));
+        assertEquals("armeabi-v7a CtsNetTestCases", sortedModuleIds.get(1));
+        assertEquals("armeabi-v7a CtsGestureTestCases", sortedModuleIds.get(2));
+        assertEquals("arm64-v8a CtsGestureTestCases", sortedModuleIds.get(3));
     }
 
     private void createConfig(File tmpDir, String name) throws IOException {
