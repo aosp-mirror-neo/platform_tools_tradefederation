@@ -98,6 +98,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.SearchArtifactUtil;
 import com.android.tradefed.util.StreamUtil;
+import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.TimeUtil;
 
 import com.google.common.collect.ImmutableMap;
@@ -1190,7 +1191,7 @@ public abstract class ITestSuite
     }
 
     private List<IMetricCollector> populateDefaultLogCollectors() {
-        if (!mEnableDefaultLogs) {
+        if (!mEnableDefaultLogs || SystemUtil.isLocalMode()) {
             return null;
         }
         List<IMetricCollector> defaultCollectors = new LinkedList<>();
