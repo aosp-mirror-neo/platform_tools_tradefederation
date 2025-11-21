@@ -18,7 +18,6 @@ package com.android.tradefed.result.resultdb;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.TestResult;
-import com.android.resultdb.proto.UpdateInvocationRequest;
 import com.android.resultdb.proto.WorkUnit;
 
 import com.google.protobuf.FieldMask;
@@ -31,6 +30,7 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
     private List<TestResult> mTestResults = new ArrayList<>();
     private List<Artifact> mArtifacts = new ArrayList<>();
     private Invocation mInvocation;
+    private List<RecorderClient.WorkUnitItem> mWorkUnitItems = new ArrayList<>();
     private List<WorkUnit> mWorkUnitUpdates = new ArrayList<>();
 
     public static StubClient create() {
@@ -42,12 +42,6 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
     @Override
     public Invocation finalizeInvocation() {
         return Invocation.getDefaultInstance();
-    }
-
-    @Override
-    public Invocation updateInvocation(UpdateInvocationRequest request) {
-        // TODO: implement this method.
-        return null;
     }
 
     @Override
@@ -79,6 +73,20 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
 
     public List<WorkUnit> getWorkUnitUpdates() {
         return mWorkUnitUpdates;
+    }
+
+    public List<RecorderClient.WorkUnitItem> getWorkUnitItems() {
+        return mWorkUnitItems;
+    }
+
+    @Override
+    public void enqueueWorkUnit(String parentId, String id, WorkUnit workUnit) {
+        mWorkUnitItems.add(new RecorderClient.WorkUnitItem(parentId, id, workUnit));
+    }
+
+    @Override
+    public void enqueueWorkUnitUpdate(WorkUnit workUnit, FieldMask updateMask) {
+        mWorkUnitUpdates.add(workUnit);
     }
 
     @Override

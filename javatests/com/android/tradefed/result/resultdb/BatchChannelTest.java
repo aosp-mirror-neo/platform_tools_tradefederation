@@ -86,6 +86,26 @@ public final class BatchChannelTest {
         assertThat(mClient.mBatches).hasSize(0);
     }
 
+    @Test
+    public void uploadBatch_forceUpload() throws InterruptedException {
+        for (int i = 0; i < 9; i++) {
+            mBatchChannel.enqueue(String.valueOf(i));
+        }
+
+        // No upload happens since the batch is not full.
+        assertThat(mClient.mBatches).hasSize(0);
+
+        // Force upload should upload even though the batch is not full.
+        mBatchChannel.forceUpload();
+        assertThat(mClient.mBatches).hasSize(1);
+        assertThat(mClient.mBatches.get(0))
+                .containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
+        mBatchChannel.finalizeUpload();
+
+        // No more upload should happen during finalizeUpload.
+        assertThat(mClient.mBatches).hasSize(1);
+    }
+
     private class BatchUploadClient {
         private final ArrayList<List<String>> mBatches = new ArrayList<>();
         private Boolean mShouldUploadFail = false;

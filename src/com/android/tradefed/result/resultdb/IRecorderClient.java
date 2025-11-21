@@ -26,10 +26,34 @@ import com.google.protobuf.FieldMask;
 public interface IRecorderClient {
 
     /**
+     * Enqueue a work unit to report to ResultDB.
+     *
+     * @param parentId The parent ID of the work unit.
+     * @param id The ID of the work unit.
+     * @param workUnit The work unit to upload in the CreateWorkUnitRequest.
+     */
+    public void enqueueWorkUnit(String parentId, String id, WorkUnit workUnit);
+
+    /**
+     * Enqueue a work unit update to report to ResultDB.
+     *
+     * @param workUnit The work unit to update in the UpdateWorkUnitRequest.
+     * @param updateMask The field mask for the update.
+     */
+    public void enqueueWorkUnitUpdate(WorkUnit workUnit, FieldMask updateMask);
+
+    /**
      * Update a work unit in ResultDB.
      *
-     * @param workUnit The work unit to update.
+     * @param workUnit The work unit to update in the UpdateWorkUnitRequest.
      * @param updateMask The field mask for the update.
      */
     public void updateWorkUnit(WorkUnit workUnit, FieldMask updateMask);
+
+    /**
+     * Finalize the upload of test results, artifacts and work units. This method should be called
+     * after all resources have been enqueued. Any enqueueXXX calls after this method will be
+     * ignored.
+     */
+    public void finalizeUpload();
 }

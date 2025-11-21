@@ -108,6 +108,11 @@ class TestArtifactHandler {
             }
             // Queue the artifact for upload.
             recorder.enqueueArtifact(artifact);
+        } else {
+            CLog.w(
+                    "Recorder is not initialized, skipping upload storage path %s %s",
+                    resourceId, storagePath);
+            return;
         }
     }
 
