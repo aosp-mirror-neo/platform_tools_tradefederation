@@ -18,20 +18,27 @@ package com.android.tradefed.result.resultdb;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.BatchCreateArtifactsRequest;
 import com.android.resultdb.proto.BatchCreateTestResultsRequest;
+import com.android.resultdb.proto.BatchUpdateWorkUnitsRequest;
 import com.android.resultdb.proto.CreateArtifactRequest;
 import com.android.resultdb.proto.CreateInvocationRequest;
+import com.android.resultdb.proto.CreateRootInvocationRequest;
+import com.android.resultdb.proto.CreateRootInvocationResponse;
 import com.android.resultdb.proto.CreateTestResultRequest;
 import com.android.resultdb.proto.FinalizeInvocationRequest;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.RecorderGrpc;
+import com.android.resultdb.proto.RootInvocation;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.UpdateInvocationRequest;
+import com.android.resultdb.proto.UpdateWorkUnitRequest;
+import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.FieldMask;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -52,7 +59,7 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 
 /** ResultDB recorder client that uploads test results to ResultDB. */
-public class RecorderClient implements IRecorderClient {
+public class RecorderClient implements IRecorderClient, IRecorderClientLegacy {
 
     // The key for the update token used to create/update resources undera ResultDB invocation.
     private static final Metadata.Key<String> UPDATE_TOKEN_METADATA_KEY =
@@ -60,6 +67,8 @@ public class RecorderClient implements IRecorderClient {
     // The id of the ResultDB invocation used in upload results, update and finalize invocation
     // request. Currently only one ResultDB invocation per TF invocation is supported.
     private String mInvocationId;
+    // The id of the ResultDB root invocation used in upload results.
+    private String mRootInvocationId;
     private String mUpdateToken;
 
     private final RecorderGrpc.RecorderBlockingStub mStub;
@@ -93,7 +102,7 @@ public class RecorderClient implements IRecorderClient {
         mArtifactChannel = new BatchChannel<Artifact>(500, "artifacts", this::batchUploadArtifacts);
     }
 
-    public static IRecorderClient create(
+    public static IRecorderClientLegacy createLegacy(
             String invocationId, String updateToken, Boolean isStaging) {
         RecorderClient client = new RecorderClient(isStaging);
         client.mInvocationId = invocationId;
@@ -101,11 +110,40 @@ public class RecorderClient implements IRecorderClient {
         return client;
     }
 
-    public static IRecorderClient createWithNewInvocation(
-            CreateInvocationRequest request, Boolean isStaging) {
+    public static IRecorderClientLegacy createLegacyWithNewInvocation(
+            String invocationId, Invocation invocation, Boolean isStaging) {
         RecorderClient client = new RecorderClient(isStaging);
-        Invocation invocation = client.createInvocation(request);
-        client.mInvocationId = invocation.getName().replace("invocations/", "");
+        client.mInvocationId = invocationId;
+        client.createInvocation(
+                CreateInvocationRequest.newBuilder()
+                        .setInvocation(invocation)
+                        .setInvocationId(invocationId)
+                        .build());
+        return client;
+    }
+
+    public static IRecorderClient create(
+            String rootInvocationId, String updateToken, Boolean isStaging) {
+        RecorderClient client = new RecorderClient(isStaging);
+        client.mRootInvocationId = rootInvocationId;
+        client.mUpdateToken = updateToken;
+        return client;
+    }
+
+    public static IRecorderClient create(
+            String rootInvocationId,
+            RootInvocation rootInvocation,
+            WorkUnit rootWorkUnit,
+            Boolean isStaging) {
+        RecorderClient client = new RecorderClient(isStaging);
+        client.mRootInvocationId = rootInvocationId;
+        client.createRootInvocation(
+                CreateRootInvocationRequest.newBuilder()
+                        .setRootInvocationId(rootInvocationId)
+                        .setRootInvocation(rootInvocation)
+                        .setRootWorkUnit(rootWorkUnit)
+                        .setRequestId(UUID.randomUUID().toString())
+                        .build());
         return client;
     }
 
@@ -118,6 +156,10 @@ public class RecorderClient implements IRecorderClient {
 
     // Interceptor that adds the update token to requests.
     private ClientInterceptor recorderInterceptor() {
+        List<String> updateTokenRpc =
+                List.of(
+                        "luci.resultdb.v1.Recorder/CreateInvocation",
+                        "luci.resultdb.v1.Recorder/CreateRootInvocation");
         ClientInterceptor clientInterceptor =
                 new ClientInterceptor() {
                     @Override
@@ -141,8 +183,7 @@ public class RecorderClient implements IRecorderClient {
                                             @Override
                                             public void onHeaders(Metadata headers) {
                                                 String fullMethodName = method.getFullMethodName();
-                                                if (fullMethodName.equals(
-                                                        "luci.resultdb.v1.Recorder/CreateInvocation")) {
+                                                if (updateTokenRpc.contains(fullMethodName)) {
                                                     String updateToken =
                                                             headers.get(UPDATE_TOKEN_METADATA_KEY);
 
@@ -169,6 +210,14 @@ public class RecorderClient implements IRecorderClient {
         return invocation;
     }
 
+    private CreateRootInvocationResponse createRootInvocation(CreateRootInvocationRequest request) {
+        CreateRootInvocationResponse response = mStub.createRootInvocation(request);
+        CLog.i(
+                "Created root invocation: %s, and root work unit: %s",
+                response.getRootInvocation().getName(), response.getRootWorkUnit().getName());
+        return response;
+    }
+
     @Override
     public Invocation updateInvocation(UpdateInvocationRequest request) {
         // TODO: Call recorder grpc client to update invocation.
@@ -183,6 +232,15 @@ public class RecorderClient implements IRecorderClient {
                 FinalizeInvocationRequest.newBuilder()
                         .setName("invocations/" + mInvocationId)
                         .build());
+    }
+
+    @Override
+    public void updateWorkUnit(WorkUnit workUnit, FieldMask updateMask) {
+        try {
+            batchUpdateWorkUnits(List.of(workUnit), updateMask);
+        } catch (StatusRuntimeException e) {
+            CLog.e("Failed to update work unit: " + e.getMessage());
+        }
     }
 
     @Override
@@ -245,5 +303,20 @@ public class RecorderClient implements IRecorderClient {
 
         mStub.batchCreateArtifacts(request.build());
         CLog.i("Uploaded %d artifacts to invocation %s", allArtifacts.size(), mInvocationId);
+    }
+
+    private void batchUpdateWorkUnits(List<WorkUnit> allWorkUnits, FieldMask updateMask)
+            throws StatusRuntimeException {
+        BatchUpdateWorkUnitsRequest.Builder request =
+                BatchUpdateWorkUnitsRequest.newBuilder().setRequestId(UUID.randomUUID().toString());
+        for (WorkUnit workUnit : allWorkUnits) {
+            request.addRequests(
+                    UpdateWorkUnitRequest.newBuilder()
+                            .setWorkUnit(workUnit)
+                            .setUpdateMask(updateMask)
+                            .build());
+        }
+        mStub.batchUpdateWorkUnits(request.build());
+        CLog.i("Updated %d work units in invocation %s", allWorkUnits.size(), mRootInvocationId);
     }
 }

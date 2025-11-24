@@ -174,6 +174,10 @@ public class DebugHostLogOnFailureCollector extends BaseDeviceMetricCollector {
 
     /** Get the current offset of the buffer to be able to query later. */
     private void collectCurrentOffsets(MetricCollectionLevel level) {
+        // Do not collect offset if throttle limit has already reached.
+        if (!mFirstThrottle) {
+            return;
+        }
         try (InputStreamSource source = getLogger().getLog()) {
             if (source == null) {
                 CLog.e(

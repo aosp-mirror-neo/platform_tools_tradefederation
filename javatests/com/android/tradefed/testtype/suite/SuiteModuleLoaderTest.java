@@ -1153,4 +1153,41 @@ public class SuiteModuleLoaderTest {
         module = res.get("armeabi-v7a module2");
         assertNull(module);
     }
+
+    /** Test that the test configs are sorted based on the order defined in include-filter. */
+    @Test
+    public void testSortConfigsWithIncludeFilters() throws Exception {
+        createModuleConfig("module1");
+        createModuleConfig("module2");
+        createModuleConfig("module3");
+
+        Map<String, LinkedHashSet<SuiteTestFilter>> includeFilters = new LinkedHashMap<>();
+        SuiteTestFilter filter = SuiteTestFilter.createFrom("armeabi-v7a module1");
+        LinkedHashSet<SuiteTestFilter> mapFilter = new LinkedHashSet<>();
+        mapFilter.add(filter);
+        includeFilters.put("armeabi-v7a module2", mapFilter);
+        includeFilters.put("armeabi-v7a module3", mapFilter);
+        includeFilters.put("armeabi-v7a module1", mapFilter);
+
+        mRepo =
+                new SuiteModuleLoader(
+                        includeFilters,
+                        new LinkedHashMap<String, LinkedHashSet<SuiteTestFilter>>(),
+                        new ArrayList<>(),
+                        new ArrayList<>());
+
+        mRepo.setUseIncludeFilterOrder(true);
+        List<String> patterns = new ArrayList<>();
+        patterns.add(".*.config");
+        patterns.add(".*.xml");
+        LinkedHashMap<String, IConfiguration> res =
+                mRepo.loadConfigsFromDirectory(
+                        Arrays.asList(mTestsDir), mAbis, null, null, patterns);
+
+        assertEquals(3, res.size());
+        List<String> sortedModuleIds = new ArrayList<>(res.keySet());
+        assertEquals("armeabi-v7a module2", sortedModuleIds.get(0));
+        assertEquals("armeabi-v7a module3", sortedModuleIds.get(1));
+        assertEquals("armeabi-v7a module1", sortedModuleIds.get(2));
+    }
 }

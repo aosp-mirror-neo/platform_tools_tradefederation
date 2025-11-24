@@ -19,15 +19,19 @@ import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.UpdateInvocationRequest;
+import com.android.resultdb.proto.WorkUnit;
+
+import com.google.protobuf.FieldMask;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** Stub implementation of IRecorderClient for testing. */
-class StubClient implements IRecorderClient {
+class StubClient implements IRecorderClient, IRecorderClientLegacy {
     private List<TestResult> mTestResults = new ArrayList<>();
     private List<Artifact> mArtifacts = new ArrayList<>();
     private Invocation mInvocation;
+    private List<WorkUnit> mWorkUnitUpdates = new ArrayList<>();
 
     public static StubClient create() {
         return new StubClient();
@@ -71,6 +75,15 @@ class StubClient implements IRecorderClient {
 
     public Invocation getInvocation() {
         return mInvocation;
+    }
+
+    public List<WorkUnit> getWorkUnitUpdates() {
+        return mWorkUnitUpdates;
+    }
+
+    @Override
+    public void updateWorkUnit(WorkUnit workUnit, FieldMask updateMask) {
+        mWorkUnitUpdates.add(workUnit);
     }
 
     @Override

@@ -98,6 +98,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.SearchArtifactUtil;
 import com.android.tradefed.util.StreamUtil;
+import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.TimeUtil;
 
 import com.google.common.collect.ImmutableMap;
@@ -433,7 +434,7 @@ public abstract class ITestSuite
     @Option(
             name = "enable-default-logs",
             description = "Whether to collect debugging logs by default.")
-    private boolean mEnableDefaultLogs = false;
+    private boolean mEnableDefaultLogs = true;
 
     @Option(
             name = "log-level-on-failure",
@@ -1190,7 +1191,7 @@ public abstract class ITestSuite
     }
 
     private List<IMetricCollector> populateDefaultLogCollectors() {
-        if (!mEnableDefaultLogs) {
+        if (!mEnableDefaultLogs || SystemUtil.isLocalMode()) {
             return null;
         }
         List<IMetricCollector> defaultCollectors = new LinkedList<>();
@@ -1223,7 +1224,7 @@ public abstract class ITestSuite
             if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
                 logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
             } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
-                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.MODULE);
+                logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
                 logCollector.setAlwaysOnCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
@@ -1238,25 +1239,33 @@ public abstract class ITestSuite
             if (AutoLogCollector.LOGCAT_ON_FAILURE.equals(type)) {
                 logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
             } else if (AutoLogCollector.HOSTLOG_ON_FAILURE.equals(type)) {
-                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.SCREENSHOT_ON_FAILURE.equals(type)) {
-                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.TEST_CASE);
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.NULL);
             } else if (AutoLogCollector.BUGREPORTZ_ON_FAILURE.equals(type)) {
-                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.MODULE);
+                logCollector.setOnFailureCollectionLevel(MetricCollectionLevel.NULL);
             }
         }
-        defaultLogCollectors.add(logCollector);
 
+        // do not add collector if we are not collecting at any level by default.
+        if (logCollector.getAlwaysOnCollectionLevel().equals(MetricCollectionLevel.NULL)
+                && logCollector.getOnFailureCollectionLevel().equals(MetricCollectionLevel.NULL)) {
+            return;
+        }
+
+        defaultLogCollectors.add(logCollector);
         // remove duplicated invocation level collectors
-        Iterator<IMetricCollector> itr = mMetricCollectors.iterator();
-        while (itr.hasNext()) {
-            IMetricCollector invocationMetricCollector = itr.next();
-            if (invocationMetricCollector.getClass().equals(logCollector.getClass())) {
-                itr.remove();
-                CLog.d(
-                        "Removing duplicated invocation level log collector %s in favor of default"
-                                + " log collection.",
-                        type);
+        if (mMetricCollectors != null) {
+            Iterator<IMetricCollector> itr = mMetricCollectors.iterator();
+            while (itr.hasNext()) {
+                IMetricCollector invocationMetricCollector = itr.next();
+                if (invocationMetricCollector.getClass().equals(logCollector.getClass())) {
+                    itr.remove();
+                    CLog.d(
+                            "Removing duplicated invocation level log collector %s in favor of"
+                                    + " default log collection.",
+                            type);
+                }
             }
         }
     }

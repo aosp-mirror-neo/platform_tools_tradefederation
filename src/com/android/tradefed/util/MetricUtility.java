@@ -29,8 +29,9 @@ import com.google.common.math.Quantiles;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -78,10 +79,10 @@ public class MetricUtility {
     private Map<String, ArrayListMultimap<String, Metric>> mStoredTestMetrics =
             new LinkedHashMap<String, ArrayListMultimap<String, Metric>>();
 
-    private List<Pattern> mMetricPatterns = new ArrayList<>();
+    private Map<String, Integer> mTestIterationCounts = new HashMap<>();
+    private boolean mEnableCountTestIterations = false;
 
-    // The number of test iterations.
-    private int mTestIterations = 0;
+    private List<Pattern> mMetricPatterns = new ArrayList<>();
 
     /**
      * Used for storing the individual test metrics and use it for aggregation.
@@ -103,6 +104,12 @@ public class MetricUtility {
                         .replaceFirst(Pattern.quote(mTestIterationSeparator) + "\\d+", "");
         if (!mStoredTestMetrics.containsKey(newTestId)) {
             mStoredTestMetrics.put(newTestId, ArrayListMultimap.create());
+            if (mEnableCountTestIterations) {
+                mTestIterationCounts.put(newTestId, 0);
+            }
+        }
+        if (mEnableCountTestIterations) {
+            mTestIterationCounts.put(newTestId, mTestIterationCounts.get(newTestId) + 1);
         }
         ArrayListMultimap<String, Metric> storedMetricsForThisTest =
                 mStoredTestMetrics.get(newTestId);
@@ -169,7 +176,7 @@ public class MetricUtility {
             List<String> splitVals = Arrays.asList(values.split(",", 0));
             // Build stats for keys with any values, even only one.
             if (isAllDoubleValues(splitVals)) {
-                buildStats(entry.getKey(), splitVals, aggregateMetrics);
+                buildStats(entry.getKey(), splitVals, aggregateMetrics, 0);
             }
         }
         return aggregateMetrics;
@@ -185,7 +192,7 @@ public class MetricUtility {
         File resultsFile = null;
         for (String testName : mStoredTestMetrics.keySet()) {
             ArrayListMultimap<String, Metric> currentTest = mStoredTestMetrics.get(testName);
-
+            int iterations = mTestIterationCounts.getOrDefault(testName, 0);
             Map<String, Metric> aggregateMetrics = new LinkedHashMap<String, Metric>();
             for (String metricKey : currentTest.keySet()) {
                 List<Metric> metrics = currentTest.get(metricKey);
@@ -215,7 +222,7 @@ public class MetricUtility {
                     continue;
                 }
                 if (isAllDoubleValues(rawValues)) {
-                    buildStats(metricKey, rawValues, aggregateMetrics);
+                    buildStats(metricKey, rawValues, aggregateMetrics, iterations);
                 }
             }
 
@@ -238,8 +245,8 @@ public class MetricUtility {
         mTestIterationSeparator = separator;
     }
 
-    public void setTestIterations(int testIterations) {
-        mTestIterations = testIterations;
+    public void setCountTestIterationsFlag(boolean enableCountTestIterations) {
+        mEnableCountTestIterations = enableCountTestIterations;
     }
 
     @VisibleForTesting
@@ -270,6 +277,7 @@ public class MetricUtility {
      *
      * @param values raw values to compute the aggregation.
      * @param percentiles stats to include in the final metrics.
+     * @param testIterations number of iterations of the test.
      * @return aggregated values.
      */
     public static Map<String, Double> getStats(
@@ -339,12 +347,16 @@ public class MetricUtility {
      * @param metricKey key to which the values correspond to.
      * @param values list of raw values.
      * @param aggregateMetrics where final metrics will be stored.
+     * @param testIterations number of iterations of the test.
      */
     private void buildStats(
-            String metricKey, List<String> values, Map<String, Metric> aggregateMetrics) {
+            String metricKey,
+            List<String> values,
+            Map<String, Metric> aggregateMetrics,
+            int testIterations) {
         List<Double> doubleValues =
                 values.stream().map(Double::parseDouble).collect(Collectors.toList());
-        Map<String, Double> stats = getStats(doubleValues, mActualPercentiles, mTestIterations);
+        Map<String, Double> stats = getStats(doubleValues, mActualPercentiles, testIterations);
         for (String statKey : stats.keySet()) {
             Metric.Builder metricBuilder = Metric.newBuilder();
             metricBuilder

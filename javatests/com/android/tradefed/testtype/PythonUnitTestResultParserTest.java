@@ -80,6 +80,8 @@ public class PythonUnitTestResultParserTest {
         assertTrue(PythonUnitTestResultParser.PATTERN_ONE_LINE_RESULT.matcher(s).matches());
         s = "a (b) ... skipped 'reason foo'";
         assertTrue(PythonUnitTestResultParser.PATTERN_ONE_LINE_RESULT.matcher(s).matches());
+        s = "a (b) ... skipped \"can't run test\"";
+        assertTrue(PythonUnitTestResultParser.PATTERN_ONE_LINE_RESULT.matcher(s).matches());
         s = "a (b)";
         assertFalse(PythonUnitTestResultParser.PATTERN_ONE_LINE_RESULT.matcher(s).matches());
         assertTrue(PythonUnitTestResultParser.PATTERN_TWO_LINE_RESULT_FIRST.matcher(s).matches());
@@ -636,6 +638,29 @@ public class PythonUnitTestResultParserTest {
     }
 
     @Test
+    public void testParseSingleTestSkippedWithDoubleQuotes() throws Exception {
+        String[] output = {
+            "test_b (a) ... skipped \"can't run test\"",
+            "",
+            PythonUnitTestResultParser.DASH_LINE,
+            "Ran 1 test in 1s",
+            "",
+            "OK (skipped=1)",
+        };
+        TestDescription id = new TestDescription("a", "test_b");
+
+        mParser.processNewLines(output);
+
+        InOrder inOrder = Mockito.inOrder(mMockListener);
+        inOrder.verify(mMockListener, times(1)).testRunStarted("test", 1);
+        inOrder.verify(mMockListener, times(1)).testStarted(Mockito.eq(id));
+        inOrder.verify(mMockListener, times(1)).testIgnored(Mockito.any());
+        inOrder.verify(mMockListener, times(1))
+                .testEnded(Mockito.eq(id), Mockito.<HashMap<String, Metric>>any());
+        inOrder.verify(mMockListener, times(1)).testRunEnded(1000L, new HashMap<String, Metric>());
+    }
+
+    @Test
     public void testParseSingleTestPassWithDocString() throws Exception {
         String[] output = {
             "b (a)",
@@ -727,6 +752,11 @@ public class PythonUnitTestResultParserTest {
             "testOkWithDocString (foo.testFoo)",
             "foo bar ... ok",
             "testSkipped (foo.testFoo) ... skipped 'reason foo'",
+            "testSkipped2 (foo.testFoo) ... skipped \"can't run test\"",
+            "testSkipped3 (foo.testFoo)",
+            "let's output something ... skipped 'reason foo'",
+            "testSkipped4 (foo.testFoo)",
+            "let's output something ... skipped \"can't run test\"",
             "testUnexpectedSuccess (foo.testFoo) ... unexpected success",
             "",
             PythonUnitTestResultParser.EQUAL_LINE,
@@ -755,9 +785,9 @@ public class PythonUnitTestResultParserTest {
             "AssertionError: 4 != 5",
             "",
             PythonUnitTestResultParser.DASH_LINE,
-            "Ran 8 tests in 1s",
+            "Ran 11 tests in 1s",
             "",
-            "FAILED (failures=2, errors=1, skipped=1, expected failures=1, unexpected successes=1)",
+            "FAILED (failures=2, errors=1, skipped=4, expected failures=1, unexpected successes=1)",
         };
         TestDescription[] ids = {
             new TestDescription("foo.testFoo", "testError"),
@@ -767,12 +797,15 @@ public class PythonUnitTestResultParserTest {
             new TestDescription("foo.testFoo", "testOk"),
             new TestDescription("foo.testFoo", "testOkWithDocString"),
             new TestDescription("foo.testFoo", "testSkipped"),
+            new TestDescription("foo.testFoo", "testSkipped2"),
+            new TestDescription("foo.testFoo", "testSkipped3"),
+            new TestDescription("foo.testFoo", "testSkipped4"),
             new TestDescription("foo.testFoo", "testUnexpectedSuccess")
         };
 
         mParser.processNewLines(output);
 
-        verify(mMockListener, times(1)).testRunStarted("test", 8);
+        verify(mMockListener, times(1)).testRunStarted("test", 11);
         verify(mMockListener, times(1)).testRunEnded(1000L, new HashMap<String, Metric>());
     }
 

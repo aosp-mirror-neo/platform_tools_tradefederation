@@ -129,22 +129,27 @@ public class PythonUnitTestResultParser extends MultiLineReceiver {
 
     static final Pattern PATTERN_TEST_SUCCESS = Pattern.compile("ok|expected failure");
     static final Pattern PATTERN_TEST_FAILURE = Pattern.compile("FAIL|ERROR");
-    static final Pattern PATTERN_TEST_SKIPPED = Pattern.compile("skipped '.*");
+    static final Pattern PATTERN_TEST_SKIPPED = Pattern.compile("skipped ['\"].*");
     static final Pattern PATTERN_TEST_UNEXPECTED_SUCCESS = Pattern.compile("unexpected success");
 
+    // The patterns matching a "skipped" result all contain (?:'.*'|\".*\") after the word.
+    // It's a non-capturing group (?:) matching either a single-quoted or a double-quoted string
+    // containing the skip reason. Python's unittest module normally prints skip reasons using
+    // single-quoted strings, but may print a double-quoted string if the skip reason contains
+    // a single quote character (i.e., an apostrophe).
     static final Pattern PATTERN_ONE_LINE_RESULT =
             Pattern.compile(
-                    "(\\S*) \\((\\S*)\\) \\.\\.\\. "
-                            + "(ok|expected failure|FAIL|ERROR|skipped '.*'|unexpected success)?");
+                    "(\\S*) \\((\\S*)\\) \\.\\.\\. (ok|expected failure|FAIL|ERROR|skipped"
+                            + " (?:'.*'|\".*\")|unexpected success)?");
     static final Pattern PATTERN_TWO_LINE_RESULT_FIRST = Pattern.compile("(\\S*) \\((\\S*)\\)");
     static final Pattern PATTERN_TWO_LINE_RESULT_SECOND =
             Pattern.compile(
-                    "(.*) \\.\\.\\. "
-                            + "(ok|expected failure|FAIL|ERROR|skipped '.*'|unexpected success)");
+                    "(.*) \\.\\.\\. (ok|expected failure|FAIL|ERROR|skipped"
+                            + " (?:'.*'|\".*\")|unexpected success)");
     static final Pattern PATTERN_TWO_LINE_RESULT_SECOND_ERROR =
             Pattern.compile(
-                    "(.*) \\.\\.\\. error: (.*)"
-                            + "(ok|expected failure|FAIL|ERROR|skipped '.*'|unexpected success)",
+                    "(.*) \\.\\.\\. error: (.*)(ok|expected failure|FAIL|ERROR|skipped"
+                            + " (?:'.*'|\".*\")|unexpected success)",
                     Pattern.DOTALL);
     static final Pattern PATTERN_FAIL_MESSAGE =
             Pattern.compile("(FAIL|ERROR): (\\S*) \\((\\S*)\\)( \\(.*\\))?");
@@ -166,9 +171,10 @@ public class PythonUnitTestResultParser extends MultiLineReceiver {
     static final Pattern PATTERN_MULTILINE_RESULT_FIRST_NEGATIVE =
             Pattern.compile(
                     "(\\S*) \\((\\S*)\\) \\.\\.\\. (ok|expected failure|FAIL|ERROR|error|skipped"
-                            + " '.*'|unexpected success).*");
+                            + " (?:'.*'|\".*\")|unexpected success).*");
     static final Pattern PATTERN_MULTILINE_RESULT_LAST =
-            Pattern.compile("(ok|expected failure|FAIL|ERROR|skipped '.*'|unexpected success)");
+            Pattern.compile(
+                    "(ok|expected failure|FAIL|ERROR|skipped (?:'.*'|\".*\")|unexpected success)");
 
     static final Pattern PATTERN_RUN_RESULT = Pattern.compile("(OK|FAILED).*");
 

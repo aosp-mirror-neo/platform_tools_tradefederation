@@ -15,15 +15,13 @@
  */
 package com.android.tradefed.result.resultdb;
 
-import com.android.resultdb.proto.Artifact;
-import com.android.resultdb.proto.CreateInvocationRequest;
-import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.Invocation;
-import com.android.resultdb.proto.SkippedReason;
-import com.android.resultdb.proto.StringPair;
-import com.android.resultdb.proto.TestIdentifier;
-import com.android.resultdb.proto.TestResult;
+import com.android.resultdb.proto.ProducerResource;
+import com.android.resultdb.proto.RootInvocation;
+import com.android.resultdb.proto.Sources;
+import com.android.resultdb.proto.SubmittedAndroidBuild;
 import com.android.resultdb.proto.Variant;
+import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
@@ -42,35 +40,16 @@ import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
-import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.result.retry.ISupportGranularResults;
 import com.android.tradefed.result.skipped.SkipReason;
-import com.android.tradefed.testtype.suite.ModuleDefinition;
-import com.android.tradefed.testtype.suite.SuiteTestFilter;
-import com.android.tradefed.util.MultiMap;
 
+import com.google.android.tradefed.build.AbLocalBuildProvider;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.util.Durations;
-import com.google.protobuf.util.Timestamps;
+import com.google.protobuf.FieldMask;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Result reporter that uploads test results to ResultDB. */
 @OptionClass(alias = "resultdb-reporter")
@@ -82,25 +61,8 @@ public class ResultDBReporter
 
     private static final String BUILD_ENV_INVOCATION_CONTEXT_KEY = "android-build-environment";
 
-    private static final int MAX_SUMMARY_HTML_BYTES = 4096;
-
-    private static final int MAX_ERROR_MESSAGE_BYTES = 1024;
-    private static final int MAX_ERROR_TRACE_BYTES = 4096;
-    private static final int MAX_SKIP_REASON_MESSAGE_BYTES = 1024;
-
     // Link to redirect to the result page.
     private static final String RESULT_LINK = "https://ci.chromium.org/ui/inv/invocations/%s";
-
-    // Set containing the allowed variant module parameter keys
-    private static final Set<String> ALLOWED_MODULE_PARAMETERS =
-            ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
-    // Tag name for the test mapping source
-    private static final String TEST_MAPPING_TAG = "test_mapping_source";
-
-    // Pattern to extract artifact id from logsaver URL.
-    private static final Pattern LOGSAVER_PATTERN =
-            Pattern.compile(
-                    "https:\\/\\/android-build.googleplex.com\\/builds\\/.+\\/.+\\/.+\\/.+\\/tests\\/\\d+\\/(.+)");
 
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
@@ -113,25 +75,28 @@ public class ResultDBReporter
 
     private IConfiguration mConfiguration;
     private String mInvocationId;
+    private String mTopWorkUnitId;
+    private String mRootInvocationId;
     // Set to true if the reporter is responsible for updating and finalizing the invocation.
     private boolean mManageInvocation = false;
+
+    // A legacy recorder client that uploading test results to legacy invocation.
+    private IRecorderClientLegacy mRecorderLegacy;
+    // A recorder client that uploading test results to work unit.
     private IRecorderClient mRecorder;
 
     // Common variant values for all test in this TF invocation.
     private Variant mBaseVariant;
-    // Module level variant for test in the same test module.
-    private Variant mModuleVariant;
-    private String mCurrentModule;
-    private IInvocationContext mModuleContext;
-    private TestResult mCurrentTestResult;
-    // Counter for generate test result ID.
-    private AtomicInteger mResultCounter = new AtomicInteger(0);
-    // Base for generate test result ID.
-    private String mResultIdBase;
-    // No more log associations can be added to the upload queue after this set to true.
-    private boolean mUploadQueueFinalized = false;
-    // A map from resource ID to TestArtifact.
-    private Map<String, Artifact> mTestArtifacts = new ConcurrentHashMap<>();
+    private boolean mIsStaging = false;
+
+    private final TestResultHandler mTestResultHandler = createTestResultHandler();
+    private final WorkUnitHandler mWorkUnitHandler = new WorkUnitHandler();
+    private final TestArtifactHandler mTestArtifactHandler = new TestArtifactHandler();
+
+    @VisibleForTesting
+    TestResultHandler createTestResultHandler() {
+        return new TestResultHandler();
+    }
 
     @Override
     public void setConfiguration(IConfiguration configuration) {
@@ -148,33 +113,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-
-        String resourceId = getAntsResourceId(logFile);
-        if (resourceId.isEmpty()) {
-            // Ignore logs with empty resource id.
-            return;
-        }
-        Artifact.Builder artifactBuilder = Artifact.newBuilder().setArtifactId(resourceId);
-
-        CLog.v(
-                "Received association %s %s %s %s",
-                dataName, resourceId, logFile.getPath(), logFile.getUrl());
-
-        if (mCurrentTestResult != null) {
-            TestIdentifier testId = mCurrentTestResult.getTestIdStructured();
-
-            artifactBuilder
-                    .setTestIdStructured(
-                            TestIdentifier.newBuilder()
-                                    .setModuleName(testId.getModuleName())
-                                    .setModuleScheme(testId.getModuleScheme())
-                                    .setCoarseName(testId.getCoarseName())
-                                    .setFineName(testId.getFineName())
-                                    .setCaseName(testId.getCaseName()))
-                    .setResultId(mCurrentTestResult.getResultId());
-        }
-        mTestArtifacts.put(resourceId, artifactBuilder.build());
-        CLog.v("Received association %s %s %s", dataName, logFile.getPath(), logFile.getUrl());
+        mTestArtifactHandler.logAssociation(
+                dataName, logFile, mTestResultHandler.getCurrentTestResult());
     }
 
     /**
@@ -206,67 +146,13 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mRecorder == null) {
+        if (mRecorderLegacy == null) {
             CLog.w(
                     "Recorder is not initialized, skipping upload storage path %s %s",
                     resourceId, storagePath);
             return;
         }
-        CLog.v("Uploading storage path %s %s", resourceId, storagePath);
-        Artifact artifact = mTestArtifacts.remove(resourceId);
-        if (artifact == null) {
-            // If the artifact is not found, it means the log association is not called before.
-            // Upload the artifact to the top work unit.
-            CLog.d(
-                    "Artifact for resource ID %s not found, upload to the top work unit.",
-                    resourceId);
-            artifact = Artifact.newBuilder().setArtifactId(resourceId).build();
-        }
-        if (!storagePath.matches("^/bigstore/([^/]+)/.+$")) {
-            return;
-        }
-        // The storage path is a valid bigstore path, set the artifact to with GCS URI.
-        String contentType = logFile.getType().getContentType();
-        // Convert storage path to GCS URI.
-        String gcsUri = storagePath.replaceFirst("^/bigstore/", "gs://");
-        artifact =
-                artifact.toBuilder()
-                        .setGcsUri(gcsUri)
-                        .setContentType(contentType)
-                        .setSizeBytes(logFile.getSize())
-                        .setArtifactType(logFile.getType().toString())
-                        .build();
-
-        if (mUploadQueueFinalized) {
-            // If the upload queue is finalized, make block call to upload the artifact directly.
-            CLog.d("Upload queue is finalized, has been called, upload the artifact directly.");
-            mRecorder.uploadArtifact(artifact);
-            return;
-        }
-        // Queue the artifact for upload.
-        mRecorder.enqueueArtifact(artifact);
-    }
-
-    // Returns the AnTS artifact resource ID.
-    private String getAntsResourceId(LogFile logFile) {
-        // We need to decode the resourceId because the backend expects that it is unencoded,
-        // but TF gives as the url that is already encoded.
-        String resourceId = "";
-        if (logFile.getUrl() == null) {
-            resourceId = "";
-        } else {
-            Matcher m = LOGSAVER_PATTERN.matcher(logFile.getUrl());
-            if (!m.find()) {
-                resourceId = "";
-            } else {
-                try {
-                    resourceId = new URI(m.group(1)).getPath();
-                } catch (URISyntaxException e) {
-                    // ignore
-                }
-            }
-        }
-        return resourceId;
+        mTestArtifactHandler.uploadStoragePath(resourceId, storagePath, logFile, mRecorderLegacy);
     }
 
     @Override
@@ -281,23 +167,30 @@ public class ResultDBReporter
     }
 
     @VisibleForTesting
-    IRecorderClient createRecorderClient(
+    IRecorderClientLegacy createRecorderClientLegacy(
             String invocationId, String updateToken, Boolean isStaging) {
-        return RecorderClient.create(invocationId, updateToken, isStaging);
+        return RecorderClient.createLegacy(invocationId, updateToken, isStaging);
     }
 
     @VisibleForTesting
-    IRecorderClient createRecorderClient(CreateInvocationRequest request, Boolean isStaging) {
-        return RecorderClient.createWithNewInvocation(request, isStaging);
+    IRecorderClientLegacy createRecorderClientLegacy(
+            String invocationId, Invocation invocation, Boolean isStaging) {
+        return RecorderClient.createLegacyWithNewInvocation(invocationId, invocation, isStaging);
     }
 
-    // Generate a random hexadecimal string of length 8.
     @VisibleForTesting
-    String randomHexString() throws NoSuchAlgorithmException {
-        SecureRandom random = SecureRandom.getInstance("SHA1PRNG");
-        byte[] bytes = new byte[4];
-        random.nextBytes(bytes);
-        return ResultDBUtil.bytesToHex(bytes);
+    IRecorderClient createRecorderClient(
+            String rootInvocationId, String updateToken, Boolean isStaging) {
+        return RecorderClient.create(rootInvocationId, updateToken, isStaging);
+    }
+
+    @VisibleForTesting
+    IRecorderClient createRecorderClient(
+            String rootInvocationId,
+            RootInvocation rootInvocation,
+            WorkUnit rootWorkUnit,
+            Boolean isStaging) {
+        return RecorderClient.create(rootInvocationId, rootInvocation, rootWorkUnit, isStaging);
     }
 
     @Override
@@ -306,37 +199,172 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
-        // Read root invocation and work unit context.
-        String rootInvocationId = context.getAttribute("resultdb_root_invocation_id");
-        String workUnitId = context.getAttribute("resultdb_work_unit_id");
-        String workUnitUpdateToken = context.getAttribute("resultdb_work_unit_update_token");
-        if (!rootInvocationId.isEmpty()) {
-            if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
-                CLog.w(
-                        "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
-                            + " required when resultdb_root_invocation_id is provided %s",
-                        rootInvocationId);
-                return;
-            }
-            CLog.i(
-                    "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
-                            + " update token",
-                    rootInvocationId, workUnitId);
-            CLog.i(
-                    "Disabling ResultDBReporter, because ResultDB work unit support is not"
-                            + " yet implemented in this plugin. Test results will be uploaded"
-                            + " automatically once support is ready.");
-            // TODO(beining): Implement work unit upload support.
+        Variant.Builder baseVariantBuilder =
+                Variant.newBuilder()
+                        .putDef("scheduler", "ATP") // ATP is the only scheduler supported for now.
+                        .putDef("name", Strings.nullToEmpty(context.getTestTag()));
+
+        IBuildInfo primaryBuild = getPrimaryBuild(context);
+        if (primaryBuild != null) {
+            baseVariantBuilder =
+                    baseVariantBuilder
+                            .putDef("build_provider", "androidbuild")
+                            .putDef("branch", Strings.nullToEmpty(primaryBuild.getBuildBranch()))
+                            .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
+        }
+        // TODO: Remove the base variant. Root invocation now has new fields that is more
+        // appropriate these properties, eg. source, producer_resource.
+        mBaseVariant = baseVariantBuilder.build();
+        mIsStaging = isStaging(context);
+
+        boolean successLegacy = initRecorderLegacy(context);
+        boolean success = initRecorder(context);
+        if (!success && !successLegacy) {
             mDisable = true;
+            CLog.i("ResultDBReporter is disabled");
             return;
         }
+        CLog.logAndDisplay(LogLevel.INFO, "Result link: %s", getResultLinks());
+    }
+
+    private String getResultLinks() {
+        String host = "";
+        if (mIsStaging) {
+            host = "https://luci-milo-dev.appspot.com/";
+        } else {
+            host = "https://ci.chromium.org";
+        }
+        String legacyLink = String.format("%s/ui/inv/%s", host, mInvocationId);
+        if (!Strings.isNullOrEmpty(mRootInvocationId)) {
+            return String.format("%s/ui/test-investigate/invocations/%s", host, mRootInvocationId)
+                    + "\n"
+                    + legacyLink;
+        }
+        return legacyLink;
+    }
+
+    private IBuildInfo getPrimaryBuild(IInvocationContext context) {
+        if (context.getBuildInfos().isEmpty()) {
+            return null;
+        }
+        if (context.getBuildInfo(AbLocalBuildProvider.LOCAL_BUILD) != null) {
+            return context.getBuildInfo(AbLocalBuildProvider.LOCAL_BUILD);
+        }
+        return context.getBuildInfos().get(0);
+    }
+
+    /**
+     * Initializes the ResultDB client with root invocation, work unit information from the context.
+     *
+     * @return true if the client is initialized successfully, false otherwise. If it succeeds,
+     *     mRecorder, mRootInvocationId and mTopWorkUnitId are set, otherwise none of them is set.
+     */
+    private boolean initRecorder(IInvocationContext context) {
+        try {
+            // Read root invocation and work unit context.
+            String rootInvocationId = context.getAttribute("resultdb_root_invocation_id");
+            String workUnitId = context.getAttribute("resultdb_work_unit_id");
+            String workUnitUpdateToken = context.getAttribute("resultdb_work_unit_update_token");
+
+            if (!rootInvocationId.isEmpty()) {
+                if (workUnitId.isEmpty() || workUnitUpdateToken.isEmpty()) {
+                    CLog.w(
+                            "both resultdb_work_unit_id and resultdb_work_unit_update_token are"
+                                    + " required when resultdb_root_invocation_id is provided %s",
+                            rootInvocationId);
+                    return false;
+                }
+                CLog.i(
+                        "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
+                                + " update token",
+                        rootInvocationId, workUnitId);
+                mTopWorkUnitId = workUnitId;
+                mRootInvocationId = rootInvocationId;
+                mRecorder =
+                        createRecorderClient(
+                                rootInvocationId, workUnitUpdateToken, isStaging(context));
+            } else if (mCreateLocalInvocation) {
+                IBuildInfo primaryBuild = getPrimaryBuild(context);
+                if (primaryBuild == null) {
+                    CLog.w("No primary build found, skipping ResultDBReporter initialization.");
+                    return false;
+                }
+                String branch =
+                        primaryBuild.getBuildBranch() != null
+                                ? primaryBuild.getBuildBranch()
+                                : "unknown";
+                // TODO: Update the sources field with the correct information. Set temporary data
+                // to unblock upload.
+                Sources sources =
+                        Sources.newBuilder()
+                                .setSubmittedAndroidBuild(
+                                        SubmittedAndroidBuild.newBuilder()
+                                                .setDataRealm("prod")
+                                                .setBranch(branch)
+                                                .setBuildId(
+                                                        Long.parseLong(primaryBuild.getBuildId()))
+                                                .build())
+                                .build();
+                ProducerResource producerResource =
+                        ProducerResource.newBuilder()
+                                .setSystem("tradefed")
+                                .setDataRealm("prod")
+                                .setName("runs/" + randomUUIDString())
+                                .build();
+                RootInvocation rootInvocation =
+                        RootInvocation.newBuilder()
+                                .setRealm("android:ants-experiment")
+                                .setSources(sources)
+                                .setStreamingExportState(
+                                        RootInvocation.StreamingExportState.WAIT_FOR_METADATA)
+                                .setProducerResource(producerResource)
+                                .build();
+                mRootInvocationId = "u-" + randomUUIDString().toString();
+
+                WorkUnit rootWorkUnit =
+                        WorkUnit.newBuilder()
+                                .setState(WorkUnit.State.RUNNING)
+                                .setKind(WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE)
+                                .build();
+                mRecorder =
+                        createRecorderClient(
+                                mRootInvocationId,
+                                rootInvocation,
+                                rootWorkUnit,
+                                isStaging(context));
+                mTopWorkUnitId = "root"; // Top work unit is the root work unit.
+                mManageInvocation = true;
+            } else {
+                CLog.i(
+                        "ResultDBReporter is disabled as root invocation ID, work unit ID and"
+                                + " update token are not provided.");
+                return false;
+            }
+        } catch (RuntimeException e) {
+            CLog.e("Failed to create ResultDB client. Error: %s", e.getMessage());
+            mRecorder = null;
+            mRootInvocationId = null;
+            mTopWorkUnitId = null;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Initializes the ResultDB client with legacy invocation information from the context.
+     *
+     * @return true if the client is initialized successfully, false otherwise. If it succeeds,
+     *     mInvocationId and mRecorderLegacy are set, otherwise none of them is set.
+     */
+    private boolean initRecorderLegacy(IInvocationContext context) {
         try {
             // Obtain invocation ID from context.
             String invocationId = context.getAttribute("resultdb_invocation_id");
             String updateToken = context.getAttribute("resultdb_invocation_update_token");
             if (!invocationId.isEmpty() && !updateToken.isEmpty()) {
                 mInvocationId = invocationId;
-                mRecorder = createRecorderClient(invocationId, updateToken, isStaging(context));
+                mRecorderLegacy =
+                        createRecorderClientLegacy(invocationId, updateToken, isStaging(context));
             } else if (mCreateLocalInvocation) {
                 Invocation invocation =
                         Invocation.newBuilder()
@@ -344,60 +372,28 @@ public class ResultDBReporter
                                 .setIsExportRoot(true)
                                 .build();
                 mInvocationId = "u-" + randomUUIDString().toString();
-                mRecorder =
-                        createRecorderClient(
-                                CreateInvocationRequest.newBuilder()
-                                        .setInvocation(invocation)
-                                        .setInvocationId(mInvocationId)
-                                        .build(),
-                                isStaging(context));
+                mRecorderLegacy =
+                        createRecorderClientLegacy(mInvocationId, invocation, isStaging(context));
                 mManageInvocation = true;
-
             } else {
-                mDisable = true;
                 CLog.i(
                         "ResultDBReporter is disabled as invocation ID or update token is not"
                                 + " provided.");
-                return;
+                return false;
             }
         } catch (RuntimeException e) {
-            mDisable = true;
-            CLog.e("Failed to create ResultDB client.");
-            if (mRecorder != null) {
+            CLog.e("Failed to create ResultDB client legacy. Error: %s", e.getMessage());
+            if (mRecorderLegacy != null) {
                 // Make sure we cancel the client, otherwise it will leak a thread since
                 // invocationEnded will be skipped.
-                mRecorder.finalizeUpload();
-                mUploadQueueFinalized = true;
+                mRecorderLegacy.finalizeUpload();
+                mTestArtifactHandler.setUploadQueueFinalized();
             }
-            throw new RuntimeException(e);
+            mRecorderLegacy = null;
+            mInvocationId = null;
+            return false;
         }
-        try {
-            mResultIdBase = this.randomHexString();
-        } catch (NoSuchAlgorithmException e) {
-            mDisable = true;
-            CLog.e("Failed to generate random result ID base.");
-            return;
-        }
-        // Variant contains properties in go/consistent-test-identifiers, excluding
-        // properties in ResultDB test identifier.
-        // TODO: Add Test definition properties eg. cluster_id.
-        Variant.Builder mBaseVariantBuilder =
-                Variant.newBuilder()
-                        .putDef("scheduler", "ATP") // ATP is the only scheduler supported for now.
-                        .putDef("name", Strings.nullToEmpty(context.getTestTag()));
-
-        if (!context.getBuildInfos().isEmpty()) {
-            IBuildInfo primaryBuild = context.getBuildInfos().get(0);
-            mBaseVariantBuilder =
-                    mBaseVariantBuilder
-                            .putDef("build_provider", "androidbuild")
-                            .putDef("branch", Strings.nullToEmpty(primaryBuild.getBuildBranch()))
-                            .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
-        }
-        mBaseVariant = mBaseVariantBuilder.build();
-
-        CLog.logAndDisplay(
-                LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
+        return true;
     }
 
     private Boolean isStaging(IInvocationContext context) {
@@ -425,13 +421,27 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mRecorder.finalizeUpload();
-        mUploadQueueFinalized = true;
-        if (mManageInvocation) {
-            mRecorder.finalizeInvocation();
+        if (mRecorderLegacy != null) {
+            mRecorderLegacy.finalizeUpload();
+            mTestArtifactHandler.setUploadQueueFinalized();
+            if (mManageInvocation) {
+                mRecorderLegacy.finalizeInvocation();
+            }
         }
-        CLog.logAndDisplay(
-                LogLevel.INFO, "Result link: %s", String.format(RESULT_LINK, mInvocationId));
+        if (mRecorder != null) {
+            if (mManageInvocation) {
+                mRecorder.updateWorkUnit(
+                        WorkUnit.newBuilder()
+                                .setName(
+                                        String.format(
+                                                "rootInvocations/%s/workUnits/root",
+                                                mRootInvocationId))
+                                .setState(WorkUnit.State.SUCCEEDED)
+                                .build(),
+                        FieldMask.newBuilder().addPaths("state").build());
+            }
+        }
+        CLog.logAndDisplay(LogLevel.INFO, "Result link: %s", getResultLinks());
         // TODO: Update ResultDB invocation with information from TF invocation.
     }
 
@@ -440,31 +450,15 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mModuleContext = moduleContext;
-        // Extract module informations.
-        mCurrentModule = moduleContext.getConfigurationDescriptor().getModuleName();
-        mModuleVariant = getModuleVariant(moduleContext.getAttributes());
-    }
-
-    /*
-     * Only module-abi and module-param are used in the variant, so filter other values.
-     */
-    private Variant getModuleVariant(MultiMap<String, String> properties) {
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        for (Map.Entry<String, String> property : properties.entries()) {
-            if (ALLOWED_MODULE_PARAMETERS.contains(property.getKey())) {
-                variantBuilder.putDef(
-                        ResultDBUtil.makeValidKey(property.getKey()), property.getValue());
-            }
-        }
-        return variantBuilder.build();
+        mWorkUnitHandler.testModuleStarted(moduleContext);
     }
 
     @Override
     public void testModuleEnded() {
-        // Clear module context.
-        mModuleContext = null;
-        mModuleVariant = null;
+        if (mDisable) {
+            return;
+        }
+        mWorkUnitHandler.testModuleEnded();
     }
 
     @Override
@@ -474,79 +468,17 @@ public class ResultDBReporter
             return;
         }
         try {
-            reportDemotedTests();
+            mTestResultHandler.reportDemotedTests(
+                    mConfiguration,
+                    mWorkUnitHandler.getModuleContext(),
+                    currentTimestamp(),
+                    mBaseVariant,
+                    mWorkUnitHandler.getModuleVariant(),
+                    mWorkUnitHandler.getCurrentModule(),
+                    mRecorderLegacy);
         } catch (RuntimeException e) {
             CLog.e("error during skip reporting:");
             CLog.e(e);
-        }
-    }
-
-    private void reportDemotedTests() {
-        String moduleAbi = null;
-        String moduleName = null;
-        if (mModuleContext != null) {
-            moduleAbi = mModuleContext.getAttribute(ModuleDefinition.MODULE_ABI);
-            moduleName = mModuleContext.getAttribute(ModuleDefinition.MODULE_NAME);
-        }
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        if (mModuleVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mModuleVariant);
-        }
-        if (mBaseVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
-        }
-        for (Entry<String, SkipReason> entry :
-                mConfiguration.getSkipManager().getDemotedTests().entrySet()) {
-            String key = entry.getKey();
-            SuiteTestFilter filter = SuiteTestFilter.createFrom(key);
-            // If module filter has an ABI, we expect the filter to match it to be applicable
-            // not having it is a bit ambiguous so we default to report for all abi similar
-            // to how filters are applied.
-            if (filter.getAbi() != null && !filter.getAbi().equals(moduleAbi)) {
-                continue;
-            }
-            if (!filter.getName().equals(moduleName)) {
-                continue;
-            }
-            if (filter.getTest() == null) {
-                continue;
-            }
-            TestDescription test = TestDescription.fromString(filter.getTest());
-            // Skip reason of demoted test is not likely to exceed the size limit.
-            // But we truncate it just in case.
-            ResultDBUtil.TruncationResult truncatedSkipReason =
-                    ResultDBUtil.truncateString(
-                            entry.getValue().getReason(), MAX_SKIP_REASON_MESSAGE_BYTES);
-            SkippedReason skippedReason =
-                    SkippedReason.newBuilder()
-                            .setKind(SkippedReason.Kind.DEMOTED)
-                            .setReasonMessage(truncatedSkipReason.getTruncatedString())
-                            .build();
-            // Some skip reason field doesn't have a dedicated field in ResultDB, put them in the
-            // summary HTML field for now. This is not likely to exceed the size limit.
-            // But we truncate it just in case.
-            String summaryHtml =
-                    ResultDBUtil.truncateString(
-                                    ResultDBUtil.testSkipReasonToSummaryHtml(
-                                            entry.getValue(), false),
-                                    MAX_SUMMARY_HTML_BYTES)
-                            .getTruncatedString();
-            TestResult currentTest =
-                    TestResult.newBuilder()
-                            .setTestIdStructured(
-                                    ResultDBUtil.toTestIdentifier(
-                                            mCurrentModule, variantBuilder.build(), test))
-                            .setResultId(
-                                    String.format(
-                                            "%s-%05d",
-                                            mResultIdBase, mResultCounter.incrementAndGet()))
-                            .setStartTime(Timestamps.fromMillis(currentTimestamp()))
-                            .setStatusV2(TestResult.Status.SKIPPED)
-                            .setSkippedReason(skippedReason)
-                            .setSummaryHtml(summaryHtml)
-                            .build();
-            mRecorder.enqueueTestResult(currentTest);
-            CLog.d("Backfilled %s SKIPPED", currentTest);
         }
     }
 
@@ -600,25 +532,12 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        if (mModuleVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mModuleVariant);
-        }
-        if (mBaseVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(mBaseVariant);
-        }
-
-        mCurrentTestResult =
-                TestResult.newBuilder()
-                        .setTestIdStructured(
-                                ResultDBUtil.toTestIdentifier(
-                                        mCurrentModule, variantBuilder.build(), test))
-                        .setResultId(
-                                String.format(
-                                        "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
-                        .setStartTime(Timestamps.fromMillis(startTime))
-                        .setStatusV2(TestResult.Status.PASSED)
-                        .build();
+        mTestResultHandler.testStarted(
+                test,
+                startTime,
+                mWorkUnitHandler.getCurrentModule(),
+                mBaseVariant,
+                mWorkUnitHandler.getModuleVariant());
     }
 
     @Override
@@ -631,36 +550,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
-            return;
-        }
-
-        // Put first line of error message in the skip reason field because Assumption Failure maps
-        // to ResultDB SKIPPED status.
-        SkippedReason skippedReason =
-                SkippedReason.newBuilder()
-                        .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
-                        .setReasonMessage(
-                                extractAndTruncateFirstLine(
-                                        failure.getErrorMessage(), MAX_SKIP_REASON_MESSAGE_BYTES))
-                        .build();
-        // Put the full error message in the summary HTML field.
-        ResultDBUtil.TruncationResult truncated =
-                ResultDBUtil.truncateString(failure.getErrorMessage(), MAX_SUMMARY_HTML_BYTES);
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        .setStatusV2(TestResult.Status.SKIPPED)
-                        .setSkippedReason(skippedReason)
-                        .setSummaryHtml(truncated.getTruncatedString())
-                        .build();
-
-        if (truncated.wasTruncated()) {
-            // Upload the full skip reason as test artifact if it was truncated.
-            Artifact atf =
-                    artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage());
-            mRecorder.enqueueArtifact(atf);
-        }
+        mTestResultHandler.testAssumptionFailure(test, failure, mRecorderLegacy);
     }
 
     @Override
@@ -668,116 +558,23 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
-            return;
-        }
-
-        String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, true);
-        ResultDBUtil.TruncationResult truncated =
-                ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES);
-
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        // Execution errored is used for tests that did not run to completion,
-                        // because an infrastructure error precluded it from doing so.
-                        .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
-                        // Put the skip reason in the summary HTML field, because the SkippedReason
-                        // field and FailureReason failure can only be set when the status is
-                        // SKIPPED or FAILED, respectively.
-                        .setSummaryHtml(truncated.getTruncatedString())
-                        .build();
-        if (truncated.wasTruncated()) {
-            // Upload the full skip reason as test artifact.
-            Artifact atf = artifactFromString("testSkipped_reason", summaryHtml);
-            mRecorder.enqueueArtifact(atf);
-        }
+        mTestResultHandler.testSkipped(test, reason, mRecorderLegacy);
     }
 
     @Override
     public void testFailed(TestDescription test, String trace) {
-        populateFailedTest(test, trace, FailureStatus.UNSET);
+        if (mDisable) {
+            return;
+        }
+        mTestResultHandler.testFailed(test, FailureDescription.create(trace), mRecorderLegacy);
     }
 
     @Override
     public void testFailed(TestDescription test, FailureDescription failure) {
-        populateFailedTest(test, failure.toString(), failure.getFailureStatus());
-    }
-
-    private void populateFailedTest(TestDescription test, String trace, FailureStatus status) {
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
-            return;
-        }
-        String truncatedFailureReason = extractAndTruncateFirstLine(trace, MAX_ERROR_MESSAGE_BYTES);
-        ResultDBUtil.TruncationResult truncationResult =
-                ResultDBUtil.truncateString(trace, MAX_ERROR_TRACE_BYTES);
-
-        FailureReason.Kind kind = FailureReason.Kind.ORDINARY;
-        if (status != null) {
-            switch (status) {
-                case TIMED_OUT:
-                    kind = FailureReason.Kind.TIMEOUT;
-                    break;
-                case CANCELLED:
-                case INFRA_FAILURE:
-                case SYSTEM_UNDER_TEST_CRASHED:
-                    kind = FailureReason.Kind.CRASH;
-                    break;
-                default:
-                    kind = FailureReason.Kind.ORDINARY;
-                    break;
-            }
-        }
-
-        FailureReason reason =
-                FailureReason.newBuilder()
-                        .setKind(kind)
-                        .addErrors(
-                                FailureReason.Error.newBuilder()
-                                        .setMessage(truncatedFailureReason)
-                                        .setTrace(truncationResult.getTruncatedString())
-                                        .build())
-                        .build();
-
-        TestResult.Builder testResultBuilder =
-                mCurrentTestResult.toBuilder()
-                        .setFailureReason(reason)
-                        .setStatusV2(TestResult.Status.FAILED);
-
-        if (status != null && status != FailureStatus.UNSET) {
-            testResultBuilder.setSummaryHtml("TF error type: " + status);
-        }
-        mCurrentTestResult = testResultBuilder.build();
-        if (truncationResult.wasTruncated()) {
-            // Upload the full trace as test artifact.
-            Artifact atf = artifactFromString("testFailed_trace", trace);
-            mRecorder.enqueueArtifact(atf);
-        }
-        // TODO: extract local instruction from test description and set in ResultDB test result.
-    }
-
-    /**
-     * Create an artifact from the given string.
-     *
-     * <p>The artifact will be associated with the current test result if it is not null.
-     */
-    private Artifact artifactFromString(String artifactId, String contents) {
-        ByteString contentsBytes = ByteString.copyFromUtf8(contents);
-        Artifact.Builder ab =
-                Artifact.newBuilder()
-                        .setArtifactId(artifactId)
-                        .setContentType("text/plain")
-                        .setContents(contentsBytes)
-                        .setSizeBytes(contentsBytes.size());
-        if (mCurrentTestResult != null) {
-            ab.setTestIdStructured(mCurrentTestResult.getTestIdStructured())
-                    .setResultId(mCurrentTestResult.getResultId());
-        }
-        return ab.build();
+        mTestResultHandler.testFailed(test, failure, mRecorderLegacy);
     }
 
     @Override
@@ -785,17 +582,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mCurrentTestResult == null) {
-            CLog.e("Received #testIgnored(%s) without a valid testStart before.", test);
-            return;
-        }
-        mCurrentTestResult =
-                mCurrentTestResult.toBuilder()
-                        .setStatusV2(TestResult.Status.SKIPPED)
-                        .setSkippedReason(
-                                SkippedReason.newBuilder()
-                                        .setKind(SkippedReason.Kind.DISABLED_AT_DECLARATION))
-                        .build();
+        mTestResultHandler.testIgnored(test);
     }
 
     @Override
@@ -812,35 +599,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        long startTimeMillis = Timestamps.toMillis(mCurrentTestResult.getStartTime());
-        TestResult.Builder testResultBuilder =
-                mCurrentTestResult.toBuilder()
-                        .setDuration(Durations.fromMillis(endTime - startTimeMillis));
-
-        // Add test mapping sources to test result as tags.
-        if (testMetrics.get(TEST_MAPPING_TAG) != null) {
-            // Get Test Mapping sources from string formatting with list such as "[path1, path2]".
-            // Note: Some test mapping sources may not be recorded. This is because a test module
-            // can be defined across multiple TEST_MAPPING files, and TF doesn't run it again if
-            // it's passed in the previous run.
-            String testMappingMeasurement =
-                    testMetrics
-                            .get(TEST_MAPPING_TAG)
-                            .getMeasurements()
-                            .getSingleString()
-                            .replaceAll("^\\[| |\\]$", "");
-            List<String> testMappingSources = Arrays.asList(testMappingMeasurement.split(","));
-
-            for (String testMappingSource : testMappingSources) {
-                testResultBuilder.addTags(
-                        StringPair.newBuilder()
-                                .setKey(ResultDBUtil.makeValidKey(TEST_MAPPING_TAG))
-                                .setValue(testMappingSource));
-            }
-        }
-        mCurrentTestResult = testResultBuilder.build();
-        mRecorder.enqueueTestResult(mCurrentTestResult);
-        mCurrentTestResult = null;
+        mTestResultHandler.testEnded(test, endTime, testMetrics, mRecorderLegacy);
     }
 
     @Override
@@ -850,19 +609,5 @@ public class ResultDBReporter
 
     public boolean isDisabled() {
         return mDisable;
-    }
-
-    /**
-     * Extract the first line of the stack trace as the error message, and truncate the string to
-     * the given max bytes.
-     *
-     * <p>In most cases, this ends up being the exception + error message.
-     */
-    String extractAndTruncateFirstLine(String trace, int maxBytes) {
-        String firstLine = trace.split("[\\r\\n]+", 2)[0];
-        if (!firstLine.trim().isEmpty()) {
-            return ResultDBUtil.truncateString(firstLine, maxBytes).getTruncatedString();
-        }
-        return "";
     }
 }

@@ -468,6 +468,8 @@ public class NativeDevice
 
             Thread watcher = null;
             if (mReceiver != null) {
+                // Ensure we can interrupt this thread if the receiver is cancelled
+                getRunUtil().allowInterrupt(true);
                 // Create a watcher to monite if receiver.cancel() is called.
                 watcher =
                         new Thread(
