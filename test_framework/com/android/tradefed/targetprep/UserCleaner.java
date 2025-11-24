@@ -16,13 +16,15 @@
 
 package com.android.tradefed.targetprep;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
+import static com.android.tradefed.device.UserInfo.USER_NULL;
+import static com.android.tradefed.device.UserInfo.USER_SYSTEM;
 
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
-import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
+
+import java.util.TreeMap;
 
 /** A {@link ITargetPreparer} that removes secondary users on teardown. */
 @OptionClass(alias = "user-cleaner")
@@ -36,14 +38,47 @@ public class UserCleaner extends BaseTargetPreparer {
 
     @Override
     public void tearDown(TestInformation testInfo, Throwable e) throws DeviceNotAvailableException {
-        ITestDevice device = testInfo.getDevice();
-        // treat current user as primary if no primary user found
-        int ownerId = firstNonNull(device.getPrimaryUserId(), device.getCurrentUser());
-        device.switchUser(ownerId);
+        var device = testInfo.getDevice();
+        int currentUserId = device.getCurrentUser();
+        // Uses a TreeMap to make sure user 0 is the first entry
+        var allUsers = new TreeMap<>(device.getUserInfos());
 
-        for (Integer id : device.listUsers()) {
-            if (id != ownerId && !device.removeUser(id)) {
-                CLog.w("Failed to remove user %d", id);
+        // First need to find the first full user
+        int firstFullUserId = USER_NULL;
+        for (var user : allUsers.values()) {
+            if (user.isFull() && firstFullUserId == USER_NULL) {
+                firstFullUserId = user.userId();
+                break;
+            }
+        }
+        if (firstFullUserId == USER_NULL) {
+            // Shouldn't happen, but it doesn't hurt to check..
+            CLog.e("Didn't find a full user, using system user (%d) instead", USER_SYSTEM);
+            firstFullUserId = USER_SYSTEM;
+        }
+        CLog.d(
+                "tearDown(): currentUserId=%d, firstFullUserId=%d, allUsers=%s",
+                currentUserId, firstFullUserId, allUsers.keySet());
+
+        // Then switch to it if necessary
+        if (currentUserId != firstFullUserId) {
+            CLog.i("Switching to first full user (%d)", firstFullUserId);
+            device.switchUser(firstFullUserId);
+        }
+
+        // Finally, remove all users (except system and first full)
+        for (var userId : allUsers.keySet()) {
+            if (userId == USER_SYSTEM) {
+                CLog.d("Not removing system user (%d)", userId);
+                continue;
+            }
+            if (userId == firstFullUserId) {
+                CLog.d("Not removing first full user (%d)", userId);
+                continue;
+            }
+            CLog.i("Removing user %d", userId);
+            if (!device.removeUser(userId)) {
+                CLog.w("Failed to remove user %d", userId);
             }
         }
     }
