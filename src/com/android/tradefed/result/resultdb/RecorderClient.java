@@ -15,13 +15,16 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.BatchCreateTestResultsRequest;
 import com.android.resultdb.proto.BatchCreateWorkUnitsRequest;
 import com.android.resultdb.proto.BatchUpdateWorkUnitsRequest;
 import com.android.resultdb.proto.CreateRootInvocationRequest;
 import com.android.resultdb.proto.CreateRootInvocationResponse;
+import com.android.resultdb.proto.CreateTestResultRequest;
 import com.android.resultdb.proto.CreateWorkUnitRequest;
 import com.android.resultdb.proto.RecorderGrpc;
 import com.android.resultdb.proto.RootInvocation;
+import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.UpdateWorkUnitRequest;
 import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.log.LogUtil.CLog;
@@ -37,6 +40,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -58,6 +62,7 @@ public class RecorderClient implements IRecorderClient {
 
     private final BatchChannel<WorkUnitItem> mWorkUnitChannel;
     private final BatchChannel<WorkUnitUpdateItem> mWorkUnitUpdateChannel;
+    private final BatchChannel<TestResultItem> mTestResultChannel;
 
     private RecorderClient(Boolean isStaging) {
         try {
@@ -84,6 +89,10 @@ public class RecorderClient implements IRecorderClient {
         mWorkUnitUpdateChannel =
                 new BatchChannel<WorkUnitUpdateItem>(
                         MAX_BATCH_SIZE, "work unit updates", this::batchUpdateWorkUnits);
+
+        mTestResultChannel =
+                new BatchChannel<TestResultItem>(
+                        MAX_BATCH_SIZE, "test results", this::batchUploadTestResults);
     }
 
     public static IRecorderClient create(
@@ -154,16 +163,28 @@ public class RecorderClient implements IRecorderClient {
     }
 
     @Override
+    public void enqueueTestResult(String workunitId, TestResult result) {
+        try {
+            mTestResultChannel.enqueue(new TestResultItem(workunitId, result));
+        } catch (InterruptedException e) {
+            CLog.e("Failed to enqueue test result: " + e.getMessage());
+        }
+    }
+
+    @Override
     public void finalizeUpload() {
         try {
+            // Order is important. Work units need to be uploaded before test results and artifacts.
+            // Work unit updates need to be uploaded the last.
             mWorkUnitChannel.finalizeUpload();
+            mTestResultChannel.finalizeUpload();
             mWorkUnitUpdateChannel.finalizeUpload();
         } catch (InterruptedException e) {
             CLog.e("Failed to finalize result or artifact upload: " + e.getMessage());
         }
     }
 
-    private void batchUploadWorkUnits(ImmutableList<WorkUnitItem> allWorkUnits)
+    private void batchUploadWorkUnits(List<WorkUnitItem> allWorkUnits)
             throws StatusRuntimeException {
         BatchCreateWorkUnitsRequest.Builder request =
                 BatchCreateWorkUnitsRequest.newBuilder().setRequestId(UUID.randomUUID().toString());
@@ -183,7 +204,7 @@ public class RecorderClient implements IRecorderClient {
                 allWorkUnits.size(), mRootInvocationId);
     }
 
-    private void batchUpdateWorkUnits(ImmutableList<WorkUnitUpdateItem> allWorkUnitUpdates)
+    private void batchUpdateWorkUnits(List<WorkUnitUpdateItem> allWorkUnitUpdates)
             throws StatusRuntimeException {
         BatchUpdateWorkUnitsRequest.Builder request =
                 BatchUpdateWorkUnitsRequest.newBuilder().setRequestId(UUID.randomUUID().toString());
@@ -194,12 +215,37 @@ public class RecorderClient implements IRecorderClient {
                             .setUpdateMask(workUnitUpdate.getUpdateMask())
                             .build());
         }
-        // Force upload all pending work units.
+        // Force upload all pending work units, test results and artifacts.
         mWorkUnitChannel.forceUpload();
+        mTestResultChannel.forceUpload();
         mStub.batchUpdateWorkUnits(request.build());
         CLog.i(
                 "Updated %d work units in invocation %s",
                 allWorkUnitUpdates.size(), mRootInvocationId);
+    }
+
+    private void batchUploadTestResults(List<TestResultItem> allResults)
+            throws StatusRuntimeException {
+        BatchCreateTestResultsRequest.Builder requestBuilder =
+                BatchCreateTestResultsRequest.newBuilder()
+                        .setRequestId(UUID.randomUUID().toString());
+        // Add each test result to the request.
+        for (TestResultItem item : allResults) {
+            CreateTestResultRequest createTestResultRequest =
+                    CreateTestResultRequest.newBuilder()
+                            .setParent(
+                                    ResultDBUtil.makeWorkUnitName(
+                                            mRootInvocationId, item.getWorkUnitId()))
+                            .setTestResult(item.getTestResult())
+                            .build();
+
+            requestBuilder.addRequests(createTestResultRequest);
+        }
+
+        // Work units need to be created before test results.
+        mWorkUnitChannel.forceUpload();
+        mStub.batchCreateTestResults(requestBuilder.build());
+        CLog.i("Uploaded %d results to root invocation %s", allResults.size(), mRootInvocationId);
     }
 
     static class WorkUnitItem {
@@ -267,6 +313,49 @@ public class RecorderClient implements IRecorderClient {
 
         public FieldMask getUpdateMask() {
             return mUpdateMask;
+        }
+    }
+
+    /** A wrapper class for TestResult and its parent work unit id. */
+    static class TestResultItem {
+        private final String mWorkUnitId;
+        private final TestResult mTestResult;
+
+        public TestResultItem(String workUnitId, TestResult testResult) {
+            mWorkUnitId = workUnitId;
+            mTestResult = testResult;
+        }
+
+        public String getWorkUnitId() {
+            return mWorkUnitId;
+        }
+
+        public TestResult getTestResult() {
+            return mTestResult;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            TestResultItem that = (TestResultItem) o;
+            return mWorkUnitId.equals(that.mWorkUnitId) && mTestResult.equals(that.mTestResult);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mWorkUnitId, mTestResult);
+        }
+
+        @Override
+        public String toString() {
+            return "TestResultItem{"
+                    + "mWorkUnitId='"
+                    + mWorkUnitId
+                    + '\''
+                    + ", mTestResult="
+                    + mTestResult
+                    + '}';
         }
     }
 }

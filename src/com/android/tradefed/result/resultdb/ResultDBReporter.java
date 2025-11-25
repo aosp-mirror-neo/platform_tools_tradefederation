@@ -20,7 +20,6 @@ import com.android.resultdb.proto.ProducerResource;
 import com.android.resultdb.proto.RootInvocation;
 import com.android.resultdb.proto.Sources;
 import com.android.resultdb.proto.SubmittedAndroidBuild;
-import com.android.resultdb.proto.Variant;
 import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.IConfiguration;
@@ -62,9 +61,6 @@ public class ResultDBReporter
 
     private static final String BUILD_ENV_INVOCATION_CONTEXT_KEY = "android-build-environment";
 
-    // Link to redirect to the result page.
-    private static final String RESULT_LINK = "https://ci.chromium.org/ui/inv/invocations/%s";
-
     @Option(name = "disable", description = "Set to true if reporter is disabled")
     private boolean mDisable = false;
 
@@ -88,8 +84,6 @@ public class ResultDBReporter
     // Only set when report to root invocation and work unit is enabled, and mRootInvocationId,
     // mTopWorkUnitId are set.
     private IRecorderClient mRecorder;
-    // Common variant values for all test in this TF invocation.
-    private Variant mBaseVariant;
     private boolean mIsStaging = false;
 
     private final TestResultHandler mTestResultHandler = createTestResultHandler();
@@ -197,22 +191,6 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
-        Variant.Builder baseVariantBuilder =
-                Variant.newBuilder()
-                        .putDef("scheduler", "ATP") // ATP is the only scheduler supported for now.
-                        .putDef("name", Strings.nullToEmpty(context.getTestTag()));
-
-        IBuildInfo primaryBuild = getPrimaryBuild(context);
-        if (primaryBuild != null) {
-            baseVariantBuilder =
-                    baseVariantBuilder
-                            .putDef("build_provider", "androidbuild")
-                            .putDef("branch", Strings.nullToEmpty(primaryBuild.getBuildBranch()))
-                            .putDef("target", Strings.nullToEmpty(primaryBuild.getBuildFlavor()));
-        }
-        // TODO: Remove the base variant. Root invocation now has new fields that is more
-        // appropriate these properties, eg. source, producer_resource.
-        mBaseVariant = baseVariantBuilder.build();
         mIsStaging = isStaging(context);
 
         boolean successLegacy = initRecorderLegacy(context);
@@ -484,10 +462,10 @@ public class ResultDBReporter
                     mConfiguration,
                     mWorkUnitHandler.getModuleContext(),
                     currentTimestamp(),
-                    mBaseVariant,
-                    mWorkUnitHandler.getModuleVariant(),
-                    mWorkUnitHandler.getCurrentModule(),
-                    mRecorderLegacy);
+                    mWorkUnitHandler.getCurrentModuleIdentifier(),
+                    mWorkUnitHandler.getCurrentWorkUnitId(),
+                    mRecorderLegacy,
+                    mRecorder);
         } catch (RuntimeException e) {
             CLog.e("error during skip reporting:");
             CLog.e(e);
@@ -550,11 +528,7 @@ public class ResultDBReporter
             return;
         }
         mTestResultHandler.testStarted(
-                test,
-                startTime,
-                mWorkUnitHandler.getCurrentModule(),
-                mBaseVariant,
-                mWorkUnitHandler.getModuleVariant());
+                test, startTime, mWorkUnitHandler.getCurrentModuleIdentifier());
     }
 
     @Override
@@ -616,7 +590,13 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testEnded(test, endTime, testMetrics, mRecorderLegacy);
+        mTestResultHandler.testEnded(
+                test,
+                endTime,
+                testMetrics,
+                mWorkUnitHandler.getCurrentWorkUnitId(),
+                mRecorderLegacy,
+                mRecorder);
     }
 
     @Override

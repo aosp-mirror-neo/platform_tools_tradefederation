@@ -20,6 +20,7 @@ import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.WorkUnit;
 
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.FieldMask;
 
 import java.util.ArrayList;
@@ -32,12 +33,15 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
     private Invocation mInvocation;
     private List<RecorderClient.WorkUnitItem> mWorkUnitItems = new ArrayList<>();
     private List<WorkUnit> mWorkUnitUpdates = new ArrayList<>();
+    private List<RecorderClient.TestResultItem> mTestResultItems = new ArrayList<>();
 
     public static StubClient create() {
         return new StubClient();
     }
 
     private StubClient() {}
+
+    //  -------------------- IRecorderClientLegacy methods ---------------------
 
     @Override
     public Invocation finalizeInvocation() {
@@ -59,25 +63,19 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
         mArtifacts.add(artifact);
     }
 
-    public List<TestResult> getTestResults() {
-        return mTestResults;
+    public ImmutableList<TestResult> getTestResults() {
+        return ImmutableList.copyOf(mTestResults);
     }
 
-    public List<Artifact> getArtifacts() {
-        return mArtifacts;
+    public ImmutableList<Artifact> getArtifacts() {
+        return ImmutableList.copyOf(mArtifacts);
     }
 
     public Invocation getInvocation() {
         return mInvocation;
     }
 
-    public List<WorkUnit> getWorkUnitUpdates() {
-        return mWorkUnitUpdates;
-    }
-
-    public List<RecorderClient.WorkUnitItem> getWorkUnitItems() {
-        return mWorkUnitItems;
-    }
+    //  -------------------- IRecorderClient methods ---------------------
 
     @Override
     public void enqueueWorkUnit(String parentId, String id, WorkUnit workUnit) {
@@ -92,6 +90,23 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
     @Override
     public void updateWorkUnit(WorkUnit workUnit, FieldMask updateMask) {
         mWorkUnitUpdates.add(workUnit);
+    }
+
+    @Override
+    public void enqueueTestResult(String workUnitId, TestResult result) {
+        mTestResultItems.add(new RecorderClient.TestResultItem(workUnitId, result));
+    }
+
+    public ImmutableList<WorkUnit> getWorkUnitUpdates() {
+        return ImmutableList.copyOf(mWorkUnitUpdates);
+    }
+
+    public ImmutableList<RecorderClient.TestResultItem> getTestResultItems() {
+        return ImmutableList.copyOf(mTestResultItems);
+    }
+
+    public ImmutableList<RecorderClient.WorkUnitItem> getWorkUnitItems() {
+        return ImmutableList.copyOf(mWorkUnitItems);
     }
 
     @Override
