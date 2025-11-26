@@ -102,6 +102,7 @@ import com.android.tradefed.device.ManagedTestDeviceFactoryTest;
 import com.android.tradefed.device.NativeDeviceTest;
 import com.android.tradefed.device.RemoteAndroidDeviceTest;
 import com.android.tradefed.device.TestDeviceTest;
+import com.android.tradefed.device.UserInfoTest;
 import com.android.tradefed.device.UserSwitcherTest;
 import com.android.tradefed.device.WaitDeviceRecoveryTest;
 import com.android.tradefed.device.WifiCommandUtilTest;
@@ -667,6 +668,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PropertyChangerTest.class,
     TargetFileUtilsTest.class,
     TestDeviceTest.class,
+    UserInfoTest.class,
     UserSwitcherTest.class,
     WaitDeviceRecoveryTest.class,
     WifiHelperTest.class,
