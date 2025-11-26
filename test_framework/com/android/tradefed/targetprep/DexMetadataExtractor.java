@@ -53,6 +53,19 @@ public class DexMetadataExtractor extends BaseTargetPreparer {
             description = "Throw exception if the specified file is not found.")
     private boolean mThrowIfNoFile = true;
 
+    @VisibleForTesting static final String REINSTALL_EXISTING_APP_OPTION = "reinstall-existing-app";
+
+    @Option(name = REINSTALL_EXISTING_APP_OPTION, description = "Reinstall existing app.")
+    private boolean mReinstallExistingApp = true;
+
+    @VisibleForTesting
+    static final String ALLOW_VERSION_CODE_DOWNGRADE_OPTION = "allow-version-code-downgrade";
+
+    @Option(
+            name = ALLOW_VERSION_CODE_DOWNGRADE_OPTION,
+            description = "Allow APK version code downgrade.")
+    private boolean mAllowVersionCodeDowngrade = true;
+
     @VisibleForTesting static final String CHECK_MIN_SDK_OPTION = "check-min-sdk";
 
     @Option(
@@ -188,6 +201,12 @@ public class DexMetadataExtractor extends BaseTargetPreparer {
 
             List<String> cmd = new ArrayList<>();
             cmd.add("install-multiple");
+            if (mReinstallExistingApp) {
+                cmd.add("-r");
+            }
+            if (mAllowVersionCodeDowngrade) {
+                cmd.add("-d");
+            }
             if (mUserId != null) {
                 cmd.add("--user");
                 cmd.add(String.valueOf(mUserId));

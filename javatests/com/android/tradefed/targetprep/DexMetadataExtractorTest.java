@@ -16,7 +16,9 @@
 
 package com.android.tradefed.targetprep;
 
+import static com.android.tradefed.targetprep.DexMetadataExtractor.ALLOW_VERSION_CODE_DOWNGRADE_OPTION;
 import static com.android.tradefed.targetprep.DexMetadataExtractor.CHECK_MIN_SDK_OPTION;
+import static com.android.tradefed.targetprep.DexMetadataExtractor.REINSTALL_EXISTING_APP_OPTION;
 import static com.android.tradefed.targetprep.DexMetadataExtractor.THROW_IF_NOT_FOUND_OPTION;
 
 import static org.junit.Assert.assertEquals;
@@ -138,6 +140,26 @@ public class DexMetadataExtractorTest {
     @Test
     public void testSetupAndTeardownWithUserId() throws Exception {
         mPrep.setUserId(10);
+        mPrep.setUp(mTestInfo);
+
+        verify(mRunUtil, times(2)).runTimedCmd(anyLong(), ArgumentMatchers.<String>any());
+        verify(mMockTestDevice, times(1)).executeAdbV2Command(ArgumentMatchers.<String>any());
+    }
+
+    @Test
+    public void testSetupAndTeardownDisallowVersionCodeDowngrade() throws Exception {
+        mSetter.setOptionValue(ALLOW_VERSION_CODE_DOWNGRADE_OPTION, "false");
+
+        mPrep.setUp(mTestInfo);
+
+        verify(mRunUtil, times(2)).runTimedCmd(anyLong(), ArgumentMatchers.<String>any());
+        verify(mMockTestDevice, times(1)).executeAdbV2Command(ArgumentMatchers.<String>any());
+    }
+
+    @Test
+    public void testSetupAndTeardownDisallowReinstallingExistingApp() throws Exception {
+        mSetter.setOptionValue(REINSTALL_EXISTING_APP_OPTION, "false");
+
         mPrep.setUp(mTestInfo);
 
         verify(mRunUtil, times(2)).runTimedCmd(anyLong(), ArgumentMatchers.<String>any());
