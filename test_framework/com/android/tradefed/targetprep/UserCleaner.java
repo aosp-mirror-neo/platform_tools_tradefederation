@@ -43,37 +43,37 @@ public class UserCleaner extends BaseTargetPreparer {
         // Uses a TreeMap to make sure user 0 is the first entry
         var allUsers = new TreeMap<>(device.getUserInfos());
 
-        // First need to find the first full user
-        int firstFullUserId = USER_NULL;
+        // First need to find the first admin user
+        int firstAdminUserId = USER_NULL;
         for (var user : allUsers.values()) {
-            if (user.isFull() && firstFullUserId == USER_NULL) {
-                firstFullUserId = user.userId();
+            if (user.isFull() && user.isAdmin() && firstAdminUserId == USER_NULL) {
+                firstAdminUserId = user.userId();
                 break;
             }
         }
-        if (firstFullUserId == USER_NULL) {
+        if (firstAdminUserId == USER_NULL) {
             // Shouldn't happen, but it doesn't hurt to check..
-            CLog.e("Didn't find a full user, using system user (%d) instead", USER_SYSTEM);
-            firstFullUserId = USER_SYSTEM;
+            CLog.e("Didn't find an admin user, using system user (%d) instead", USER_SYSTEM);
+            firstAdminUserId = USER_SYSTEM;
         }
         CLog.d(
-                "tearDown(): currentUserId=%d, firstFullUserId=%d, allUsers=%s",
-                currentUserId, firstFullUserId, allUsers.keySet());
+                "tearDown(): currentUserId=%d, firstAdminUserId=%d, allUsers=%s",
+                currentUserId, firstAdminUserId, allUsers.keySet());
 
         // Then switch to it if necessary
-        if (currentUserId != firstFullUserId) {
-            CLog.i("Switching to first full user (%d)", firstFullUserId);
-            device.switchUser(firstFullUserId);
+        if (currentUserId != firstAdminUserId) {
+            CLog.i("Switching to first admin user (%d)", firstAdminUserId);
+            device.switchUser(firstAdminUserId);
         }
 
-        // Finally, remove all users (except system and first full)
+        // Finally, remove all users (except system and first admin)
         for (var userId : allUsers.keySet()) {
             if (userId == USER_SYSTEM) {
                 CLog.d("Not removing system user (%d)", userId);
                 continue;
             }
-            if (userId == firstFullUserId) {
-                CLog.d("Not removing first full user (%d)", userId);
+            if (userId == firstAdminUserId) {
+                CLog.d("Not removing first admin user (%d)", userId);
                 continue;
             }
             CLog.i("Removing user %d", userId);

@@ -16,6 +16,7 @@
 
 package com.android.tradefed.targetprep;
 
+import static com.android.tradefed.device.UserInfo.FLAG_ADMIN;
 import static com.android.tradefed.device.UserInfo.FLAG_FULL;
 import static com.android.tradefed.device.UserInfo.USER_NULL;
 import static com.android.tradefed.device.UserInfo.USER_SYSTEM;
@@ -105,7 +106,7 @@ public final class UserCleanerTest {
     @Test
     public void testTeardown_hsum_oneFullUserOnly_currentUserIsSystem() throws Exception {
         var device = FakeTestDevice.createHsumFakeDevice();
-        device.addFullUsers(42);
+        device.addAdminUsers(42);
         device.switchUser(USER_SYSTEM);
 
         mCleaner.tearDown(device.testInfo, null);
@@ -117,7 +118,7 @@ public final class UserCleanerTest {
     @Test
     public void testTeardown_hsum_oneFullUserOnly_currentUserIsNotSystem() throws Exception {
         var device = FakeTestDevice.createHsumFakeDevice();
-        device.addFullUsers(42);
+        device.addAdminUsers(42);
         device.switchUser(42);
 
         mCleaner.tearDown(device.testInfo, null);
@@ -129,7 +130,7 @@ public final class UserCleanerTest {
     @Test
     public void testTeardown_hsum_multipleUsers_currentUserIsSystem() throws Exception {
         var device = FakeTestDevice.createHsumFakeDevice();
-        device.addFullUsers(4, 8, 15);
+        device.addAdminUsers(4, 8, 15);
         device.addNonFullUsers(16, 23, 42);
         device.switchUser(USER_SYSTEM);
 
@@ -142,7 +143,7 @@ public final class UserCleanerTest {
     @Test
     public void testTeardown_hsum_multipleUsers_currentUserIsNotSystem() throws Exception {
         var device = FakeTestDevice.createHsumFakeDevice();
-        device.addFullUsers(4, 8, 15);
+        device.addAdminUsers(4, 8, 15);
         device.addNonFullUsers(16, 23, 42);
         device.switchUser(4);
 
@@ -150,6 +151,20 @@ public final class UserCleanerTest {
 
         expectCurrentUser(device, 4);
         expectUsers(device, USER_SYSTEM, 4);
+    }
+
+    @Test
+    public void testTeardown_hsum_multipleUsers_firstFullUserIsNotAdmin() throws Exception {
+        var device = FakeTestDevice.createHsumFakeDevice();
+        device.addFullUsers(4, 8);
+        device.addAdminUsers(15);
+        device.addNonFullUsers(16, 23, 42);
+        device.switchUser(4);
+
+        mCleaner.tearDown(device.testInfo, null);
+
+        expectCurrentUser(device, 15);
+        expectUsers(device, USER_SYSTEM, 15);
     }
 
     private void expectUsers(ITestDevice device, Integer... userIds)
@@ -194,6 +209,10 @@ public final class UserCleanerTest {
 
         private void addFullUsers(int... userIds) {
             addUsers(FLAG_FULL, userIds);
+        }
+
+        private void addAdminUsers(int... userIds) {
+            addUsers(FLAG_FULL | FLAG_ADMIN, userIds);
         }
 
         private void addNonFullUsers(int... userIds) {
@@ -252,7 +271,7 @@ public final class UserCleanerTest {
         }
 
         private static UserInfo createUser(int userId, int flags) {
-            return new UserInfo(userId, "User-" + userId, flags, /* isRunning= */ true);
+            return new UserInfo(userId, "User-" + userId, flags, /* isRunning= */ false);
         }
     }
 }
