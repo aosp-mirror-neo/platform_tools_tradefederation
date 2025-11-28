@@ -459,6 +459,9 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
             }
             shard.mShardIndex = i;
             shard.mShardCount = shardCount;
+            shard.mAbi = this.mAbi;
+            shard.mIncludeFilters = new TreeSet<>(this.mIncludeFilters);
+            shard.mExcludeFilters = new TreeSet<>(this.mExcludeFilters);
             shards.add(shard);
         }
         return shards;
