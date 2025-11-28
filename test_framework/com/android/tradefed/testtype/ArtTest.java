@@ -32,18 +32,17 @@ import com.android.tradefed.util.SearchArtifactUtil;
 import com.android.tradefed.util.TarUtil;
 import com.android.tradefed.util.ZipUtil;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,29 +66,33 @@ import java.util.zip.ZipFile;
  *  - ART translates any test-specific python steps into a per-test BASH script.
  *
  *  The JSON file might look like the following (subject to change):
- *  {
- *    "001-HelloWorld#1f5cdb07": {
- *       "adb push": [
- *         [ "../target/001-HelloWorld", "/data/local/tmp/art/test/1f5cdb07" ],
- *         [ "001-HelloWorld/1f5cdb07.sh", "/data/local/tmp/art/test/1f5cdb07/run.sh" ]
- *       ],
- *       "adb shell": [
- *         [ "sh", "/data/local/tmp/art/test/1f5cdb07/run.sh" ]
- *       ],
- *       "dependencies": [
- *         "setup#compile-boot-image"
- *       ]
- *    },
- *    "setup#compile-boot-image": {
- *       "adb push": [
- *         [ "setup.sh", "/data/local/tmp/art/setup.sh" ]
- *       ],
- *       "adb shell": [
- *         [ "rm", "-rf", "/data/local/tmp/art/test" ],
- *         [ "sh", "/data/local/tmp/art/setup.sh" ]
- *       ]
- *    }
- *  }
+ *  [{
+ *    "name": "001-HelloWorld#1f5cdb07",
+ *    "tags": ["armeabi-v7a"],
+ *    "deps": ["setup#compile-boot-image"],
+ *    "cmds": [{
+ *      "kind": "push",
+ *      "args": ["../target/001-HelloWorld", "/data/local/tmp/art/test/1f5cdb07"]
+ *    }, {
+ *      "kind": "push",
+ *      "args": ["001-HelloWorld/1f5cdb07.sh", "/data/local/tmp/art/test/1f5cdb07/run.sh"]
+ *    }, {
+ *      "kind": "shell",
+ *      "args": ["sh", "/data/local/tmp/art/test/1f5cdb07/run.sh"]
+ *    }]
+ *  }, {
+ *    "name": "setup#compile-boot-image",
+ *    "cmds": [{
+ *      "kind": "push",
+ *      "args": ["setup.sh", "/data/local/tmp/art/setup.sh"]
+ *    }, {
+ *      "kind": "shell",
+ *      "args": ["rm", "-rf", "/data/local/tmp/art/test"]
+ *    }, {
+ *      "kind": "shell",
+ *      "args": ["sh", "/data/local/tmp/art/setup.sh"]
+ *    }]
+ *  }]
  */
 public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceiver {
     private static final int ADB_TIMEOUT = 900;
@@ -181,7 +184,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                 mRunnerDir = extractTarBall(tmp_dir);
                 extractZipApex(tmp_dir);
                 mTests = loadTests();
-            } catch (IOException | JSONException e) {
+            } catch (IOException e) {
                 throw new RuntimeException(e);
             }
 
@@ -195,7 +198,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                 // Schedule all tests to run.
                 List<Future<Boolean>> futures =
                         mTests.values().stream()
-                                .map(test -> executorRef.submit(() -> test.run(listener)))
+                                .map(test -> executorRef.submit(() -> run(test, listener)))
                                 .collect(Collectors.toList());
 
                 // Wait for all tests to complete.
@@ -239,37 +242,22 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         }
     }
 
-    TreeMap<String, Test> loadTests() throws IOException, JSONException {
+    TreeMap<String, Test> loadTests() throws IOException {
+        Gson gson = new Gson();
         TreeMap<String, Test> allTests = new TreeMap<String, Test>();
         TreeMap<String, Test> filteredTests = new TreeMap<String, Test>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
-            JSONObject jsonData = new JSONObject(FileUtil.readStringFromFile(jsonFile));
-            for (Iterator<?> it = jsonData.keys(); it.hasNext(); ) {
-                String name = (String) it.next();
-                JSONObject jsonTest = jsonData.getJSONObject(name);
-                JSONArray jsonTags = jsonTest.optJSONArray("tags");
-                TreeSet<String> tags = new TreeSet<>();
-                if (jsonTags != null) {
-                    for (int i = 0; i < jsonTags.length(); i++) {
-                        tags.add(jsonTags.getString(i));
-                    }
-                }
-                Test test =
-                        new Test() {
-                            {
-                                mName = name;
-                                mTags = tags;
-                                mJson = jsonTest;
-                            }
-                        };
-                allTests.put(name, test);
-                if (!shouldIncludeTest(name)) {
+            Test[] tests = gson.fromJson(FileUtil.readStringFromFile(jsonFile), Test[].class);
+            for (Test test : tests) {
+                test.mResult = Optional.empty();
+                allTests.put(test.mName, test);
+                if (!shouldIncludeTest(test.mName)) {
                     continue;
                 }
                 if (mAbi != null && !test.mTags.contains(mAbi.getName())) {
                     continue;
                 }
-                filteredTests.put(name, test);
+                filteredTests.put(test.mName, test);
             }
         }
 
@@ -290,9 +278,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         while (!dependencyQueue.isEmpty()) {
             String testName = dependencyQueue.remove();
             Test test = allTests.get(testName);
-            JSONArray dependencies = test.mJson.optJSONArray("dependencies");
-            for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
-                String depName = dependencies.getString(i);
+            for (String depName : test.mDependencies) {
                 if (!shardedTests.containsKey(depName)) {
                     shardedTests.put(depName, allTests.get(depName));
                     dependencyQueue.add(depName);
@@ -303,37 +289,70 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         return shardedTests;
     }
 
-    class Test {
-        synchronized Boolean run(ITestInvocationListener listener)
-                throws JSONException, DeviceNotAvailableException {
+    static class Command {
+        @SerializedName("kind")
+        String mKind;
+
+        @SerializedName("args")
+        List<String> mArgs = new ArrayList<>();
+
+        Command() {}
+
+        Command(String kind, String... args) {
+            mKind = kind;
+            mArgs.addAll(Arrays.asList(args));
+        }
+    }
+
+    static class Test {
+        @SerializedName("name")
+        String mName;
+
+        @SerializedName("tags")
+        Set<String> mTags = new TreeSet<>();
+
+        @SerializedName("deps")
+        List<String> mDependencies = new ArrayList<>();
+
+        @SerializedName("cmds")
+        List<Command> mCommands = new ArrayList<>();
+
+        transient Optional<Boolean> mResult = Optional.empty();
+
+        Test() {}
+
+        Test(String name, List<String> deps, Command... commands) {
+            mName = name;
+            mDependencies.addAll(deps);
+            mCommands.addAll(Arrays.asList(commands));
+        }
+    }
+
+    Boolean run(Test test, ITestInvocationListener listener) throws DeviceNotAvailableException {
+        synchronized (test) {
             // Check if the test has already completed (e.g., as a dependency of another test)
-            if (mResult.isPresent()) {
-                return mResult.get();
+            if (test.mResult.isPresent()) {
+                return test.mResult.get();
             }
 
             String error = null;
-            JSONArray dependencies = mJson.optJSONArray("dependencies");
-            for (int i = 0; dependencies != null && i < dependencies.length(); i++) {
-                String dep = dependencies.getString(i);
-                if (!mTests.get(dep).run(listener)) {
+            for (String dep : test.mDependencies) {
+                if (!run(mTests.get(dep), listener)) {
                     error = "Dependency '" + dep + "' failed";
                     break;
                 }
             }
 
-            TestDescription testId = TestDescription.fromString(mName);
+            TestDescription testId = TestDescription.fromString(test.mName);
             long startTime = System.currentTimeMillis();
             try {
                 if (error == null) {
-                    CLog.i("Running ART test %s", mName);
+                    CLog.i("Running ART test %s", test.mName);
                 }
                 if (error == null) {
-                    error = adbPush(mJson);
+                    error = executeCommands(test.mCommands);
                 }
-                if (error == null) {
-                    error = adbShell(mJson);
-                }
-            } catch (JSONException | DeviceNotAvailableException e) {
+            } catch (DeviceNotAvailableException e) {
                 error = e.toString();
                 throw e;
             } finally {
@@ -361,15 +380,47 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                     }
                     listener.testEnded(testId, endTime, Collections.emptyMap());
                 }
-                mResult = Optional.of(error == null);
+                test.mResult = Optional.of(error == null);
             }
             return error == null;
         }
+    }
 
-        String mName;
-        Set<String> mTags = new TreeSet<>();
-        JSONObject mJson;
-        Optional<Boolean> mResult = Optional.empty();
+    String executeCommands(List<Command> commands) throws DeviceNotAvailableException {
+        for (Command cmd : commands) {
+            if (cmd.mKind.equals("push")) {
+                if (cmd.mArgs.size() != 2) {
+                    throw new RuntimeException("Invalid adb push command: " + cmd.mArgs);
+                }
+                File src = new File(mRunnerDir, cmd.mArgs.get(0));
+                String dst = cmd.mArgs.get(1);
+
+                ITestDevice device = mTestInfo.getDevice();
+                if (src.isDirectory()) {
+                    if (!device.pushDir(src, dst)) {
+                        return "Failed to push directory '" + src + "'";
+                    }
+                } else {
+                    if (!device.pushFile(src, dst)) {
+                        return "Failed to push file '" + src + "'";
+                    }
+                }
+            } else if (cmd.mKind.equals("shell")) {
+                String shellCmd = String.join(" ", cmd.mArgs);
+                CommandResult res =
+                        mTestInfo
+                                .getDevice()
+                                .executeShellV2Command(
+                                        shellCmd, ADB_TIMEOUT, TimeUnit.SECONDS, ADB_RETRIES);
+                if (res.getStatus() != CommandStatus.SUCCESS) {
+                    return String.format(
+                            "stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
+                }
+            } else {
+                throw new RuntimeException("Unknown command kind: " + cmd.mKind);
+            }
+        }
+        return null;
     }
 
     void clean() throws DeviceNotAvailableException {
@@ -388,53 +439,6 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         } catch (DeviceNotAvailableException e) {
             return false;
         }
-    }
-
-    String adbPush(JSONObject test) throws JSONException, DeviceNotAvailableException {
-        JSONArray cmds = test.optJSONArray("adb push");
-        for (int i = 0; cmds != null && i < cmds.length(); i++) {
-            JSONArray cmd = cmds.getJSONArray(i);
-            if (cmd.length() != 2) {
-                throw new RuntimeException("Invalid adb push command: " + cmd.toString());
-            }
-            File src = new File(mRunnerDir, cmd.getString(0));
-            String dst = cmd.getString(1);
-
-            ITestDevice device = mTestInfo.getDevice();
-            if (src.isDirectory()) {
-                if (!device.pushDir(src, dst)) {
-                    return "Failed to push directory '" + src + "'";
-                }
-            } else {
-                if (!device.pushFile(src, dst)) {
-                    return "Failed to push file '" + src + "'";
-                }
-            }
-        }
-        return null;
-    }
-
-    String adbShell(JSONObject test) throws JSONException, DeviceNotAvailableException {
-        JSONArray cmds = test.optJSONArray("adb shell");
-        for (int i = 0; cmds != null && i < cmds.length(); i++) {
-            JSONArray args = cmds.getJSONArray(i);
-            StringBuilder cmdBuilder = new StringBuilder();
-            for (int j = 0; j < args.length(); j++) {
-                if (j > 0) {
-                    cmdBuilder.append(" ");
-                }
-                cmdBuilder.append(args.getString(j));
-            }
-            String cmd = cmdBuilder.toString();
-            CommandResult res =
-                    mTestInfo
-                            .getDevice()
-                            .executeShellV2Command(cmd, ADB_TIMEOUT, TimeUnit.SECONDS, ADB_RETRIES);
-            if (res.getStatus() != CommandStatus.SUCCESS) {
-                return String.format("stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
-            }
-        }
-        return null;
     }
 
     @Override
