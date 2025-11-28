@@ -174,10 +174,12 @@ public class RamdumpPreparer extends BaseTargetPreparer implements ITestLoggerRe
         }
 
         if (mCaptureBugreport) {
-            InputStreamSource bugreport = device.getBugreportz();
-            mTestLogger.testLog(
-                    "bugreport_teardown_" + mDeviceSerialNumber, LogDataType.BUGREPORTZ, bugreport);
-            bugreport.close();
+            try (InputStreamSource bugreport = device.getBugreportz()) {
+                mTestLogger.testLog(
+                        "bugreport_teardown_" + mDeviceSerialNumber,
+                        LogDataType.BUGREPORTZ,
+                        bugreport);
+            }
         }
 
         // Disable ramdump after the test is complete.
