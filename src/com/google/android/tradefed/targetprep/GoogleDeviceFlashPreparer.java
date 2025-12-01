@@ -43,6 +43,7 @@ import com.android.tradefed.util.StaticCompatibleBuildFlavorUtil;
 import com.android.tradefed.util.StaticDeviceInfoUtil;
 
 import com.google.android.tradefed.build.LaunchControlProvider;
+import com.google.common.base.Strings;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -144,6 +145,11 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
     private static final Set<String> mRolloutBootloaderUpdate = new LinkedHashSet<>();
 
     @Option(
+            name = "alt-static-device-info-class",
+            description = "Alternative class to use for fetching static device info.")
+    private String mAltStaticDeviceInfoClass = null;
+
+    @Option(
             name = "enable-flashstation",
             description =
                     "Whether to enable Flashstation as the default flasher for flashing devices.")
@@ -161,6 +167,9 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
         super();
         for (String branch : mIncrementalFlashingDefaultFullBranchRollout) {
             addAllowedBranchForTransitionInIncremental(branch);
+        }
+        if (!Strings.isNullOrEmpty(mAltStaticDeviceInfoClass)) {
+            StaticDeviceInfoUtil.setStaticDeviceInfoClass(mAltStaticDeviceInfoClass);
         }
     }
 
@@ -403,5 +412,9 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
                     device.getDeviceDescriptor(),
                     InfraErrorIdentifier.MISMATCHED_BUILD_DEVICE);
         }
+    }
+
+    public void setAltStaticDeviceInfoClass(String altStaticDeviceInfoClass) {
+        StaticDeviceInfoUtil.setStaticDeviceInfoClass(altStaticDeviceInfoClass);
     }
 }
