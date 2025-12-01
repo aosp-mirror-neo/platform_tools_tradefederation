@@ -1392,16 +1392,6 @@ public class Console extends Thread {
             console.setArgs(nonGlobalArgs);
             console.setCommandScheduler(GlobalConfiguration.getInstance().getCommandScheduler());
             console.setKeyStoreFactory(GlobalConfiguration.getInstance().getKeyStoreFactory());
-            // Force to load and parse keystore files, fail the console early if keystore files
-            // are corrupted.
-            try {
-                GlobalConfiguration.getInstance().getKeyStoreFactory().createKeyStoreClient();
-            } catch (KeyStoreException e) {
-                CLog.e(e);
-                // Rethrow the KeyStoreException as a ConfigurationException as it's related to bad
-                // global config.
-                throw new ConfigurationException(e.getMessage());
-            }
             console.setDaemon(true);
 
             GlobalConfiguration.getInstance().getCommandScheduler().setClearcutClient(client);
