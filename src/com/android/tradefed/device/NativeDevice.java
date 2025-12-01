@@ -5644,6 +5644,11 @@ public class NativeDevice
         throw new UnsupportedOperationException("No support for user's feature.");
     }
 
+    @Override
+    public int getUserVisibleOnDisplay(int displayId) throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("No support for user's feature.");
+    }
+
     /** {@inheritDoc} */
     @Override
     public boolean isUserSecondary(int userId) throws DeviceNotAvailableException {

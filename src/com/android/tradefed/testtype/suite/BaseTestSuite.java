@@ -279,6 +279,12 @@ public class BaseTestSuite extends ITestSuite {
                 mExcludeFilters.clear();
             }
 
+            if (mUseIncludeFilterOrder) {
+                // Reset the parsed filters to rebuild them from scratch to match the test order in
+                // the original filters.
+                mIncludeFiltersParsed.clear();
+                mExcludeFiltersParsed.clear();
+            }
             // Create and populate the filters here
             SuiteModuleLoader.addFilters(
                     mIncludeFilters, mIncludeFiltersParsed, mAbis, mFoldableStates);

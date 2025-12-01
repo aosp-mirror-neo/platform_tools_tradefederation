@@ -18,7 +18,6 @@ package com.android.tradefed.result.resultdb;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.TestResult;
-import com.android.resultdb.proto.UpdateInvocationRequest;
 
 /**
  * Interface for communicating with ResultDB recorder backend. The interface contains methods to
@@ -26,8 +25,6 @@ import com.android.resultdb.proto.UpdateInvocationRequest;
  * of reporting test results to ResultDB. New code should use {@link IRecorderClient} instead.
  */
 public interface IRecorderClientLegacy {
-
-    public Invocation updateInvocation(UpdateInvocationRequest request);
 
     /**
      * Finalize the invocation. This method should be called after all test results and artifacts

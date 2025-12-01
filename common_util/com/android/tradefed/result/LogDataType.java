@@ -112,6 +112,7 @@ public enum LogDataType {
     BT_SNOOP_LOG("log", "application/octet-stream", false, false), // Bluetooth HCI snoop logs
     WINSCOPE("winscope", "application/octet-stream", true, false),
     BMP("bmp", "image/bmp", true, false),
+    WAV("wav", "audio/wav", true /* do not compress */, false),
     /* Unknown file type */
     UNKNOWN("dat", "text/plain", false, false);
 

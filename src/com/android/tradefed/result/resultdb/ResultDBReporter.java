@@ -46,6 +46,7 @@ import com.android.tradefed.result.skipped.SkipReason;
 import com.google.android.tradefed.build.AbLocalBuildProvider;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.FieldMask;
 
 import java.util.HashMap;
@@ -81,10 +82,12 @@ public class ResultDBReporter
     private boolean mManageInvocation = false;
 
     // A legacy recorder client that uploading test results to legacy invocation.
+    // Only set when report to legacy invocation is enabled, and mInvocationId is set.
     private IRecorderClientLegacy mRecorderLegacy;
     // A recorder client that uploading test results to work unit.
+    // Only set when report to root invocation and work unit is enabled, and mRootInvocationId,
+    // mTopWorkUnitId are set.
     private IRecorderClient mRecorder;
-
     // Common variant values for all test in this TF invocation.
     private Variant mBaseVariant;
     private boolean mIsStaging = false;
@@ -146,12 +149,6 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        if (mRecorderLegacy == null) {
-            CLog.w(
-                    "Recorder is not initialized, skipping upload storage path %s %s",
-                    resourceId, storagePath);
-            return;
-        }
         mTestArtifactHandler.uploadStoragePath(resourceId, storagePath, logFile, mRecorderLegacy);
     }
 
@@ -169,13 +166,14 @@ public class ResultDBReporter
     @VisibleForTesting
     IRecorderClientLegacy createRecorderClientLegacy(
             String invocationId, String updateToken, Boolean isStaging) {
-        return RecorderClient.createLegacy(invocationId, updateToken, isStaging);
+        return RecorderClientLegacy.createLegacy(invocationId, updateToken, isStaging);
     }
 
     @VisibleForTesting
     IRecorderClientLegacy createRecorderClientLegacy(
             String invocationId, Invocation invocation, Boolean isStaging) {
-        return RecorderClient.createLegacyWithNewInvocation(invocationId, invocation, isStaging);
+        return RecorderClientLegacy.createLegacyWithNewInvocation(
+                invocationId, invocation, isStaging);
     }
 
     @VisibleForTesting
@@ -224,23 +222,26 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
-        CLog.logAndDisplay(LogLevel.INFO, "Result link: %s", getResultLinks());
+        CLog.logAndDisplay(LogLevel.INFO, "Result links: %s", String.join(", ", getResultLinks()));
     }
 
-    private String getResultLinks() {
+    private ImmutableList<String> getResultLinks() {
         String host = "";
         if (mIsStaging) {
-            host = "https://luci-milo-dev.appspot.com/";
+            host = "https://luci-milo-dev.appspot.com";
         } else {
             host = "https://ci.chromium.org";
         }
-        String legacyLink = String.format("%s/ui/inv/%s", host, mInvocationId);
-        if (!Strings.isNullOrEmpty(mRootInvocationId)) {
-            return String.format("%s/ui/test-investigate/invocations/%s", host, mRootInvocationId)
-                    + "\n"
-                    + legacyLink;
+        ImmutableList.Builder<String> links = ImmutableList.builder();
+        if (mInvocationId != null) {
+            links.add(String.format("%s/ui/inv/%s", host, mInvocationId));
         }
-        return legacyLink;
+        if (!Strings.isNullOrEmpty(mRootInvocationId)) {
+            links.add(
+                    String.format(
+                            "%s/ui/test-investigate/invocations/%s", host, mRootInvocationId));
+        }
+        return links.build();
     }
 
     private IBuildInfo getPrimaryBuild(IInvocationContext context) {
@@ -283,6 +284,8 @@ public class ResultDBReporter
                 mRecorder =
                         createRecorderClient(
                                 rootInvocationId, workUnitUpdateToken, isStaging(context));
+                mWorkUnitHandler.setTopWorkUnitInfo(
+                        mTopWorkUnitId, WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE);
             } else if (mCreateLocalInvocation) {
                 IBuildInfo primaryBuild = getPrimaryBuild(context);
                 if (primaryBuild == null) {
@@ -293,7 +296,8 @@ public class ResultDBReporter
                         primaryBuild.getBuildBranch() != null
                                 ? primaryBuild.getBuildBranch()
                                 : "unknown";
-                // TODO: Update the sources field with the correct information. Set temporary data
+                // TODO(b/463830449): Update the sources field with the correct information. Set
+                // temporary data
                 // to unblock upload.
                 Sources sources =
                         Sources.newBuilder()
@@ -334,6 +338,8 @@ public class ResultDBReporter
                                 isStaging(context));
                 mTopWorkUnitId = "root"; // Top work unit is the root work unit.
                 mManageInvocation = true;
+                mWorkUnitHandler.setTopWorkUnitInfo(
+                        mTopWorkUnitId, WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE);
             } else {
                 CLog.i(
                         "ResultDBReporter is disabled as root invocation ID, work unit ID and"
@@ -342,6 +348,11 @@ public class ResultDBReporter
             }
         } catch (RuntimeException e) {
             CLog.e("Failed to create ResultDB client. Error: %s", e.getMessage());
+            if (mRecorder != null) {
+                // Make sure we cancel the client, otherwise it will leak a thread since
+                // invocationEnded will skip the finalization.
+                mRecorder.finalizeUpload();
+            }
             mRecorder = null;
             mRootInvocationId = null;
             mTopWorkUnitId = null;
@@ -385,7 +396,7 @@ public class ResultDBReporter
             CLog.e("Failed to create ResultDB client legacy. Error: %s", e.getMessage());
             if (mRecorderLegacy != null) {
                 // Make sure we cancel the client, otherwise it will leak a thread since
-                // invocationEnded will be skipped.
+                // invocationEnded will skip the finalization.
                 mRecorderLegacy.finalizeUpload();
                 mTestArtifactHandler.setUploadQueueFinalized();
             }
@@ -429,6 +440,7 @@ public class ResultDBReporter
             }
         }
         if (mRecorder != null) {
+            mRecorder.finalizeUpload();
             if (mManageInvocation) {
                 mRecorder.updateWorkUnit(
                         WorkUnit.newBuilder()
@@ -441,8 +453,8 @@ public class ResultDBReporter
                         FieldMask.newBuilder().addPaths("state").build());
             }
         }
-        CLog.logAndDisplay(LogLevel.INFO, "Result link: %s", getResultLinks());
-        // TODO: Update ResultDB invocation with information from TF invocation.
+        CLog.logAndDisplay(LogLevel.INFO, "Result links: %s", String.join(", ", getResultLinks()));
+        // TODO(b/463830449): Update ResultDB invocation with information from TF invocation.
     }
 
     @Override
@@ -450,7 +462,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mWorkUnitHandler.testModuleStarted(moduleContext);
+        mWorkUnitHandler.testModuleStarted(moduleContext, mTopWorkUnitId, mRecorder);
     }
 
     @Override
@@ -458,7 +470,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mWorkUnitHandler.testModuleEnded();
+        mWorkUnitHandler.testModuleEnded(mRootInvocationId, mRecorder);
     }
 
     @Override
@@ -480,6 +492,7 @@ public class ResultDBReporter
             CLog.e("error during skip reporting:");
             CLog.e(e);
         }
+        mWorkUnitHandler.testRunEnded(mRootInvocationId, mTopWorkUnitId, mRecorder);
     }
 
     @Override
@@ -494,17 +507,21 @@ public class ResultDBReporter
 
     @Override
     public void testRunStarted(String runName, int testCount) {
-        // TODO: implement this method.
+        testRunStarted(runName, testCount, 0);
     }
 
     @Override
     public void testRunStarted(String runName, int testCount, int attemptNumber) {
-        // TODO: implement this method.
+        testRunStarted(runName, testCount, attemptNumber, currentTimestamp());
     }
 
     @Override
     public void testRunStarted(String runName, int testCount, int attemptNumber, long startTime) {
-        // TODO: implement this method.
+        if (mDisable) {
+            return;
+        }
+        mWorkUnitHandler.testRunStarted(
+                runName, testCount, attemptNumber, startTime, mTopWorkUnitId, mRecorder);
     }
 
     @VisibleForTesting

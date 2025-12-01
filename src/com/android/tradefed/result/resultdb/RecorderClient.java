@@ -15,58 +15,39 @@
  */
 package com.android.tradefed.result.resultdb;
 
-import com.android.resultdb.proto.Artifact;
-import com.android.resultdb.proto.BatchCreateArtifactsRequest;
-import com.android.resultdb.proto.BatchCreateTestResultsRequest;
+import com.android.resultdb.proto.BatchCreateWorkUnitsRequest;
 import com.android.resultdb.proto.BatchUpdateWorkUnitsRequest;
-import com.android.resultdb.proto.CreateArtifactRequest;
-import com.android.resultdb.proto.CreateInvocationRequest;
 import com.android.resultdb.proto.CreateRootInvocationRequest;
 import com.android.resultdb.proto.CreateRootInvocationResponse;
-import com.android.resultdb.proto.CreateTestResultRequest;
-import com.android.resultdb.proto.FinalizeInvocationRequest;
-import com.android.resultdb.proto.Invocation;
+import com.android.resultdb.proto.CreateWorkUnitRequest;
 import com.android.resultdb.proto.RecorderGrpc;
 import com.android.resultdb.proto.RootInvocation;
-import com.android.resultdb.proto.TestResult;
-import com.android.resultdb.proto.UpdateInvocationRequest;
 import com.android.resultdb.proto.UpdateWorkUnitRequest;
 import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.FieldMask;
 
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
-import io.grpc.ForwardingClientCall;
-import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 
 /** ResultDB recorder client that uploads test results to ResultDB. */
-public class RecorderClient implements IRecorderClient, IRecorderClientLegacy {
+public class RecorderClient implements IRecorderClient {
 
-    // The key for the update token used to create/update resources undera ResultDB invocation.
-    private static final Metadata.Key<String> UPDATE_TOKEN_METADATA_KEY =
-            Metadata.Key.of("update-token", Metadata.ASCII_STRING_MARSHALLER);
-    // The id of the ResultDB invocation used in upload results, update and finalize invocation
-    // request. Currently only one ResultDB invocation per TF invocation is supported.
-    private String mInvocationId;
+    private static final int MAX_BATCH_SIZE = 500;
+    private static final String UPDATE_TOKEN_PROVIDER_METHOD_NAME =
+            "luci.resultdb.v1.Recorder/CreateRootInvocation";
+    private static final String AUTH_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
     // The id of the ResultDB root invocation used in upload results.
     private String mRootInvocationId;
     private String mUpdateToken;
@@ -75,15 +56,12 @@ public class RecorderClient implements IRecorderClient, IRecorderClientLegacy {
     private final Credentials mCredentials;
     public static final int SERVER_PORT = 443;
 
-    private final BatchChannel<TestResult> mTestResultChannel;
-
-    private final BatchChannel<Artifact> mArtifactChannel;
+    private final BatchChannel<WorkUnitItem> mWorkUnitChannel;
+    private final BatchChannel<WorkUnitUpdateItem> mWorkUnitUpdateChannel;
 
     private RecorderClient(Boolean isStaging) {
         try {
-            mCredentials =
-                    GoogleCredentials.getApplicationDefault()
-                            .createScoped("https://www.googleapis.com/auth/userinfo.email");
+            mCredentials = GoogleCredentials.getApplicationDefault().createScoped(AUTH_EMAIL_SCOPE);
         } catch (IOException e) {
             throw new RuntimeException("Failed to get application default credentials", e);
         }
@@ -94,32 +72,18 @@ public class RecorderClient implements IRecorderClient, IRecorderClientLegacy {
         RecorderGrpc.RecorderBlockingStub stub =
                 RecorderGrpc.newBlockingStub(channel)
                         .withCallCredentials(MoreCallCredentials.from(mCredentials))
-                        .withInterceptors(recorderInterceptor());
+                        .withInterceptors(
+                                new UpdateTokenInterceptor(
+                                        () -> mUpdateToken,
+                                        (token) -> mUpdateToken = token,
+                                        UPDATE_TOKEN_PROVIDER_METHOD_NAME));
         mStub = stub;
-        mTestResultChannel =
-                new BatchChannel<TestResult>(500, "test results", this::batchUploadTestResults);
-
-        mArtifactChannel = new BatchChannel<Artifact>(500, "artifacts", this::batchUploadArtifacts);
-    }
-
-    public static IRecorderClientLegacy createLegacy(
-            String invocationId, String updateToken, Boolean isStaging) {
-        RecorderClient client = new RecorderClient(isStaging);
-        client.mInvocationId = invocationId;
-        client.mUpdateToken = updateToken;
-        return client;
-    }
-
-    public static IRecorderClientLegacy createLegacyWithNewInvocation(
-            String invocationId, Invocation invocation, Boolean isStaging) {
-        RecorderClient client = new RecorderClient(isStaging);
-        client.mInvocationId = invocationId;
-        client.createInvocation(
-                CreateInvocationRequest.newBuilder()
-                        .setInvocation(invocation)
-                        .setInvocationId(invocationId)
-                        .build());
-        return client;
+        mWorkUnitChannel =
+                new BatchChannel<WorkUnitItem>(
+                        MAX_BATCH_SIZE, "work units", this::batchUploadWorkUnits);
+        mWorkUnitUpdateChannel =
+                new BatchChannel<WorkUnitUpdateItem>(
+                        MAX_BATCH_SIZE, "work unit updates", this::batchUpdateWorkUnits);
     }
 
     public static IRecorderClient create(
@@ -154,62 +118,6 @@ public class RecorderClient implements IRecorderClient, IRecorderClientLegacy {
         return "results.api.luci.app";
     }
 
-    // Interceptor that adds the update token to requests.
-    private ClientInterceptor recorderInterceptor() {
-        List<String> updateTokenRpc =
-                List.of(
-                        "luci.resultdb.v1.Recorder/CreateInvocation",
-                        "luci.resultdb.v1.Recorder/CreateRootInvocation");
-        ClientInterceptor clientInterceptor =
-                new ClientInterceptor() {
-                    @Override
-                    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-                            MethodDescriptor<ReqT, RespT> method,
-                            CallOptions callOptions,
-                            Channel next) {
-                        ClientCall<ReqT, RespT> delegate = next.newCall(method, callOptions);
-                        return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
-                                delegate) {
-                            @Override
-                            public void start(Listener<RespT> responseListener, Metadata headers) {
-                                if (!Strings.isNullOrEmpty(mUpdateToken)) {
-                                    // Add update token to request header.
-                                    headers.put(UPDATE_TOKEN_METADATA_KEY, mUpdateToken);
-                                }
-
-                                super.start(
-                                        new SimpleForwardingClientCallListener<RespT>(
-                                                responseListener) {
-                                            @Override
-                                            public void onHeaders(Metadata headers) {
-                                                String fullMethodName = method.getFullMethodName();
-                                                if (updateTokenRpc.contains(fullMethodName)) {
-                                                    String updateToken =
-                                                            headers.get(UPDATE_TOKEN_METADATA_KEY);
-
-                                                    if (!Strings.isNullOrEmpty(updateToken)) {
-                                                        // Retrieve the update token from the
-                                                        // response header.
-                                                        mUpdateToken = updateToken;
-                                                    }
-                                                }
-                                                super.onHeaders(headers);
-                                            }
-                                        },
-                                        headers);
-                            }
-                        };
-                    }
-                };
-        return clientInterceptor;
-    }
-
-    private Invocation createInvocation(CreateInvocationRequest request) {
-        Invocation invocation = mStub.createInvocation(request);
-        CLog.i("Created invocation: %s", invocation.getName());
-        return invocation;
-    }
-
     private CreateRootInvocationResponse createRootInvocation(CreateRootInvocationRequest request) {
         CreateRootInvocationResponse response = mStub.createRootInvocation(request);
         CLog.i(
@@ -219,104 +127,146 @@ public class RecorderClient implements IRecorderClient, IRecorderClientLegacy {
     }
 
     @Override
-    public Invocation updateInvocation(UpdateInvocationRequest request) {
-        // TODO: Call recorder grpc client to update invocation.
-        CLog.i("Updating invocation: %s", request.toString());
-        return request.getInvocation();
+    public void enqueueWorkUnit(String parentId, String id, WorkUnit workUnit) {
+        try {
+            mWorkUnitChannel.enqueue(new WorkUnitItem(parentId, id, workUnit));
+        } catch (InterruptedException e) {
+            CLog.e("Failed to enqueue work unit: " + e.getMessage());
+        }
     }
 
     @Override
-    public Invocation finalizeInvocation() {
-        CLog.i("Finalizing invocation: %s", mInvocationId);
-        return mStub.finalizeInvocation(
-                FinalizeInvocationRequest.newBuilder()
-                        .setName("invocations/" + mInvocationId)
-                        .build());
+    public void enqueueWorkUnitUpdate(WorkUnit workUnit, FieldMask updateMask) {
+        try {
+            mWorkUnitUpdateChannel.enqueue(new WorkUnitUpdateItem(workUnit, updateMask));
+        } catch (InterruptedException e) {
+            CLog.e("Failed to enqueue work unit update: " + e.getMessage());
+        }
     }
 
     @Override
     public void updateWorkUnit(WorkUnit workUnit, FieldMask updateMask) {
         try {
-            batchUpdateWorkUnits(List.of(workUnit), updateMask);
+            batchUpdateWorkUnits(ImmutableList.of(new WorkUnitUpdateItem(workUnit, updateMask)));
         } catch (StatusRuntimeException e) {
             CLog.e("Failed to update work unit: " + e.getMessage());
         }
     }
 
     @Override
-    public void enqueueTestResult(TestResult result) {
-        try {
-            mTestResultChannel.enqueue(result);
-        } catch (InterruptedException e) {
-            CLog.e("Failed to enqueue test result: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void enqueueArtifact(Artifact artifact) {
-        try {
-            mArtifactChannel.enqueue(artifact);
-        } catch (InterruptedException e) {
-            CLog.e("Failed to enqueue artifact: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void uploadArtifact(Artifact artifact) {
-        try {
-            batchUploadArtifacts(ImmutableList.of(artifact));
-        } catch (StatusRuntimeException e) {
-            CLog.e("Failed to upload artifact: " + e.getMessage());
-        }
-    }
-
-    @Override
     public void finalizeUpload() {
         try {
-            mTestResultChannel.finalizeUpload();
-            mArtifactChannel.finalizeUpload();
+            mWorkUnitChannel.finalizeUpload();
+            mWorkUnitUpdateChannel.finalizeUpload();
         } catch (InterruptedException e) {
             CLog.e("Failed to finalize result or artifact upload: " + e.getMessage());
         }
     }
 
-    private void batchUploadTestResults(List<TestResult> allResults) throws StatusRuntimeException {
-        BatchCreateTestResultsRequest.Builder request =
-                BatchCreateTestResultsRequest.newBuilder()
-                        .setInvocation(String.format("invocations/%s", mInvocationId))
-                        .setRequestId(UUID.randomUUID().toString());
-        for (TestResult result : allResults) {
-            request.addRequests(CreateTestResultRequest.newBuilder().setTestResult(result).build());
+    private void batchUploadWorkUnits(ImmutableList<WorkUnitItem> allWorkUnits)
+            throws StatusRuntimeException {
+        BatchCreateWorkUnitsRequest.Builder request =
+                BatchCreateWorkUnitsRequest.newBuilder().setRequestId(UUID.randomUUID().toString());
+        for (WorkUnitItem workUnit : allWorkUnits) {
+            request.addRequests(
+                    CreateWorkUnitRequest.newBuilder()
+                            .setParent(
+                                    ResultDBUtil.makeWorkUnitName(
+                                            mRootInvocationId, workUnit.getParentId()))
+                            .setWorkUnitId(workUnit.getWorkUnitId())
+                            .setWorkUnit(workUnit.getWorkUnit())
+                            .build());
         }
-
-        mStub.batchCreateTestResults(request.build());
-        CLog.i("Uploaded %d results to invocation %s", allResults.size(), mInvocationId);
+        mStub.batchCreateWorkUnits(request.build());
+        CLog.i(
+                "Uploaded %d work units to root invocation %s",
+                allWorkUnits.size(), mRootInvocationId);
     }
 
-    private void batchUploadArtifacts(List<Artifact> allArtifacts) throws StatusRuntimeException {
-        BatchCreateArtifactsRequest.Builder request =
-                BatchCreateArtifactsRequest.newBuilder()
-                        .setParent(String.format("invocations/%s", mInvocationId));
-        for (Artifact artifact : allArtifacts) {
-            request.addRequests(CreateArtifactRequest.newBuilder().setArtifact(artifact).build());
-        }
-
-        mStub.batchCreateArtifacts(request.build());
-        CLog.i("Uploaded %d artifacts to invocation %s", allArtifacts.size(), mInvocationId);
-    }
-
-    private void batchUpdateWorkUnits(List<WorkUnit> allWorkUnits, FieldMask updateMask)
+    private void batchUpdateWorkUnits(ImmutableList<WorkUnitUpdateItem> allWorkUnitUpdates)
             throws StatusRuntimeException {
         BatchUpdateWorkUnitsRequest.Builder request =
                 BatchUpdateWorkUnitsRequest.newBuilder().setRequestId(UUID.randomUUID().toString());
-        for (WorkUnit workUnit : allWorkUnits) {
+        for (WorkUnitUpdateItem workUnitUpdate : allWorkUnitUpdates) {
             request.addRequests(
                     UpdateWorkUnitRequest.newBuilder()
-                            .setWorkUnit(workUnit)
-                            .setUpdateMask(updateMask)
+                            .setWorkUnit(workUnitUpdate.getWorkUnit())
+                            .setUpdateMask(workUnitUpdate.getUpdateMask())
                             .build());
         }
+        // Force upload all pending work units.
+        mWorkUnitChannel.forceUpload();
         mStub.batchUpdateWorkUnits(request.build());
-        CLog.i("Updated %d work units in invocation %s", allWorkUnits.size(), mRootInvocationId);
+        CLog.i(
+                "Updated %d work units in invocation %s",
+                allWorkUnitUpdates.size(), mRootInvocationId);
+    }
+
+    static class WorkUnitItem {
+        private final String mParentId;
+        private final String mWorkUnitId;
+        private final WorkUnit mWorkUnit;
+
+        public WorkUnitItem(String parentId, String workUnitId, WorkUnit workUnit) {
+            mParentId = parentId;
+            mWorkUnitId = workUnitId;
+            mWorkUnit = workUnit;
+        }
+
+        public String getWorkUnitId() {
+            return mWorkUnitId;
+        }
+
+        public String getParentId() {
+            return mParentId;
+        }
+
+        public WorkUnit getWorkUnit() {
+            return mWorkUnit;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof WorkUnitItem)) {
+                return false;
+            }
+            WorkUnitItem that = (WorkUnitItem) o;
+            return mParentId.equals(that.mParentId)
+                    && mWorkUnitId.equals(that.mWorkUnitId)
+                    && mWorkUnit.equals(that.mWorkUnit);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mParentId, mWorkUnitId, mWorkUnit);
+        }
+
+        @Override
+        public String toString() {
+            return String.format(
+                    "WorkUnitItem{parentId=%s, workUnitId=%s, workUnit=%s}",
+                    mParentId, mWorkUnitId, mWorkUnit);
+        }
+    }
+
+    static class WorkUnitUpdateItem {
+        private final WorkUnit mWorkUnit;
+        private final FieldMask mUpdateMask;
+
+        public WorkUnitUpdateItem(WorkUnit workUnit, FieldMask updateMask) {
+            mWorkUnit = workUnit;
+            mUpdateMask = updateMask;
+        }
+
+        public WorkUnit getWorkUnit() {
+            return mWorkUnit;
+        }
+
+        public FieldMask getUpdateMask() {
+            return mUpdateMask;
+        }
     }
 }

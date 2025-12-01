@@ -29,13 +29,14 @@ import com.android.tradefed.result.TestSummary;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.util.MultiMap;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,58 +64,69 @@ public class InvocationSimulator {
         }
     }
 
-    private String mModuleName = "example-module";
-    private MultiMap<String, String> mModuleMetadata = new MultiMap<>();
-    private Map<String, String> mModuleAttributes = new HashMap<>();
-    private List<TestDescription> mTests;
-    private List<TestStatus> mTestOutcomes;
-    private List<HashMap<String, MetricMeasurement.Metric>> mTestMetricsList;
-    private Map<TestDescription, FailureDescription> mFailureDescriptions;
+    static class TestConfig {
+        TestDescription description;
+        TestStatus status;
+        HashMap<String, MetricMeasurement.Metric> metrics;
+        FailureDescription failure;
+        List<LogFile> logs = new ArrayList<>();
+
+        TestConfig(
+                TestDescription description,
+                TestStatus status,
+                HashMap<String, MetricMeasurement.Metric> metrics,
+                FailureDescription failure) {
+            this.description = description;
+            this.status = status;
+            this.metrics = metrics;
+            this.failure = failure;
+        }
+    }
+
+    static class TestRunConfig {
+        String name = "TestRun1";
+        HashMap<String, MetricMeasurement.Metric> metrics = new HashMap<>();
+        String error = "";
+        FailureDescription failure = null;
+        List<LogFile> logs = new ArrayList<>();
+        List<TestConfig> tests = new ArrayList<>();
+
+        TestRunConfig(String name) {
+            this.name = name;
+        }
+    }
+
+    static class ModuleConfig {
+        String name;
+        MultiMap<String, String> metadata = new MultiMap<>();
+        Map<String, String> attributes = new HashMap<>();
+        List<TestRunConfig> testRuns = new ArrayList<>();
+
+        ModuleConfig(String name) {
+            this.name = name;
+        }
+    }
+
+    private List<ModuleConfig> mModules = new ArrayList<>();
+    private ModuleConfig mCurrentModule = null;
+    private TestRunConfig mCurrentTestRun = null;
+
     private String mSummary = "";
-    private String mTestRunError = "";
-    private FailureDescription mTestRunDescription;
-    private HashMap<String, MetricMeasurement.Metric> mTestRunMetrics;
-    private String mInvocationId;
-    private String mWorkUnitId;
-    private String mLegacyResultId;
-    private Map<String, String> mInvocationAttributes;
-    private List<IBuildInfo> mBuildInfos;
-    private List<LogFile> mTestLogs;
-    private List<LogFile> mTestRunLogs;
-    private List<LogFile> mInvocationLogs;
+    private Map<String, String> mInvocationAttributes = new HashMap<>();
+    private List<IBuildInfo> mBuildInfos = new ArrayList<>();
+    private List<LogFile> mTestLogs = new ArrayList<>();
+    private List<LogFile> mInvocationLogs = new ArrayList<>();
     private boolean mIgnoreExceptions = false;
-    private boolean mSkipTestRuns = false;
 
     public static InvocationSimulator create() {
         return new InvocationSimulator();
     }
 
     private InvocationSimulator() {
-        mTests = new ArrayList<>();
-        mTestOutcomes = new ArrayList<>();
-        mTestMetricsList = new ArrayList<>();
-        mFailureDescriptions = new HashMap<>();
-        mTestRunMetrics = new HashMap<>();
         mBuildInfos = new ArrayList<>();
         mTestLogs = new ArrayList<>();
-        mTestRunLogs = new ArrayList<>();
         mInvocationLogs = new ArrayList<>();
         mInvocationAttributes = new HashMap<>();
-    }
-
-    public InvocationSimulator setInvocationId(String invocationId) {
-        mInvocationId = invocationId;
-        return this;
-    }
-
-    public InvocationSimulator setWorkUnitId(String workUnitId) {
-        mWorkUnitId = workUnitId;
-        return this;
-    }
-
-    public InvocationSimulator setLegacyResultId(String id) {
-        mLegacyResultId = id;
-        return this;
     }
 
     public InvocationSimulator withBuildInfo(IBuildInfo info) {
@@ -127,15 +139,15 @@ public class InvocationSimulator {
         return this;
     }
 
-    private IInvocationContext getModule() {
+    private IInvocationContext getModuleContext(ModuleConfig moduleConfig) {
         ConfigurationDescriptor module = new ConfigurationDescriptor();
-        module.setModuleName(mModuleName);
-        if (!mModuleMetadata.isEmpty()) {
-            module.setMetaData(mModuleMetadata);
+        module.setModuleName(moduleConfig.name);
+        if (!moduleConfig.metadata.isEmpty()) {
+            module.setMetaData(moduleConfig.metadata);
         }
         InvocationContext moduleContext = createInvocation();
         moduleContext.setConfigurationDescriptor(module);
-        for (Map.Entry<String, String> attribute : mModuleAttributes.entrySet()) {
+        for (Map.Entry<String, String> attribute : moduleConfig.attributes.entrySet()) {
             moduleContext.addInvocationAttribute(attribute.getKey(), attribute.getValue());
         }
         return moduleContext;
@@ -148,6 +160,19 @@ public class InvocationSimulator {
         return date.toInstant().toEpochMilli();
     }
 
+    private void ensureModule() {
+        if (mCurrentModule == null) {
+            withModule("example-module");
+        }
+    }
+
+    private void ensureTestRun() {
+        ensureModule();
+        if (mCurrentTestRun == null) {
+            withTestRun("TestRun1");
+        }
+    }
+
     public InvocationSimulator withTest(String clazz, String method) {
         return withTest(clazz, method, TestStatus.PASS);
     }
@@ -158,7 +183,13 @@ public class InvocationSimulator {
 
     public InvocationSimulator withTestFailure(
             String clazz, String method, FailureDescription failure) {
-        mFailureDescriptions.put(new TestDescription(clazz, method), failure);
+        ensureTestRun();
+        mCurrentTestRun.tests.add(
+                new TestConfig(
+                        new TestDescription(clazz, method),
+                        TestStatus.FAIL,
+                        new HashMap<>(),
+                        failure));
         return this;
     }
 
@@ -167,29 +198,44 @@ public class InvocationSimulator {
             String method,
             TestStatus outcome,
             HashMap<String, MetricMeasurement.Metric> metrics) {
-        mTests.add(new TestDescription(clazz, method));
-        mTestOutcomes.add(outcome);
-        mTestMetricsList.add(metrics);
+        ensureTestRun();
+        mCurrentTestRun.tests.add(
+                new TestConfig(new TestDescription(clazz, method), outcome, metrics, null));
         return this;
     }
 
-    public InvocationSimulator withModule(String module) {
-        mModuleName = module;
+    @CanIgnoreReturnValue
+    public InvocationSimulator withModule(String moduleName) {
+        mCurrentModule = new ModuleConfig(moduleName);
+        mModules.add(mCurrentModule);
+        mCurrentTestRun = null;
+        return this;
+    }
+
+    @CanIgnoreReturnValue
+    public InvocationSimulator withTestRun(String runName) {
+        ensureModule();
+        mCurrentTestRun = new TestRunConfig(runName);
+        mCurrentModule.testRuns.add(mCurrentTestRun);
         return this;
     }
 
     public InvocationSimulator withModuleMetadata(String name, String value) {
-        mModuleMetadata.put(name, value);
+        ensureModule();
+        mCurrentModule.metadata.put(name, value);
         return this;
     }
 
     public InvocationSimulator withModuleAttribute(String name, String value) {
-        mModuleAttributes.put(name, value);
+        ensureModule();
+        mCurrentModule.attributes.put(name, value);
         return this;
     }
 
     public InvocationSimulator withoutModules() {
-        mModuleName = "";
+        mModules.clear();
+        mCurrentModule = null;
+        mCurrentTestRun = null;
         return this;
     }
 
@@ -198,19 +244,15 @@ public class InvocationSimulator {
         return this;
     }
 
-    public InvocationSimulator withTestRunMetrics(
-            HashMap<String, MetricMeasurement.Metric> runMetrics) {
-        mTestRunMetrics = runMetrics;
-        return this;
-    }
-
     public InvocationSimulator withTestRunFailure(String message) {
-        mTestRunError = message;
+        ensureTestRun();
+        mCurrentTestRun.error = message;
         return this;
     }
 
     public InvocationSimulator withTestRunFailure(FailureDescription failure) {
-        mTestRunDescription = failure;
+        ensureTestRun();
+        mCurrentTestRun.failure = failure;
         return this;
     }
 
@@ -220,7 +262,8 @@ public class InvocationSimulator {
     }
 
     public InvocationSimulator withTestRunLog(LogFile log) {
-        mTestRunLogs.add(log);
+        ensureTestRun();
+        mCurrentTestRun.logs.add(log);
         return this;
     }
 
@@ -231,11 +274,6 @@ public class InvocationSimulator {
 
     public InvocationSimulator ignoreExceptions() {
         mIgnoreExceptions = true;
-        return this;
-    }
-
-    public InvocationSimulator skipTestRuns() {
-        mSkipTestRuns = true;
         return this;
     }
 
@@ -251,39 +289,50 @@ public class InvocationSimulator {
                 throw e;
             }
         }
-        try {
-            if (!mModuleName.isEmpty()) {
-                reporter.testModuleStarted(getModule());
+
+        for (ModuleConfig module : mModules) {
+            try {
+                if (!module.name.isEmpty()) {
+                    reporter.testModuleStarted(getModuleContext(module));
+                }
+            } catch (Exception e) {
+                if (!mIgnoreExceptions) {
+                    throw e;
+                }
             }
-        } catch (Exception e) {
-            if (!mIgnoreExceptions) {
-                throw e;
+
+            for (TestRunConfig run : module.testRuns) {
+                try {
+                    reporter.testRunStarted(run.name, run.tests.size(), 1);
+                } catch (Exception e) {
+                    if (!mIgnoreExceptions) {
+                        throw e;
+                    }
+                }
+
+                simulateTests(reporter, run.tests);
+
+                if (!run.error.isEmpty()) {
+                    reporter.testRunFailed(run.error);
+                }
+                if (run.failure != null) {
+                    reporter.testRunFailed(run.failure);
+                }
+                simulateLogs("test-run-", run.logs, reporter);
+                reporter.testRunEnded(1000L, run.metrics);
             }
-        }
-        try {
-            if (!mSkipTestRuns) {
-                reporter.testRunStarted("TestRun1", 1, 1);
-            }
-        } catch (Exception e) {
-            if (!mIgnoreExceptions) {
-                throw e;
+
+            try {
+                if (!module.name.isEmpty()) {
+                    reporter.testModuleEnded();
+                }
+            } catch (Exception e) {
+                if (!mIgnoreExceptions) {
+                    throw e;
+                }
             }
         }
 
-        simulateTests(reporter);
-        if (!mTestRunError.isEmpty()) {
-            reporter.testRunFailed(mTestRunError);
-        }
-        if (mTestRunDescription != null) {
-            reporter.testRunFailed(mTestRunDescription);
-        }
-        simulateLogs("test-run-", mTestRunLogs, reporter);
-        if (!mSkipTestRuns) {
-            reporter.testRunEnded(1000L, mTestRunMetrics);
-        }
-        if (!mModuleName.isEmpty()) {
-            reporter.testModuleEnded();
-        }
         simulateLogs("invocation-log-", mInvocationLogs, reporter);
         reporter.invocationEnded(100);
     }
@@ -291,9 +340,7 @@ public class InvocationSimulator {
     private InvocationContext createInvocation() {
         InvocationContext context = new InvocationContext();
         context.setTestTag("test tag");
-        context.addInvocationAttribute("invocation_id", mInvocationId);
-        context.addInvocationAttribute("work_unit_id", mWorkUnitId);
-        context.addInvocationAttribute("test_result_id", mLegacyResultId);
+
         for (int i = 0; i < mBuildInfos.size(); i++) {
             context.addDeviceBuildInfo(String.format("device_%d", i), mBuildInfos.get(i));
         }
@@ -303,39 +350,37 @@ public class InvocationSimulator {
         return context;
     }
 
-    private <T extends ILogSaverListener & ITestSummaryListener> void simulateTests(T reporter) {
+    private <T extends ILogSaverListener & ITestSummaryListener> void simulateTests(
+            T reporter, List<TestConfig> tests) {
         long startTime = getStartTime();
-        for (int i = 0; i < mTests.size(); i++) {
-            reporter.testStarted(mTests.get(i), startTime);
+        for (int i = 0; i < tests.size(); i++) {
+            TestConfig test = tests.get(i);
+            reporter.testStarted(test.description, startTime);
             startTime += 100;
-            switch (mTestOutcomes.get(i)) {
-                case FAIL:
-                    reporter.testFailed(mTests.get(i), "Fail Trace");
-                    break;
-                case ASSUMPTION_FAILURE:
-                    reporter.testAssumptionFailure(mTests.get(i), "Assumption Fail Trace");
-                    break;
-                case IGNORED:
-                    reporter.testIgnored(mTests.get(i));
-                    break;
-                case TEST_SKIPPED:
-                    reporter.testSkipped(
-                            mTests.get(i),
-                            new SkipReason("skip reason message", "skip trigger", "bugId"));
-                    break;
-                default:
-                    break;
+            if (test.failure != null) {
+                reporter.testFailed(test.description, test.failure);
+            } else {
+                switch (test.status) {
+                    case FAIL:
+                        reporter.testFailed(test.description, "Fail Trace");
+                        break;
+                    case ASSUMPTION_FAILURE:
+                        reporter.testAssumptionFailure(test.description, "Assumption Fail Trace");
+                        break;
+                    case IGNORED:
+                        reporter.testIgnored(test.description);
+                        break;
+                    case TEST_SKIPPED:
+                        reporter.testSkipped(
+                                test.description,
+                                new SkipReason("skip reason message", "skip trigger", "bugId"));
+                        break;
+                    default:
+                        break;
+                }
             }
             simulateLogs("test-log-", mTestLogs, reporter);
-            reporter.testEnded(mTests.get(i), startTime, mTestMetricsList.get(i));
-            startTime += 100;
-        }
-        for (Map.Entry<TestDescription, FailureDescription> entry :
-                mFailureDescriptions.entrySet()) {
-            reporter.testStarted(entry.getKey(), startTime);
-            startTime += 100;
-            reporter.testFailed(entry.getKey(), entry.getValue());
-            reporter.testEnded(entry.getKey(), startTime, Collections.emptyMap());
+            reporter.testEnded(test.description, startTime, test.metrics);
             startTime += 100;
         }
     }

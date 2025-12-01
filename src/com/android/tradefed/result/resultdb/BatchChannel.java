@@ -17,6 +17,8 @@ package com.android.tradefed.result.resultdb;
 
 import com.android.tradefed.log.LogUtil.CLog;
 
+import com.google.common.collect.ImmutableList;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +36,8 @@ public class BatchChannel<T> {
     private final BatchUploadAction<T> mBatchUploadAction;
     // Executor
     private final ExecutorService executorService;
+    // Buffer for items polled from queue but not yet uploaded.
+    private final List<T> mBatch;
 
     // Shutdown flag
     private volatile boolean mShutdownRequested = false;
@@ -46,56 +50,71 @@ public class BatchChannel<T> {
         this.mItemQueue = new LinkedBlockingQueue<>();
         this.executorService = Executors.newSingleThreadExecutor();
         this.mMaxBatchSize = maxBatchSize;
+        this.mBatch = new ArrayList<>(maxBatchSize);
         this.mBatchUploadAction = batchUploadAction;
         executorService.execute(() -> processQueue());
     }
 
     private void processQueue() {
         CLog.i("Uploader Service started for %s. Batch Size: %s", mItemName, mMaxBatchSize);
-        List<T> batch = new ArrayList<>(mMaxBatchSize);
         while (!mShutdownRequested || !mItemQueue.isEmpty()) {
-            try {
-                // Wait for 10 seconds for more items.
-                T item = mItemQueue.poll(10000L, TimeUnit.MILLISECONDS);
-                if (item != null) {
-                    batch.add(item);
-                }
-            } catch (InterruptedException e) {
-                // Exit if the thread is interrupted.
-                CLog.e(
-                        "Uploader Service interrupted while polling for %s:%s ",
-                        mItemName, e.getMessage());
-                Thread.currentThread().interrupt();
-                return;
-            }
-            boolean batchIsFull = batch.size() >= mMaxBatchSize;
-            if (batchIsFull) {
+            // Synchronized block to avoid race conditions with forceUpload.
+            // We only allow one thread to upload the items from mItemQueue and mBatch at a time.
+            synchronized (this) {
+                T item = null;
                 try {
-                    // Trigger batch upload if batch is full.
-                    mBatchUploadAction.uploadBatch(new ArrayList<>(batch));
-                    batch.clear();
-                } catch (Exception e) {
-                    // We log the error, we log the error and clear the batch to avoid infinite
-                    // loops on errors. This means that we will lose the batch.
-                    // TODO: ResultDB may reject the test result upload request if some fields are
-                    // invalid
-                    // (eg. test identifier is too long).
-                    // We need some way to surface this error to avoid silently dropping
-                    // test results.
-                    CLog.e("Failed to upload batch %s: %s", mItemName, e.getMessage());
-                    batch.clear();
-                    // continue the loop, upload other batches.
+                    // Wait for 1 second for more items.
+                    item = mItemQueue.poll(1000L, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    // Exit if the thread is interrupted.
+                    CLog.e(
+                            "Uploader Service interrupted while polling for %s:%s ",
+                            mItemName, e.getMessage());
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                ImmutableList<T> batchToUpload = null;
+                if (item != null) {
+                    mBatch.add(item);
+                }
+                if (mBatch.size() >= mMaxBatchSize) {
+                    batchToUpload = ImmutableList.copyOf(mBatch);
+                    mBatch.clear();
+                }
+
+                if (batchToUpload != null) {
+                    try {
+                        mBatchUploadAction.uploadBatch(batchToUpload);
+                    } catch (Exception e) {
+                        // We log the error, we log the error and clear the batch to avoid infinite
+                        // loops on errors. This means that we will lose the batch.
+                        // TODO (b/464393481): ResultDB may reject the test result upload request if
+                        // some fields
+                        // are invalid (eg. test identifier is too long).
+                        // We need some way to surface this error to avoid silently dropping
+                        // test results.
+                        CLog.e("Failed to upload batch %s: %s", mItemName, e.getMessage());
+                        // continue the loop, upload other batches.
+                    }
                 }
             }
         }
 
         // Upload the last batch.
-        if (!batch.isEmpty()) {
-            try {
-                mBatchUploadAction.uploadBatch(new ArrayList<>(batch));
-            } catch (Exception e) {
-                // We log the error, we just log the error. This means that we will lose the batch.
-                CLog.e("Failed to upload batch %s: %s", mItemName, e.getMessage());
+        synchronized (this) {
+            ImmutableList<T> finalBatch = null;
+            if (!mBatch.isEmpty()) {
+                finalBatch = ImmutableList.copyOf(mBatch);
+                mBatch.clear();
+            }
+            if (finalBatch != null) {
+                try {
+                    mBatchUploadAction.uploadBatch(finalBatch);
+                } catch (Exception e) {
+                    // We log the error, we just log the error. This means that we will lose the
+                    // batch.
+                    CLog.e("Failed to upload final batch %s: %s", mItemName, e.getMessage());
+                }
             }
         }
     }
@@ -122,9 +141,37 @@ public class BatchChannel<T> {
         }
     }
 
+    /**
+     * Upload all items currently in the queue. This is a blocking call that waits for all items
+     * enqueued previously to be uploaded. Calling this method in mBatchUploadAction of the same
+     * instance will cause deadlock.
+     */
+    public synchronized void forceUpload() {
+        List<T> currentItems = new ArrayList<>();
+        // Add all items in the queue to the current items list.
+        mItemQueue.drainTo(currentItems);
+        // Add all items in the mBatch to the current items list.
+        currentItems.addAll(mBatch);
+        mBatch.clear();
+
+        CLog.i("Force uploading %d items for %s.", currentItems.size(), mItemName);
+        // Upload in chunks
+        for (int i = 0; i < currentItems.size(); i += mMaxBatchSize) {
+            List<T> chunk =
+                    currentItems.subList(i, Math.min(i + mMaxBatchSize, currentItems.size()));
+            try {
+                mBatchUploadAction.uploadBatch(ImmutableList.copyOf(chunk));
+            } catch (Exception e) {
+                CLog.e(
+                        "Failed to upload chunk during force upload %s: %s",
+                        mItemName, e.getMessage());
+            }
+        }
+    }
+
     /** Action to be performed when a batch of items is ready to be uploaded. */
     @FunctionalInterface
     public interface BatchUploadAction<T> {
-        void uploadBatch(List<T> batch) throws Exception;
+        void uploadBatch(ImmutableList<T> batch) throws Exception;
     }
 }

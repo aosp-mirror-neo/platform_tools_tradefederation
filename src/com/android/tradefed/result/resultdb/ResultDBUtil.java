@@ -193,4 +193,15 @@ public final class ResultDBUtil {
                 .setCaseName(testDescription.getTestName())
                 .build();
     }
+
+    /**
+     * Create work unit resource name from root invocation id and work unit id.
+     *
+     * @param rootInvocationId The root invocation id.
+     * @param workUnitId The work unit id.
+     * @return The work unit resource name.
+     */
+    public static String makeWorkUnitName(String rootInvocationId, String workUnitId) {
+        return String.format("rootInvocations/%s/workUnits/%s", rootInvocationId, workUnitId);
+    }
 }

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.Invocation;
+import com.android.resultdb.proto.ModuleIdentifier;
 import com.android.resultdb.proto.RootInvocation;
 import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.TestIdentifier;
@@ -192,7 +193,7 @@ public class ResultDBReporterTest {
     @Before
     public void setUp() throws ConfigurationException {
         mReporter = new ResultDBReporterTester();
-        mSimulator = InvocationSimulator.create().withModule("example-module");
+        mSimulator = InvocationSimulator.create();
         mConfig = new ConfigurationTester("name", "description");
         mReporter.setConfiguration(mConfig);
         mOption = new OptionSetter(mReporter);
@@ -262,9 +263,51 @@ public class ResultDBReporterTest {
         // Assert legacy invocation created.
         assertThat(mReporter.mInvocationId).isEqualTo("u-random_uuid_string");
         assertThat(mReporter.mInvocation).isNotNull();
+        // Assert root work unit creation.
+        assertThat(mReporter.mRecorder.getWorkUnitItems()).hasSize(2);
+        ModuleIdentifier moduleId =
+                ModuleIdentifier.newBuilder()
+                        .setModuleName("example-module")
+                        .setModuleScheme("junit")
+                        .setModuleVariant(Variant.getDefaultInstance())
+                        .build();
+        String moduleWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(0).getWorkUnitId();
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        assertThat(moduleWorkUnitId).isNotEqualTo(testRunWorkUnitId);
+        assertThat(moduleWorkUnitId).isNotEmpty();
+        assertThat(testRunWorkUnitId).isNotEmpty();
+        assertThat(mReporter.mRecorder.getWorkUnitItems())
+                .containsExactly(
+                        // Module work unit.
+                        new RecorderClient.WorkUnitItem(
+                                "root",
+                                moduleWorkUnitId,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_MODULE")
+                                        .setRealm("android:ants-experiment")
+                                        .setModuleId(moduleId)
+                                        .build()),
+                        // Test run work unit.
+                        new RecorderClient.WorkUnitItem(
+                                moduleWorkUnitId,
+                                testRunWorkUnitId,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_TEST_RUN")
+                                        .setRealm("android:ants-experiment")
+                                        .build()));
         // Assert work unit updates.
         assertThat(mReporter.mRecorder.getWorkUnitUpdates())
                 .containsExactly(
+                        // Test run work unit update
+                        newWorkUnitUpdate(
+                                "u-random_uuid_string",
+                                testRunWorkUnitId,
+                                WorkUnit.State.SUCCEEDED),
+                        // Module work unit update
+                        newWorkUnitUpdate(
+                                "u-random_uuid_string", moduleWorkUnitId, WorkUnit.State.SUCCEEDED),
                         // Root work unit update
                         newWorkUnitUpdate(
                                 "u-random_uuid_string", "root", WorkUnit.State.SUCCEEDED));
@@ -286,47 +329,159 @@ public class ResultDBReporterTest {
     }
 
     @Test
-    public void uploadFunctionalResults() {
-        mSimulator
-                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
-                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
-                .withTest("com.google.ExampleClass", "testExampleMethod")
-                .simulateInvocation(mReporter);
-
-        assertThat(mReporter.mRecorderLegacy.getTestResults())
-                .containsExactly(newTestResult("testExampleMethod").build());
-    }
-
-    @Test
-    public void uploadResultWithVariant() {
+    public void uploadToUpstreamRootInvocation_multipleModulesAndTestRuns() {
         BuildInfo info = new BuildInfo("1", "target_1");
         info.setBuildBranch("test-branch");
         info.setBuildFlavor("test-flavor");
         mSimulator
+                .withBuildInfo(info)
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
-                .withTest("com.google.ExampleClass", "testExampleMethod")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "top_work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
+                .withModule("module-1")
+                .withModuleAttribute(ModuleDefinition.MODULE_ABI, "module-1-abi")
                 .withModuleAttribute("should-ignore", "ignore")
-                .withModuleAttribute(ModuleDefinition.MODULE_ABI, "test-abi")
                 .withModuleAttribute(
                         ModuleDefinition.MODULE_PARAMETERIZATION, "test-parameterization")
-                .withBuildInfo(info)
+                .withTestRun("test-run-11")
+                .withTest("com.google.ExampleClass", "testExampleMethod")
+                .withTestRun("test-run-12")
+                .withModule("module-2")
+                .withModuleAttribute(ModuleDefinition.MODULE_ABI, "module-2-abi")
+                .withTestRun("test-run-21")
+                .withTest("com.google.ExampleClass", "testExampleMethod")
                 .simulateInvocation(mReporter);
 
+        // Assert work units created.
+        assertThat(mReporter.mRecorder.getWorkUnitItems()).hasSize(5);
+        String moduleWorkUnitId1 = mReporter.mRecorder.getWorkUnitItems().get(0).getWorkUnitId();
+        String testRunWorkUnitId11 = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        String testRunWorkUnitId12 = mReporter.mRecorder.getWorkUnitItems().get(2).getWorkUnitId();
+        String moduleWorkUnitId2 = mReporter.mRecorder.getWorkUnitItems().get(3).getWorkUnitId();
+        String testRunWorkUnitId21 = mReporter.mRecorder.getWorkUnitItems().get(4).getWorkUnitId();
+        Variant moduleVariant1 =
+                Variant.newBuilder()
+                        .putDef("module_abi", "module-1-abi")
+                        .putDef("module_param", "test-parameterization")
+                        .build();
+        Variant moduleVariant2 = Variant.newBuilder().putDef("module_abi", "module-2-abi").build();
+        assertThat(mReporter.mRecorder.getWorkUnitItems())
+                .containsExactly(
+                        // Module work unit 1.
+                        new RecorderClient.WorkUnitItem(
+                                "top_work_unit_001",
+                                moduleWorkUnitId1,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_MODULE")
+                                        .setRealm("android:ants-experiment")
+                                        .setModuleId(
+                                                ModuleIdentifier.newBuilder()
+                                                        .setModuleName("module-1")
+                                                        .setModuleScheme("junit")
+                                                        .setModuleVariant(moduleVariant1)
+                                                        .build())
+                                        .build()),
+                        // Test run work unit 11.
+                        new RecorderClient.WorkUnitItem(
+                                moduleWorkUnitId1,
+                                testRunWorkUnitId11,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_TEST_RUN")
+                                        .setRealm("android:ants-experiment")
+                                        .build()),
+                        // Test run work unit 12.
+                        new RecorderClient.WorkUnitItem(
+                                moduleWorkUnitId1,
+                                testRunWorkUnitId12,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_TEST_RUN")
+                                        .setRealm("android:ants-experiment")
+                                        .build()),
+                        // Module work unit 2.
+                        new RecorderClient.WorkUnitItem(
+                                "top_work_unit_001",
+                                moduleWorkUnitId2,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_MODULE")
+                                        .setRealm("android:ants-experiment")
+                                        .setModuleId(
+                                                ModuleIdentifier.newBuilder()
+                                                        .setModuleName("module-2")
+                                                        .setModuleScheme("junit")
+                                                        .setModuleVariant(moduleVariant2)
+                                                        .build())
+                                        .build()),
+                        // Test run work unit 21.
+                        new RecorderClient.WorkUnitItem(
+                                moduleWorkUnitId2,
+                                testRunWorkUnitId21,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_TEST_RUN")
+                                        .setRealm("android:ants-experiment")
+                                        .build()));
+        // Assert work unit updates.
+        assertThat(mReporter.mRecorder.getWorkUnitUpdates())
+                .containsExactly(
+                        newWorkUnitUpdate(
+                                "root_invocation_001",
+                                testRunWorkUnitId11,
+                                WorkUnit.State.SUCCEEDED),
+                        newWorkUnitUpdate(
+                                "root_invocation_001",
+                                testRunWorkUnitId12,
+                                WorkUnit.State.SUCCEEDED),
+                        newWorkUnitUpdate(
+                                "root_invocation_001", moduleWorkUnitId1, WorkUnit.State.SUCCEEDED),
+                        newWorkUnitUpdate(
+                                "root_invocation_001",
+                                testRunWorkUnitId21,
+                                WorkUnit.State.SUCCEEDED),
+                        newWorkUnitUpdate(
+                                "root_invocation_001",
+                                moduleWorkUnitId2,
+                                WorkUnit.State.SUCCEEDED));
+
+        // Assert test results uploaded to mRecorderLegacy.
         Variant variant =
                 Variant.newBuilder()
                         .putDef("branch", "test-branch")
                         .putDef("build_provider", "androidbuild")
-                        .putDef("module_abi", "test-abi")
-                        .putDef("module_param", "test-parameterization")
                         .putDef("name", "test tag")
                         .putDef("scheduler", "ATP")
                         .putDef("target", "test-flavor")
                         .build();
-        TestResult.Builder expected = newTestResult("testExampleMethod");
-        expected.setTestIdStructured(
-                expected.getTestIdStructured().toBuilder().setModuleVariant(variant).build());
-        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected.build());
+        TestResult.Builder expectedTestResult1 = newTestResult("testExampleMethod");
+        expectedTestResult1
+                .setResultId("1234abcd-00001")
+                .setTestIdStructured(
+                        expectedTestResult1.getTestIdStructured().toBuilder()
+                                .setModuleName("module-1")
+                                .setModuleVariant(
+                                        variant.toBuilder()
+                                                .putDef("module_abi", "module-1-abi")
+                                                .putDef("module_param", "test-parameterization")
+                                                .build())
+                                .build());
+        TestResult.Builder expectedTestResult2 = newTestResult("testExampleMethod");
+        expectedTestResult2
+                .setResultId("1234abcd-00002")
+                .setTestIdStructured(
+                        expectedTestResult2.getTestIdStructured().toBuilder()
+                                .setModuleName("module-2")
+                                .setModuleVariant(
+                                        variant.toBuilder()
+                                                .putDef("module_abi", "module-2-abi")
+                                                .build())
+                                .build());
+        assertThat(mReporter.mRecorderLegacy.getTestResults())
+                .containsExactly(expectedTestResult1.build(), expectedTestResult2.build());
     }
 
     @Test
@@ -518,6 +673,7 @@ public class ResultDBReporterTest {
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
                 .withModuleAttribute(ModuleDefinition.MODULE_ABI, "x86")
                 .withModuleAttribute(ModuleDefinition.MODULE_NAME, "module-name")
+                .withTestRun("testRun1")
                 .simulateInvocation(mReporter);
         Variant variant =
                 Variant.newBuilder()

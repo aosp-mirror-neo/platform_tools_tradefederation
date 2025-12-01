@@ -1329,7 +1329,8 @@ public class TestInvocation implements ITestInvocation {
             if (!config.getCommandOptions()
                             .getInvocationData()
                             .containsKey(SubprocessTfLauncher.SUBPROCESS_TAG_NAME)
-                    && !RunMode.DELEGATED_INVOCATION.equals(mode)) {
+                    && !RunMode.DELEGATED_INVOCATION.equals(mode)
+                    && !config.getSkipManager().isDisabled()) {
                 boolean skipInvocation = config.getSkipManager().shouldSkipInvocation(info, config);
                 String skipReason = config.getSkipManager().getInvocationSkipReason();
                 if (!skipInvocation) {

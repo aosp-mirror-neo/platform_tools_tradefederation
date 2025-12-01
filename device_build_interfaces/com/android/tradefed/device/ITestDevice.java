@@ -975,6 +975,17 @@ public interface ITestDevice extends INativeDevice {
             throws DeviceNotAvailableException;
 
     /**
+     * Gets the user id of the visible user on the given display.
+     *
+     * @param displayId the id of the display.
+     * @return the user id of the visible user on the given display. It does not differentiate a
+     *     visible background user from the current foreground user as both types are visible. To
+     *     differentiate, further compare with the result of getCurrentUser().
+     * @throws DeviceNotAvailableException
+     */
+    public int getUserVisibleOnDisplay(int displayId) throws DeviceNotAvailableException;
+
+    /**
      * Find and return the flags of a given user.
      * Flags are defined in "android.content.pm.UserInfo" class in Android Open Source Project.
      *

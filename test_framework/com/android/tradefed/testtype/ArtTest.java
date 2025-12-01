@@ -91,7 +91,7 @@ import java.util.zip.ZipFile;
  *    }
  *  }
  */
-public class ArtTest implements IShardableTest, ITestFilterReceiver {
+public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceiver {
     private static final int ADB_TIMEOUT = 900;
     private static final int ADB_RETRIES = 3;
 
@@ -101,8 +101,19 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
     protected int mShardIndex = 0;
     protected int mShardCount = 1;
 
+    private IAbi mAbi;
     private Set<String> mIncludeFilters = new TreeSet<>();
     private Set<String> mExcludeFilters = new TreeSet<>();
+
+    @Override
+    public void setAbi(IAbi abi) {
+        mAbi = abi;
+    }
+
+    @Override
+    public IAbi getAbi() {
+        return mAbi;
+    }
 
     @Override
     public void addIncludeFilter(String filter) {
@@ -230,18 +241,35 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
 
     TreeMap<String, Test> loadTests() throws IOException, JSONException {
         TreeMap<String, Test> allTests = new TreeMap<String, Test>();
+        TreeMap<String, Test> filteredTests = new TreeMap<String, Test>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
             JSONObject jsonData = new JSONObject(FileUtil.readStringFromFile(jsonFile));
             for (Iterator<?> it = jsonData.keys(); it.hasNext(); ) {
                 String name = (String) it.next();
+                JSONObject jsonTest = jsonData.getJSONObject(name);
+                JSONArray jsonTags = jsonTest.optJSONArray("tags");
+                TreeSet<String> tags = new TreeSet<>();
+                if (jsonTags != null) {
+                    for (int i = 0; i < jsonTags.length(); i++) {
+                        tags.add(jsonTags.getString(i));
+                    }
+                }
                 Test test =
                         new Test() {
                             {
                                 mName = name;
-                                mJson = jsonData.getJSONObject(name);
+                                mTags = tags;
+                                mJson = jsonTest;
                             }
                         };
                 allTests.put(name, test);
+                if (!shouldIncludeTest(name)) {
+                    continue;
+                }
+                if (mAbi != null && !test.mTags.contains(mAbi.getName())) {
+                    continue;
+                }
+                filteredTests.put(name, test);
             }
         }
 
@@ -249,13 +277,10 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
         Queue<String> dependencyQueue = new ArrayDeque<>();
 
         // Select tests for this shard based on index modulo shardCount
-        ArrayList<String> sortedTestNames = new ArrayList<>(allTests.keySet());
+        ArrayList<String> sortedTestNames = new ArrayList<>(filteredTests.keySet());
         for (int i = 0; i < sortedTestNames.size(); i++) {
             if (i % mShardCount == mShardIndex) {
                 String testName = sortedTestNames.get(i);
-                if (!shouldIncludeTest(testName)) {
-                    continue;
-                }
                 shardedTests.put(testName, allTests.get(testName));
                 dependencyQueue.add(testName);
             }
@@ -342,6 +367,7 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
         }
 
         String mName;
+        Set<String> mTags = new TreeSet<>();
         JSONObject mJson;
         Optional<Boolean> mResult = Optional.empty();
     }
@@ -433,6 +459,9 @@ public class ArtTest implements IShardableTest, ITestFilterReceiver {
             }
             shard.mShardIndex = i;
             shard.mShardCount = shardCount;
+            shard.mAbi = this.mAbi;
+            shard.mIncludeFilters = new TreeSet<>(this.mIncludeFilters);
+            shard.mExcludeFilters = new TreeSet<>(this.mExcludeFilters);
             shards.add(shard);
         }
         return shards;
