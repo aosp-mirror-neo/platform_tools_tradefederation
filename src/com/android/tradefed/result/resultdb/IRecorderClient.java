@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.WorkUnit;
 
@@ -58,6 +59,22 @@ public interface IRecorderClient {
      * @param result The test result to upload in the CreateTestResultRequest.
      */
     public void enqueueTestResult(String workUnitId, TestResult result);
+
+    /**
+     * Enqueue an artifact to report to ResultDB.
+     *
+     * @param workUnitId The work unit ID of the artifact.
+     * @param artifact The artifact to upload in the CreateArtifactRequest.
+     */
+    public void enqueueArtifact(String workUnitId, Artifact artifact);
+
+    /**
+     * Upload an artifact to ResultDB.
+     *
+     * @param workUnitId The work unit ID of the artifact.
+     * @param artifact The artifact to upload in the CreateArtifactRequest.
+     */
+    public void uploadArtifact(String workUnitId, Artifact artifact);
 
     /**
      * Finalize the upload of test results, artifacts and work units. This method should be called

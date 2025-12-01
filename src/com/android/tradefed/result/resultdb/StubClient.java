@@ -34,6 +34,7 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
     private List<RecorderClient.WorkUnitItem> mWorkUnitItems = new ArrayList<>();
     private List<WorkUnit> mWorkUnitUpdates = new ArrayList<>();
     private List<RecorderClient.TestResultItem> mTestResultItems = new ArrayList<>();
+    private List<RecorderClient.ArtifactItem> mArtifactItems = new ArrayList<>();
 
     public static StubClient create() {
         return new StubClient();
@@ -97,12 +98,26 @@ class StubClient implements IRecorderClient, IRecorderClientLegacy {
         mTestResultItems.add(new RecorderClient.TestResultItem(workUnitId, result));
     }
 
+    @Override
+    public void enqueueArtifact(String workUnitId, Artifact artifact) {
+        mArtifactItems.add(new RecorderClient.ArtifactItem(workUnitId, artifact));
+    }
+
+    @Override
+    public void uploadArtifact(String workUnitId, Artifact artifact) {
+        mArtifactItems.add(new RecorderClient.ArtifactItem(workUnitId, artifact));
+    }
+
     public ImmutableList<WorkUnit> getWorkUnitUpdates() {
         return ImmutableList.copyOf(mWorkUnitUpdates);
     }
 
     public ImmutableList<RecorderClient.TestResultItem> getTestResultItems() {
         return ImmutableList.copyOf(mTestResultItems);
+    }
+
+    public ImmutableList<RecorderClient.ArtifactItem> getArtifactItems() {
+        return ImmutableList.copyOf(mArtifactItems);
     }
 
     public ImmutableList<RecorderClient.WorkUnitItem> getWorkUnitItems() {

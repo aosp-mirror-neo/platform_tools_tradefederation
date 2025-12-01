@@ -155,7 +155,9 @@ class TestResultHandler {
     public void testFailed(
             TestDescription test,
             FailureDescription failure,
-            IRecorderClientLegacy recorderLegacy) {
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
@@ -210,13 +212,20 @@ class TestResultHandler {
             if (recorderLegacy != null) {
                 recorderLegacy.enqueueArtifact(atf);
             }
+            if (recorder != null) {
+                recorder.enqueueArtifact(workUnitId, atf);
+            }
         }
         // TODO: extract local instruction from test description and set in ResultDB test result.
 
     }
 
     public void testSkipped(
-            TestDescription test, SkipReason reason, IRecorderClientLegacy recorderLegacy) {
+            TestDescription test,
+            SkipReason reason,
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
             return;
@@ -242,13 +251,18 @@ class TestResultHandler {
             if (recorderLegacy != null) {
                 recorderLegacy.enqueueArtifact(atf);
             }
+            if (recorder != null) {
+                recorder.enqueueArtifact(workUnitId, atf);
+            }
         }
     }
 
     public void testAssumptionFailure(
             TestDescription test,
             FailureDescription failure,
-            IRecorderClientLegacy recorderLegacy) {
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
             return;
@@ -281,6 +295,9 @@ class TestResultHandler {
                     artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage());
             if (recorderLegacy != null) {
                 recorderLegacy.enqueueArtifact(atf);
+            }
+            if (recorder != null) {
+                recorder.enqueueArtifact(workUnitId, atf);
             }
         }
     }

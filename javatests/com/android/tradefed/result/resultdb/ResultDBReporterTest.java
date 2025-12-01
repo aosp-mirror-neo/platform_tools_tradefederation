@@ -65,11 +65,9 @@ public class ResultDBReporterTest {
         public StubClient mRecorderLegacy = StubClient.create();
         public StubClient mRecorder = StubClient.create();
         public String mInvocationId;
-        public String mUpdateToken;
         public Invocation mInvocation;
         public String mRootInvocationId;
         public RootInvocation mRootInvocation;
-        public WorkUnit mRootWorkUnit;
 
         public ResultDBReporterTester() {
             super();
@@ -84,7 +82,6 @@ public class ResultDBReporterTest {
         IRecorderClientLegacy createRecorderClientLegacy(
                 String invocationId, String updateToken, Boolean isStaging) {
             mInvocationId = invocationId;
-            mUpdateToken = updateToken;
             return mRecorderLegacy;
         }
 
@@ -100,7 +97,6 @@ public class ResultDBReporterTest {
         IRecorderClient createRecorderClient(
                 String rootInvocationId, String updateToken, Boolean isStaging) {
             mRootInvocationId = rootInvocationId;
-            mUpdateToken = updateToken;
             return mRecorder;
         }
 
@@ -112,7 +108,6 @@ public class ResultDBReporterTest {
                 Boolean isStaging) {
             mRootInvocationId = rootInvocationId;
             mRootInvocation = rootInvocation;
-            mRootWorkUnit = rootWorkUnit;
             return mRecorder;
         }
 
@@ -614,6 +609,10 @@ public class ResultDBReporterTest {
                         .setResultId(expectedTestResult.getResultId())
                         .setContents(ByteString.copyFromUtf8(failureMessage))
                         .build();
+        // Assert the full artifact is uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getArtifactItems())
+                .containsExactly(
+                        new RecorderClient.ArtifactItem(testRunWorkUnitId, expectedArtifact));
         // Assert the full artifact is uploaded to mRecorderLegacy.
         assertThat(mReporter.mRecorderLegacy.getArtifacts()).containsExactly(expectedArtifact);
         // No need to verify work unit and work unit updates as they are already verified in the
@@ -748,6 +747,8 @@ public class ResultDBReporterTest {
         LogFile testLog = new LogFile("/tmp/test.log", getLogUrl("test.log"), LogDataType.TEXT);
         LogFile testRunLog =
                 new LogFile("/tmp/test-run.log", getLogUrl("test-run.log"), LogDataType.TEXT);
+        LogFile moduleLog =
+                new LogFile("/tmp/module.log", getLogUrl("module.log"), LogDataType.TEXT);
         LogFile invocationLog =
                 new LogFile("/tmp/invocation.log", getLogUrl("invocation.log"), LogDataType.PNG);
         LogFile newLog =
@@ -756,9 +757,13 @@ public class ResultDBReporterTest {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withTest("com.google.ExampleClass", "testExampleMethod")
                 .withTestLog(testLog)
                 .withTestRunLog(testRunLog)
+                .withModuleLog(moduleLog)
                 .withInvocationLog(invocationLog)
                 .simulateInvocation(mReporter);
         // simulate the updateStoragePath called from AnTS Result reporter.
@@ -769,6 +774,8 @@ public class ResultDBReporterTest {
                 "/bigstore/test/test-run.log",
                 testRunLog);
         mReporter.uploadStoragePath(
+                "18274/stub/inv_9000/module.log_9000.dat", "/bigstore/test/module.log", moduleLog);
+        mReporter.uploadStoragePath(
                 "18274/stub/inv_9000/invocation.log_9000.dat",
                 "/bigstore/test/invocation.log",
                 invocationLog);
@@ -778,43 +785,66 @@ public class ResultDBReporterTest {
         // uploadStoragePath called with invalid storage path.
         mReporter.uploadStoragePath(
                 "18274/stub/inv_9000/invalid.log_9000.dat", "/bigstore/", invalidLog);
-        // Verify the artifacts are uploaded to ResultDB.
-        assertThat(mReporter.mRecorderLegacy.getArtifacts())
+
+        String moduleWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(0).getWorkUnitId();
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        Artifact expected1 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/test.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setTestIdStructured(
+                                TestIdentifier.newBuilder()
+                                        .setModuleName("example-module")
+                                        .setModuleScheme("junit")
+                                        .setCoarseName("com.google")
+                                        .setFineName("ExampleClass")
+                                        .setCaseName("testExampleMethod")
+                                        .build())
+                        .setResultId("1234abcd-00001")
+                        .setGcsUri("gs://test/test.log")
+                        .setArtifactType("TEXT")
+                        .build();
+        Artifact expected2 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setGcsUri("gs://test/test-run.log")
+                        .setArtifactType("TEXT")
+                        .build();
+        Artifact expected3 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/module.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setGcsUri("gs://test/module.log")
+                        .setArtifactType("TEXT")
+                        .build();
+        Artifact expected4 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
+                        .setContentType("image/png")
+                        .setGcsUri("gs://test/invocation.log")
+                        .setArtifactType("PNG")
+                        .build();
+        Artifact expected5 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/new.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setGcsUri("gs://test/new.log")
+                        .setArtifactType("TEXT")
+                        .setSizeBytes(101)
+                        .build();
+
+        // Assert the artifacts are uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getArtifactItems())
                 .containsExactly(
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/test.log_9000.dat")
-                                .setContentType("text/plain")
-                                .setTestIdStructured(
-                                        TestIdentifier.newBuilder()
-                                                .setModuleName("example-module")
-                                                .setModuleScheme("junit")
-                                                .setCoarseName("com.google")
-                                                .setFineName("ExampleClass")
-                                                .setCaseName("testExampleMethod")
-                                                .build())
-                                .setResultId("1234abcd-00001")
-                                .setGcsUri("gs://test/test.log")
-                                .setArtifactType("TEXT")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
-                                .setContentType("text/plain")
-                                .setGcsUri("gs://test/test-run.log")
-                                .setArtifactType("TEXT")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
-                                .setContentType("image/png")
-                                .setGcsUri("gs://test/invocation.log")
-                                .setArtifactType("PNG")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/new.log_9000.dat")
-                                .setContentType("text/plain")
-                                .setGcsUri("gs://test/new.log")
-                                .setArtifactType("TEXT")
-                                .setSizeBytes(101)
-                                .build());
+                        new RecorderClient.ArtifactItem(testRunWorkUnitId, expected1),
+                        new RecorderClient.ArtifactItem(testRunWorkUnitId, expected2),
+                        new RecorderClient.ArtifactItem(moduleWorkUnitId, expected3),
+                        new RecorderClient.ArtifactItem("work_unit_001", expected4),
+                        new RecorderClient.ArtifactItem("work_unit_001", expected5));
+        // Assert the artifacts are uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getArtifacts())
+                .containsExactly(expected1, expected2, expected3, expected4, expected5);
     }
 
     private String getLogUrl(String log) {

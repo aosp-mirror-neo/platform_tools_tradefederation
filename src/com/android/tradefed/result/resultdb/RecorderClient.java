@@ -15,9 +15,12 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
+import com.android.resultdb.proto.BatchCreateArtifactsRequest;
 import com.android.resultdb.proto.BatchCreateTestResultsRequest;
 import com.android.resultdb.proto.BatchCreateWorkUnitsRequest;
 import com.android.resultdb.proto.BatchUpdateWorkUnitsRequest;
+import com.android.resultdb.proto.CreateArtifactRequest;
 import com.android.resultdb.proto.CreateRootInvocationRequest;
 import com.android.resultdb.proto.CreateRootInvocationResponse;
 import com.android.resultdb.proto.CreateTestResultRequest;
@@ -64,6 +67,8 @@ public class RecorderClient implements IRecorderClient {
     private final BatchChannel<WorkUnitUpdateItem> mWorkUnitUpdateChannel;
     private final BatchChannel<TestResultItem> mTestResultChannel;
 
+    private final BatchChannel<ArtifactItem> mArtifactChannel;
+
     private RecorderClient(Boolean isStaging) {
         try {
             mCredentials = GoogleCredentials.getApplicationDefault().createScoped(AUTH_EMAIL_SCOPE);
@@ -93,6 +98,10 @@ public class RecorderClient implements IRecorderClient {
         mTestResultChannel =
                 new BatchChannel<TestResultItem>(
                         MAX_BATCH_SIZE, "test results", this::batchUploadTestResults);
+
+        mArtifactChannel =
+                new BatchChannel<ArtifactItem>(
+                        MAX_BATCH_SIZE, "artifacts", this::batchUploadArtifacts);
     }
 
     public static IRecorderClient create(
@@ -172,12 +181,31 @@ public class RecorderClient implements IRecorderClient {
     }
 
     @Override
+    public void enqueueArtifact(String workUnitId, Artifact artifact) {
+        try {
+            mArtifactChannel.enqueue(new ArtifactItem(workUnitId, artifact));
+        } catch (InterruptedException e) {
+            CLog.e("Failed to enqueue artifact: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uploadArtifact(String workUnitId, Artifact artifact) {
+        try {
+            batchUploadArtifacts(ImmutableList.of(new ArtifactItem(workUnitId, artifact)));
+        } catch (StatusRuntimeException e) {
+            CLog.e("Failed to upload artifact: " + e.getMessage());
+        }
+    }
+
+    @Override
     public void finalizeUpload() {
         try {
             // Order is important. Work units need to be uploaded before test results and artifacts.
             // Work unit updates need to be uploaded the last.
             mWorkUnitChannel.finalizeUpload();
             mTestResultChannel.finalizeUpload();
+            mArtifactChannel.finalizeUpload();
             mWorkUnitUpdateChannel.finalizeUpload();
         } catch (InterruptedException e) {
             CLog.e("Failed to finalize result or artifact upload: " + e.getMessage());
@@ -218,6 +246,7 @@ public class RecorderClient implements IRecorderClient {
         // Force upload all pending work units, test results and artifacts.
         mWorkUnitChannel.forceUpload();
         mTestResultChannel.forceUpload();
+        mArtifactChannel.forceUpload();
         mStub.batchUpdateWorkUnits(request.build());
         CLog.i(
                 "Updated %d work units in invocation %s",
@@ -246,6 +275,28 @@ public class RecorderClient implements IRecorderClient {
         mWorkUnitChannel.forceUpload();
         mStub.batchCreateTestResults(requestBuilder.build());
         CLog.i("Uploaded %d results to root invocation %s", allResults.size(), mRootInvocationId);
+    }
+
+    private void batchUploadArtifacts(List<ArtifactItem> allArtifacts)
+            throws StatusRuntimeException {
+        BatchCreateArtifactsRequest.Builder requestBuilder =
+                BatchCreateArtifactsRequest.newBuilder().setRequestId(UUID.randomUUID().toString());
+        for (ArtifactItem item : allArtifacts) {
+            CreateArtifactRequest createArtifactRequest =
+                    CreateArtifactRequest.newBuilder()
+                            .setArtifact(item.getArtifact())
+                            .setParent(
+                                    ResultDBUtil.makeWorkUnitName(
+                                            mRootInvocationId, item.getWorkUnitId()))
+                            .build();
+            requestBuilder.addRequests(createArtifactRequest);
+        }
+        // Work units need to be created before test artifacts.
+        mWorkUnitChannel.forceUpload();
+        mStub.batchCreateArtifacts(requestBuilder.build());
+        CLog.i(
+                "Uploaded %d artifacts to root invocation %s",
+                allArtifacts.size(), mRootInvocationId);
     }
 
     static class WorkUnitItem {
@@ -355,6 +406,48 @@ public class RecorderClient implements IRecorderClient {
                     + '\''
                     + ", mTestResult="
                     + mTestResult
+                    + '}';
+        }
+    }
+
+    static class ArtifactItem {
+        private final String mWorkUnitId;
+        private final Artifact mArtifact;
+
+        public ArtifactItem(String workUnitId, Artifact artifact) {
+            mWorkUnitId = workUnitId;
+            mArtifact = artifact;
+        }
+
+        public String getWorkUnitId() {
+            return mWorkUnitId;
+        }
+
+        public Artifact getArtifact() {
+            return mArtifact;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ArtifactItem that = (ArtifactItem) o;
+            return mWorkUnitId.equals(that.mWorkUnitId) && mArtifact.equals(that.mArtifact);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mWorkUnitId, mArtifact);
+        }
+
+        @Override
+        public String toString() {
+            return "ArtifactItem{"
+                    + "mWorkUnitId='"
+                    + mWorkUnitId
+                    + '\''
+                    + ", mArtifact="
+                    + mArtifact
                     + '}';
         }
     }

@@ -111,7 +111,10 @@ public class ResultDBReporter
             return;
         }
         mTestArtifactHandler.logAssociation(
-                dataName, logFile, mTestResultHandler.getCurrentTestResult());
+                dataName,
+                logFile,
+                mWorkUnitHandler.getCurrentWorkUnitId(),
+                mTestResultHandler.getCurrentTestResult());
     }
 
     /**
@@ -133,7 +136,8 @@ public class ResultDBReporter
      * system, as they are not finalized by this reporter. This does not apply to locally created
      * invocations, which are finalized in {@link #invocationEnded(long)}.
      *
-     * <p>TODO(beining): Remove this method once we can properly migrate AnTS artifacts to ResultDB.
+     * <p>TODO(b/464941055): Remove this method once we can properly migrate AnTS artifacts to
+     * ResultDB.
      *
      * @param resourceId The resource ID of the artifact.
      * @param storagePath The storage path of the artifact (e.g., a /bigstore/ path).
@@ -143,7 +147,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestArtifactHandler.uploadStoragePath(resourceId, storagePath, logFile, mRecorderLegacy);
+        mTestArtifactHandler.uploadStoragePath(
+                resourceId, storagePath, logFile, mTopWorkUnitId, mRecorderLegacy, mRecorder);
     }
 
     @Override
@@ -541,7 +546,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testAssumptionFailure(test, failure, mRecorderLegacy);
+        mTestResultHandler.testAssumptionFailure(
+                test, failure, mWorkUnitHandler.getCurrentWorkUnitId(), mRecorderLegacy, mRecorder);
     }
 
     @Override
@@ -549,7 +555,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testSkipped(test, reason, mRecorderLegacy);
+        mTestResultHandler.testSkipped(
+                test, reason, mWorkUnitHandler.getCurrentWorkUnitId(), mRecorderLegacy, mRecorder);
     }
 
     @Override
@@ -557,7 +564,12 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testFailed(test, FailureDescription.create(trace), mRecorderLegacy);
+        mTestResultHandler.testFailed(
+                test,
+                FailureDescription.create(trace),
+                mWorkUnitHandler.getCurrentWorkUnitId(),
+                mRecorderLegacy,
+                mRecorder);
     }
 
     @Override
@@ -565,7 +577,8 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testFailed(test, failure, mRecorderLegacy);
+        mTestResultHandler.testFailed(
+                test, failure, mWorkUnitHandler.getCurrentWorkUnitId(), mRecorderLegacy, mRecorder);
     }
 
     @Override
