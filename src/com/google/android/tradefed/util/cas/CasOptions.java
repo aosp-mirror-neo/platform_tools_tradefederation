@@ -54,7 +54,7 @@ public class CasOptions {
             name = "download-timeout",
             description = "Timeout for each CAS download. 0 means no timeout.",
             isTimeVal = true)
-    private long mDownloadTimeoutMs = TimeUnit.MINUTES.toMillis(60);
+    private long mDownloadTimeoutMs = TimeUnit.MINUTES.toMillis(20);
 
     @Option(
             name = "cas-cache-dir",
