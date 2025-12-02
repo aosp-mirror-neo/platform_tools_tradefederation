@@ -17,6 +17,7 @@
 package com.android.tradefed.testtype;
 
 import com.android.tradefed.config.ConfigurationException;
+import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
@@ -108,6 +109,9 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     private Set<String> mIncludeFilters = new TreeSet<>();
     private Set<String> mExcludeFilters = new TreeSet<>();
 
+    @Option(name = "jobs", description = "The number of tests to run in parallel on device")
+    private int mJobs = 4;
+
     @Override
     public void setAbi(IAbi abi) {
         mAbi = abi;
@@ -191,7 +195,8 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
             long startTime = System.currentTimeMillis();
             try {
                 clean();
-                executor = Executors.newFixedThreadPool(4);
+                CLog.i("Running %s tests in parallel", mJobs);
+                executor = Executors.newFixedThreadPool(mJobs);
                 final ExecutorService executorRef = executor;
                 listener.testRunStarted("ArtTest", mTests.size());
 
