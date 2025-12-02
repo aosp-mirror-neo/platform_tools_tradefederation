@@ -26,6 +26,7 @@ import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.error.ErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
+import com.android.tradefed.util.StringUtil;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -324,7 +325,7 @@ public class GTestResultParser extends MultiLineReceiver {
         }
 
         for (String line : lines) {
-            parse(line);
+            parse(StringUtil.removeAnsiCodes(line));
             // in verbose mode, dump all adb output to log
             CLog.v(line);
         }

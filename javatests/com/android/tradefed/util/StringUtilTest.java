@@ -38,4 +38,9 @@ public class StringUtilTest {
         assertEquals("foo-bar-", StringUtil.expand("${FOO}-${BAR}-${ZZZ}", valueMap));
         assertEquals("${FOO-bar-$ZZZ}", StringUtil.expand("${FOO-${BAR}-$ZZZ}", valueMap));
     }
+
+    @Test
+    public void testRemoveAnsiCodes() {
+        assertEquals("foo-bar", StringUtil.removeAnsiCodes("\u001B[32mfoo-bar\u001B[32m"));
+    }
 }

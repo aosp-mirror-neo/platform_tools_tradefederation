@@ -368,6 +368,10 @@ public class GTest extends GTestBase implements IDeviceTest {
                                 TimeUnit.MILLISECONDS,
                                 0);
                 byte[] outputBytes = result.getStdout().getBytes();
+                // Fall back to stderr if there is no output in stdout.
+                if (outputBytes.length == 0) {
+                    outputBytes = result.getStderr().getBytes();
+                }
                 resultParser.addOutput(outputBytes, 0, outputBytes.length);
             } else {
                 // wrap adb shell command in script if command is too long for direct execution
