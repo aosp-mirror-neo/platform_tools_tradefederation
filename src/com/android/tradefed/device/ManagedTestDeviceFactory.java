@@ -24,6 +24,7 @@ import com.android.tradefed.device.cloud.NestedDeviceStateMonitor;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.cloud.RemoteAndroidVirtualDevice;
 import com.android.tradefed.device.cloud.VmRemoteDevice;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.SystemUtil;
@@ -49,11 +50,6 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
     protected boolean mFastbootEnabled;
     protected IDeviceManager mDeviceManager;
     protected IDeviceMonitor mAllocationMonitor;
-    protected static final String CHECK_PM_CMD = "ls %s";
-    protected static final String EXPECTED_RES = "/system/bin/pm";
-    protected static final String EXPECTED_ERROR = "No such file or directory";
-    protected static final long FRAMEWORK_CHECK_SLEEP_MS = 500;
-    protected static final int FRAMEWORK_CHECK_MAX_RETRY = 3;
 
     public ManagedTestDeviceFactory(boolean fastbootEnabled, IDeviceManager deviceManager,
             IDeviceMonitor allocationMonitor) {
@@ -62,48 +58,102 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
         mAllocationMonitor = allocationMonitor;
     }
 
+    /** Creates a NativeDeviceStateMonitor. */
+    private IDeviceStateMonitor createNativeDeviceStateMonitor(IDevice idevice) {
+        return new NativeDeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled);
+    }
+
+    /** Checks if the device is an SDV device based on system properties. */
+    private boolean isSdvDevice(IDevice idevice) {
+        // Cannot check properties on a FastbootDevice or StubDevice
+        if (idevice instanceof FastbootDevice || idevice instanceof StubDevice) {
+            return false;
+        }
+        try {
+            // Primary check: ro.boot.hardware
+            String hardware = idevice.getProperty("ro.boot.hardware");
+            CLog.d("get property of  ro.boot.hardware is %s", hardware);
+            if ("SDV".equalsIgnoreCase(hardware)) {
+                CLog.d("Device %s has ro.boot.hardware=SDV", idevice.getSerialNumber());
+                return true;
+            }
+
+            // Fallback check: ro.build.product
+            String product = idevice.getProperty("ro.build.product");
+            CLog.d("get property of ro.build.product is %s", product);
+
+            if (product != null && product.startsWith("sdv_")) {
+                CLog.d(
+                        "Device %s has ro.build.product starting with sdv_ (%s)",
+                        idevice.getSerialNumber(), product);
+                return true;
+            }
+        } catch (Exception e) {
+            CLog.w(
+                    "Error checking SDV properties on %s: %s. Assuming non-SDV for monitor"
+                            + " selection.",
+                    idevice.getSerialNumber(), e.getMessage());
+        }
+        return false;
+    }
+
     @Override
     public IManagedTestDevice createRequestedDevice(IDevice idevice, IDeviceSelection options) {
-        IManagedTestDevice testDevice = null;
+        IManagedTestDevice testDevice;
         if (BaseDeviceType.NATIVE_DEVICE.equals(options.getBaseDeviceTypeRequested())) {
             testDevice =
                     new NativeDevice(
-                            idevice,
-                            new NativeDeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled),
-                            mAllocationMonitor);
-            testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
+                            idevice, createNativeDeviceStateMonitor(idevice), mAllocationMonitor);
         } else {
             // Default to-go device is Android full stack device.
-            testDevice =
-                    new TestDevice(
-                            idevice,
-                            new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled),
-                            mAllocationMonitor);
-            testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
+            IDeviceStateMonitor monitor = null;
+            // Special SDV check only for RemoteAndroidDevice and its subclasses if not native
+            if (idevice instanceof RemoteAndroidDevice
+                    && isSdvDevice(idevice)) { // Includes RemoteAvdIDevice
+                CLog.i(
+                        "Requested %s %s identified as SDV by properties: Using"
+                                + " NativeDeviceStateMonitor",
+                        idevice.getClass().getSimpleName(), idevice.getSerialNumber());
+                monitor = createNativeDeviceStateMonitor(idevice);
+            }
+
+            if (monitor == null) {
+                CLog.i(
+                        "Requested %s %s is Using" + " DeviceStateMonitor",
+                        idevice.getClass().getSimpleName(), idevice.getSerialNumber());
+                monitor = new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled);
+            }
+            testDevice = new TestDevice(idevice, monitor, mAllocationMonitor);
         }
+        testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
         return testDevice;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public IManagedTestDevice createDevice(IDevice idevice) {
-        IManagedTestDevice testDevice = null;
+        IManagedTestDevice testDevice;
         if (idevice instanceof VmRemoteDevice) {
             testDevice =
                     new ManagedRemoteDevice(
                             idevice,
                             new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled),
                             mAllocationMonitor);
-            testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
         } else if (idevice instanceof RemoteAvdIDevice) {
-            testDevice =
-                    new RemoteAndroidVirtualDevice(
-                            idevice,
-                            new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled),
-                            mAllocationMonitor);
-            testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
+            IDeviceStateMonitor monitor;
+            if (isSdvDevice(idevice)) {
+                CLog.i(
+                        "RemoteAvdIDevice %s identified as SDV by properties: Using"
+                                + " NativeDeviceStateMonitor",
+                        idevice.getSerialNumber());
+                monitor = createNativeDeviceStateMonitor(idevice);
+            } else {
+                CLog.d(
+                        "RemoteAvdIDevice %s: Using default DeviceStateMonitor",
+                        idevice.getSerialNumber());
+                monitor = new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled);
+            }
+            testDevice = new RemoteAndroidVirtualDevice(idevice, monitor, mAllocationMonitor);
         } else if (idevice instanceof StubLocalAndroidVirtualDevice) {
             // Virtual device to be launched by TradeFed locally.
             testDevice =
@@ -126,18 +176,22 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
                     testDevice =
                             new NativeDevice(
                                     idevice,
-                                    new NativeDeviceStateMonitor(
-                                            mDeviceManager, idevice, mFastbootEnabled),
+                                    createNativeDeviceStateMonitor(idevice),
                                     mAllocationMonitor);
                 } else {
                     // Handle device connected via 'adb connect'
-                    testDevice =
-                            new RemoteAndroidDevice(
-                                    idevice,
-                                    new DeviceStateMonitor(
-                                            mDeviceManager, idevice, mFastbootEnabled),
-                                    mAllocationMonitor);
-                    testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
+                    // Check if it's an SDV device
+                    IDeviceStateMonitor monitor;
+                    if (isSdvDevice(idevice)) {
+                        CLog.i(
+                                "TCP Device %s identified as SDV by properties: Using"
+                                        + " NativeDeviceStateMonitor",
+                                idevice.getSerialNumber());
+                        monitor = createNativeDeviceStateMonitor(idevice);
+                    } else {
+                        monitor = new DeviceStateMonitor(mDeviceManager, idevice, mFastbootEnabled);
+                    }
+                    testDevice = new RemoteAndroidDevice(idevice, monitor, mAllocationMonitor);
                 }
             }
         } else {
@@ -146,8 +200,7 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
                 testDevice =
                         new NativeDevice(
                                 idevice,
-                                new NativeDeviceStateMonitor(
-                                        mDeviceManager, idevice, mFastbootEnabled),
+                                createNativeDeviceStateMonitor(idevice),
                                 mAllocationMonitor);
             } else {
                 // Default to-go device is Android full stack device.
@@ -159,6 +212,7 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
             }
         }
 
+        // Set initial state
         if (idevice instanceof FastbootDevice) {
             if (((FastbootDevice) idevice).isFastbootD()) {
                 testDevice.setDeviceState(TestDeviceState.FASTBOOTD);
@@ -167,7 +221,10 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
             }
         } else if (idevice instanceof StubDevice) {
             testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
+        } else if (testDevice.getDeviceState() == null) {
+            testDevice.setDeviceState(TestDeviceState.NOT_AVAILABLE);
         }
+
         testDevice.setFastbootEnabled(mFastbootEnabled);
         testDevice.setFastbootPath(mDeviceManager.getFastbootPath());
         testDevice.setAdbPath(mDeviceManager.getAdbPath());
@@ -205,8 +262,9 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
 
     private Set<String> getNativeDeviceSerials() {
         Set<String> nativeSerials = new HashSet<>();
-        if (System.getenv(NOTIFY_AS_NATIVE) != null) {
-            nativeSerials.addAll(Arrays.asList(System.getenv(NOTIFY_AS_NATIVE).split(",")));
+        String nativeEnv = System.getenv(NOTIFY_AS_NATIVE);
+        if (nativeEnv != null) {
+            nativeSerials.addAll(Arrays.asList(nativeEnv.split(",")));
         }
         return nativeSerials;
     }
@@ -219,9 +277,6 @@ public class ManagedTestDeviceFactory implements IManagedTestDeviceFactory {
         final String remotePattern = IPADDRESS_PATTERN + "(:)([0-9]{2,5})(\\b)";
         Pattern pattern = Pattern.compile(remotePattern);
         Matcher match = pattern.matcher(serial.trim());
-        if (match.find()) {
-            return true;
-        }
-        return false;
+        return match.find();
     }
 }
