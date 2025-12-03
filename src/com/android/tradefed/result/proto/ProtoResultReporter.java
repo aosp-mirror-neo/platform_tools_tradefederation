@@ -75,6 +75,9 @@ public abstract class ProtoResultReporter
     /** Whether or not a testModuleStart had currently been called. */
     private boolean mModuleInProgress = false;
 
+    /** Whether or not a testRunStart had currently been called. */
+    private boolean mTestRunInProgress = false;
+
     /** Whether or not a testStart had currently been called. */
     private boolean mTestInProgress = false;
 
@@ -227,6 +230,10 @@ public abstract class ProtoResultReporter
 
     @Override
     public final void invocationEnded(long elapsedTime) {
+        // if we had a test run in progress, complete the call
+        if (mTestRunInProgress) {
+            testRunEnded(System.currentTimeMillis(), new HashMap<String, Metric>());
+        }
         if (mModuleInProgress) {
             // If we had a module in progress, and a new module start occurs, complete the call
             testModuleEnded();
@@ -264,6 +271,10 @@ public abstract class ProtoResultReporter
     @Override
     public final void testModuleStarted(IInvocationContext moduleContext) {
         beforeModuleStart();
+        // if we had a test run in progress, complete the call
+        if (mTestRunInProgress) {
+            testRunEnded(System.currentTimeMillis(), new HashMap<String, Metric>());
+        }
         if (mModuleInProgress) {
             // If we had a module in progress, and a new module start occurs, complete the call
             testModuleEnded();
@@ -343,6 +354,7 @@ public abstract class ProtoResultReporter
         runBuilder.setAttemptId(attemptNumber);
 
         mLatestChild.add(runBuilder);
+        mTestRunInProgress = true;
         try {
             processTestRunStarted(runBuilder.build());
         } catch (RuntimeException e) {
@@ -431,6 +443,8 @@ public abstract class ProtoResultReporter
         } catch (RuntimeException e) {
             CLog.e("Failed to process test run end:");
             CLog.e(e);
+        } finally {
+            mTestRunInProgress = false;
         }
     }
 
