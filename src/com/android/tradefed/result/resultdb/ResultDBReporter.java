@@ -70,6 +70,11 @@ public class ResultDBReporter
             description = "Create a local invocation if invocation is not provided in the context")
     private boolean mCreateLocalInvocation = false;
 
+    @Option(
+            name = "enable-work-unit-reporting",
+            description = "Enable work unit reporting, used for rate control work unit reporting.")
+    private boolean mEnableWorkUnitReporting = false;
+
     private IConfiguration mConfiguration;
     private String mInvocationId;
     private String mTopWorkUnitId;
@@ -262,6 +267,10 @@ public class ResultDBReporter
                         "ResultDBReporter received root invocation ID: %s, work unit ID: %s and"
                                 + " update token",
                         rootInvocationId, workUnitId);
+                if (!mEnableWorkUnitReporting) {
+                    CLog.i("Work unit reporting is disabled by the mEnableWorkUnitReporting flag.");
+                    return false;
+                }
                 mTopWorkUnitId = workUnitId;
                 mRootInvocationId = rootInvocationId;
                 mRecorder =

@@ -193,6 +193,7 @@ public class ResultDBReporterTest {
         mConfig = new ConfigurationTester("name", "description");
         mReporter.setConfiguration(mConfig);
         mOption = new OptionSetter(mReporter);
+        mOption.setOptionValue("enable-work-unit-reporting", "true");
     }
 
     @Test
