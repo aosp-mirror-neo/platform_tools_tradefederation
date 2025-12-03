@@ -215,11 +215,7 @@ public abstract class RustTestBase
             return;
         }
         if (!Strings.isNullOrEmpty(filter)) {
-            if (!filter.contains("#")) {
-                CLog.w("Filter: %s isn't formatted like a method", filter);
-            } else {
-                args.add(cleanFilter(filter));
-            }
+            args.add(cleanFilter(filter));
         }
         args.add("--exact");
         for (String s : mExcludeFilters) {
