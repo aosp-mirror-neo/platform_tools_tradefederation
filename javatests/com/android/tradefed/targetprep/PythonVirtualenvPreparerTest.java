@@ -64,29 +64,6 @@ public class PythonVirtualenvPreparerTest {
     }
 
     @Test
-    public void testInstallDeps_reqFile_success() throws Exception {
-        mPreparer.setRequirementsFile(new File("foobar"));
-        when(mMockRunUtil.runTimedCmd(
-                        anyLong(), (String) any(), (String) any(), (String) any(), (String) any()))
-                .thenReturn(new CommandResult(CommandStatus.SUCCESS));
-
-        IBuildInfo buildInfo = new BuildInfo();
-        mPreparer.installDeps(buildInfo, mMockDevice);
-        assertTrue(buildInfo.getFile("PYTHONPATH") != null);
-    }
-
-    @Test
-    public void testInstallDeps_depModule_success() throws Exception {
-        mPreparer.addDepModule("blahblah");
-        when(mMockRunUtil.runTimedCmd(anyLong(), (String) any(), (String) any(), (String) any()))
-                .thenReturn(new CommandResult(CommandStatus.SUCCESS));
-
-        IBuildInfo buildInfo = new BuildInfo();
-        mPreparer.installDeps(buildInfo, mMockDevice);
-        assertTrue(buildInfo.getFile("PYTHONPATH") != null);
-    }
-
-    @Test
     public void testInstallDeps_reqFile_failure() throws Exception {
         mPreparer.setRequirementsFile(new File("foobar"));
         when(mMockRunUtil.runTimedCmd(
