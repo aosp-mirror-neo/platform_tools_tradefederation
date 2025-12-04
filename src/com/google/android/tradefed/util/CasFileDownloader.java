@@ -320,7 +320,10 @@ public class CasFileDownloader implements IFileDownloader {
             }
             loadDigests(mManifestPath.toPath());
         } catch (IOException | JSONException e) {
-            throw new CasInitializationException("The CAS digest file is invalid", e);
+            throw new CasInitializationException(
+                    "The CAS digest file is invalid (expected for non-REB branches and can be"
+                        + " safely ignored).",
+                    e);
         }
     }
 
