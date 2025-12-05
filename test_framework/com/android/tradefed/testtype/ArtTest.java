@@ -44,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +57,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import java.util.zip.ZipFile;
 
 /* Generic test runner for ART.
@@ -101,7 +105,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
-    protected Map<String, Test> mTests = new TreeMap<String, Test>();
+    protected List<Test> mTests = new ArrayList<>();
     protected int mShardIndex = 0;
     protected int mShardCount = 1;
 
@@ -111,6 +115,9 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
     @Option(name = "jobs", description = "The number of tests to run in parallel on device")
     private int mJobs = 4;
+
+    @Option(name = "shuffle", description = "Shuffle test order before running")
+    private boolean mShuffle = true;
 
     @Override
     public void setAbi(IAbi abi) {
@@ -202,7 +209,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
                 // Schedule all tests to run.
                 List<Future<Boolean>> futures =
-                        mTests.values().stream()
+                        mTests.stream()
                                 .map(test -> executorRef.submit(() -> run(test, listener)))
                                 .collect(Collectors.toList());
 
@@ -247,51 +254,64 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         }
     }
 
-    TreeMap<String, Test> loadTests() throws IOException {
-        Gson gson = new Gson();
-        TreeMap<String, Test> allTests = new TreeMap<String, Test>();
-        TreeMap<String, Test> filteredTests = new TreeMap<String, Test>();
+    List<Test> loadTests() throws IOException {
+        // Load and parse JSON files.
+        Map<String, Test> allTests = new TreeMap<>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
-            Test[] tests = gson.fromJson(FileUtil.readStringFromFile(jsonFile), Test[].class);
-            for (Test test : tests) {
-                test.mResult = Optional.empty();
+            Gson gson = new Gson();
+            for (Test test : gson.fromJson(FileUtil.readStringFromFile(jsonFile), Test[].class)) {
                 allTests.put(test.mName, test);
-                if (!shouldIncludeTest(test.mName)) {
-                    continue;
-                }
-                if (mAbi != null && !test.mTags.contains(mAbi.getName())) {
-                    continue;
-                }
-                filteredTests.put(test.mName, test);
             }
         }
 
-        TreeMap<String, Test> shardedTests = new TreeMap<String, Test>();
-        Queue<String> dependencyQueue = new ArrayDeque<>();
-
-        // Select tests for this shard based on index modulo shardCount
-        ArrayList<String> sortedTestNames = new ArrayList<>(filteredTests.keySet());
-        for (int i = 0; i < sortedTestNames.size(); i++) {
-            if (i % mShardCount == mShardIndex) {
-                String testName = sortedTestNames.get(i);
-                shardedTests.put(testName, allTests.get(testName));
-                dependencyQueue.add(testName);
-            }
+        // Finish object initialization.
+        for (Test test : allTests.values()) {
+            Stream<String> deps = test.mDependencies.stream();
+            test.mResolvedDependencies =
+                    deps.map(depName -> allTests.get(depName)).toArray(Test[]::new);
+            test.mResult = Optional.empty();
         }
 
-        // Include dependencies recursively
-        while (!dependencyQueue.isEmpty()) {
-            String testName = dependencyQueue.remove();
-            Test test = allTests.get(testName);
-            for (String depName : test.mDependencies) {
-                if (!shardedTests.containsKey(depName)) {
-                    shardedTests.put(depName, allTests.get(depName));
-                    dependencyQueue.add(depName);
+        // Filter tests by name and abi.
+        List<Test> tests =
+                allTests.values().stream()
+                        .sorted(Comparator.comparing(a -> a.mName))
+                        .filter(test -> shouldIncludeTest(test.mName))
+                        .filter(test -> mAbi == null || test.mTags.contains(mAbi.getName()))
+                        .collect(Collectors.toList());
+
+        // Shuffle tests in a deterministic and well-distributed way.
+        // This will uniformly spread expensive tests over time and over shards.
+        if (mShuffle) {
+            ToIntFunction<Integer> hash = i -> (i * 0x9E3779B1); // Prime near golden ratio.
+            Stream<Integer> indices = IntStream.range(0, tests.size()).boxed();
+            Stream<Integer> permutation = indices.sorted(Comparator.comparingInt(hash));
+            final List<Test> testsCopy = tests; // Effectively final copy for lambda
+            tests = permutation.map(i -> testsCopy.get(i)).collect(Collectors.toList());
+        }
+
+        // Filter tests for this shard.
+        if (mShardCount > 1) {
+            Stream<Integer> indices = IntStream.range(0, tests.size()).boxed();
+            Stream<Integer> shard = indices.filter(i -> i % mShardCount == mShardIndex);
+            final List<Test> testsCopy = tests; // Effectively final copy for lambda
+            tests = shard.map(i -> testsCopy.get(i)).collect(Collectors.toList());
+        }
+
+        // Also include all dependencies recursively.
+        Queue<Test> todo = new ArrayDeque<>(tests);
+        Set<String> names = tests.stream().map(t -> t.mName).collect(Collectors.toSet());
+        while (!todo.isEmpty()) {
+            Test test = todo.remove();
+            for (Test dep : test.mResolvedDependencies) {
+                if (names.add(dep.mName)) {
+                    tests.add(dep);
+                    todo.add(dep);
                 }
             }
         }
 
-        return shardedTests;
+        return tests;
     }
 
     static class Command {
@@ -323,6 +343,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         List<Command> mCommands = new ArrayList<>();
 
         transient Optional<Boolean> mResult = Optional.empty();
+        transient Test[] mResolvedDependencies = new Test[0];
 
         Test() {}
 
@@ -341,8 +362,8 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
             }
 
             String error = null;
-            for (String dep : test.mDependencies) {
-                if (!run(mTests.get(dep), listener)) {
+            for (Test dep : test.mResolvedDependencies) {
+                if (!run(dep, listener)) {
                     error = "Dependency '" + dep + "' failed";
                     break;
                 }

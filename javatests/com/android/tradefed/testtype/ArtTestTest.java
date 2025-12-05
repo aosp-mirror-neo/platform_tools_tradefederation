@@ -52,7 +52,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Unit tests for {@link ArtTest}. */
 @RunWith(JUnit4.class)
@@ -155,21 +156,23 @@ public class ArtTestTest {
             assertEquals(0, shard0.mShardIndex);
             assertEquals(2, shard0.mShardCount);
             shard0.mRunnerDir = shard0.extractTarBall(new File(tempDir, "shard0_basedir"));
-            Map<String, ArtTest.Test> testsShard0 = shard0.loadTests();
-            assertEquals(3, testsShard0.size());
-            assertTrue(testsShard0.containsKey("001-HelloWorld#1f5cdb07"));
-            assertTrue(testsShard0.containsKey("003-Bar#1f5cdb09"));
-            assertTrue(testsShard0.containsKey("setup#compile-boot-image"));
+            List<ArtTest.Test> testsShard0 = shard0.loadTests();
+            Set<String> names0 = testsShard0.stream().map(t -> t.mName).collect(Collectors.toSet());
+            assertEquals(3, names0.size());
+            assertTrue(names0.contains("001-HelloWorld#1f5cdb07"));
+            assertTrue(names0.contains("002-Foo#1f5cdb08"));
+            assertTrue(names0.contains("setup#compile-boot-image"));
 
             // Shard 1
             ArtTest shard1 = (ArtTest) ((List<IRemoteTest>) shards).get(1);
             assertEquals(1, shard1.mShardIndex);
             assertEquals(2, shard1.mShardCount);
             shard1.mRunnerDir = shard1.extractTarBall(new File(tempDir, "shard1_basedir"));
-            Map<String, ArtTest.Test> testsShard1 = shard1.loadTests();
-            assertEquals(2, testsShard1.size());
-            assertTrue(testsShard1.containsKey("002-Foo#1f5cdb08"));
-            assertTrue(testsShard1.containsKey("setup#compile-boot-image"));
+            List<ArtTest.Test> testsShard1 = shard1.loadTests();
+            Set<String> names1 = testsShard1.stream().map(t -> t.mName).collect(Collectors.toSet());
+            assertEquals(2, names1.size());
+            assertTrue(names1.contains("003-Bar#1f5cdb09"));
+            assertTrue(names1.contains("setup#compile-boot-image"));
 
         } finally {
             FileUtil.recursiveDelete(tempDir);
@@ -189,12 +192,13 @@ public class ArtTestTest {
         try {
             tempDir = FileUtil.createTempDir("art-test-sharding");
             test.mRunnerDir = test.extractTarBall(tempDir);
-            Map<String, ArtTest.Test> tests = test.loadTests();
-            assertTrue(tests.containsKey("001-HelloWorld#1f5cdb07"));
-            assertTrue(!tests.containsKey("002-Foo#1f5cdb08"));
-            assertTrue(!tests.containsKey("003-Bar#1f5cdb09"));
-            assertTrue(tests.containsKey("setup#compile-boot-image"));
+            List<ArtTest.Test> tests = test.loadTests();
+            Set<String> names = tests.stream().map(t -> t.mName).collect(Collectors.toSet());
             assertEquals(2, tests.size());
+            assertTrue(names.contains("001-HelloWorld#1f5cdb07"));
+            assertTrue(!names.contains("002-Foo#1f5cdb08"));
+            assertTrue(!names.contains("003-Bar#1f5cdb09"));
+            assertTrue(names.contains("setup#compile-boot-image"));
         } finally {
             FileUtil.recursiveDelete(tempDir);
         }
@@ -213,12 +217,13 @@ public class ArtTestTest {
         try {
             tempDir = FileUtil.createTempDir("art-test-sharding");
             test.mRunnerDir = test.extractTarBall(tempDir);
-            Map<String, ArtTest.Test> tests = test.loadTests();
-            assertTrue(!tests.containsKey("001-HelloWorld#1f5cdb07"));
-            assertTrue(tests.containsKey("002-Foo#1f5cdb08"));
-            assertTrue(tests.containsKey("003-Bar#1f5cdb09"));
-            assertTrue(tests.containsKey("setup#compile-boot-image"));
+            List<ArtTest.Test> tests = test.loadTests();
+            Set<String> names = tests.stream().map(t -> t.mName).collect(Collectors.toSet());
             assertEquals(3, tests.size());
+            assertTrue(!names.contains("001-HelloWorld#1f5cdb07"));
+            assertTrue(names.contains("002-Foo#1f5cdb08"));
+            assertTrue(names.contains("003-Bar#1f5cdb09"));
+            assertTrue(names.contains("setup#compile-boot-image"));
         } finally {
             FileUtil.recursiveDelete(tempDir);
         }
