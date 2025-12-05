@@ -101,6 +101,15 @@ public class PythonVirtualenvPreparer extends BaseTargetPreparer {
         }
         if (!hasDependencies) {
             CLog.i("No dependencies to install");
+        } else {
+            // make the install directory of new packages available to other classes that
+            // receive the build
+            // TODO(b/166688272): Get install location from pip rather than hard code it.
+            buildInfo.setFile(
+                    PYTHONPATH,
+                    new File(mTmpVenvDir, "local/lib/python3.8/site-packages"),
+                    buildInfo.getBuildId());
+            buildInfo.setFile("VIRTUAL_ENV", mTmpVenvDir, buildInfo.getBuildId());
         }
     }
 
