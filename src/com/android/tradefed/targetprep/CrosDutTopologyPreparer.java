@@ -25,6 +25,7 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.invoker.ExecutionFiles;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -158,6 +159,8 @@ public class CrosDutTopologyPreparer extends BaseTargetPreparer {
                 continue;
             }
             if (key.equals("--invocation-data")) {
+                // Invocation data cannot be directly modified, so it's stored as a property
+                // with the `invocation_data.` prefix.
                 String[] dParts = value.split("=", 2);
                 if (dParts.length < 2) {
                     CLog.w("Skipping malformed invocation-data line from dt-converter: %s", line);
@@ -167,6 +170,25 @@ public class CrosDutTopologyPreparer extends BaseTargetPreparer {
                 String dVal = dParts[1].trim();
                 key = "invocation_data." + dKey;
                 value = dVal;
+
+            } else if (key.equals("-c")) {
+                // Handle config file path: register it in execution files and as a property. This
+                // allows other preparers (e.g., MoblyBinaryHostTest) to easily find and use it.
+                File configFile = new File(value);
+                if (!configFile.isAbsolute()) {
+                    CLog.w("Skipping non-absolute config file path: %s", value);
+                    continue;
+                }
+                if (!configFile.exists()) {
+                    CLog.w("Skipping non-existent config file: %s", value);
+                    continue;
+                }
+                String fileKey = ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString();
+                testInfo.executionFiles().put(fileKey, configFile);
+                CLog.d("Register Mobly config file to execution files: %s for %s", fileKey, value);
+                // Also register it as a property for other preparers to use.
+                key = fileKey;
+                value = fileKey;
             }
             testInfo.properties().put(key, value);
             CLog.d("Set property: '%s' = '%s'", key, value);

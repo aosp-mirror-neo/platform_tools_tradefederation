@@ -29,11 +29,13 @@ import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
+import com.android.tradefed.invoker.ExecutionFiles;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.IRunUtil;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,6 +43,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import com.android.tradefed.util.FileUtil;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
@@ -56,6 +59,8 @@ public class CrosDutTopologyPreparerTest {
     @Mock CommandResult mMockResult;
     private TestInformation mTestInfo;
     private IBuildInfo mBuildInfo;
+    private File mMoblyConfigFile;
+    private File mVenvDir;
     private IInvocationContext mContext;
 
     @Captor ArgumentCaptor<String[]> mCommandCaptor;
@@ -74,10 +79,19 @@ public class CrosDutTopologyPreparerTest {
         mBuildInfo = new BuildInfo();
         mBuildInfo.addBuildAttribute("LOG_DIR", System.getProperty("java.io.tmpdir"));
 
+        mVenvDir = FileUtil.createTempDir("venv");
+        mMoblyConfigFile = FileUtil.createTempFile("mobly_binary", ".par", mVenvDir);
+
         mContext = new InvocationContext();
         mContext.addDeviceBuildInfo("device", mBuildInfo);
         mContext.addAllocatedDevice("device", mMockDevice);
         mTestInfo = TestInformation.newBuilder().setInvocationContext(mContext).build();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        FileUtil.recursiveDelete(mMoblyConfigFile);
+        FileUtil.recursiveDelete(mVenvDir);
     }
 
     private void setupDtConverterOutput(CommandStatus status, String stdout, String stderr) {
@@ -92,7 +106,7 @@ public class CrosDutTopologyPreparerTest {
                 "-s dut1:5555\n"
                         + "--invocation-data lsnexus_primary.host=localhost\n"
                         + "--invocation-data lsnexus_primary.port=9100\n"
-                        + "-c /tmp/mobly_config.yaml\n"
+                        + "-c " + mMoblyConfigFile.getAbsolutePath() + "\n"
                         + "extra_prop value1";
         setupDtConverterOutput(CommandStatus.SUCCESS, output, "");
     }
@@ -114,7 +128,8 @@ public class CrosDutTopologyPreparerTest {
         assertTrue(command.contains("-config_name"));
         assertTrue(command.contains("-mh"));
         assertTrue(command.contains("-tf"));
-        assertEquals("/tmp/mobly_config.yaml", mTestInfo.properties().get("-c"));
+        String fileKey = ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString();
+        assertEquals(fileKey, mTestInfo.properties().get(fileKey));
         assertEquals("dut1:5555", mTestInfo.properties().get("-s"));
         assertEquals("value1", mTestInfo.properties().get("extra_prop"));
         assertEquals(
@@ -145,19 +160,32 @@ public class CrosDutTopologyPreparerTest {
 
     @Test
     public void testSetUp_MalformedOutput() throws Exception {
-        String output = "-s onlykey=1\n" + "-c /tmp/mobly_config.yaml";
+        String output = "-s onlykey=1\n" + "-c " + mMoblyConfigFile.getAbsolutePath();
         setupDtConverterOutput(CommandStatus.SUCCESS, output, "");
 
         mPreparer.setUp(mTestInfo);
         // Should not crash, malformed line is skipped
-        assertEquals("/tmp/mobly_config.yaml", mTestInfo.properties().get("-c"));
         assertEquals("onlykey=1", mTestInfo.properties().get("-s"));
+        String fileKey = ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString();
+        assertEquals(fileKey, mTestInfo.properties().get(fileKey));
+    }
+
+    @Test
+    public void testSetUp_WithMoblyConfigFile() throws Exception {
+        String output = "-s dut1:5555\n" + "-c " + mMoblyConfigFile.getAbsolutePath();
+        setupDtConverterOutput(CommandStatus.SUCCESS, output, "");
+
+        mPreparer.setUp(mTestInfo);
+
+        String fileKey = ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString();
+        assertEquals(mMoblyConfigFile, mTestInfo.executionFiles().get(fileKey));
+        assertEquals(fileKey, mTestInfo.properties().get(fileKey));
     }
 
     @Test
     public void testBuildCommand() throws Exception {
         String dutName = "test-device";
-        File logDir = new File("/tmp/logs");
+        File logDir = mVenvDir;
         List<String> command = mPreparer.buildCommand(mTestInfo, mMockDevice, dutName, logDir);
 
         assertTrue(command.get(0).endsWith("dt-converter"));
@@ -166,7 +194,7 @@ public class CrosDutTopologyPreparerTest {
         assertTrue(command.contains("-labservice"));
         assertEquals("localhost:1485", command.get(command.indexOf("-labservice") + 1));
         assertTrue(command.contains("-logdir"));
-        assertEquals("/tmp/logs", command.get(command.indexOf("-logdir") + 1));
+        assertEquals(mVenvDir.getAbsolutePath(), command.get(command.indexOf("-logdir") + 1));
         assertTrue(command.contains("-config_name"));
         assertEquals("config_test-device", command.get(command.indexOf("-config_name") + 1));
         assertTrue(command.contains("-mh"));
@@ -200,14 +228,15 @@ public class CrosDutTopologyPreparerTest {
                 "-s dut1:5555\n"
                         + "--invocation-data lsnexus_primary.host=localhost\n"
                         + "--invocation-data lsnexus_primary.port=9100\n"
-                        + "-c /tmp/mobly_config.yaml\n"
+                        + "-c " + mMoblyConfigFile.getAbsolutePath() + "\n"
                         + "extra_prop value1\n"
                         + "malformed\n"
                         + "";
 
         mPreparer.parseOutput(mTestInfo, output);
 
-        assertEquals("/tmp/mobly_config.yaml", mTestInfo.properties().get("-c"));
+        String fileKey = ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString();
+        assertEquals(fileKey, mTestInfo.properties().get(fileKey));
         assertEquals("dut1:5555", mTestInfo.properties().get("-s"));
         assertEquals("value1", mTestInfo.properties().get("extra_prop"));
         assertEquals(
