@@ -102,6 +102,7 @@ import com.android.tradefed.device.ManagedTestDeviceFactoryTest;
 import com.android.tradefed.device.NativeDeviceTest;
 import com.android.tradefed.device.RemoteAndroidDeviceTest;
 import com.android.tradefed.device.TestDeviceTest;
+import com.android.tradefed.device.UserInfoTest;
 import com.android.tradefed.device.UserSwitcherTest;
 import com.android.tradefed.device.WaitDeviceRecoveryTest;
 import com.android.tradefed.device.WifiCommandUtilTest;
@@ -149,6 +150,7 @@ import com.android.tradefed.device.metric.PerfettoFilePullerCollectorTest;
 import com.android.tradefed.device.metric.PerfettoPullerMetricCollectorTest;
 import com.android.tradefed.device.metric.RebootReasonCollectorTest;
 import com.android.tradefed.device.metric.RuntimeRestartCollectorTest;
+import com.android.tradefed.device.metric.ScreenRecordOnFailureCollectorTest;
 import com.android.tradefed.device.metric.ScreenshotOnFailureCollectorTest;
 import com.android.tradefed.device.metric.ShowmapPullerMetricCollectorTest;
 import com.android.tradefed.device.metric.TraceCmdCollectorTest;
@@ -667,6 +669,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PropertyChangerTest.class,
     TargetFileUtilsTest.class,
     TestDeviceTest.class,
+    UserInfoTest.class,
     UserSwitcherTest.class,
     WaitDeviceRecoveryTest.class,
     WifiHelperTest.class,
@@ -726,6 +729,7 @@ import org.junit.runners.Suite.SuiteClasses;
     PerfettoPullerMetricCollectorTest.class,
     RebootReasonCollectorTest.class,
     RuntimeRestartCollectorTest.class,
+    ScreenRecordOnFailureCollectorTest.class,
     ScreenshotOnFailureCollectorTest.class,
     ShowmapPullerMetricCollectorTest.class,
     TraceCmdCollectorTest.class,

@@ -16,12 +16,19 @@
 
 package com.android.tradefed.util;
 
+import com.google.common.base.Strings;
+
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Utility class for escaping strings for common string manipulation. */
 public class StringUtil {
+
+    // Regex to match all common ANSI escape sequences
+    // \u001B is the ESC character, followed by [ then any characters
+    // until an ANSI-terminating character (m, K, H, etc.) is found.
+    private static final String ANSI_ESCAPE_REGEX = "\\u001B\\[[\\d;]*[mKHFJ]";
 
     /**
      * Expand all variables in a given string with their values in the map.
@@ -49,5 +56,18 @@ public class StringUtil {
         }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * Remove all common ANSI escape sequences
+     *
+     * @param coloredText string that might contain ANSI code for colored text
+     * @return a string with all ANSI codes removed
+     */
+    public static String removeAnsiCodes(String coloredText) {
+        if (Strings.isNullOrEmpty(coloredText)) {
+            return coloredText;
+        }
+        return coloredText.replaceAll(ANSI_ESCAPE_REGEX, "");
     }
 }

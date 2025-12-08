@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.Artifact;
+import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.WorkUnit;
 
 import com.google.protobuf.FieldMask;
@@ -49,6 +51,30 @@ public interface IRecorderClient {
      * @param updateMask The field mask for the update.
      */
     public void updateWorkUnit(WorkUnit workUnit, FieldMask updateMask);
+
+    /**
+     * Enqueue a test result to report to ResultDB.
+     *
+     * @param workUnitId The work unit ID of the test result.
+     * @param result The test result to upload in the CreateTestResultRequest.
+     */
+    public void enqueueTestResult(String workUnitId, TestResult result);
+
+    /**
+     * Enqueue an artifact to report to ResultDB.
+     *
+     * @param workUnitId The work unit ID of the artifact.
+     * @param artifact The artifact to upload in the CreateArtifactRequest.
+     */
+    public void enqueueArtifact(String workUnitId, Artifact artifact);
+
+    /**
+     * Upload an artifact to ResultDB.
+     *
+     * @param workUnitId The work unit ID of the artifact.
+     * @param artifact The artifact to upload in the CreateArtifactRequest.
+     */
+    public void uploadArtifact(String workUnitId, Artifact artifact);
 
     /**
      * Finalize the upload of test results, artifacts and work units. This method should be called

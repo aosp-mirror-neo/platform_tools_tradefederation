@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.targetprep;
 
+import static com.android.tradefed.targetprep.UserHelper.CAR_TOS_ACCEPTED;
+import static com.android.tradefed.targetprep.UserHelper.FEATURE_AUTOMOTIVE;
 import static com.android.tradefed.targetprep.UserHelper.USER_SETUP_COMPLETE;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -197,6 +199,19 @@ public final class CreateUserPreparerTest {
         TargetSetupError e = assertThrows(TargetSetupError.class, () -> mPreparer.setUp(mTestInfo));
 
         assertThat(e).hasCauseThat().isSameInstanceAs(cause);
+    }
+
+    @Test
+    public void testSetUp_acceptsTosOnAutomotive() throws Exception {
+        mTestDeviceMockHelper.mockHasFeature(FEATURE_AUTOMOTIVE, true);
+        setParam("switch-user", "false");
+        mockGetCurrentUser(10);
+        mockCreateUser(15);
+
+        mPreparer.setUp(mTestInfo);
+
+        verifyUserCreated();
+        verifyUserSettings(15, CAR_TOS_ACCEPTED, "2");
     }
 
     @Test

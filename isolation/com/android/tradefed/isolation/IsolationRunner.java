@@ -205,19 +205,19 @@ public final class IsolationRunner {
                                             klass));
                         }
                     }
-                } else if (req.getRunner() instanceof IgnoredClassRunner) {
-                    // Do nothing since class was ignored
                 } else {
                     Runner checkRunner = req.getRunner();
 
-                    if (params.getDryRun()) {
-                        checkRunner = new DryRunner(req.getRunner().getDescription());
-                    } else {
-                        checkRunner = req.getRunner();
-                    }
+                    if (!shouldSkipClass(checkRunner)) {
+                        if (params.getDryRun()) {
+                            checkRunner = new DryRunner(req.getRunner().getDescription());
+                        }
 
-                    runnerCore.run(checkRunner);
-                    System.out.println("Done executing class: " + klass);
+                        runnerCore.run(checkRunner);
+                        System.out.println("Done executing class: " + klass);
+                    } else {
+                        // Do nothing since class was ignored
+                    }
                 }
             }
         } catch (Throwable e) {
@@ -236,6 +236,30 @@ public final class IsolationRunner {
                 .setRunnerStatus(RunnerStatus.RUNNER_STATUS_FINISHED_OK)
                 .build()
                 .writeDelimitedTo(output);
+    }
+
+    private boolean shouldSkipClass(Runner runner) {
+        if (runner instanceof IgnoredClassRunner) {
+            // Class is ignored.
+            return true;
+        }
+
+        // If the test class description has any annotation whose class name starts with
+        // "ClassIgnored", we also skip this test.
+        // This is to handle @DisabledOnRavenwood cleanly. Without this logic, we'd still execute
+        // the test class and have its method throws AssumptionFailedException,
+        // which would show up as "skipped" in the test result, which is noisy.
+        // We treat it as if the class is ignored, in which case it won't show up in the result.
+        //
+        // See more on b/462198969.
+        var desc = runner.getDescription();
+        for (var annot : desc.getAnnotations()) {
+            if (annot.annotationType().getSimpleName().startsWith("ClassIgnored")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private List<Class<?>> getClasses(TestParameters params) {

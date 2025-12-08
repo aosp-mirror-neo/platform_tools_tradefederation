@@ -37,6 +37,8 @@ import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 
+import com.google.gson.Gson;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,6 +48,8 @@ import org.mockito.Mock;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -53,49 +57,44 @@ import java.util.Map;
 /** Unit tests for {@link ArtTest}. */
 @RunWith(JUnit4.class)
 public class ArtTestTest {
-    public static final String INPUT =
-            String.join(
-                    "\n",
-                    "{",
-                    "    \"001-HelloWorld#1f5cdb07\": {",
-                    "      \"adb push\": [",
-                    "        [ \"../target/001-HelloWorld\",\"/data/local/tmp/art/test/1f5cdb07\""
-                            + " ],",
-                    "        [ \"001-HelloWorld/1f5cdb07.sh\","
-                            + " \"/data/local/tmp/art/test/1f5cdb07/run.sh\" ]",
-                    "      ],",
-                    "      \"adb shell\": [",
-                    "        [ \"sh\", \"/data/local/tmp/art/test/1f5cdb07/run.sh\" ]",
-                    "      ],",
-                    "      \"dependencies\": [",
-                    "        \"setup#compile-boot-image\"",
-                    "      ]",
-                    "    },",
-                    "    \"002-Foo#1f5cdb08\": {},",
-                    "    \"003-Bar#1f5cdb09\": {},",
-                    "    \"setup#compile-boot-image\": {",
-                    "      \"adb push\": [",
-                    "        [ \"setup.sh\", \"/data/local/tmp/art/setup.sh\" ]",
-                    "      ],",
-                    "      \"adb shell\": [",
-                    "        [ \"rm\", \"-rf\", \"/data/local/tmp/art/test\" ],",
-                    "        [ \"sh\", \"/data/local/tmp/art/setup.sh\" ]",
-                    "      ]",
-                    "    }",
-                    "}");
-
     private ArtTest mTest;
 
     @Mock ITestInvocationListener mListener;
     @Mock ITestDevice mDevice;
+    @Mock TestInformation mTestInfo;
 
     static class ArtTestForTesting extends ArtTest {
+        Test[] mockInput() {
+            return new Test[] {
+                new Test(
+                        "001-HelloWorld#1f5cdb07",
+                        Arrays.asList("setup#compile-boot-image"),
+                        new Command(
+                                "push",
+                                "../target/001-HelloWorld",
+                                "/data/local/tmp/art/test/1f5cdb07"),
+                        new Command(
+                                "push",
+                                "001-HelloWorld/1f5cdb07.sh",
+                                "/data/local/tmp/art/test/1f5cdb07/run.sh"),
+                        new Command("shell", "sh", "/data/local/tmp/art/test/1f5cdb07/run.sh")),
+                new Test("002-Foo#1f5cdb08", new ArrayList<>()),
+                new Test("003-Bar#1f5cdb09", new ArrayList<>()),
+                new Test(
+                        "setup#compile-boot-image",
+                        new ArrayList<>(),
+                        new Command("push", "setup.sh", "/data/local/tmp/art/setup.sh"),
+                        new Command("shell", "rm", "-rf", "/data/local/tmp/art/test"),
+                        new Command("shell", "sh", "/data/local/tmp/art/setup.sh")),
+            };
+        }
+
         @Override
         File extractTarBall(File dst_dir) throws IOException {
             File runnerDir = new File(dst_dir, "runner");
             runnerDir.mkdirs();
             try (FileWriter fw = new FileWriter(new File(runnerDir, "tests.json"))) {
-                fw.write(INPUT);
+                new Gson().toJson(mockInput(), fw);
             }
             return runnerDir;
         }

@@ -101,6 +101,7 @@ public class InvocationSimulator {
         MultiMap<String, String> metadata = new MultiMap<>();
         Map<String, String> attributes = new HashMap<>();
         List<TestRunConfig> testRuns = new ArrayList<>();
+        List<LogFile> logs = new ArrayList<>();
 
         ModuleConfig(String name) {
             this.name = name;
@@ -267,6 +268,12 @@ public class InvocationSimulator {
         return this;
     }
 
+    public InvocationSimulator withModuleLog(LogFile log) {
+        ensureModule();
+        mCurrentModule.logs.add(log);
+        return this;
+    }
+
     public InvocationSimulator withInvocationLog(LogFile log) {
         mInvocationLogs.add(log);
         return this;
@@ -324,6 +331,7 @@ public class InvocationSimulator {
 
             try {
                 if (!module.name.isEmpty()) {
+                    simulateLogs("module-log-", module.logs, reporter);
                     reporter.testModuleEnded();
                 }
             } catch (Exception e) {

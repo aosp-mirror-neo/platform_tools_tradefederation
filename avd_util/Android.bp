@@ -17,6 +17,22 @@ package {
 }
 
 java_library_host {
+    name: "cvd-env-config-proto",
+    srcs: [
+        "proto/cvd_env_config.proto",
+    ],
+    libs: [
+        "libprotobuf-java-full",
+    ],
+    proto: {
+        include_dirs: ["external/protobuf/src"],
+        type: "full",
+    },
+    // b/267831518: Pin tradefed and dependencies to Java 11.
+    java_version: "11",
+}
+
+java_library_host {
     name: "tradefed-avd-util",
     // Restrict visibility to only those targets that need to access it.
     visibility: [
@@ -31,6 +47,7 @@ java_library_host {
         "tradefed-common-util",
         "virtual-device-manager-proto",
         "gson",
+        "cvd-env-config-proto",
     ],
     libs: [
         "json-prebuilt",

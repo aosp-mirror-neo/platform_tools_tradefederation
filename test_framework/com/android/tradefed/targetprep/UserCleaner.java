@@ -16,13 +16,15 @@
 
 package com.android.tradefed.targetprep;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
+import static com.android.tradefed.device.UserInfo.USER_NULL;
+import static com.android.tradefed.device.UserInfo.USER_SYSTEM;
 
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
-import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.log.LogUtil.CLog;
+
+import java.util.TreeMap;
 
 /** A {@link ITargetPreparer} that removes secondary users on teardown. */
 @OptionClass(alias = "user-cleaner")
@@ -36,14 +38,47 @@ public class UserCleaner extends BaseTargetPreparer {
 
     @Override
     public void tearDown(TestInformation testInfo, Throwable e) throws DeviceNotAvailableException {
-        ITestDevice device = testInfo.getDevice();
-        // treat current user as primary if no primary user found
-        int ownerId = firstNonNull(device.getPrimaryUserId(), device.getCurrentUser());
-        device.switchUser(ownerId);
+        var device = testInfo.getDevice();
+        int currentUserId = device.getCurrentUser();
+        // Uses a TreeMap to make sure user 0 is the first entry
+        var allUsers = new TreeMap<>(device.getUserInfos());
 
-        for (Integer id : device.listUsers()) {
-            if (id != ownerId && !device.removeUser(id)) {
-                CLog.w("Failed to remove user %d", id);
+        // First need to find the first admin user
+        int firstAdminUserId = USER_NULL;
+        for (var user : allUsers.values()) {
+            if (user.isFull() && user.isAdmin() && firstAdminUserId == USER_NULL) {
+                firstAdminUserId = user.userId();
+                break;
+            }
+        }
+        if (firstAdminUserId == USER_NULL) {
+            // Shouldn't happen, but it doesn't hurt to check..
+            CLog.e("Didn't find an admin user, using system user (%d) instead", USER_SYSTEM);
+            firstAdminUserId = USER_SYSTEM;
+        }
+        CLog.d(
+                "tearDown(): currentUserId=%d, firstAdminUserId=%d, allUsers=%s",
+                currentUserId, firstAdminUserId, allUsers.keySet());
+
+        // Then switch to it if necessary
+        if (currentUserId != firstAdminUserId) {
+            CLog.i("Switching to first admin user (%d)", firstAdminUserId);
+            device.switchUser(firstAdminUserId);
+        }
+
+        // Finally, remove all users (except system and first admin)
+        for (var userId : allUsers.keySet()) {
+            if (userId == USER_SYSTEM) {
+                CLog.d("Not removing system user (%d)", userId);
+                continue;
+            }
+            if (userId == firstAdminUserId) {
+                CLog.d("Not removing first admin user (%d)", userId);
+                continue;
+            }
+            CLog.i("Removing user %d", userId);
+            if (!device.removeUser(userId)) {
+                CLog.w("Failed to remove user %d", userId);
             }
         }
     }

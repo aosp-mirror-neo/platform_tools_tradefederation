@@ -1231,34 +1231,25 @@ public class NativeDevice
             final int retryAttempts,
             final boolean skipReceiverWatcher)
             throws DeviceNotAvailableException {
-        CLog.i("ExecuteShellCommand: %s", command);
-        ShellOutputReceiverStream outputReceiverStream = new ShellOutputReceiverStream(receiver);
-        boolean parseExitStatus = !isShellV2Support() && getOptions().useExitStatusWorkaround();
-
-        final String[] fullCmd = buildAdbShellCommand(command, parseExitStatus, true);
-        AdbShellAction adbAction =
-                new AdbShellAction(
-                        fullCmd,
-                        null,
-                        outputReceiverStream,
-                        outputReceiverStream,
-                        timeUnit.toMillis(maxTimeoutForCommand),
-                        timeUnit.toMillis(maxTimeToOutputShellResponse),
-                        skipReceiverWatcher ? null : receiver);
-        try {
-            performDeviceAction(String.format("shell %s", fullCmd[4]), adbAction, retryAttempts);
-        } catch (DeviceNotAvailableException e) {
-            throw e;
-        } finally {
-            receiver.flush();
-        }
-
-        if (parseExitStatus) {
-            postProcessExitStatus(adbAction.mResult);
-        }
-        if (!CommandStatus.SUCCESS.equals(adbAction.mResult.getStatus())) {
-            CLog.e("Execute Shell Command (%s) failed.", command);
-        }
+        DeviceAction action =
+                new DeviceAction() {
+                    @Override
+                    public boolean run()
+                            throws TimeoutException,
+                                    IOException,
+                                    AdbCommandRejectedException,
+                                    ShellCommandUnresponsiveException {
+                        getIDevice()
+                                .executeShellCommand(
+                                        command,
+                                        receiver,
+                                        maxTimeoutForCommand,
+                                        maxTimeToOutputShellResponse,
+                                        timeUnit);
+                        return true;
+                    }
+                };
+        performDeviceAction(String.format("shell %s", command), action, retryAttempts);
     }
 
     /** {@inheritDoc} */

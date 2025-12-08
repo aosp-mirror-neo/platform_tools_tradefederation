@@ -33,6 +33,8 @@ public final class UserHelper {
     private static final String TF_CREATED_USER = "tf_created_user";
 
     @VisibleForTesting static final String USER_SETUP_COMPLETE = "user_setup_complete";
+    @VisibleForTesting static final String FEATURE_AUTOMOTIVE = "android.hardware.type.automotive";
+    @VisibleForTesting static final String CAR_TOS_ACCEPTED = "android.car.KEY_USER_TOS_ACCEPTED";
 
     /** System property used to indicate which Android user is running the test. */
     public static final String RUN_TESTS_AS_USER_KEY = "RUN_TESTS_AS_USER";
@@ -59,6 +61,11 @@ public final class UserHelper {
             int userId = device.createUser(userName != null ? userName : TF_CREATED_USER);
             CLog.d("Marking user %d as setup complete", userId);
             device.setSetting(userId, "secure", USER_SETUP_COMPLETE, "1");
+            // Accept TOS for the new test user, to avoid showing the setup wizard.
+            if (device.hasFeature(FEATURE_AUTOMOTIVE)) {
+                device.setSetting(userId, "secure", CAR_TOS_ACCEPTED, "2");
+            }
+
             return userId;
         } catch (IllegalStateException e) {
             throw new TargetSetupError("Failed to create user.", e, device.getDeviceDescriptor());

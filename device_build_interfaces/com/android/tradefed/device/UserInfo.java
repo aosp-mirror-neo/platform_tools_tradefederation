@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.device;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * Similar to UserInfo class from platform.
  *
@@ -32,6 +34,7 @@ public final class UserInfo {
 
     // From {@link android.content.pm.UserInfo}
     public static final int FLAG_PRIMARY = 0x00000001;
+    public static final int FLAG_ADMIN = 0x00000002;
     public static final int FLAG_GUEST = 0x00000004;
     public static final int FLAG_RESTRICTED = 0x00000008;
     public static final int FLAG_EPHEMERAL = 0x00000100;
@@ -194,6 +197,10 @@ public final class UserInfo {
         return (mFlag & FLAG_FULL) == FLAG_FULL;
     }
 
+    public boolean isAdmin() {
+        return (mFlag & FLAG_ADMIN) == FLAG_ADMIN;
+    }
+
     /**
      * @deprecated Use {@link #isFull()} instead.
      */
@@ -256,5 +263,52 @@ public final class UserInfo {
             default:
                 throw new RuntimeException("Variant not covered: " + userType);
         }
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder string =
+                new StringBuilder("UserInfo[id=")
+                        .append(mUserId)
+                        .append(", name=")
+                        .append(mUserName)
+                        .append(", flags=0x")
+                        .append(Integer.toHexString(mFlag));
+        if (mFlag != 0) {
+            string.append(" (");
+            AtomicBoolean isFirst = new AtomicBoolean(true);
+            // NOTE: flags are check in alphabetical order
+            appendFlag(string, isFirst, mFlag, FLAG_ADMIN, "ADMIN");
+            appendFlag(string, isFirst, mFlag, FLAG_EPHEMERAL, "EPHEMERAL");
+            appendFlag(string, isFirst, mFlag, FLAG_FOR_TESTING, "FOR_TESTING");
+            appendFlag(string, isFirst, mFlag, FLAG_FULL, "FULL");
+            appendFlag(string, isFirst, mFlag, FLAG_GUEST, "GUEST");
+            appendFlag(string, isFirst, mFlag, FLAG_MAIN, "MAIN");
+            appendFlag(string, isFirst, mFlag, FLAG_MANAGED_PROFILE, "MANAGED_PROFILE");
+            appendFlag(string, isFirst, mFlag, FLAG_PRIMARY, "PRIMARY");
+            appendFlag(string, isFirst, mFlag, FLAG_PROFILE, "PROFILE");
+            appendFlag(string, isFirst, mFlag, FLAG_RESTRICTED, "RESTRICTED");
+            string.append(')');
+        }
+        if (mUserType != null) {
+            string.append(", type=").append(mUserType);
+        }
+        if (mIsRunning) {
+            string.append(", running");
+        }
+        return string.append(']').toString();
+    }
+
+    private static void appendFlag(
+            StringBuilder string, AtomicBoolean isFirst, int flags, int flag, String name) {
+        if ((flags & flag) == 0) {
+            return;
+        }
+        if (isFirst.get()) {
+            isFirst.set(false);
+        } else {
+            string.append("|");
+        }
+        string.append(name);
     }
 }

@@ -46,6 +46,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MultiMap;
 import com.android.tradefed.util.hostmetric.IHostMonitor;
 import com.android.tradefed.util.keystore.IKeyStoreFactory;
+import com.android.tradefed.util.keystore.KeyStoreException;
 import com.android.tradefed.util.keystore.StubKeyStoreFactory;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -353,6 +354,18 @@ public class GlobalConfiguration implements IGlobalConfiguration {
     @Override
     public void setup() throws ConfigurationException {
         getHostResourceManager().setup();
+        // Force to load and parse keystore files, fail the console early if keystore files
+        // are corrupted.
+        try {
+            if (getKeyStoreFactory() != null) {
+                getKeyStoreFactory().createKeyStoreClient();
+            }
+        } catch (KeyStoreException e) {
+            CLog.e(e);
+            // Rethrow the KeyStoreException as a ConfigurationException as it's related to bad
+            // global config.
+            throw new ConfigurationException(e.getMessage());
+        }
     }
 
     /** {@inheritDoc} */

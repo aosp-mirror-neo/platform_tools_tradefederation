@@ -122,7 +122,7 @@ public class BatchChannel<T> {
     public void enqueue(T item) throws InterruptedException {
         if (mShutdownRequested) {
             throw new IllegalStateException(
-                    "Uploader service finalizing. Cannot enqueue new" + mItemName);
+                    "Uploader service finalizing. Cannot enqueue new " + mItemName);
         }
         mItemQueue.put(item);
     }
@@ -172,6 +172,6 @@ public class BatchChannel<T> {
     /** Action to be performed when a batch of items is ready to be uploaded. */
     @FunctionalInterface
     public interface BatchUploadAction<T> {
-        void uploadBatch(ImmutableList<T> batch) throws Exception;
+        void uploadBatch(List<T> batch) throws Exception;
     }
 }

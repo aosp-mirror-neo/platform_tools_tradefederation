@@ -59,6 +59,10 @@ public final class ITestDeviceMockHelper {
         when(mMockDevice.getRemainingCreatableUserCount(eq(userType))).thenReturn(count);
     }
 
+    public void mockHasFeature(String feature, boolean value) throws Exception {
+        when(mMockDevice.hasFeature(feature)).thenReturn(value);
+    }
+
     public void mockSwitchUser(int userId) throws Exception {
         when(mMockDevice.switchUser(userId)).thenReturn(true);
     }

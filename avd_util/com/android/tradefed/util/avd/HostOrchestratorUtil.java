@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.util.avd;
 
+import static com.android.tradefed.util.avd.HostOrchestratorClient.CreateCvdRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.CreateSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.Cvd;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.DisplayAddRequest;
@@ -28,6 +29,7 @@ import static com.android.tradefed.util.avd.HostOrchestratorClient.ListCvdsRespo
 import static com.android.tradefed.util.avd.HostOrchestratorClient.Operation;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.StartCVDRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateBugreportRequest;
+import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateCvdRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildCreateSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDeleteSnapshotRequest;
 import static com.android.tradefed.util.avd.HostOrchestratorClient.buildDisplayAddRequest;
@@ -56,6 +58,7 @@ import com.android.tradefed.util.RunUtil;
 import com.android.tradefed.util.ZipUtil2;
 import com.android.tradefed.util.avd.OxygenClient.LHPTunnelMode;
 
+import com.google.android_cuttlefish.base.cvd.cuttlefish.host.commands.cvd.cli.parser.CvdConfig.EnvironmentSpecification;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.json.JSONException;
@@ -153,6 +156,28 @@ public class HostOrchestratorUtil {
         if (mUseOxygenation) {
             mHOTunnel = createHostOrchestratorTunnel();
         }
+    }
+
+    /**
+     * Create cuttlefish instance
+     *
+     * @return A {@link CommandResult}.
+     */
+    public CommandResult createCvd(EnvironmentSpecification specs) {
+        try {
+            if (mUseOxygenation && (mHOTunnel == null || !mHOTunnel.isAlive())) {
+                CLog.e("oxygenation: invalid tunnel state");
+                return buildHOFailureResult();
+            }
+            String baseUrl = getHOBaseUrl(mHOPortNumber);
+            CreateCvdRequest request = new CreateCvdRequest(specs);
+            HttpRequest httpRequest = buildCreateCvdRequest(baseUrl, request);
+            Operation operation = sendRequest(mHttpClient, httpRequest, Operation.class);
+        } catch (IOException | InterruptedException | ErrorResponseException e) {
+            CLog.e("Failed to create cuttlefish instance via Host Orchestrator: %s", e);
+            return new CommandResult(CommandStatus.EXCEPTION);
+        }
+        return new CommandResult(CommandStatus.SUCCESS);
     }
 
     /**

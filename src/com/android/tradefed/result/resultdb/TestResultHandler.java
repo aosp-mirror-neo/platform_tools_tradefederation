@@ -17,10 +17,10 @@ package com.android.tradefed.result.resultdb;
 
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.FailureReason;
+import com.android.resultdb.proto.ModuleIdentifier;
 import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestResult;
-import com.android.resultdb.proto.Variant;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.log.LogUtil.CLog;
@@ -33,6 +33,7 @@ import com.android.tradefed.testtype.suite.ModuleDefinition;
 import com.android.tradefed.testtype.suite.SuiteTestFilter;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
@@ -76,24 +77,14 @@ class TestResultHandler {
     }
 
     public void testStarted(
-            TestDescription test,
-            long startTime,
-            String currentModule,
-            Variant baseVariant,
-            Variant moduleVariant) {
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        if (moduleVariant != null) {
-            variantBuilder.mergeFrom(moduleVariant);
-        }
-        if (baseVariant != null) {
-            variantBuilder.mergeFrom(baseVariant);
-        }
-
+            TestDescription test, long startTime, ModuleIdentifier moduleIdentifier) {
         mCurrentTestResult =
                 TestResult.newBuilder()
                         .setTestIdStructured(
                                 ResultDBUtil.toTestIdentifier(
-                                        currentModule, variantBuilder.build(), test))
+                                        moduleIdentifier.getModuleName(),
+                                        moduleIdentifier.getModuleVariant(),
+                                        test))
                         .setResultId(
                                 String.format(
                                         "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
@@ -106,7 +97,9 @@ class TestResultHandler {
             TestDescription test,
             long endTime,
             HashMap<String, MetricMeasurement.Metric> testMetrics,
-            IRecorderClientLegacy recorder) {
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testEnded(%s) without a valid testStart before.", test);
             return;
@@ -140,14 +133,31 @@ class TestResultHandler {
         }
 
         mCurrentTestResult = testResultBuilder.build();
+        if (recorderLegacy != null) {
+            recorderLegacy.enqueueTestResult(mCurrentTestResult);
+        }
         if (recorder != null) {
-            recorder.enqueueTestResult(mCurrentTestResult);
+            if (Strings.isNullOrEmpty(workUnitId)) {
+                CLog.e("logic error: test ended %s without a valid work unit id.", test.toString());
+            } else {
+                // TODO(b/458246392): test might start outside a module, in such case the work unit
+                // id here might be the test run level work unit (if TestRunStarted is called), or
+                // the top work unit passed to this tradefed invocation.
+                // In both cases, ResultDB will reject the test result because of missing module_id
+                // in the parent work unit.
+                // Find a suitable workaround for this.
+                recorder.enqueueTestResult(workUnitId, mCurrentTestResult);
+            }
         }
         mCurrentTestResult = null;
     }
 
     public void testFailed(
-            TestDescription test, FailureDescription failure, IRecorderClientLegacy recorder) {
+            TestDescription test,
+            FailureDescription failure,
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
@@ -198,8 +208,12 @@ class TestResultHandler {
 
         if (truncationResult.wasTruncated()) {
             // Upload the full trace as test artifact.
+            Artifact atf = artifactFromString("testFailed_trace", trace);
+            if (recorderLegacy != null) {
+                recorderLegacy.enqueueArtifact(atf);
+            }
             if (recorder != null) {
-                recorder.enqueueArtifact(artifactFromString("testFailed_trace", trace));
+                recorder.enqueueArtifact(workUnitId, atf);
             }
         }
         // TODO: extract local instruction from test description and set in ResultDB test result.
@@ -207,7 +221,11 @@ class TestResultHandler {
     }
 
     public void testSkipped(
-            TestDescription test, SkipReason reason, IRecorderClientLegacy recorder) {
+            TestDescription test,
+            SkipReason reason,
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
             return;
@@ -230,14 +248,21 @@ class TestResultHandler {
         if (truncated.wasTruncated()) {
             // Upload the full skip reason as test artifact.
             Artifact atf = artifactFromString("testSkipped_reason", summaryHtml);
+            if (recorderLegacy != null) {
+                recorderLegacy.enqueueArtifact(atf);
+            }
             if (recorder != null) {
-                recorder.enqueueArtifact(atf);
+                recorder.enqueueArtifact(workUnitId, atf);
             }
         }
     }
 
     public void testAssumptionFailure(
-            TestDescription test, FailureDescription failure, IRecorderClientLegacy recorder) {
+            TestDescription test,
+            FailureDescription failure,
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
             return;
@@ -266,10 +291,13 @@ class TestResultHandler {
 
         if (truncated.wasTruncated()) {
             // Upload the full skip reason as test artifact if it was truncated.
+            Artifact atf =
+                    artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage());
+            if (recorderLegacy != null) {
+                recorderLegacy.enqueueArtifact(atf);
+            }
             if (recorder != null) {
-                recorder.enqueueArtifact(
-                        artifactFromString(
-                                "testAssumptionFailure_reason", failure.getErrorMessage()));
+                recorder.enqueueArtifact(workUnitId, atf);
             }
         }
     }
@@ -330,22 +358,15 @@ class TestResultHandler {
             IConfiguration configuration,
             IInvocationContext moduleContext,
             long currentTimestamp,
-            Variant baseVariant,
-            Variant moduleVariant,
-            String currentModule,
-            IRecorderClientLegacy recorder) {
+            ModuleIdentifier moduleIdentifier,
+            String workUnitId,
+            IRecorderClientLegacy recorderLegacy,
+            IRecorderClient recorder) {
         String moduleAbi = null;
         String moduleName = null;
         if (moduleContext != null) {
             moduleAbi = moduleContext.getAttribute(ModuleDefinition.MODULE_ABI);
             moduleName = moduleContext.getAttribute(ModuleDefinition.MODULE_NAME);
-        }
-        Variant.Builder variantBuilder = Variant.newBuilder();
-        if (moduleVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(moduleVariant);
-        }
-        if (baseVariant != null) {
-            variantBuilder = variantBuilder.mergeFrom(baseVariant);
         }
         for (Entry<String, SkipReason> entry :
                 configuration.getSkipManager().getDemotedTests().entrySet()) {
@@ -387,7 +408,9 @@ class TestResultHandler {
                     TestResult.newBuilder()
                             .setTestIdStructured(
                                     ResultDBUtil.toTestIdentifier(
-                                            currentModule, variantBuilder.build(), test))
+                                            moduleIdentifier.getModuleName(),
+                                            moduleIdentifier.getModuleVariant(),
+                                            test))
                             .setResultId(
                                     String.format(
                                             "%s-%05d",
@@ -397,9 +420,17 @@ class TestResultHandler {
                             .setSkippedReason(skippedReason)
                             .setSummaryHtml(summaryHtml)
                             .build();
+            if (recorderLegacy != null) {
+                recorderLegacy.enqueueTestResult(currentTest);
+            }
             if (recorder != null) {
-                recorder.enqueueTestResult(currentTest);
-                CLog.d("Backfilled %s SKIPPED", currentTest);
+                if (Strings.isNullOrEmpty(workUnitId)) {
+                    CLog.e(
+                            "logic error: reportDemotedTests %s without a valid work unit id.",
+                            test.toString());
+                    return;
+                }
+                recorder.enqueueTestResult(workUnitId, currentTest);
             }
         }
     }

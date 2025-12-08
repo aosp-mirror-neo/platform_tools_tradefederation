@@ -31,6 +31,7 @@ import com.android.tradefed.result.proto.LogFileProto.LogFileInfo;
 import com.android.tradefed.result.proto.TestRecordProto.ChildReference;
 import com.android.tradefed.result.proto.TestRecordProto.DebugInfo;
 import com.android.tradefed.result.proto.TestRecordProto.DebugInfoContext;
+import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
 import com.android.tradefed.result.proto.TestRecordProto.TestRecord;
 import com.android.tradefed.result.proto.TestRecordProto.TestStatus;
 import com.android.tradefed.result.retry.ISupportGranularResults;
@@ -73,6 +74,15 @@ public abstract class ProtoResultReporter
     private SkipReason mInvocationSkipReason = null;
     /** Whether or not a testModuleStart had currently been called. */
     private boolean mModuleInProgress = false;
+
+    /** Whether or not a testRunStart had currently been called. */
+    private boolean mTestRunInProgress = false;
+
+    /** Whether or not a testStart had currently been called. */
+    private boolean mTestInProgress = false;
+
+    /** Track the last test result for delayed reporting. */
+    private TestRecord.Builder mLastTestBuilder = null;
 
     private IInvocationContext mModuleContext;
     /** Track whether or not invocation ended has been reported. */
@@ -220,6 +230,10 @@ public abstract class ProtoResultReporter
 
     @Override
     public final void invocationEnded(long elapsedTime) {
+        // if we had a test run in progress, complete the call
+        if (mTestRunInProgress) {
+            testRunEnded(System.currentTimeMillis(), new HashMap<String, Metric>());
+        }
         if (mModuleInProgress) {
             // If we had a module in progress, and a new module start occurs, complete the call
             testModuleEnded();
@@ -257,6 +271,10 @@ public abstract class ProtoResultReporter
     @Override
     public final void testModuleStarted(IInvocationContext moduleContext) {
         beforeModuleStart();
+        // if we had a test run in progress, complete the call
+        if (mTestRunInProgress) {
+            testRunEnded(System.currentTimeMillis(), new HashMap<String, Metric>());
+        }
         if (mModuleInProgress) {
             // If we had a module in progress, and a new module start occurs, complete the call
             testModuleEnded();
@@ -336,6 +354,7 @@ public abstract class ProtoResultReporter
         runBuilder.setAttemptId(attemptNumber);
 
         mLatestChild.add(runBuilder);
+        mTestRunInProgress = true;
         try {
             processTestRunStarted(runBuilder.build());
         } catch (RuntimeException e) {
@@ -405,6 +424,7 @@ public abstract class ProtoResultReporter
 
     @Override
     public final void testRunEnded(long elapsedTimeMillis, HashMap<String, Metric> runMetrics) {
+        reportLastTest();
         TestRecord.Builder runBuilder = mLatestChild.pop();
         long startTime = timeStampToMillis(runBuilder.getStartTime());
         runBuilder.setEndTime(createTimeStamp(startTime + elapsedTimeMillis));
@@ -423,6 +443,8 @@ public abstract class ProtoResultReporter
         } catch (RuntimeException e) {
             CLog.e("Failed to process test run end:");
             CLog.e(e);
+        } finally {
+            mTestRunInProgress = false;
         }
     }
 
@@ -435,6 +457,7 @@ public abstract class ProtoResultReporter
 
     @Override
     public final void testStarted(TestDescription test, long startTime) {
+        reportLastTest();
         TestRecord.Builder testBuilder = TestRecord.newBuilder();
         TestRecord.Builder parent = mLatestChild.peek();
         testBuilder.setParentTestRecordId(parent.getTestRecordId());
@@ -443,6 +466,8 @@ public abstract class ProtoResultReporter
         testBuilder.setStatus(TestStatus.PASS);
 
         mLatestChild.add(testBuilder);
+        mTestInProgress = true;
+        mLastTestBuilder = testBuilder;
         try {
             processTestCaseStarted(testBuilder.build());
         } catch (RuntimeException e) {
@@ -460,18 +485,39 @@ public abstract class ProtoResultReporter
     public final void testEnded(
             TestDescription test, long endTime, HashMap<String, Metric> testMetrics) {
         TestRecord.Builder testBuilder = mLatestChild.pop();
+        mTestInProgress = false;
         testBuilder.setEndTime(createTimeStamp(endTime));
         testBuilder.putAllMetrics(testMetrics);
-        TestRecord.Builder parentBuilder = mLatestChild.peek();
+        // delay reporting the test end until a next testStart or testRunFailed or testRunEnd
+    }
 
+    /** Report previous test, if any exist. */
+    private void reportLastTest() {
+        if (mLastTestBuilder == null) {
+            return;
+        }
+        // check if the last test actually ended. If not, it means the last test was not
+        // complete and should be reported as failed.
+        if (mTestInProgress) {
+            addTestFailureDescription(
+                    mLastTestBuilder,
+                    FailureDescription.create(
+                            "Test end was not reported.", FailureStatus.TEST_FAILURE));
+            mLastTestBuilder.setEndTime(createTimeStamp(System.currentTimeMillis()));
+            mTestInProgress = false;
+        }
+
+        TestRecord.Builder parentBuilder = mLatestChild.peek();
         // Finalize the run and track it in the child
-        TestRecord testCaseRecord = testBuilder.build();
+        TestRecord testCaseRecord = mLastTestBuilder.build();
         parentBuilder.addChildren(createChildReference(testCaseRecord));
         try {
             processTestCaseEnded(testCaseRecord);
         } catch (RuntimeException e) {
             CLog.e("Failed to process test case end:");
             CLog.e(e);
+        } finally {
+            mLastTestBuilder = null;
         }
     }
 
@@ -484,6 +530,16 @@ public abstract class ProtoResultReporter
 
     @Override
     public final void testFailed(TestDescription test, String trace) {
+        // if current test is not in progress, we have received a test failed event for a test that
+        // already ended. update the last test record if not reported already.
+        if (!mTestInProgress) {
+            if (mLastTestBuilder != null) {
+                addTestFailureDescription(
+                        mLastTestBuilder,
+                        FailureDescription.create(trace, FailureStatus.TEST_FAILURE));
+            }
+            return;
+        }
         TestRecord.Builder testBuilder = mLatestChild.peek();
 
         testBuilder.setStatus(TestStatus.FAIL);
@@ -496,8 +552,20 @@ public abstract class ProtoResultReporter
 
     @Override
     public final void testFailed(TestDescription test, FailureDescription failure) {
+        // if current test is not in progress, we have received a test failed event for a test that
+        // already ended. update the last test record if not reported already.
+        if (!mTestInProgress) {
+            if (mLastTestBuilder != null) {
+                addTestFailureDescription(mLastTestBuilder, failure);
+            }
+            return;
+        }
         TestRecord.Builder testBuilder = mLatestChild.peek();
+        addTestFailureDescription(testBuilder, failure);
+    }
 
+    private void addTestFailureDescription(
+            TestRecord.Builder testBuilder, FailureDescription failure) {
         testBuilder.setStatus(TestStatus.FAIL);
         DebugInfo.Builder debugBuilder = DebugInfo.newBuilder();
         // FIXME: extract the error message from the trace

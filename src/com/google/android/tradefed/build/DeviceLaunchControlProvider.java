@@ -58,6 +58,7 @@ import com.android.tradefed.util.ZipUtil2;
 import com.google.android.tradefed.build.RemoteBuildInfo.BuildAttributeKey;
 import com.google.android.tradefed.build.content.ContentBasedHelper;
 import com.google.android.tradefed.build.content.ContentMappings;
+import com.google.common.base.Strings;
 
 import java.io.File;
 import java.io.IOException;
@@ -177,6 +178,11 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
             description = "Collect information from modified_files.json on what changed.")
     private boolean mCheckModifiedFiles = true;
 
+    @Option(
+            name = "alt-static-device-info-class",
+            description = "Alternative class to use for fetching static device info.")
+    private String mAltStaticDeviceInfoClass = null;
+
     /** stores the current device build's id */
     private String mCurrentBuildId = null;
 
@@ -192,6 +198,13 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
 
     public ITestDevice getDevice() {
         return mDevice;
+    }
+
+    public DeviceLaunchControlProvider() {
+        super();
+        if (!Strings.isNullOrEmpty(mAltStaticDeviceInfoClass)) {
+            StaticDeviceInfoUtil.setStaticDeviceInfoClass(mAltStaticDeviceInfoClass);
+        }
     }
 
     String fetchTestsZipPath(RemoteBuildInfo remoteBuild) throws BuildRetrievalError {
@@ -984,5 +997,9 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
             }
         }
         return filters;
+    }
+
+    public void setAltStaticDeviceInfoClass(String altStaticDeviceInfoClass) {
+        StaticDeviceInfoUtil.setStaticDeviceInfoClass(mAltStaticDeviceInfoClass);
     }
 }

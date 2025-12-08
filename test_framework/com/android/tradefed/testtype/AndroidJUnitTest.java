@@ -356,6 +356,10 @@ public class AndroidJUnitTest extends InstrumentationTest
                 // SDK sandboxes don't have access to the test ContentProvider.
                 mUseTestStorage = false;
                 CLog.d("Disable test storage for SDK sandbox instrumentation tests.");
+            } else if (mInstrumentInPcc) {
+                // Pcc processes don't have access to the test ContentProvider.
+                mUseTestStorage = false;
+                CLog.d("Disable test storage for PCC instrumentation tests.");
             } else {
                 mUseTestStorage = getDevice().checkApiLevelAgainstNextRelease(34);
                 if (!mUseTestStorage) {

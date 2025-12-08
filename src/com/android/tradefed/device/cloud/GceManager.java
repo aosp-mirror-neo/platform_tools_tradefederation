@@ -49,6 +49,7 @@ import com.android.tradefed.util.avd.InspectionUtil;
 import com.android.tradefed.util.avd.LogCollector;
 import com.android.tradefed.util.avd.OxygenClient;
 
+import com.google.android_cuttlefish.base.cvd.cuttlefish.host.commands.cvd.cli.parser.CvdConfig;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpRequestInitializer;
 import com.google.api.client.json.JsonFactory;
@@ -67,6 +68,9 @@ import com.google.common.net.HostAndPort;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ProcessBuilder.Redirect;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -266,6 +270,9 @@ public class GceManager {
             // with more parameters passed in.
             return startGceWithOxygenClient(logger, attributes);
         } else {
+            if (getTestDeviceOptions().getCreateWithHO()) {
+                return createWithHO(logger, ipDevice, user, offset, attributes);
+            }
             return startGceWithAcloud(ipDevice, user, offset, attributes);
         }
     }
@@ -730,6 +737,108 @@ public class GceManager {
             logCloudDeviceMetadata();
             FileUtil.deleteFile(reportFile);
         }
+    }
+
+    /**
+     * Attempt to start a gce instance via HO API.
+     *
+     * @param logger The {@link ITestLogger} where to log the file.
+     * @param ipDevice the initial IP of the GCE instance to run AVD in, <code>null</code> if not
+     *     applicable
+     * @param user the host running user of AVD, <code>null</code> if not applicable
+     * @param offset the device num offset of the AVD in the host, <code>null</code> if not
+     *     applicable
+     * @param attributes attributes associated with current invocation, used for passing applicable
+     *     information down to the GCE instance to be added as VM metadata
+     * @return a {@link GceAvdInfo} describing the GCE instance. Could be a BOOT_FAIL instance.
+     * @throws TargetSetupError
+     */
+    private GceAvdInfo createWithHO(
+            ITestLogger logger,
+            String ipDevice,
+            String user,
+            Integer offset,
+            MultiMap<String, String> attributes)
+            throws TargetSetupError {
+        if (ipDevice == null) {
+            throw new TargetSetupError(
+                    "remote host ip is empty",
+                    mDeviceDescriptor,
+                    InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+        }
+        File avdConfigFile = getAvdConfigFile();
+        if (avdConfigFile != null) {
+            try {
+                String pathStr = avdConfigFile.getAbsolutePath();
+                CLog.i("avd config file absolute path: %s", pathStr);
+                Path path = Path.of(pathStr);
+                String content = Files.readString(path, Charset.defaultCharset());
+                CLog.i("avd config file content: %s", content);
+            } catch (IOException e) {
+                throw new TargetSetupError(
+                        e.getMessage(),
+                        mDeviceDescriptor,
+                        InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+            }
+        }
+        mGceAvdInfo =
+                new GceAvdInfo(
+                        mGceInstanceName,
+                        HostAndPort.fromString(mGceHost)
+                                .withDefaultPort(mDeviceOptions.getRemoteAdbPort()));
+        mGceAvdInfo.setIpPreconfigured(ipDevice != null);
+        mGceAvdInfo.setDeviceOffset(offset);
+        mGceAvdInfo.setInstanceUser(user);
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        /* useOxygenation= */ false,
+                        getTestDeviceOptions().getExtraOxygenArgs(),
+                        /* instanceName= */ "",
+                        ipDevice,
+                        /* oxygenationDeviceId= */ "",
+                        /* targetRegion= */ "",
+                        /* accountingUser= */ "",
+                        /* oxygenClient= */ null);
+        String buildTarget = mBuildInfo.getBuildFlavor();
+        if (mBuildInfo.getBuildAttributes().containsKey("build_target")) {
+            // If BuildInfo contains the attribute for a build target, use that.
+            buildTarget = mBuildInfo.getBuildAttributes().get("build_target");
+        }
+        CvdConfig.Disk.Builder diskBuilder = CvdConfig.Disk.newBuilder();
+        diskBuilder.setDownloadImgZip(true);
+        diskBuilder.setDefaultBuild(buildTarget);
+        CvdConfig.Instance.Builder instanceBuilder = CvdConfig.Instance.newBuilder();
+        instanceBuilder.setDisk(diskBuilder.build());
+        CvdConfig.EnvironmentSpecification.Builder envSpecBuilder =
+                CvdConfig.EnvironmentSpecification.newBuilder();
+        envSpecBuilder.addInstances(instanceBuilder.build());
+        CvdConfig.EnvironmentSpecification envSpec = envSpecBuilder.build();
+        CLog.i(
+                "Creating cuttlefish instance with environment specification: %s",
+                envSpec.toString());
+        long startTime = System.currentTimeMillis();
+        CommandResult res = mHOUtil.createCvd(envSpec);
+        if (!CommandStatus.SUCCESS.equals(res.getStatus())) {
+            CLog.w("create cvd request failed: %s", mGceAvdInfo);
+            mGceAvdInfo.setErrorType(InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_HO_CALL_FAILED);
+            mGceAvdInfo.setStatus(GceStatus.FAIL);
+            mGceAvdInfo.setErrors("`create cvd` request failed");
+            return mGceAvdInfo;
+        }
+        long timeout =
+                startTime + getTestDeviceOptions().getGceCmdTimeout() - System.currentTimeMillis();
+        boolean bootOk = mHOUtil.deviceBootCompleted(timeout);
+        // TODO(dshi): parse metrics for fetch and launch time.
+        if (!bootOk) {
+            mGceAvdInfo.setErrorType(
+                    InfraErrorIdentifier.CUTTLEFISH_LAUNCH_FAILURE_HO_BOOT_TIMEOUT);
+            mGceAvdInfo.setStatus(GceStatus.BOOT_FAIL);
+            mGceAvdInfo.setErrors("Waiting for boot complete timed out");
+            CLog.w("Waiting for boot complete timed out");
+            CommonLogRemoteFileUtil.pullCommonCvdLogs(
+                    mGceAvdInfo, mHOUtil, logger, getTestDeviceOptions());
+        }
+        return mGceAvdInfo;
     }
 
     /**

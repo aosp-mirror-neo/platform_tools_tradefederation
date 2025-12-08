@@ -26,7 +26,7 @@ import java.lang.reflect.Method;
  * A utility class that loads StaticDeviceInfo from classpath and provides access to the methods.
  */
 public class StaticDeviceInfoUtil {
-    private static final String STATIC_DEVICE_INFO_CLASS =
+    private static String mStaticDeviceInfoClass =
             "com.google.android.tradefed.device.StaticDeviceInfo";
 
     /** Method to fetch the flasher class to use for a given product type/variant */
@@ -35,7 +35,7 @@ public class StaticDeviceInfoUtil {
         Class<?>[] paramTypes = {String.class, String.class};
         Object[] methodArgs = {type, variant};
         try {
-            Class<?> loadedClass = Class.forName(STATIC_DEVICE_INFO_CLASS);
+            Class<?> loadedClass = Class.forName(mStaticDeviceInfoClass);
             Method method = loadedClass.getDeclaredMethod(methodName, paramTypes);
             return (Class<? extends IDeviceFlasher>) method.invoke(null, methodArgs);
         } catch (ClassNotFoundException e) {
@@ -44,12 +44,12 @@ public class StaticDeviceInfoUtil {
         } catch (NoSuchMethodException e) {
             CLog.d(
                     "Failed to load method %s from loaded class %s.",
-                    methodName, STATIC_DEVICE_INFO_CLASS);
+                    methodName, mStaticDeviceInfoClass);
             throw new RuntimeException(e);
         } catch (InvocationTargetException e) {
             CLog.d(
                     "Failed to invoke method %s from loaded class %s.",
-                    methodName, STATIC_DEVICE_INFO_CLASS);
+                    methodName, mStaticDeviceInfoClass);
             throw new RuntimeException(e);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
@@ -66,7 +66,7 @@ public class StaticDeviceInfoUtil {
         Class<?>[] paramTypes = {String.class, String.class};
         Object[] methodArgs = {type, variant};
         try {
-            Class<?> loadedClass = Class.forName(STATIC_DEVICE_INFO_CLASS);
+            Class<?> loadedClass = Class.forName(mStaticDeviceInfoClass);
             Method method = loadedClass.getDeclaredMethod(methodName, paramTypes);
             return (String) method.invoke(null, methodArgs);
         } catch (ClassNotFoundException e) {
@@ -75,15 +75,19 @@ public class StaticDeviceInfoUtil {
         } catch (NoSuchMethodException e) {
             CLog.d(
                     "Failed to load method %s from loaded class %s.",
-                    methodName, STATIC_DEVICE_INFO_CLASS);
+                    methodName, mStaticDeviceInfoClass);
             throw new RuntimeException(e);
         } catch (InvocationTargetException e) {
             CLog.d(
                     "Failed to invoke method %s from loaded class %s.",
-                    methodName, STATIC_DEVICE_INFO_CLASS);
+                    methodName, mStaticDeviceInfoClass);
             throw new RuntimeException(e);
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static void setStaticDeviceInfoClass(String staticDeviceInfoClass) {
+        mStaticDeviceInfoClass = staticDeviceInfoClass;
     }
 }

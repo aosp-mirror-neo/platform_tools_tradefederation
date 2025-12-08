@@ -24,6 +24,8 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.avd.OxygenClient.LHPTunnelMode;
 
+import com.google.android_cuttlefish.base.cvd.cuttlefish.host.commands.cvd.cli.parser.CvdConfig.EnvironmentSpecification;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -428,6 +430,45 @@ public class HostOrchestratorUtilTest {
         Assert.assertNull(mHOUtil.pullCvdHostLogs());
     }
 
+    @Test
+    public void testCreateCvd() throws Exception {
+        Mockito.doReturn(1111).when(mMockClient).createServerSocket();
+        Mockito.doReturn(true).when(mMockProcess).isAlive();
+        Mockito.doReturn(mMockProcess)
+                .when(mMockClient)
+                .createTunnelViaLHP(
+                        Mockito.eq(LHPTunnelMode.CURL),
+                        Mockito.eq("1111"),
+                        Mockito.eq(INSTANCE_NAME),
+                        Mockito.eq(HOST),
+                        Mockito.eq(TARGET_REGION),
+                        Mockito.eq(ACCOUNTING_USER),
+                        Mockito.eq(OXYGENATION_DEVICE_ID),
+                        Mockito.eq(mExtraOxygenArgs),
+                        Mockito.any());
+        mHOUtil =
+                new HostOrchestratorUtil(
+                        true,
+                        mExtraOxygenArgs,
+                        INSTANCE_NAME,
+                        HOST,
+                        OXYGENATION_DEVICE_ID,
+                        TARGET_REGION,
+                        ACCOUNTING_USER,
+                        mMockClient,
+                        mMockHttpClient) {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        Mockito.when(mMockHttpClient.send(Mockito.any()))
+                .thenReturn(
+                        mockHttpResponse(200, OPERATION_RES),
+                        mockHttpResponse(200, OPERATION_DONE_RES));
+        EnvironmentSpecification specs = EnvironmentSpecification.newBuilder().build();
+        Assert.assertEquals(CommandStatus.SUCCESS, mHOUtil.createCvd(specs).getStatus());
+    }
 
     @Test
     public void testPowerwashGce() throws Exception {

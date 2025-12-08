@@ -41,9 +41,8 @@ class WorkUnitHandler {
     // Set containing the allowed variant module parameter keys
     private static final ImmutableSet<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
+
     // Module level variant for test in the same test module.
-    private Variant mModuleVariant;
-    private String mCurrentModuleName;
     private IInvocationContext mModuleContext;
     private ModuleIdentifier mCurrentModuleIdentifier;
 
@@ -58,16 +57,16 @@ class WorkUnitHandler {
     public void testModuleStarted(
             IInvocationContext moduleContext, String invTopWorkUnitId, IRecorderClient recorder) {
         mModuleContext = moduleContext;
-        mCurrentModuleName = moduleContext.getConfigurationDescriptor().getModuleName();
-        mModuleVariant = extractModuleVariant(moduleContext.getAttributes());
-        if (Strings.isNullOrEmpty(mCurrentModuleName)) {
-            mCurrentModuleName = "no-module-name";
+        String currentModuleName = moduleContext.getConfigurationDescriptor().getModuleName();
+        Variant moduleVariant = extractModuleVariant(moduleContext.getAttributes());
+        if (Strings.isNullOrEmpty(currentModuleName)) {
+            currentModuleName = "no-module-name";
         }
         mCurrentModuleIdentifier =
                 ModuleIdentifier.newBuilder()
-                        .setModuleName(mCurrentModuleName)
+                        .setModuleName(currentModuleName)
                         .setModuleScheme("junit")
-                        .setModuleVariant(mModuleVariant)
+                        .setModuleVariant(moduleVariant)
                         .build();
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
@@ -95,8 +94,6 @@ class WorkUnitHandler {
 
     public void testModuleEnded(String rootInvocationId, IRecorderClient recorder) {
         mModuleContext = null;
-        mCurrentModuleName = null;
-        mModuleVariant = null;
         mCurrentModuleIdentifier = null;
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
@@ -188,12 +185,15 @@ class WorkUnitHandler {
         return mModuleContext;
     }
 
-    public Variant getModuleVariant() {
-        return mModuleVariant;
+    public ModuleIdentifier getCurrentModuleIdentifier() {
+        return mCurrentModuleIdentifier;
     }
 
-    public String getCurrentModule() {
-        return mCurrentModuleName;
+    public String getCurrentWorkUnitId() {
+        if (mWorkUnitInfos.isEmpty()) {
+            return null;
+        }
+        return mWorkUnitInfos.peek().getId();
     }
 
     public void setTopWorkUnitInfo(String topWorkUnitId, String workUnitType) {

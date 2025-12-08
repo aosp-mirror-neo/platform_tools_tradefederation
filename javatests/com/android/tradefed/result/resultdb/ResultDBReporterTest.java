@@ -65,11 +65,9 @@ public class ResultDBReporterTest {
         public StubClient mRecorderLegacy = StubClient.create();
         public StubClient mRecorder = StubClient.create();
         public String mInvocationId;
-        public String mUpdateToken;
         public Invocation mInvocation;
         public String mRootInvocationId;
         public RootInvocation mRootInvocation;
-        public WorkUnit mRootWorkUnit;
 
         public ResultDBReporterTester() {
             super();
@@ -84,7 +82,6 @@ public class ResultDBReporterTest {
         IRecorderClientLegacy createRecorderClientLegacy(
                 String invocationId, String updateToken, Boolean isStaging) {
             mInvocationId = invocationId;
-            mUpdateToken = updateToken;
             return mRecorderLegacy;
         }
 
@@ -100,7 +97,6 @@ public class ResultDBReporterTest {
         IRecorderClient createRecorderClient(
                 String rootInvocationId, String updateToken, Boolean isStaging) {
             mRootInvocationId = rootInvocationId;
-            mUpdateToken = updateToken;
             return mRecorder;
         }
 
@@ -112,7 +108,6 @@ public class ResultDBReporterTest {
                 Boolean isStaging) {
             mRootInvocationId = rootInvocationId;
             mRootInvocation = rootInvocation;
-            mRootWorkUnit = rootWorkUnit;
             return mRecorder;
         }
 
@@ -162,20 +157,21 @@ public class ResultDBReporterTest {
     }
 
     private TestResult.Builder newTestResult(String method) {
+        return newTestResult(method, "example-module", Variant.getDefaultInstance());
+    }
+
+    private TestResult.Builder newTestResult(String method, String moduleName, Variant variant) {
+        TestIdentifier.Builder testId =
+                TestIdentifier.newBuilder()
+                        .setModuleName(moduleName)
+                        .setModuleScheme("junit")
+                        .setModuleVariant(variant)
+                        .setCoarseName("com.google")
+                        .setFineName("ExampleClass")
+                        .setCaseName(method);
+
         return TestResult.newBuilder()
-                .setTestIdStructured(
-                        TestIdentifier.newBuilder()
-                                .setModuleName("example-module")
-                                .setModuleScheme("junit")
-                                .setModuleVariant(
-                                        Variant.newBuilder()
-                                                .putDef("name", "test tag")
-                                                .putDef("scheduler", "ATP")
-                                                .build())
-                                .setCoarseName("com.google")
-                                .setFineName("ExampleClass")
-                                .setCaseName(method)
-                                .build())
+                .setTestIdStructured(testId.build())
                 .setResultId("1234abcd-00001")
                 .setStartTime(Timestamps.fromSeconds(1536333825L))
                 .setDuration(Durations.fromMillis(100))
@@ -197,6 +193,7 @@ public class ResultDBReporterTest {
         mConfig = new ConfigurationTester("name", "description");
         mReporter.setConfiguration(mConfig);
         mOption = new OptionSetter(mReporter);
+        mOption.setOptionValue("enable-work-unit-reporting", "true");
     }
 
     @Test
@@ -209,7 +206,7 @@ public class ResultDBReporterTest {
                 .simulateInvocation(mReporter);
 
         assertThat(mReporter.isDisabled()).isTrue();
-        assertThat(mReporter.mRecorder.getTestResults()).isEmpty();
+        assertThat(mReporter.mRecorder.getTestResultItems()).isEmpty();
         assertThat(mReporter.mRecorderLegacy.getTestResults()).isEmpty();
     }
 
@@ -224,9 +221,17 @@ public class ResultDBReporterTest {
                 .simulateInvocation(mReporter);
 
         assertThat(mReporter.isDisabled()).isFalse();
-        assertThat(mReporter.mRecorder.getTestResults()).isEmpty();
-        // No test results uploaded to mRecorderLegacy, because no invocation id in context.
+        // Verify test results are uploaded to mRecorder.
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(
+                        new RecorderClient.TestResultItem(
+                                testRunWorkUnitId, newTestResult("testExampleMethod").build()));
+        // Verify no test results are uploaded to mRecorderLegacy, because no invocation id in
+        // context.
         assertThat(mReporter.mRecorderLegacy.getTestResults()).isEmpty();
+        // No need to verify work unit creation, because it is already covered in
+        // createLocalInvocation_rootInvocationAndLegacyInvocationCreated.
     }
 
     @Test
@@ -239,7 +244,7 @@ public class ResultDBReporterTest {
                 .simulateInvocation(mReporter);
 
         assertThat(mReporter.isDisabled()).isFalse();
-        assertThat(mReporter.mRecorder.getTestResults()).isEmpty();
+        assertThat(mReporter.mRecorder.getTestResultItems()).isEmpty();
         assertThat(mReporter.mRecorderLegacy.getTestResults())
                 .containsExactly(newTestResult("testExampleMethod").build());
     }
@@ -311,21 +316,12 @@ public class ResultDBReporterTest {
                         // Root work unit update
                         newWorkUnitUpdate(
                                 "u-random_uuid_string", "root", WorkUnit.State.SUCCEEDED));
+        // Assert test results uploaded to mRecorder.
+        TestResult expected = newTestResult("testExampleMethod").build();
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(new RecorderClient.TestResultItem(testRunWorkUnitId, expected));
         // Assert test results uploaded to mRecorderLegacy.
-        Variant variant =
-                Variant.newBuilder()
-                        .putDef("branch", "test-branch")
-                        .putDef("build_provider", "androidbuild")
-                        .putDef("name", "test tag")
-                        .putDef("scheduler", "ATP")
-                        .putDef("target", "test-flavor")
-                        .build();
-        TestResult.Builder expected = newTestResult("testExampleMethod");
-        expected.setTestIdStructured(
-                expected.getTestIdStructured().toBuilder().setModuleVariant(variant).build());
-        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected.build());
-        // No test results uploaded to mRecorder yet, because it is not implemented yet.
-        assertThat(mReporter.mRecorder.getTestResults()).isEmpty();
+        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected);
     }
 
     @Test
@@ -447,41 +443,23 @@ public class ResultDBReporterTest {
                                 "root_invocation_001",
                                 moduleWorkUnitId2,
                                 WorkUnit.State.SUCCEEDED));
-
-        // Assert test results uploaded to mRecorderLegacy.
-        Variant variant =
-                Variant.newBuilder()
-                        .putDef("branch", "test-branch")
-                        .putDef("build_provider", "androidbuild")
-                        .putDef("name", "test tag")
-                        .putDef("scheduler", "ATP")
-                        .putDef("target", "test-flavor")
+        // Verify test results uploaded to mRecorder.
+        TestResult expectedTestResult1 =
+                newTestResult("testExampleMethod", "module-1", moduleVariant1)
+                        .setResultId("1234abcd-00001")
                         .build();
-        TestResult.Builder expectedTestResult1 = newTestResult("testExampleMethod");
-        expectedTestResult1
-                .setResultId("1234abcd-00001")
-                .setTestIdStructured(
-                        expectedTestResult1.getTestIdStructured().toBuilder()
-                                .setModuleName("module-1")
-                                .setModuleVariant(
-                                        variant.toBuilder()
-                                                .putDef("module_abi", "module-1-abi")
-                                                .putDef("module_param", "test-parameterization")
-                                                .build())
-                                .build());
-        TestResult.Builder expectedTestResult2 = newTestResult("testExampleMethod");
-        expectedTestResult2
-                .setResultId("1234abcd-00002")
-                .setTestIdStructured(
-                        expectedTestResult2.getTestIdStructured().toBuilder()
-                                .setModuleName("module-2")
-                                .setModuleVariant(
-                                        variant.toBuilder()
-                                                .putDef("module_abi", "module-2-abi")
-                                                .build())
-                                .build());
+        TestResult expectedTestResult2 =
+                newTestResult("testExampleMethod", "module-2", moduleVariant2)
+                        .setResultId("1234abcd-00002")
+                        .build();
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(
+                        new RecorderClient.TestResultItem(testRunWorkUnitId11, expectedTestResult1),
+                        new RecorderClient.TestResultItem(
+                                testRunWorkUnitId21, expectedTestResult2));
+        // Verify test results uploaded to mRecorderLegacy.
         assertThat(mReporter.mRecorderLegacy.getTestResults())
-                .containsExactly(expectedTestResult1.build(), expectedTestResult2.build());
+                .containsExactly(expectedTestResult1, expectedTestResult2);
     }
 
     @Test
@@ -489,6 +467,9 @@ public class ResultDBReporterTest {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withTest(
                         "com.google.ExampleClass",
                         "testMethodPassed",
@@ -511,51 +492,68 @@ public class ResultDBReporterTest {
                         InvocationSimulator.TestStatus.TEST_SKIPPED)
                 .simulateInvocation(mReporter);
 
-        assertThat(mReporter.mRecorderLegacy.getTestResults())
+        assertThat(mReporter.mRecorder.getWorkUnitItems()).hasSize(2);
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        TestResult expected1 =
+                newTestResult("testMethodPassed")
+                        .setResultId("1234abcd-00001")
+                        .setStatusV2(TestResult.Status.PASSED)
+                        .build();
+        TestResult expected2 =
+                newTestResult("testMethodFailed")
+                        .setResultId("1234abcd-00002")
+                        .setStatusV2(TestResult.Status.FAILED)
+                        .setStartTime(Timestamps.fromMillis(1536333825200L))
+                        .setFailureReason(
+                                FailureReason.newBuilder()
+                                        .setKind(FailureReason.Kind.ORDINARY)
+                                        .addErrors(
+                                                FailureReason.Error.newBuilder()
+                                                        .setMessage("Fail Trace")
+                                                        .setTrace("Fail Trace")))
+                        .build();
+        TestResult expected3 =
+                newTestResult("testMethodAssumption")
+                        .setResultId("1234abcd-00003")
+                        .setStatusV2(TestResult.Status.SKIPPED)
+                        .setStartTime(Timestamps.fromMillis(1536333825400L))
+                        .setSkippedReason(
+                                SkippedReason.newBuilder()
+                                        .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
+                                        .setReasonMessage("Assumption Fail Trace"))
+                        .setSummaryHtml("Assumption Fail Trace")
+                        .build();
+        TestResult expected4 =
+                newTestResult("testMethodIgnored")
+                        .setResultId("1234abcd-00004")
+                        .setStatusV2(TestResult.Status.SKIPPED)
+                        .setSkippedReason(
+                                SkippedReason.newBuilder()
+                                        .setKind(SkippedReason.Kind.DISABLED_AT_DECLARATION))
+                        .setStartTime(Timestamps.fromMillis(1536333825600L))
+                        .build();
+        TestResult expected5 =
+                newTestResult("testMethodSkip")
+                        .setResultId("1234abcd-00005")
+                        .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
+                        .setStartTime(Timestamps.fromMillis(1536333825800L))
+                        .setSummaryHtml(
+                                "bug_id: bugId<br>trigger: skip trigger<br>reason:"
+                                        + " skip reason message<br>")
+                        .build();
+        // Assert test results uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getTestResultItems())
                 .containsExactly(
-                        newTestResult("testMethodPassed")
-                                .setResultId("1234abcd-00001")
-                                .setStatusV2(TestResult.Status.PASSED)
-                                .build(),
-                        newTestResult("testMethodFailed")
-                                .setResultId("1234abcd-00002")
-                                .setStatusV2(TestResult.Status.FAILED)
-                                .setStartTime(Timestamps.fromMillis(1536333825200L))
-                                .setFailureReason(
-                                        FailureReason.newBuilder()
-                                                .setKind(FailureReason.Kind.ORDINARY)
-                                                .addErrors(
-                                                        FailureReason.Error.newBuilder()
-                                                                .setMessage("Fail Trace")
-                                                                .setTrace("Fail Trace")))
-                                .build(),
-                        newTestResult("testMethodAssumption")
-                                .setResultId("1234abcd-00003")
-                                .setStatusV2(TestResult.Status.SKIPPED)
-                                .setStartTime(Timestamps.fromMillis(1536333825400L))
-                                .setSkippedReason(
-                                        SkippedReason.newBuilder()
-                                                .setKind(SkippedReason.Kind.SKIPPED_BY_TEST_BODY)
-                                                .setReasonMessage("Assumption Fail Trace"))
-                                .setSummaryHtml("Assumption Fail Trace")
-                                .build(),
-                        newTestResult("testMethodIgnored")
-                                .setResultId("1234abcd-00004")
-                                .setStatusV2(TestResult.Status.SKIPPED)
-                                .setSkippedReason(
-                                        SkippedReason.newBuilder()
-                                                .setKind(
-                                                        SkippedReason.Kind.DISABLED_AT_DECLARATION))
-                                .setStartTime(Timestamps.fromMillis(1536333825600L))
-                                .build(),
-                        newTestResult("testMethodSkip")
-                                .setResultId("1234abcd-00005")
-                                .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
-                                .setStartTime(Timestamps.fromMillis(1536333825800L))
-                                .setSummaryHtml(
-                                        "bug_id: bugId<br>trigger: skip trigger<br>reason: skip"
-                                                + " reason message<br>")
-                                .build());
+                        new RecorderClient.TestResultItem(testRunWorkUnitId, expected1),
+                        new RecorderClient.TestResultItem(testRunWorkUnitId, expected2),
+                        new RecorderClient.TestResultItem(testRunWorkUnitId, expected3),
+                        new RecorderClient.TestResultItem(testRunWorkUnitId, expected4),
+                        new RecorderClient.TestResultItem(testRunWorkUnitId, expected5));
+        // Assert test results uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getTestResults())
+                .containsExactly(expected1, expected2, expected3, expected4, expected5);
+        // No need to verify work unit and work unit updates as they are already verified in the
+        // test uploadToUpstreamRootInvocation_multipleModulesAndTestRuns.
     }
 
     @Test
@@ -566,6 +564,9 @@ public class ResultDBReporterTest {
             failureMessage += "a";
         }
         mSimulator
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
                 .withTestFailure(
@@ -582,6 +583,7 @@ public class ResultDBReporterTest {
                         // Trace field has a limit of 4096 bytes.
                         .setTrace(failureMessage.substring(0, 4096))
                         .build();
+
         TestResult expectedTestResult =
                 newTestResult("testMethodFailed")
                         .setStatusV2(TestResult.Status.FAILED)
@@ -592,19 +594,30 @@ public class ResultDBReporterTest {
                                         .addErrors(expectedRDBError))
                         .setSummaryHtml("TF error type: TEST_FAILURE")
                         .build();
-        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expectedTestResult);
-
-        // Verify the full skip reason artifact is uploaded to ResultDB.
-        assertThat(mReporter.mRecorderLegacy.getArtifacts())
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        // Assert test results uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getTestResultItems())
                 .containsExactly(
-                        Artifact.newBuilder()
-                                .setArtifactId("testFailed_trace")
-                                .setContentType("text/plain")
-                                .setSizeBytes(4196)
-                                .setTestIdStructured(expectedTestResult.getTestIdStructured())
-                                .setResultId(expectedTestResult.getResultId())
-                                .setContents(ByteString.copyFromUtf8(failureMessage))
-                                .build());
+                        new RecorderClient.TestResultItem(testRunWorkUnitId, expectedTestResult));
+        // Assert the test result is uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expectedTestResult);
+        Artifact expectedArtifact =
+                Artifact.newBuilder()
+                        .setArtifactId("testFailed_trace")
+                        .setContentType("text/plain")
+                        .setSizeBytes(4196)
+                        .setTestIdStructured(expectedTestResult.getTestIdStructured())
+                        .setResultId(expectedTestResult.getResultId())
+                        .setContents(ByteString.copyFromUtf8(failureMessage))
+                        .build();
+        // Assert the full artifact is uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getArtifactItems())
+                .containsExactly(
+                        new RecorderClient.ArtifactItem(testRunWorkUnitId, expectedArtifact));
+        // Assert the full artifact is uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getArtifacts()).containsExactly(expectedArtifact);
+        // No need to verify work unit and work unit updates as they are already verified in the
+        // test uploadToUpstreamRootInvocation_multipleModulesAndTestRuns.
     }
 
     @Test
@@ -612,6 +625,9 @@ public class ResultDBReporterTest {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withTestFailure(
                         "com.google.ExampleClass",
                         "testMethodCrashed",
@@ -620,22 +636,29 @@ public class ResultDBReporterTest {
                                 TestRecordProto.FailureStatus.SYSTEM_UNDER_TEST_CRASHED))
                 .simulateInvocation(mReporter);
 
-        assertThat(mReporter.mRecorderLegacy.getTestResults())
-                .containsExactly(
-                        newTestResult("testMethodCrashed")
-                                .setStatusV2(TestResult.Status.FAILED)
-                                .setFailureReason(
-                                        FailureReason.newBuilder()
-                                                .setKind(FailureReason.Kind.CRASH)
-                                                .addErrors(
-                                                        FailureReason.Error.newBuilder()
-                                                                .setMessage("Failure Message")
-                                                                .setTrace(
-                                                                        "Failure Message\n"
-                                                                            + " java.lang.RuntimeException:"
-                                                                            + " Failure Message")))
-                                .setSummaryHtml("TF error type: SYSTEM_UNDER_TEST_CRASHED")
-                                .build());
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        TestResult expected =
+                newTestResult("testMethodCrashed")
+                        .setStatusV2(TestResult.Status.FAILED)
+                        .setFailureReason(
+                                FailureReason.newBuilder()
+                                        .setKind(FailureReason.Kind.CRASH)
+                                        .addErrors(
+                                                FailureReason.Error.newBuilder()
+                                                        .setMessage("Failure Message")
+                                                        .setTrace(
+                                                                "Failure Message\n"
+                                                                    + " java.lang.RuntimeException:"
+                                                                    + " Failure Message")))
+                        .setSummaryHtml("TF error type: SYSTEM_UNDER_TEST_CRASHED")
+                        .build();
+        // Assert test results are uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(new RecorderClient.TestResultItem(testRunWorkUnitId, expected));
+        // Assert test results are uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected);
+        // No need to verify work unit and work unit updates as they are already verified in the
+        // test uploadToUpstreamRootInvocation_multipleModulesAndTestRuns.
     }
 
     @Test
@@ -643,6 +666,9 @@ public class ResultDBReporterTest {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withTestFailure(
                         "com.google.ExampleClass",
                         "testMethodTimedOut",
@@ -650,19 +676,26 @@ public class ResultDBReporterTest {
                                 "Failure Message", TestRecordProto.FailureStatus.TIMED_OUT))
                 .simulateInvocation(mReporter);
 
-        assertThat(mReporter.mRecorderLegacy.getTestResults())
-                .containsExactly(
-                        newTestResult("testMethodTimedOut")
-                                .setStatusV2(TestResult.Status.FAILED)
-                                .setFailureReason(
-                                        FailureReason.newBuilder()
-                                                .setKind(FailureReason.Kind.TIMEOUT)
-                                                .addErrors(
-                                                        FailureReason.Error.newBuilder()
-                                                                .setMessage("Failure Message")
-                                                                .setTrace("Failure Message")))
-                                .setSummaryHtml("TF error type: TIMED_OUT")
-                                .build());
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        TestResult expected =
+                newTestResult("testMethodTimedOut")
+                        .setStatusV2(TestResult.Status.FAILED)
+                        .setFailureReason(
+                                FailureReason.newBuilder()
+                                        .setKind(FailureReason.Kind.TIMEOUT)
+                                        .addErrors(
+                                                FailureReason.Error.newBuilder()
+                                                        .setMessage("Failure Message")
+                                                        .setTrace("Failure Message")))
+                        .setSummaryHtml("TF error type: TIMED_OUT")
+                        .build();
+        // Assert test results are uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(new RecorderClient.TestResultItem(testRunWorkUnitId, expected));
+        // Assert test results are uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected);
+        // No need to verify work unit and work unit updates as they are already verified in the
+        // test uploadToUpstreamRootInvocation_multipleModulesAndTestRuns.
     }
 
     @Test
@@ -671,38 +704,43 @@ public class ResultDBReporterTest {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withModuleAttribute(ModuleDefinition.MODULE_ABI, "x86")
                 .withModuleAttribute(ModuleDefinition.MODULE_NAME, "module-name")
                 .withTestRun("testRun1")
                 .simulateInvocation(mReporter);
-        Variant variant =
-                Variant.newBuilder()
-                        .putDef("module_abi", "x86")
-                        .putDef("name", "test tag")
-                        .putDef("scheduler", "ATP")
-                        .build();
+        Variant variant = Variant.newBuilder().putDef("module_abi", "x86").build();
 
-        assertThat(mReporter.mRecorderLegacy.getTestResults())
-                .containsExactly(
-                        TestResult.newBuilder()
-                                .setTestIdStructured(
-                                        TestIdentifier.newBuilder()
-                                                .setModuleName("example-module")
-                                                .setModuleScheme("junit")
-                                                .setModuleVariant(variant)
-                                                .setCoarseName("empty-package")
-                                                .setFineName("testClassSkipped")
-                                                .setCaseName("test-name-skipped")
-                                                .build())
-                                .setResultId("1234abcd-00001")
-                                .setStartTime(Timestamps.fromSeconds(1000000L))
-                                .setStatusV2(TestResult.Status.SKIPPED)
-                                .setSkippedReason(
-                                        SkippedReason.newBuilder()
-                                                .setKind(SkippedReason.Kind.DEMOTED)
-                                                .setReasonMessage("test-skip-reason"))
-                                .setSummaryHtml("trigger: UNKNOWN_TRIGGER<br>")
-                                .build());
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        TestResult expected =
+                TestResult.newBuilder()
+                        .setTestIdStructured(
+                                TestIdentifier.newBuilder()
+                                        .setModuleName("example-module")
+                                        .setModuleScheme("junit")
+                                        .setModuleVariant(variant)
+                                        .setCoarseName("empty-package")
+                                        .setFineName("testClassSkipped")
+                                        .setCaseName("test-name-skipped")
+                                        .build())
+                        .setResultId("1234abcd-00001")
+                        .setStartTime(Timestamps.fromSeconds(1000000L))
+                        .setStatusV2(TestResult.Status.SKIPPED)
+                        .setSkippedReason(
+                                SkippedReason.newBuilder()
+                                        .setKind(SkippedReason.Kind.DEMOTED)
+                                        .setReasonMessage("test-skip-reason"))
+                        .setSummaryHtml("trigger: UNKNOWN_TRIGGER<br>")
+                        .build();
+        // Assert test results are uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(new RecorderClient.TestResultItem(testRunWorkUnitId, expected));
+        // Assert test results are uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected);
+        // No need to verify work unit and work unit updates as they are already verified in the
+        // test uploadToUpstreamRootInvocation_multipleModulesAndTestRuns.
     }
 
     @Test
@@ -710,6 +748,8 @@ public class ResultDBReporterTest {
         LogFile testLog = new LogFile("/tmp/test.log", getLogUrl("test.log"), LogDataType.TEXT);
         LogFile testRunLog =
                 new LogFile("/tmp/test-run.log", getLogUrl("test-run.log"), LogDataType.TEXT);
+        LogFile moduleLog =
+                new LogFile("/tmp/module.log", getLogUrl("module.log"), LogDataType.TEXT);
         LogFile invocationLog =
                 new LogFile("/tmp/invocation.log", getLogUrl("invocation.log"), LogDataType.PNG);
         LogFile newLog =
@@ -718,9 +758,13 @@ public class ResultDBReporterTest {
         mSimulator
                 .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
                 .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
                 .withTest("com.google.ExampleClass", "testExampleMethod")
                 .withTestLog(testLog)
                 .withTestRunLog(testRunLog)
+                .withModuleLog(moduleLog)
                 .withInvocationLog(invocationLog)
                 .simulateInvocation(mReporter);
         // simulate the updateStoragePath called from AnTS Result reporter.
@@ -731,6 +775,8 @@ public class ResultDBReporterTest {
                 "/bigstore/test/test-run.log",
                 testRunLog);
         mReporter.uploadStoragePath(
+                "18274/stub/inv_9000/module.log_9000.dat", "/bigstore/test/module.log", moduleLog);
+        mReporter.uploadStoragePath(
                 "18274/stub/inv_9000/invocation.log_9000.dat",
                 "/bigstore/test/invocation.log",
                 invocationLog);
@@ -740,43 +786,66 @@ public class ResultDBReporterTest {
         // uploadStoragePath called with invalid storage path.
         mReporter.uploadStoragePath(
                 "18274/stub/inv_9000/invalid.log_9000.dat", "/bigstore/", invalidLog);
-        // Verify the artifacts are uploaded to ResultDB.
-        assertThat(mReporter.mRecorderLegacy.getArtifacts())
+
+        String moduleWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(0).getWorkUnitId();
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        Artifact expected1 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/test.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setTestIdStructured(
+                                TestIdentifier.newBuilder()
+                                        .setModuleName("example-module")
+                                        .setModuleScheme("junit")
+                                        .setCoarseName("com.google")
+                                        .setFineName("ExampleClass")
+                                        .setCaseName("testExampleMethod")
+                                        .build())
+                        .setResultId("1234abcd-00001")
+                        .setGcsUri("gs://test/test.log")
+                        .setArtifactType("TEXT")
+                        .build();
+        Artifact expected2 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setGcsUri("gs://test/test-run.log")
+                        .setArtifactType("TEXT")
+                        .build();
+        Artifact expected3 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/module.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setGcsUri("gs://test/module.log")
+                        .setArtifactType("TEXT")
+                        .build();
+        Artifact expected4 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
+                        .setContentType("image/png")
+                        .setGcsUri("gs://test/invocation.log")
+                        .setArtifactType("PNG")
+                        .build();
+        Artifact expected5 =
+                Artifact.newBuilder()
+                        .setArtifactId("18274/stub/inv_9000/new.log_9000.dat")
+                        .setContentType("text/plain")
+                        .setGcsUri("gs://test/new.log")
+                        .setArtifactType("TEXT")
+                        .setSizeBytes(101)
+                        .build();
+
+        // Assert the artifacts are uploaded to mRecorder.
+        assertThat(mReporter.mRecorder.getArtifactItems())
                 .containsExactly(
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/test.log_9000.dat")
-                                .setContentType("text/plain")
-                                .setTestIdStructured(
-                                        TestIdentifier.newBuilder()
-                                                .setModuleName("example-module")
-                                                .setModuleScheme("junit")
-                                                .setCoarseName("com.google")
-                                                .setFineName("ExampleClass")
-                                                .setCaseName("testExampleMethod")
-                                                .build())
-                                .setResultId("1234abcd-00001")
-                                .setGcsUri("gs://test/test.log")
-                                .setArtifactType("TEXT")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/test-run.log_9000.dat")
-                                .setContentType("text/plain")
-                                .setGcsUri("gs://test/test-run.log")
-                                .setArtifactType("TEXT")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/invocation.log_9000.dat")
-                                .setContentType("image/png")
-                                .setGcsUri("gs://test/invocation.log")
-                                .setArtifactType("PNG")
-                                .build(),
-                        Artifact.newBuilder()
-                                .setArtifactId("18274/stub/inv_9000/new.log_9000.dat")
-                                .setContentType("text/plain")
-                                .setGcsUri("gs://test/new.log")
-                                .setArtifactType("TEXT")
-                                .setSizeBytes(101)
-                                .build());
+                        new RecorderClient.ArtifactItem(testRunWorkUnitId, expected1),
+                        new RecorderClient.ArtifactItem(testRunWorkUnitId, expected2),
+                        new RecorderClient.ArtifactItem(moduleWorkUnitId, expected3),
+                        new RecorderClient.ArtifactItem("work_unit_001", expected4),
+                        new RecorderClient.ArtifactItem("work_unit_001", expected5));
+        // Assert the artifacts are uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getArtifacts())
+                .containsExactly(expected1, expected2, expected3, expected4, expected5);
     }
 
     private String getLogUrl(String log) {

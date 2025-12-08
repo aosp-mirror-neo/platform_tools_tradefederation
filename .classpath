@@ -64,6 +64,6 @@
 	<classpathentry exported="true" kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/googleapis/google/bytestream/bytestream-java-proto/linux_glibc_common/javac/bytestream-java-proto.jar"/>
 	<classpathentry exported="false" kind="var" path="TRADEFED_ROOT/platform_testing/libraries/androidbuildinternal/libandroid_build_v3_java.jar"/>
 	<classpathentry exported="false" kind="var" path="TRADEFED_ROOT/platform_testing/libraries/androidbuildinternal/libandroid_build_v2beta1_java.jar"/>
-	<classpathentry exported="false" kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/guava/guava/linux_glibc_common/combined/guava.jar" sourcepath="/TRADEFED_ROOT/external/guava/guava/src"/>
+	<classpathentry exported="true" kind="var" path="TRADEFED_ROOT/out/soong/.intermediates/external/guava/guava/linux_glibc_common/combined/guava.jar" sourcepath="/TRADEFED_ROOT/external/guava/guava/src"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

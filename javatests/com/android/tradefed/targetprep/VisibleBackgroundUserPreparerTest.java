@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.targetprep;
 
+import static com.android.tradefed.targetprep.UserHelper.CAR_TOS_ACCEPTED;
+import static com.android.tradefed.targetprep.UserHelper.FEATURE_AUTOMOTIVE;
 import static com.android.tradefed.targetprep.UserHelper.RUN_TESTS_AS_USER_KEY;
 import static com.android.tradefed.targetprep.UserHelper.USER_SETUP_COMPLETE;
 
@@ -115,6 +117,20 @@ public final class VisibleBackgroundUserPreparerTest {
         verifyUserStopped(42);
         verifyUserRemoved(42);
         verifyNoUserSwitched();
+    }
+
+    @Test
+    public void testSetUp_acceptsTosOnAutomotive() throws Exception {
+        mTestDeviceMockHelper.mockHasFeature(FEATURE_AUTOMOTIVE, true);
+        mockListDisplayIdsForStartingVisibleBackgroundUsers(orderedSetOf(108));
+        mockNoExistingVisibleBackgroundUserOnDisplay(108, 10);
+        mockCreateUser(42);
+        mockStartUserVisibleOnBackground(42, 108);
+
+        mPreparer.setUp(mTestInfo);
+
+        verifyUserCreated();
+        verifyUserSettings(42, CAR_TOS_ACCEPTED, "2");
     }
 
     @Test

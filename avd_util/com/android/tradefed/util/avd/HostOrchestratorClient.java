@@ -17,6 +17,7 @@ package com.android.tradefed.util.avd;
 
 import com.android.tradefed.log.LogUtil.CLog;
 
+import com.google.android_cuttlefish.base.cvd.cuttlefish.host.commands.cvd.cli.parser.CvdConfig.EnvironmentSpecification;
 import com.google.gson.Gson;
 
 import java.io.IOException;
@@ -49,6 +50,14 @@ public class HostOrchestratorClient {
         public String group;
         public String name;
         public String status;
+    }
+
+    public static final class CreateCvdRequest {
+        public EnvironmentSpecification env_config;
+
+        CreateCvdRequest(EnvironmentSpecification specs) {
+            env_config = specs;
+        }
     }
 
     public static final class ListCvdsResponse {
@@ -116,6 +125,13 @@ public class HostOrchestratorClient {
     public static final class DisplayScreenshotResponse {
         public String screenshot_bytes;
         public String screenshot_mime_type;
+    }
+
+    public static HttpRequest buildCreateCvdRequest(String baseURL, CreateCvdRequest request) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(String.format("%s/cvds", baseURL)))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(new Gson().toJson(request)))
+                .build();
     }
 
     public static HttpRequest buildListCvdsRequest(String baseURL) {

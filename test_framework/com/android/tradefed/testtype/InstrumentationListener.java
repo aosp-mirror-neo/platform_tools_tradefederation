@@ -210,6 +210,7 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
         if (mLastStartedTest != null) {
             super.testFailed(mLastStartedTest, error);
             super.testEnded(mLastStartedTest, new HashMap<String, Metric>());
+            mLastStartedTest = null;
         }
         String runLevelError =
                 String.format("Run level error reported reason: '%s'", error.getErrorMessage());
@@ -220,6 +221,15 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
 
     @Override
     public void testRunEnded(long elapsedTime, HashMap<String, Metric> runMetrics) {
+        // check if last test was completed. It's possible that the instrumentation ended abruptly
+        // after a test starts (likely due to device issue).
+        if (mLastStartedTest != null) {
+            super.testFailed(
+                    mLastStartedTest,
+                    FailureDescription.create("Test did not finish.", FailureStatus.TEST_FAILURE));
+            super.testEnded(mLastStartedTest, new HashMap<String, Metric>());
+            mLastStartedTest = null;
+        }
         if (!mDuplicateTests.isEmpty() && !mDisableDuplicateCheck) {
             FailureDescription error =
                     FailureDescription.create(
