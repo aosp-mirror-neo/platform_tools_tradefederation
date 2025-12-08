@@ -744,6 +744,56 @@ public class ResultDBReporterTest {
     }
 
     @Test
+    public void testRunWithoutModule_moduleIdSetInTestRunWorkUnit() {
+        mSimulator
+                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "top_work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
+                .withModuleNotRun()
+                .withTest("com.google.ExampleClass", "testExampleMethod")
+                .simulateInvocation(mReporter);
+
+        // Assert work unit created.
+        assertThat(mReporter.mRecorder.getWorkUnitItems()).hasSize(1);
+        String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(0).getWorkUnitId();
+        assertThat(mReporter.mRecorder.getWorkUnitItems())
+                .containsExactly(
+                        new RecorderClient.WorkUnitItem(
+                                "top_work_unit_001",
+                                testRunWorkUnitId,
+                                WorkUnit.newBuilder()
+                                        .setState(WorkUnit.State.RUNNING)
+                                        .setKind("TF_TEST_RUN")
+                                        .setRealm("android:ants-experiment")
+                                        .setModuleId(
+                                                ModuleIdentifier.newBuilder()
+                                                        .setModuleName("no-module-name")
+                                                        .setModuleScheme("junit")
+                                                        .setModuleVariant(
+                                                                Variant.getDefaultInstance())
+                                                        .build())
+                                        .build()));
+        // Assert work unit updates.
+        assertThat(mReporter.mRecorder.getWorkUnitUpdates())
+                .containsExactly(
+                        newWorkUnitUpdate(
+                                "root_invocation_001",
+                                testRunWorkUnitId,
+                                WorkUnit.State.SUCCEEDED));
+        // Assert test results uploaded to mRecorder.
+        TestResult tr1 =
+                newTestResult("testExampleMethod", "no-module-name", Variant.getDefaultInstance())
+                        .setResultId("1234abcd-00001")
+                        .build();
+        assertThat(mReporter.mRecorder.getTestResultItems())
+                .containsExactly(new RecorderClient.TestResultItem(testRunWorkUnitId, tr1));
+        // Assert test results uploaded to mRecorderLegacy.
+        assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(tr1);
+    }
+
+    @Test
     public void uploadTestArtifacts() {
         LogFile testLog = new LogFile("/tmp/test.log", getLogUrl("test.log"), LogDataType.TEXT);
         LogFile testRunLog =

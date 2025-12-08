@@ -32,16 +32,24 @@ import java.util.Deque;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
+
 /** Handles Module level and test run level states, and work unit reporting for ResultDB. */
 class WorkUnitHandler {
 
-    public static final String MODULE_WORK_UNIT_TYPE = "TF_MODULE";
-    public static final String TEST_RUN_WORK_UNIT_TYPE = "TF_TEST_RUN";
+    private static final String MODULE_WORK_UNIT_TYPE = "TF_MODULE";
+    private static final String TEST_RUN_WORK_UNIT_TYPE = "TF_TEST_RUN";
     public static final String TF_INVOCATION_WORK_UNIT_TYPE = "TF_INVOCATION";
+    private static final String WORK_UNIT_REALM = "android:ants-experiment";
     // Set containing the allowed variant module parameter keys
     private static final ImmutableSet<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
-
+    private static final ModuleIdentifier PLACEHOLDER_MODULE_IDENTIFIER =
+            ModuleIdentifier.newBuilder()
+                    .setModuleName("no-module-name")
+                    .setModuleScheme("junit")
+                    .setModuleVariant(Variant.getDefaultInstance())
+                    .build();
     // Module level variant for test in the same test module.
     private IInvocationContext mModuleContext;
     private ModuleIdentifier mCurrentModuleIdentifier;
@@ -79,10 +87,10 @@ class WorkUnitHandler {
         String moduleWorkUnitId =
                 String.format("%s:u-%s", invTopWorkUnitId, UUID.randomUUID().toString());
         // Create work unit for this module.
-        // TODO(b/463830449): add more properties to the work uni according to the data mapping.
+        // TODO(b/463830449): add more properties to the work unit according to the data mapping.
         WorkUnit moduleWorkUnit =
                 WorkUnit.newBuilder()
-                        .setRealm("android:ants-experiment")
+                        .setRealm(WORK_UNIT_REALM)
                         .setState(WorkUnit.State.RUNNING)
                         .setKind(MODULE_WORK_UNIT_TYPE)
                         .setModuleId(mCurrentModuleIdentifier)
@@ -137,17 +145,22 @@ class WorkUnitHandler {
             // Recorder is null, so we don't create test run work units.
             return;
         }
-        String parentWorkUnitId = mWorkUnitInfos.peek().getId();
+        WorkUnitInfo parentWorkUnit = mWorkUnitInfos.peek();
         // Prefixed work unit for update token sharing.
         String workUnitId =
                 String.format("%s:u-%s", invTopWorkUnitId, UUID.randomUUID().toString());
-        WorkUnit workUnit =
+        WorkUnit.Builder workUnitBuilder =
                 WorkUnit.newBuilder()
-                        .setRealm("android:ants-experiment")
+                        .setRealm(WORK_UNIT_REALM)
                         .setState(WorkUnit.State.RUNNING)
-                        .setKind(TEST_RUN_WORK_UNIT_TYPE)
-                        .build();
-        recorder.enqueueWorkUnit(parentWorkUnitId, workUnitId, workUnit);
+                        .setKind(TEST_RUN_WORK_UNIT_TYPE);
+        if (!parentWorkUnit.getKind().equals(MODULE_WORK_UNIT_TYPE)) {
+            // If the test run is not started in a module context, we set a placeholder module id
+            // to this test run level work unit, otherwise ResultDB will reject the test result
+            // because of missing module_id in the parent work unit.
+            workUnitBuilder.setModuleId(PLACEHOLDER_MODULE_IDENTIFIER);
+        }
+        recorder.enqueueWorkUnit(parentWorkUnit.getId(), workUnitId, workUnitBuilder.build());
         mWorkUnitInfos.push(new WorkUnitInfo(workUnitId, TEST_RUN_WORK_UNIT_TYPE));
     }
 
@@ -185,11 +198,19 @@ class WorkUnitHandler {
         return mModuleContext;
     }
 
+    /**
+     * Returns the current module identifier.
+     *
+     * <p>If called outside of a module context, returns the placeholder module identifier.
+     */
     public ModuleIdentifier getCurrentModuleIdentifier() {
+        if (mCurrentModuleIdentifier == null) {
+            return PLACEHOLDER_MODULE_IDENTIFIER;
+        }
         return mCurrentModuleIdentifier;
     }
 
-    public String getCurrentWorkUnitId() {
+    public @Nullable String getCurrentWorkUnitId() {
         if (mWorkUnitInfos.isEmpty()) {
             return null;
         }

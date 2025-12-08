@@ -101,6 +101,7 @@ public class InvocationSimulator {
         MultiMap<String, String> metadata = new MultiMap<>();
         Map<String, String> attributes = new HashMap<>();
         List<TestRunConfig> testRuns = new ArrayList<>();
+        boolean shouldRun = false;
         List<LogFile> logs = new ArrayList<>();
 
         ModuleConfig(String name) {
@@ -208,6 +209,16 @@ public class InvocationSimulator {
     @CanIgnoreReturnValue
     public InvocationSimulator withModule(String moduleName) {
         mCurrentModule = new ModuleConfig(moduleName);
+        mCurrentModule.shouldRun = true;
+        mModules.add(mCurrentModule);
+        mCurrentTestRun = null;
+        return this;
+    }
+
+    @CanIgnoreReturnValue
+    public InvocationSimulator withModuleNotRun() {
+        mCurrentModule = new ModuleConfig("not-run-module");
+        mCurrentModule.shouldRun = false;
         mModules.add(mCurrentModule);
         mCurrentTestRun = null;
         return this;
@@ -299,7 +310,7 @@ public class InvocationSimulator {
 
         for (ModuleConfig module : mModules) {
             try {
-                if (!module.name.isEmpty()) {
+                if (module.shouldRun) {
                     reporter.testModuleStarted(getModuleContext(module));
                 }
             } catch (Exception e) {
@@ -330,7 +341,7 @@ public class InvocationSimulator {
             }
 
             try {
-                if (!module.name.isEmpty()) {
+                if (module.shouldRun) {
                     simulateLogs("module-log-", module.logs, reporter);
                     reporter.testModuleEnded();
                 }

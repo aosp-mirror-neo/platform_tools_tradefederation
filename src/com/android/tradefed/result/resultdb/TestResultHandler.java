@@ -140,12 +140,11 @@ class TestResultHandler {
             if (Strings.isNullOrEmpty(workUnitId)) {
                 CLog.e("logic error: test ended %s without a valid work unit id.", test.toString());
             } else {
-                // TODO(b/458246392): test might start outside a module, in such case the work unit
-                // id here might be the test run level work unit (if TestRunStarted is called), or
-                // the top work unit passed to this tradefed invocation.
-                // In both cases, ResultDB will reject the test result because of missing module_id
-                // in the parent work unit.
-                // Find a suitable workaround for this.
+                // TODO(b/458246392): determine if it is possible for a test to start outside a
+                // module and a test run, in such case the work unit id is the top work unit passed
+                // to this tradefed invocation. ResultDB will reject the test result because of
+                // missing module_id in the parent work unit. If this is possible, find a suitable
+                // workaround.
                 recorder.enqueueTestResult(workUnitId, mCurrentTestResult);
             }
         }
