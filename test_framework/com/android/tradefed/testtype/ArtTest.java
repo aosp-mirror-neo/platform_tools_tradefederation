@@ -56,6 +56,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
@@ -113,8 +114,17 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     private Set<String> mIncludeFilters = new TreeSet<>();
     private Set<String> mExcludeFilters = new TreeSet<>();
 
-    @Option(name = "jobs", description = "The number of tests to run in parallel on device")
-    private int mJobs = 4;
+    @Option(name = "testJobs", description = "The number of parallel adb shell commands")
+    private int mTestJobs = 0;
+
+    private transient Semaphore mTestSemaphore;
+
+    // Tradefed's push implementation has higher latency than native "adb push" command.
+    // Hide the latency by allowing more parallel pushes before each test starts.
+    @Option(name = "pushJobs", description = "The number of parallel adb push commands")
+    private int mPushJobs = 0;
+
+    private transient Semaphore mPushSemaphore;
 
     @Option(name = "shuffle", description = "Shuffle test order before running")
     private boolean mShuffle = true;
@@ -201,9 +211,11 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
             long startTime = System.currentTimeMillis();
             try {
+                init();
                 clean();
-                CLog.i("Running %s tests in parallel", mJobs);
-                executor = Executors.newFixedThreadPool(mJobs);
+                int jobs = mTestJobs + mPushJobs;
+                CLog.i("Using %s threads (testJobs:%s, pushJobs:%s)", jobs, mTestJobs, mPushJobs);
+                executor = Executors.newFixedThreadPool(jobs);
                 final ExecutorService executorRef = executor;
                 listener.testRunStarted("ArtTest", mTests.size());
 
@@ -218,7 +230,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                     try {
                         future.get();
                     } catch (InterruptedException | ExecutionException e) {
-                        CLog.e("Error waiting for test completion: %s", e.getMessage());
+                        throw new RuntimeException(e);
                     }
                 }
 
@@ -239,6 +251,26 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         } finally {
             FileUtil.recursiveDelete(tmp_dir);
         }
+    }
+
+    void init() throws DeviceNotAvailableException {
+        if (mTestJobs == 0) {
+            mTestJobs = (int) getDeviceCpuCount();
+        }
+        if (mPushJobs == 0) {
+            mPushJobs = mTestJobs * 8;
+        }
+        mTestSemaphore = new Semaphore(mTestJobs, true);
+        mPushSemaphore = new Semaphore(mPushJobs, true);
+    }
+
+    long getDeviceCpuCount() throws DeviceNotAvailableException {
+        String stdout = mTestInfo.getDevice().executeShellCommand("cat /proc/cpuinfo");
+        if (stdout != null) {
+            return Stream.of(stdout.split("\\n")).filter(l -> l.startsWith("processor")).count();
+        }
+        CLog.e("Failed to get device CPU count");
+        return 4;
     }
 
     File extractTarBall(File dst_dir) throws IOException {
@@ -376,7 +408,11 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                     CLog.i("Running ART test %s", test.mName);
                 }
                 if (error == null) {
-                    error = executeCommands(test.mCommands);
+                    try {
+                        error = executeCommands(test.mCommands);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             } catch (DeviceNotAvailableException e) {
                 error = e.toString();
@@ -391,7 +427,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                         try {
                             TimeUnit.SECONDS.sleep(100);
                         } catch (InterruptedException e) {
-                            CLog.e("InterruptedException");
+                            throw new RuntimeException(e);
                         }
                         if (!adbPing()) {
                             // Still unavailable, give up on remaining tests.
@@ -412,7 +448,9 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         }
     }
 
-    String executeCommands(List<Command> commands) throws DeviceNotAvailableException {
+    String executeCommands(List<Command> commands)
+            throws DeviceNotAvailableException, InterruptedException {
+        ITestDevice device = mTestInfo.getDevice();
         for (Command cmd : commands) {
             if (cmd.mKind.equals("push")) {
                 if (cmd.mArgs.size() != 2) {
@@ -421,26 +459,33 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                 File src = new File(mRunnerDir, cmd.mArgs.get(0));
                 String dst = cmd.mArgs.get(1);
 
-                ITestDevice device = mTestInfo.getDevice();
-                if (src.isDirectory()) {
-                    if (!device.pushDir(src, dst)) {
-                        return "Failed to push directory '" + src + "'";
+                mPushSemaphore.acquire();
+                try {
+                    if (src.isDirectory()) {
+                        if (!device.pushDir(src, dst)) {
+                            return "Failed to push directory '" + src + "'";
+                        }
+                    } else {
+                        if (!device.pushFile(src, dst)) {
+                            return "Failed to push file '" + src + "'";
+                        }
                     }
-                } else {
-                    if (!device.pushFile(src, dst)) {
-                        return "Failed to push file '" + src + "'";
-                    }
+                } finally {
+                    mPushSemaphore.release();
                 }
             } else if (cmd.mKind.equals("shell")) {
-                String shellCmd = String.join(" ", cmd.mArgs);
-                CommandResult res =
-                        mTestInfo
-                                .getDevice()
-                                .executeShellV2Command(
-                                        shellCmd, ADB_TIMEOUT, TimeUnit.SECONDS, ADB_RETRIES);
-                if (res.getStatus() != CommandStatus.SUCCESS) {
-                    return String.format(
-                            "stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
+                mTestSemaphore.acquire();
+                try {
+                    String shellCmd = String.join(" ", cmd.mArgs);
+                    CommandResult res =
+                            device.executeShellV2Command(
+                                    shellCmd, ADB_TIMEOUT, TimeUnit.SECONDS, ADB_RETRIES);
+                    if (res.getStatus() != CommandStatus.SUCCESS) {
+                        return String.format(
+                                "stdout:\n%s\nstderr:\n%s", res.getStdout(), res.getStderr());
+                    }
+                } finally {
+                    mTestSemaphore.release();
                 }
             } else {
                 throw new RuntimeException("Unknown command kind: " + cmd.mKind);
