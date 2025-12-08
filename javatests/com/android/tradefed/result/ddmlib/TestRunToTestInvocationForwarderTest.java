@@ -86,6 +86,7 @@ public class TestRunToTestInvocationForwarderTest {
         TestIdentifier tid1 = new TestIdentifier("class", "test1");
         TestDescription td1 = new TestDescription(tid1.getClassName(), tid1.getTestName());
         TestIdentifier tid2 = new TestIdentifier("class", "null");
+        TestDescription td2 = new TestDescription(tid2.getClassName(), tid2.getTestName());
 
         // Second bad method is not propagated, instead we fail the run
         FailureDescription expectedFailure =
@@ -114,7 +115,7 @@ public class TestRunToTestInvocationForwarderTest {
         inOrder.verify(mMockListener).testStarted(td1);
         inOrder.verify(mMockListener).testFailed(td1, FailureDescription.create("I failed"));
         inOrder.verify(mMockListener).testEnded(td1, new HashMap<String, Metric>());
-        inOrder.verify(mMockListener).testRunFailed(expectedFailure);
+        inOrder.verify(mMockListener).testFailed(td2, expectedFailure);
         inOrder.verify(mMockListener)
                 .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
         inOrder.verifyNoMoreInteractions();
@@ -144,9 +145,7 @@ public class TestRunToTestInvocationForwarderTest {
         inOrder.verify(mMockListener).testStarted(td1);
         inOrder.verify(mMockListener).testFailed(td1, FailureDescription.create("I failed"));
         inOrder.verify(mMockListener).testEnded(td1, new HashMap<String, Metric>());
-        inOrder.verify(mMockListener).testStarted(td2);
         inOrder.verify(mMockListener).testIgnored(td2);
-        inOrder.verify(mMockListener).testEnded(td2, new HashMap<String, Metric>());
         inOrder.verify(mMockListener)
                 .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
         inOrder.verifyNoMoreInteractions();
@@ -157,6 +156,7 @@ public class TestRunToTestInvocationForwarderTest {
         TestIdentifier tid1 = new TestIdentifier("class", "test1");
         TestDescription td1 = new TestDescription(tid1.getClassName(), tid1.getTestName());
         TestIdentifier tid2 = new TestIdentifier("class", "initializationError");
+        TestDescription td2 = new TestDescription(tid2.getClassName(), tid2.getTestName());
 
         // Second bad method is not propagated, instead we fail the run
         FailureDescription expectedFailure =
@@ -184,7 +184,7 @@ public class TestRunToTestInvocationForwarderTest {
         verify(mMockListener).testStarted(td1);
         verify(mMockListener).testFailed(td1, FailureDescription.create("I failed"));
         verify(mMockListener).testEnded(td1, new HashMap<String, Metric>());
-        verify(mMockListener).testRunFailed(expectedFailure);
+        verify(mMockListener).testFailed(td2, expectedFailure);
         verify(mMockListener)
                 .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
     }

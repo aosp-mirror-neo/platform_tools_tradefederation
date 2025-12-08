@@ -40,7 +40,7 @@ import java.util.Set;
  */
 public class TestRunToTestInvocationForwarder implements ITestRunListener {
 
-    private static final Set<String> INVALID_METHODS =
+    public static final Set<String> INVALID_METHODS =
             ImmutableSet.<String>of("null", "initializationError");
 
     public static final String ERROR_MESSAGE_FORMAT =
@@ -75,6 +75,7 @@ public class TestRunToTestInvocationForwarder implements ITestRunListener {
         mNullMethodIsIgnored = false;
         mNullMethodIsAssumptionFailure = null;
         mInvalidMethod = null;
+        mNullStack = null;
         for (ITestLifeCycleReceiver listener : mListeners) {
             try {
                 listener.testStarted(TestDescription.createFromTestIdentifier(testId));
@@ -147,21 +148,36 @@ public class TestRunToTestInvocationForwarder implements ITestRunListener {
     @Override
     public void testEnded(TestIdentifier testId, Map<String, String> testMetrics) {
         if (mInvalidMethod != null && mInvalidMethod.equals(testId)) {
+            // report invalid test methods with specific events for tracking purpose. It will be
+            // handled properly by InstrumentationListener during reporting of missing tests.
             if (mNullMethodIsIgnored) {
                 CLog.d("ignored null method reported, most likely an @ignored class");
                 for (ITestLifeCycleReceiver listener : mListeners) {
-                    listener.testStarted(TestDescription.createFromTestIdentifier(testId));
-                    listener.testIgnored(TestDescription.createFromTestIdentifier(testId));
-                    // testEnded is reported below
+                    try {
+                        listener.testIgnored(TestDescription.createFromTestIdentifier(testId));
+                    } catch (RuntimeException any) {
+                        CLog.e(
+                                "RuntimeException when invoking %s#testIgnored",
+                                listener.getClass().getName());
+                        CLog.e(any);
+                    }
                 }
+                return;
             } else if (mNullMethodIsAssumptionFailure != null) {
                 CLog.d(
                         "assumptionFailure null method reported, most likely an Assume failure in"
                                 + " setup class");
                 for (ITestLifeCycleReceiver listener : mListeners) {
-                    listener.testAssumptionFailure(
-                            TestDescription.createFromTestIdentifier(testId),
-                            mNullMethodIsAssumptionFailure);
+                    try {
+                        listener.testAssumptionFailure(
+                                TestDescription.createFromTestIdentifier(testId),
+                                mNullMethodIsAssumptionFailure);
+                    } catch (RuntimeException any) {
+                        CLog.e(
+                                "RuntimeException when invoking %s#testAssumptionFailure",
+                                listener.getClass().getName());
+                        CLog.e(any);
+                    }
                 }
                 // Return directly after communicating the assumption failure
                 return;
@@ -177,7 +193,15 @@ public class TestRunToTestInvocationForwarder implements ITestRunListener {
                                 .setErrorIdentifier(
                                         TestErrorIdentifier.INSTRUMENTATION_NULL_METHOD);
                 for (ITestLifeCycleReceiver listener : mListeners) {
-                    listener.testRunFailed(failure);
+                    try {
+                        listener.testFailed(
+                                TestDescription.createFromTestIdentifier(testId), failure);
+                    } catch (RuntimeException any) {
+                        CLog.e(
+                                "RuntimeException when invoking %s#testEnded",
+                                listener.getClass().getName());
+                        CLog.e(any);
+                    }
                 }
                 mNullStack = null;
                 return;
