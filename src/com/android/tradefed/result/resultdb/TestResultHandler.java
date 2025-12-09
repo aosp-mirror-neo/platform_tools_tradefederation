@@ -326,6 +326,9 @@ class TestResultHandler {
      * <p>In most cases, this ends up being the exception + error message.
      */
     private String extractAndTruncateFirstLine(String trace, int maxBytes) {
+        if (Strings.isNullOrEmpty(trace)) {
+            return trace;
+        }
         String firstLine = trace.split("[\\r\\n]+", 2)[0];
         if (!firstLine.trim().isEmpty()) {
             return ResultDBUtil.truncateString(firstLine, maxBytes).getTruncatedString();

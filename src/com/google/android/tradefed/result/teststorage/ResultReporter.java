@@ -2255,6 +2255,9 @@ public class ResultReporter
      */
     @VisibleForTesting
     String extractErrorMessage(String trace) {
+        if (Strings.isNullOrEmpty(trace)) {
+            return trace;
+        }
         String firstLine = trace.split("[\\r\\n]+")[0];
         if (!firstLine.trim().isEmpty()) {
             return firstLine;

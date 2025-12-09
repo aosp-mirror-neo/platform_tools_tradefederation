@@ -183,7 +183,7 @@ public class FailureDescription {
     @Override
     public String toString() {
         // For backward compatibility of result interface, toString falls back to the simple message
-        return mErrorMessage;
+        return mErrorMessage != null ? mErrorMessage : "";
     }
 
     /**
