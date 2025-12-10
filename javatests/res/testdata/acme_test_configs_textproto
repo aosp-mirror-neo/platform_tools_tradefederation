@@ -1,0 +1,70 @@
+execution_plans {
+  name: "plan_alpha"
+  tests {
+    module: "module_one"
+    include: "test_class_a"
+    include: "test_class_b"
+    exclude: "test_class_c"
+    module_args {
+      key: "arg_key_1"
+      value: "arg_value_1"
+    }
+    module_args {
+      key: "arg_key_2"
+      value: "arg_value_2"
+    }
+  }
+  tests {
+    module: "module_two"
+    include: "test_class_d"
+    exclude: "test_class_e"
+    exclude: "test_class_f"
+    module_args {
+      key: "arg_key_3"
+      value: "arg_value_3"
+    }
+  }
+}
+execution_plans {
+  name: "plan_beta"
+  tests {
+    module: "module_three"
+    include: "test_class_g"
+    include: "test_class_h"
+    include: "test_class_i"
+    module_args {
+      key: "arg_key_4"
+      value: "arg_value_4"
+    }
+  }
+  tests {
+    module: "module_four"
+    exclude: "test_class_j"
+    module_args {
+      key: "arg_key_5"
+      value: "arg_value_5"
+    }
+    module_args {
+      key: "arg_key_6"
+      value: "arg_value_6"
+    }
+    module_args {
+      key: "arg_key_7"
+      value: "arg_value_7"
+    }
+  }
+  tests {
+    module: "module_four"
+    module_args {
+      key: "arg_key_8"
+      value: "arg_value_8"
+    }
+  }
+}
+execution_plans {
+  name: "plan_gamma"
+  tests {
+    module: "module_five"
+    include: "test_class_k"
+  }
+}
