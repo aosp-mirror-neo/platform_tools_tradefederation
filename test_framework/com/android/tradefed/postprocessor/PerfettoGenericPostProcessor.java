@@ -16,14 +16,14 @@
 
 package com.android.tradefed.postprocessor;
 
-import com.android.tradefed.postprocessor.util.PerfettoV2MetricConverterUtil;
-import com.android.tradefed.postprocessor.util.PerfettoV2ToDimensionalMetricConverter;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
-import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.MetricReport;
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.DataType;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.postprocessor.util.PerfettoV2MetricConverterUtil;
+import com.android.tradefed.postprocessor.util.PerfettoV2ToDimensionalMetricConverter;
 import com.android.tradefed.result.FileInputStreamSource;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
@@ -493,8 +493,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         for (Map.Entry<String, Metric.Builder> metric : processPerfettoMetrics.entrySet()) {
             String newKey = String.format("%s_%s", mAllMetricPrefix, metric.getKey());
             finalMetrics.put(newKey, metric.getValue());
-            CLog.d("Perfetto trace metric: key: %s value: %s", newKey, metric.getValue());
         }
+        CLog.d("Perfetto trace metrics: %s", finalMetrics);
         return finalMetrics;
     }
 
@@ -766,17 +766,12 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                 double singleValue = values.get(0);
                 convertedMetrics.put(
                         key, TfMetricProtoUtil.doubleToMetric(singleValue).toBuilder());
-                CLog.d(
-                        "Perfetto trace v2 metric (single): key: %s, value: %s",
-                        key, Double.toString(singleValue));
             } else {
                 convertedMetrics.put(
                         key, TfMetricProtoUtil.doubleArrayToMetric(values).toBuilder());
-                CLog.d(
-                        "Perfetto trace v2 metric (array): key: %s, values: %s",
-                        key, values.toString());
             }
         }
+        CLog.d("Perfetto trace v2 metrics: %s", collectedValuesForKey);
         return convertedMetrics;
     }
 

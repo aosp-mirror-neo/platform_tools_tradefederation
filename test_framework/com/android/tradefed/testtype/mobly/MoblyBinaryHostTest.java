@@ -73,6 +73,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+import com.android.tradefed.invoker.ExecutionFiles;
+
 /** Host test meant to run a mobly python binary file from the Android Build system (Soong) */
 @OptionClass(alias = "mobly-host")
 public class MoblyBinaryHostTest
@@ -253,6 +255,7 @@ public class MoblyBinaryHostTest
         } else {
             CLog.d("No virtualenv configured.");
         }
+        setConfigPathFromTestInfo(testInfo);
         for (File parFile : parFilesList) {
             // TODO(b/159365341): add a failure reporting for nonexistent binary.
             if (!parFile.exists()) {
@@ -276,6 +279,21 @@ public class MoblyBinaryHostTest
         }
     }
 
+    @VisibleForTesting
+    private void setConfigPathFromTestInfo(TestInformation testInfo) {
+        if (mConfigFileName == null) {
+            // If the config file name is not set, try to set it from the test properties.
+            // if we have property MOBLY_CONFIG_FILEPATH then it is already part of execution files
+            // and we can use it as file name.
+            String fileKey = ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString();
+            String configFileName = testInfo.properties().get(fileKey);
+            if (configFileName != null && !configFileName.isEmpty()) {
+                mConfigFileName = configFileName;
+                CLog.d("Set Mobly config from test properties: %s", mConfigFileName);
+            }
+        }
+    }
+
     private List<File> findParFiles(ITestInvocationListener listener) {
         // TODO(b/159369297): make naming and log message more "mobly".
         List<File> files = new ArrayList<>();
@@ -291,6 +309,7 @@ public class MoblyBinaryHostTest
             }
         }
         files.addAll(mBinaries);
+        CLog.d("Found %d par files.", files.size());
         return files;
     }
 
@@ -792,5 +811,10 @@ public class MoblyBinaryHostTest
     @VisibleForTesting
     long getTestTimeout() {
         return mTestTimeout;
+    }
+
+    @VisibleForTesting
+    String getConfigFileName() {
+        return mConfigFileName;
     }
 }

@@ -40,7 +40,9 @@ public class ExecutionFiles {
         // Sub-directory of TESTS_DIRECTORY that contains target artifacts
         TARGET_TESTS_DIRECTORY,
         // Sub-directory of TESTS_DIRECTORY that contains host-side artifacts
-        HOST_TESTS_DIRECTORY
+        HOST_TESTS_DIRECTORY,
+        // Represents the path to Mobly config file.
+        MOBLY_CONFIG_FILEPATH
     }
 
     private final ConcurrentMap<String, File> mFiles = new ConcurrentHashMap<>();

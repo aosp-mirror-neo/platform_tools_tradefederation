@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verify;
 import com.android.tradefed.build.DeviceBuildInfo;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.ITestDevice;
+import com.android.tradefed.invoker.ExecutionFiles;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
@@ -466,9 +467,9 @@ public class MoblyBinaryHostTestTest {
         File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
         String testResultContent =
                 "---\n"
-                    + "{Result: ERROR, Stacktrace: 'Some other error message', Test Name:"
-                    + " setup_test, Type: Record}\n"
-                    + "...";
+                        + "{Result: ERROR, Stacktrace: 'Some other error message', Test Name:"
+                        + " setup_test, Type: Record}\n"
+                        + "...";
         FileUtil.writeToFile(testResultContent, testResult);
         Mockito.when(mMockRunUtil.runTimedCmd(anyLong(), any()))
                 .thenAnswer(
@@ -958,6 +959,46 @@ public class MoblyBinaryHostTestTest {
                         contains("--log_path="),
                         eq("--tests"),
                         eq("test_baz"));
+    }
+
+    @Test
+    public void testRun_usesConfigFromTestInfo() throws Exception {
+        OptionSetter setter = new OptionSetter(mSpyTest);
+        setter.setOptionValue("mobly-binaries", mMoblyBinary.getAbsolutePath());
+        File configFile = FileUtil.createTempFile("config", ".yaml", mMoblyTestDir);
+        FileUtil.writeToFile("TestBeds:\n", configFile, true);
+        FileUtil.writeToFile("- Name: LocalTestBed\n", configFile, true);
+        FileUtil.writeToFile("  Controllers:\n", configFile, true);
+        FileUtil.writeToFile("    AndroidDevice: \"*\"\n", configFile, true);
+        mTestInfo
+                .properties()
+                .put(
+                        ExecutionFiles.FilesKey.MOBLY_CONFIG_FILEPATH.toString(),
+                        configFile.getAbsolutePath());
+
+        Mockito.doReturn(configFile)
+                .when(mTestInfo)
+                .getDependencyFile(eq(configFile.getAbsolutePath()), eq(false));
+
+        File testResult = new File(mSpyTest.getLogDirAbsolutePath(), TEST_RESULT_FILE_NAME);
+        // Mimics the behavior of a successful test run.
+        Mockito.when(mMockRunUtil.runTimedCmd(anyLong(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+                            res.setStdout("==========> FooTest <==========\ntest_foo");
+                            return res;
+                        })
+                .thenAnswer(
+                        invocation -> {
+                            testResult.createNewFile();
+                            return new CommandResult(CommandStatus.SUCCESS);
+                        });
+
+        mSpyTest.run(mTestInfo, Mockito.mock(ITestInvocationListener.class));
+
+        // Verify that the config file name was updated and used.
+        verify(mTestInfo).getDependencyFile(eq(configFile.getAbsolutePath()), eq(false));
     }
 
     @Test
