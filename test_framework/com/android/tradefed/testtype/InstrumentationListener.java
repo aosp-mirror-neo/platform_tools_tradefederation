@@ -25,7 +25,6 @@ import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogcatCrashResultForwarder;
 import com.android.tradefed.result.TestDescription;
-import com.android.tradefed.result.ddmlib.TestRunToTestInvocationForwarder;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.result.error.TestErrorIdentifier;
@@ -59,10 +58,7 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
     private static final String DDMLIB_UNEXPECTED_COUNT = "Instrumentation reported numtests=";
 
     private Set<TestDescription> mTests = new HashSet<>();
-    private Map<String, String> mInvalidAssumptionFailureTests = new HashMap<>();
-    private Set<String> mInvalidIgnoredTests = new LinkedHashSet<>();
-    private Map<String, FailureDescription> mInvalidFailedTests = new HashMap<>();
-
+    private Map<String, String> mClassAssumptionFailure = new HashMap<>();
     private Set<TestDescription> mDuplicateTests = new HashSet<>();
     private final Collection<TestDescription> mExpectedTests;
     private boolean mDisableDuplicateCheck = false;
@@ -137,26 +133,13 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
         if (message.startsWith(JUNIT4_TIMEOUT) || message.contains(DDMLIB_SHELL_UNRESPONSIVE)) {
             failure.setErrorIdentifier(TestErrorIdentifier.TEST_TIMEOUT).setRetriable(false);
         }
-        if (TestRunToTestInvocationForwarder.INVALID_METHODS.contains(test.getTestName())) {
-            mInvalidFailedTests.put(test.getClassName(), failure);
-        } else {
-            super.testFailed(test, failure);
-        }
-    }
-
-    @Override
-    public void testIgnored(TestDescription test) {
-        if (TestRunToTestInvocationForwarder.INVALID_METHODS.contains(test.getTestName())) {
-            mInvalidIgnoredTests.add(test.getClassName());
-        } else {
-            super.testIgnored(test);
-        }
+        super.testFailed(test, failure);
     }
 
     @Override
     public void testAssumptionFailure(TestDescription test, String trace) {
-        if (TestRunToTestInvocationForwarder.INVALID_METHODS.contains(test.getTestName())) {
-            mInvalidAssumptionFailureTests.put(test.getClassName(), trace);
+        if (test.getTestName().equals("null")) {
+            mClassAssumptionFailure.put(test.getClassName(), trace);
         } else {
             super.testAssumptionFailure(test, trace);
         }
@@ -273,9 +256,7 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             reportUnexecutedTestsIfNeeded(runLevelError);
             mUnexecutedTestsReported = true;
         }
-        mInvalidAssumptionFailureTests = new HashMap<String, String>();
-        mInvalidIgnoredTests = new LinkedHashSet<>();
-        mInvalidFailedTests = new HashMap<>();
+        mClassAssumptionFailure = new HashMap<String, String>();
         super.testRunEnded(elapsedTime, runMetrics);
     }
 
@@ -294,13 +275,9 @@ final class InstrumentationListener extends LogcatCrashResultForwarder {
             }
             for (TestDescription miss : missingTests) {
                 super.testStarted(miss);
-                if (mInvalidAssumptionFailureTests.containsKey(miss.getClassName())) {
+                if (mClassAssumptionFailure.containsKey(miss.getClassName())) {
                     super.testAssumptionFailure(
-                            miss, mInvalidAssumptionFailureTests.get(miss.getClassName()));
-                } else if (mInvalidIgnoredTests.contains(miss.getClassName())) {
-                    super.testIgnored(miss);
-                } else if (mInvalidFailedTests.containsKey(miss.getClassName())) {
-                    super.testFailed(miss, mInvalidFailedTests.get(miss.getClassName()));
+                            miss, mClassAssumptionFailure.get(miss.getClassName()));
                 } else {
                     SkipReason reason =
                             new SkipReason(
