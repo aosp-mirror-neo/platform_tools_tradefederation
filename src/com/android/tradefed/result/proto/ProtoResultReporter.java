@@ -569,8 +569,10 @@ public abstract class ProtoResultReporter
         testBuilder.setStatus(TestStatus.FAIL);
         DebugInfo.Builder debugBuilder = DebugInfo.newBuilder();
         // FIXME: extract the error message from the trace
-        debugBuilder.setErrorMessage(failure.toString());
-        debugBuilder.setTrace(failure.toString());
+        if (!Strings.isNullOrEmpty(failure.toString())) {
+            debugBuilder.setErrorMessage(failure.toString());
+            debugBuilder.setTrace(failure.toString());
+        }
         if (failure.getFailureStatus() != null) {
             debugBuilder.setFailureStatus(failure.getFailureStatus());
         }
