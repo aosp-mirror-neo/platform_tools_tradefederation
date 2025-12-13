@@ -31,6 +31,7 @@ public final class UserInfo {
     public static final int USER_ALL = -1;
     public static final int USER_CURRENT = -2;
     public static final int USER_CURRENT_OR_SELF = -3;
+    public static final int PER_USER_RANGE = 100000;
 
     // From {@link android.content.pm.UserInfo}
     public static final int FLAG_PRIMARY = 0x00000001;

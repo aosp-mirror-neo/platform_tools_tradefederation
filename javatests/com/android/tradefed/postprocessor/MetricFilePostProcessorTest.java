@@ -15,12 +15,16 @@
  */
 package com.android.tradefed.postprocessor;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
@@ -31,11 +35,16 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.List;
 
 /** Unit tests for {@link MetricFilePostProcessor}. */
 @RunWith(JUnit4.class)
@@ -51,17 +60,22 @@ public class MetricFilePostProcessorTest {
         boolean isMetricWrittenToFile = false;
         boolean isRunMetricAggregated = false;
         boolean isTestMetricAggregated = false;
+        boolean isDimensionalMetricAggregated = false;
+        int dimensionalFilesAggregatedCount = 0;
         Map<String, String> mMetricsInFile;
 
         @Override
-        public void storeTestMetrics(TestDescription testDescription,
-                Map<String, Metric> testMetrics) {
+        public void storeTestMetrics(
+                TestDescription testDescription, Map<String, Metric> testMetrics) {
             isMetricStored = true;
         }
 
         @Override
-        public File writeResultsToFile(String testFileSuffix, String testHeaderName,
-                Map<String, String> metrics, File resultsFile) {
+        public File writeResultsToFile(
+                String testFileSuffix,
+                String testHeaderName,
+                Map<String, String> metrics,
+                File resultsFile) {
             isMetricWrittenToFile = true;
             mMetricsInFile = metrics;
             return null;
@@ -79,11 +93,24 @@ public class MetricFilePostProcessorTest {
             return null;
         }
 
+        @Override
+        public File aggregateDimensionalMetricsAndWriteToFile(
+                List<LogFile> dimensionalMetricFiles,
+                Set<Integer> percentiles,
+                String testIterationSeparator) {
+            isDimensionalMetricAggregated = true;
+            dimensionalFilesAggregatedCount = dimensionalMetricFiles.size();
+            try {
+                return File.createTempFile("aggregated-report", ".textproto");
+            } catch (IOException e) {
+                return null;
+            }
+        }
+
         public Map<String, String> getMetricsInFile() {
             return mMetricsInFile;
         }
     }
-
 
     @Before
     public void setUp() {
@@ -174,10 +201,16 @@ public class MetricFilePostProcessorTest {
         assertFalse(mTestableMetricUtil.isTestMetricAggregated);
         assertTrue(
                 mTestableMetricUtil.getMetricsInFile().get("run_metric_1").equalsIgnoreCase("2.9"));
-        assertTrue(mTestableMetricUtil.getMetricsInFile().get("run_metric_2")
-                .equalsIgnoreCase("2.9,5.6"));
-        assertTrue(mTestableMetricUtil.getMetricsInFile().get("run_metric_3")
-                .equalsIgnoreCase("value_3"));
+        assertTrue(
+                mTestableMetricUtil
+                        .getMetricsInFile()
+                        .get("run_metric_2")
+                        .equalsIgnoreCase("2.9,5.6"));
+        assertTrue(
+                mTestableMetricUtil
+                        .getMetricsInFile()
+                        .get("run_metric_3")
+                        .equalsIgnoreCase("value_3"));
     }
 
     @Test
@@ -227,33 +260,115 @@ public class MetricFilePostProcessorTest {
     }
 
     @Test
-    public void processDimensionalMetrics() throws ConfigurationException, IOException {
-        OptionSetter setter = new OptionSetter(mMetricFilePostProcessor);
+    public void processDimensionalMetrics_aggregationEnabled()
+            throws ConfigurationException, IOException {
+        MetricUtility mockMetricUtil = Mockito.mock(MetricUtility.class);
+        MetricFilePostProcessor processor = new MetricFilePostProcessor(mockMetricUtil);
+        ITestInvocationListener mockListener = Mockito.mock(ITestInvocationListener.class);
+        processor.init(mockListener);
+        OptionSetter setter = new OptionSetter(processor);
         setter.setOptionValue("aggregate-dimensional-metrics", "true");
 
         HashMap<String, Metric> testMetrics = new HashMap<>();
         Map<String, LogFile> testLogs = new HashMap<>();
-        File dimensionalMetricsFile = FileUtil.createTempFile("dimensional-metrics", ".txt");
-        LogFile dimensionalMetricsLogFile =
+        File dimensionalMetricsFile1 =
+                FileUtil.createTempFile("dimensional-metrics1", ".textproto");
+        LogFile dimensionalMetricsLogFile1 =
                 new LogFile(
-                        dimensionalMetricsFile.getAbsolutePath(),
+                        dimensionalMetricsFile1.getAbsolutePath(),
                         "url",
-                        false,
-                        LogDataType.CB_METRICS_REPORT_FILE,
-                        0L);
-        testLogs.put("dimensional-metrics-file", dimensionalMetricsLogFile);
+                        LogDataType.CB_METRICS_REPORT_FILE);
+        testLogs.put("dimensional-metrics-file1", dimensionalMetricsLogFile1);
         File otherFile = FileUtil.createTempFile("other-file", ".txt");
-        LogFile otherLogFile =
-                new LogFile(otherFile.getAbsolutePath(), "url", false, LogDataType.TEXT, 0L);
+        LogFile otherLogFile = new LogFile(otherFile.getAbsolutePath(), "url", LogDataType.TEXT);
+        testLogs.put("other-log-file", otherLogFile);
+        final File aggregatedReportFile =
+                FileUtil.createTempFile("aggregated-report", ".textproto");
+
+        Mockito.when(
+                        mockMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
+                                Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenAnswer(
+                        new Answer<File>() {
+                            @Override
+                            public File answer(InvocationOnMock invocation) throws Throwable {
+                                java.util.List<LogFile> files = invocation.getArgument(0);
+                                assertEquals(1, files.size());
+                                return aggregatedReportFile;
+                            }
+                        });
+
+        try {
+            processor.setUp();
+            processor.processTestMetricsAndLogs(TEST_1, testMetrics, testLogs);
+            processor.processRunMetricsAndLogs(new HashMap<>(), new HashMap<>());
+
+            verify(mockMetricUtil)
+                    .aggregateDimensionalMetricsAndWriteToFile(
+                            Mockito.any(), Mockito.any(), Mockito.any());
+        } finally {
+            FileUtil.deleteFile(dimensionalMetricsFile1);
+            FileUtil.deleteFile(otherFile);
+            FileUtil.deleteFile(aggregatedReportFile);
+        }
+    }
+
+    @Test
+    public void processDimensionalMetrics_aggregationDisabled() throws IOException {
+        MetricUtility mockMetricUtil = Mockito.mock(MetricUtility.class);
+        MetricFilePostProcessor processor = new MetricFilePostProcessor(mockMetricUtil);
+        ITestInvocationListener mockListener = Mockito.mock(ITestInvocationListener.class);
+        processor.init(mockListener);
+
+        HashMap<String, Metric> testMetrics = new HashMap<>();
+        Map<String, LogFile> testLogs = new HashMap<>();
+        File dimensionalMetricsFile1 =
+                FileUtil.createTempFile("dimensional-metrics1", ".textproto");
+        LogFile dimensionalMetricsLogFile1 =
+                new LogFile(
+                        dimensionalMetricsFile1.getAbsolutePath(),
+                        "url",
+                        LogDataType.CB_METRICS_REPORT_FILE);
+        testLogs.put("dimensional-metrics-file1", dimensionalMetricsLogFile1);
+
+        try {
+            processor.setUp();
+            processor.processTestMetricsAndLogs(TEST_1, testMetrics, testLogs);
+            processor.processRunMetricsAndLogs(new HashMap<>(), new HashMap<>());
+
+            verify(mockMetricUtil, never())
+                    .aggregateDimensionalMetricsAndWriteToFile(
+                            Mockito.any(), Mockito.any(), Mockito.any());
+        } finally {
+            FileUtil.deleteFile(dimensionalMetricsFile1);
+        }
+    }
+
+    @Test
+    public void processDimensionalMetrics_noFilesToAggregate()
+            throws ConfigurationException, IOException {
+        MetricUtility mockMetricUtil = Mockito.mock(MetricUtility.class);
+        MetricFilePostProcessor processor = new MetricFilePostProcessor(mockMetricUtil);
+        ITestInvocationListener mockListener = Mockito.mock(ITestInvocationListener.class);
+        processor.init(mockListener);
+        OptionSetter setter = new OptionSetter(processor);
+        setter.setOptionValue("aggregate-dimensional-metrics", "true");
+
+        HashMap<String, Metric> testMetrics = new HashMap<>();
+        Map<String, LogFile> testLogs = new HashMap<>();
+        File otherFile = FileUtil.createTempFile("other-file", ".txt");
+        LogFile otherLogFile = new LogFile(otherFile.getAbsolutePath(), "url", LogDataType.TEXT);
         testLogs.put("other-log-file", otherLogFile);
 
         try {
-            mMetricFilePostProcessor.processTestMetricsAndLogs(TEST_1, testMetrics, testLogs);
-            Map<String, Metric.Builder> runMetrics =
-                    mMetricFilePostProcessor.processRunMetricsAndLogs(new HashMap<>(), null);
-            assertTrue(runMetrics.isEmpty());
+            processor.setUp();
+            processor.processTestMetricsAndLogs(TEST_1, testMetrics, testLogs);
+            processor.processRunMetricsAndLogs(new HashMap<>(), new HashMap<>());
+
+            verify(mockMetricUtil, never())
+                    .aggregateDimensionalMetricsAndWriteToFile(
+                            Mockito.any(), Mockito.any(), Mockito.any());
         } finally {
-            FileUtil.deleteFile(dimensionalMetricsFile);
             FileUtil.deleteFile(otherFile);
         }
     }

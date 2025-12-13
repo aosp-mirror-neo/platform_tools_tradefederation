@@ -27,6 +27,7 @@ import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.MetricUtility;
+import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
 import java.io.File;
 import java.util.ArrayList;
@@ -38,11 +39,11 @@ import java.util.Set;
 /**
  * Used for uploading the metrics log file collected during the test and run level.
  *
- * Use "aggregate-similar-tests" option to aggregate similar tests metrics at the test run level
- * and write it to a log file. Tests differ only by the iteration number or with the same name
- * are considered similar tests.
+ * <p>Use "aggregate-similar-tests" option to aggregate similar tests metrics at the test run level
+ * and write it to a log file. Tests differ only by the iteration number or with the same name are
+ * considered similar tests.
  *
- * This will have access to only raw metrics.
+ * <p>This will have access to only raw metrics.
  */
 @OptionClass(alias = "metric-file-post-processor")
 public class MetricFilePostProcessor extends BasePostProcessor {
@@ -94,7 +95,7 @@ public class MetricFilePostProcessor extends BasePostProcessor {
             name = "use-test-iterations-for-stats",
             description =
                     "Use the actual test iterations when computing the stats instead of using the"
-                        + " metric count.")
+                            + " metric count.")
     private boolean mEnableCountTestIterations = false;
 
     @Option(
@@ -191,11 +192,28 @@ public class MetricFilePostProcessor extends BasePostProcessor {
             }
         }
 
-        if (mAggregateDimensionalMetrics) {
-            CLog.i("Aggregating dimensional metrics.");
-            // TODO(449231849): Implement aggregation of dimensional metrics.
-            for (LogFile logFile : mDimensionalMetricFiles) {
-                CLog.i("Found dimensional metrics report: %s", logFile.getPath());
+        if (mAggregateDimensionalMetrics && !mDimensionalMetricFiles.isEmpty()) {
+            CLog.i(
+                    "Starting dimensional metrics aggregation for %d report files.",
+                    mDimensionalMetricFiles.size());
+            File aggregatedReportFile =
+                    mMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
+                            mDimensionalMetricFiles, mPercentiles, mTestIterationSeparator);
+            if (aggregatedReportFile != null) {
+                CLog.i(
+                        "Dimensional metrics aggregation complete. Uploading report: %s",
+                        aggregatedReportFile.getAbsolutePath());
+                try (InputStreamSource source =
+                        new FileInputStreamSource(aggregatedReportFile, true)) {
+                    testLog(
+                            "metrics_report_aggregated",
+                            LogDataType.CB_METRICS_REPORT_FILE,
+                            source);
+                } finally {
+                    FileUtil.deleteFile(aggregatedReportFile);
+                }
+            } else {
+                CLog.w("Aggregated dimensional metrics report was not generated.");
             }
             mDimensionalMetricFiles.clear();
         }

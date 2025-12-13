@@ -79,7 +79,7 @@ public enum LogDataType {
             "text/plain",
             true /* TODO(b/228497046): Allow compression when supported */,
             true),
-    CB_METRICS_REPORT_FILE("textproto", "text/plain", false, true),
+    CB_METRICS_REPORT_FILE("textproto", "text/plain", true, true),
     PROCRANK("txt", "text/plain", false, true),
     MEM_INFO("txt", "text/plain", false, true),
     TOP("txt", "text/plain", false, true),

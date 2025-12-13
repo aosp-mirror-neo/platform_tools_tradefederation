@@ -19,17 +19,30 @@ import static org.junit.Assert.assertTrue;
 
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.TestDescription;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.ComputedStatistics;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Dimension;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.DimensionalMetric;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.MetricRecord;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.MetricReport;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.RawValues;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Stat;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.TestIdentifier;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.TestMetricResult;
+import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Value;
+import com.android.tradefed.result.LogDataType;
+import com.android.tradefed.result.LogFile;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
-
 import com.google.common.collect.ArrayListMultimap;
-
+import com.google.protobuf.TextFormat;
 import org.junit.After;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -37,6 +50,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 
 /** Unit tests for {@link MetricUtility}. */
@@ -608,6 +622,214 @@ public class MetricUtilityTest {
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
 
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_11)));
+    }
+
+    @Test
+    public void testAggregateDimensionalMetrics_iterationOnClass() throws IOException {
+        TestIdentifier testId1 =
+                TestIdentifier.newBuilder()
+                        .setFullTestName("pkg.class$1#test")
+                        .setTestClass("pkg.class$1")
+                        .setMethod("test")
+                        .build();
+        File reportFile1 =
+                createDimensionalMetricReportFile("report1.textproto", testId1, 1.0, 3.0);
+        TestIdentifier testId2 =
+                TestIdentifier.newBuilder()
+                        .setFullTestName("pkg.class$2#test")
+                        .setTestClass("pkg.class$2")
+                        .setMethod("test")
+                        .build();
+        File reportFile2 = createDimensionalMetricReportFile("report2.textproto", testId2, 5.0);
+
+        List<LogFile> reportFiles =
+                Arrays.asList(
+                        new LogFile(reportFile1.getAbsolutePath(), "url1", LogDataType.TEXTPB),
+                        new LogFile(reportFile2.getAbsolutePath(), "url2", LogDataType.TEXTPB));
+
+        try {
+            mResultsFile =
+                    mMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
+                            reportFiles, new HashSet<>(Arrays.asList(90)), "$");
+
+            assertNotNull(mResultsFile);
+            MetricReport.Builder aggregatedReportBuilder = MetricReport.newBuilder();
+            TextFormat.getParser()
+                    .merge(FileUtil.readStringFromFile(mResultsFile), aggregatedReportBuilder);
+            MetricReport aggregatedReport = aggregatedReportBuilder.build();
+
+            assertEquals(1, aggregatedReport.getTestMetricResultsCount());
+            TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
+            assertEquals(
+                    "pkg.class#test",
+                    aggregatedResult.getIdentifier().getFullTestName());
+            assertEquals(
+                    "pkg.class",
+                    aggregatedResult.getIdentifier().getTestClass());
+            assertEquals(12, aggregatedResult.getMetricRecordsCount());
+
+        } finally {
+            FileUtil.deleteFile(reportFile1);
+            FileUtil.deleteFile(reportFile2);
+        }
+    }
+
+    @Test
+    public void testAggregateDimensionalMetrics() throws IOException {
+        TestIdentifier testId =
+                TestIdentifier.newBuilder()
+                        .setFullTestName("pkg.class#test$1")
+                        .setTestClass("pkg.class")
+                        .setMethod("test")
+                        .build();
+        File reportFile1 = createDimensionalMetricReportFile("report1.textproto", testId, 1.0, 3.0);
+        File reportFile2 = createDimensionalMetricReportFile("report2.textproto", testId, 5.0);
+
+        List<LogFile> reportFiles =
+                Arrays.asList(
+                        new LogFile(reportFile1.getAbsolutePath(), "url1", LogDataType.TEXTPB),
+                        new LogFile(reportFile2.getAbsolutePath(), "url2", LogDataType.TEXTPB));
+
+        try {
+            mResultsFile =
+                    mMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
+                            reportFiles, new HashSet<>(Arrays.asList(90)), "$");
+
+            assertNotNull(mResultsFile);
+            MetricReport.Builder aggregatedReportBuilder = MetricReport.newBuilder();
+            TextFormat.getParser()
+                    .merge(FileUtil.readStringFromFile(mResultsFile), aggregatedReportBuilder);
+            MetricReport aggregatedReport = aggregatedReportBuilder.build();
+
+            assertEquals(1, aggregatedReport.getTestMetricResultsCount());
+            TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
+            assertEquals("pkg.class#test", aggregatedResult.getIdentifier().getFullTestName());
+            assertEquals(12, aggregatedResult.getMetricRecordsCount());
+
+            Map<String, Double> stats = new HashMap<>();
+            for (MetricRecord record : aggregatedResult.getMetricRecordsList()) {
+                assertEquals("metric_id_1", record.getMetricId());
+                assertEquals(1, record.getDimensionalMetricsCount());
+                DimensionalMetric dm = record.getDimensionalMetrics(0);
+                ComputedStatistics computed = dm.getComputedStatistics();
+                assertEquals(1, computed.getStatsCount());
+                Stat stat = computed.getStats(0);
+                stats.put(stat.getKey(), stat.getValue().getDoubleValue());
+            }
+
+            assertEquals(1.0, stats.get("min"), 0.01);
+            assertEquals(5.0, stats.get("max"), 0.01);
+            assertEquals(3.0, stats.get("mean"), 0.01);
+            assertEquals(3.0, stats.get("median"), 0.01);
+            assertEquals(9.0, stats.get("total"), 0.01);
+            assertEquals(3.0, stats.get("metric-count"), 0.01);
+            assertEquals(2.67, stats.get("var"), 0.01);
+            assertEquals(1.63, stats.get("stdev"), 0.01);
+            assertEquals(4.6, stats.get("p90"), 0.01);
+
+        } finally {
+            FileUtil.deleteFile(reportFile1);
+            FileUtil.deleteFile(reportFile2);
+        }
+    }
+
+    @Test
+    public void testAggregateDimensionalMetricsWithStrings() throws IOException {
+        TestIdentifier testId =
+                TestIdentifier.newBuilder()
+                        .setFullTestName("pkg.class#test$1")
+                        .setTestClass("pkg.class")
+                        .setMethod("test")
+                        .build();
+        File reportFile1 =
+                createDimensionalMetricReportFile("report1.textproto", testId, "1.0", "3.0, 5.0");
+        File reportFile2 =
+                createDimensionalMetricReportFile("report2.textproto", testId, "2.0");
+
+        List<LogFile> reportFiles =
+                Arrays.asList(
+                        new LogFile(reportFile1.getAbsolutePath(), "url1", LogDataType.TEXTPB),
+                        new LogFile(reportFile2.getAbsolutePath(), "url2", LogDataType.TEXTPB));
+
+        try {
+            mResultsFile =
+                    mMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
+                            reportFiles, new HashSet<>(Arrays.asList(90)), "$");
+
+            assertNotNull(mResultsFile);
+            MetricReport.Builder aggregatedReportBuilder = MetricReport.newBuilder();
+            TextFormat.getParser()
+                    .merge(FileUtil.readStringFromFile(mResultsFile), aggregatedReportBuilder);
+            MetricReport aggregatedReport = aggregatedReportBuilder.build();
+
+            assertEquals(1, aggregatedReport.getTestMetricResultsCount());
+            TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
+            assertEquals("pkg.class#test", aggregatedResult.getIdentifier().getFullTestName());
+            assertEquals(12, aggregatedResult.getMetricRecordsCount());
+
+            Map<String, Double> stats = new HashMap<>();
+            for (MetricRecord record : aggregatedResult.getMetricRecordsList()) {
+                assertEquals("metric_id_1", record.getMetricId());
+                assertEquals(1, record.getDimensionalMetricsCount());
+                DimensionalMetric dm = record.getDimensionalMetrics(0);
+                ComputedStatistics computed = dm.getComputedStatistics();
+                assertEquals(1, computed.getStatsCount());
+                Stat stat = computed.getStats(0);
+                stats.put(stat.getKey(), stat.getValue().getDoubleValue());
+            }
+
+            assertEquals(1.0, stats.get("min"), 0.01);
+            assertEquals(5.0, stats.get("max"), 0.01);
+            assertEquals(2.75, stats.get("mean"), 0.01);
+            assertEquals(2.5, stats.get("median"), 0.01);
+            assertEquals(11.0, stats.get("total"), 0.01);
+            assertEquals(4.0, stats.get("metric-count"), 0.01);
+
+        } finally {
+            FileUtil.deleteFile(reportFile1);
+            FileUtil.deleteFile(reportFile2);
+        }
+    }
+
+    private File createDimensionalMetricReportFile(
+            String name, TestIdentifier testId, Object... values) throws IOException {
+        RawValues.Builder rawValuesBuilder = RawValues.newBuilder();
+        for (Object v : values) {
+            if (v instanceof Double) {
+                rawValuesBuilder.addValues(Value.newBuilder().setDoubleValue((Double) v).build());
+            } else if (v instanceof String) {
+                rawValuesBuilder.addValues(Value.newBuilder().setStringValue((String) v).build());
+            }
+        }
+
+        DimensionalMetric dimensionalMetric =
+                DimensionalMetric.newBuilder()
+                        .addDimensions(
+                                Dimension.newBuilder()
+                                        .setKey("dim1")
+                                        .setValue(Value.newBuilder().setStringValue("val1").build())
+                                        .build())
+                        .setRawValues(rawValuesBuilder.build())
+                        .setLegacyMetricKey("legacy_metric_key")
+                        .build();
+
+        MetricRecord metricRecord =
+                MetricRecord.newBuilder()
+                        .setMetricId("metric_id_1")
+                        .addDimensionalMetrics(dimensionalMetric)
+                        .build();
+
+        TestMetricResult testResult =
+                TestMetricResult.newBuilder()
+                        .setIdentifier(testId)
+                        .addMetricRecords(metricRecord)
+                        .build();
+
+        MetricReport report = MetricReport.newBuilder().addTestMetricResults(testResult).build();
+
+        File reportFile = FileUtil.createTempFile(name, ".textproto");
+        FileUtil.writeToFile(TextFormat.printer().printToString(report), reportFile);
+        return reportFile;
     }
 
     /**
