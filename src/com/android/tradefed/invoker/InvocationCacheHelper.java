@@ -183,6 +183,9 @@ public class InvocationCacheHelper {
             CLog.d("Looking up cache for %s", action);
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.INVOCATION_RESULTS_CHECKING_CACHE, 1);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.INVOCATION_RESULTS_CHECKING_CACHE_KEY,
+                    action.actionDigest().getHash());
             cachedResults = cacheClient.lookupCache(action);
             if (cachedResults == null) {
                 CLog.d("No cached results for the invocation.");
