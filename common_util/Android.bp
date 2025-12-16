@@ -45,8 +45,8 @@ java_library_host {
         "google-api-java-client-assembly",
         "google-api-services-compute",
         "google-api-services-storage",
-        "google-auth-library-credentials-1.23.0",
-        "google-auth-library-oauth2-http-1.23.0",
+        "google-auth-library-java-credentials",
+        "google-auth-library-java-oauth2_http",
         "google-http-client-jackson2-1.28.0",
     ],
     libs: [
