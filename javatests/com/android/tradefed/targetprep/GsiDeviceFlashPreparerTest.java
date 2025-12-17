@@ -35,6 +35,8 @@ import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.util.CommandResult;
+import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.IRunUtil;
@@ -110,7 +112,7 @@ public class GsiDeviceFlashPreparerTest {
         mSuccessResult.setStderr("OKAY [  0.043s]");
         mSuccessResult.setStdout("");
         mFailureResult = new CommandResult(CommandStatus.FAILED);
-        mFailureResult.setStderr("FAILED (remote: 'Partition error')");
+        mFailureResult.setStderr("FAILED (remote: 'No such partition.')");
         mFailureResult.setStdout("");
     }
 
@@ -536,5 +538,385 @@ public class GsiDeviceFlashPreparerTest {
         verify(mMockDevice).rebootIntoFastbootd();
         verify(mMockRunUtil).allowInterrupt(true);
         verify(mMockRunUtil).sleep(Mockito.anyLong());
+    }
+
+    /* Verifies that preparer can flash GSI and pvmfw image with pvmfw-flash-mode=ON */
+    @Test
+    public void testSetup_withPvmfw_modeOn_success() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "ON");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        File pvmfwImg = new File(gsiDir, "pvmfw.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        FileUtil.writeToFile("ddd", pvmfwImg);
+        File systemZip = FileUtil.createTempFile("system_images", ".zip", mTmpDir);
+        ZipUtil.createZip(List.of(systemImg, pvmfwImg), systemZip);
+
+        mBuildInfo.setFile("gsi_system.img", systemZip, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img")))
+                .thenReturn(mSuccessResult);
+
+        doSetupExpectations();
+
+        mPreparer.setUp(mTestInfo);
+
+        verifyExpectations();
+        verify(mMockDevice)
+                .executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img"));
+    }
+
+    /* Verifies that preparer throws error with pvmfw-flash-mode=ON when no pvmfw.img */
+    @Test
+    public void testSetup_withPvmfw_modeOn_noImage_failure() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "ON");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        mBuildInfo.setFile("gsi_system.img", systemImg, "0");
+
+        try {
+            mPreparer.setUp(mTestInfo);
+            fail("TargetSetupError is expected");
+        } catch (TargetSetupError e) {
+            // expected
+        }
+    }
+
+    /* Verifies that preparer throws error with pvmfw-flash-mode=ON when no pvmfw partition */
+    @Test
+    public void testSetup_withPvmfw_modeOn_noPartition_failure() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "ON");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        File pvmfwImg = new File(gsiDir, "pvmfw.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        FileUtil.writeToFile("ddd", pvmfwImg);
+        File systemZip = FileUtil.createTempFile("system_images", ".zip", mTmpDir);
+        ZipUtil.createZip(List.of(systemImg, pvmfwImg), systemZip);
+
+        mBuildInfo.setFile("gsi_system.img", systemZip, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img")))
+                .thenReturn(mFailureResult);
+
+        try {
+            mPreparer.setUp(mTestInfo);
+            fail("TargetSetupError is expected");
+        } catch (TargetSetupError e) {
+            // expected
+        }
+    }
+
+    /* Verifies that preparer does not flash pvmfw image with pvmfw-flash-mode=OFF */
+    @Test
+    public void testSetup_withPvmfw_modeOff_noFlash() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "OFF");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File pvmfwImg = new File(gsiDir, "pvmfw.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", pvmfwImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        File systemZip = FileUtil.createTempFile("system_images", ".zip", mTmpDir);
+        ZipUtil.createZip(List.of(systemImg, pvmfwImg), systemZip);
+        mBuildInfo.setFile("gsi_system.img", systemZip, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+
+        doSetupExpectations();
+
+        mPreparer.setUp(mTestInfo);
+
+        verifyExpectations();
+        verify(mMockDevice, Mockito.never())
+                .executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("pvmfw"), Mockito.anyString());
+    }
+
+    /* Verifies that preparer flashes pvmfw image with pvmfw-flash-mode=AUTO */
+    @Test
+    public void testSetup_withPvmfw_modeAuto_success() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "AUTO");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        File pvmfwImg = new File(gsiDir, "pvmfw.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        FileUtil.writeToFile("ddd", pvmfwImg);
+        File systemZip = FileUtil.createTempFile("system_images", ".zip", mTmpDir);
+        ZipUtil.createZip(List.of(systemImg, pvmfwImg), systemZip);
+
+        mBuildInfo.setFile("gsi_system.img", systemZip, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img")))
+                .thenReturn(mSuccessResult);
+
+        doSetupExpectations();
+
+        mPreparer.setUp(mTestInfo);
+
+        verifyExpectations();
+        verify(mMockDevice)
+                .executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img"));
+    }
+
+    /* Verifies that preparer does not flash with pvmfw-flash-mode=AUTO when no pvmfw.img */
+    @Test
+    public void testSetup_withPvmfw_modeAuto_noImage_noFlash() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "AUTO");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        mBuildInfo.setFile("gsi_system.img", systemImg, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+
+        doSetupExpectations();
+        mPreparer.setUp(mTestInfo);
+
+        verifyExpectations();
+        verify(mMockDevice, Mockito.never())
+                .executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("pvmfw"), Mockito.anyString());
+    }
+
+    /* Verifies that preparer does not fail with pvmfw-flash-mode=AUTO when no pvmfw partition */
+    @Test
+    public void testSetup_withPvmfw_modeAuto_noPartition_success() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("pvmfw-flash-mode", "AUTO");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File pvmfwImg = new File(gsiDir, "pvmfw.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", pvmfwImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        File systemZip = FileUtil.createTempFile("system_images", ".zip", mTmpDir);
+        ZipUtil.createZip(List.of(systemImg, pvmfwImg), systemZip);
+        mBuildInfo.setFile("gsi_system.img", systemZip, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img")))
+                .thenReturn(mFailureResult); // partition error
+
+        doSetupExpectations();
+        mPreparer.setUp(mTestInfo);
+
+        verifyExpectations();
+        verify(mMockDevice)
+                .executeLongFastbootCommand(
+                        Mockito.eq("flash"),
+                        Mockito.eq("pvmfw"),
+                        Mockito.matches(".*/pvmfw.img"));
+    }
+
+    /* Verifies that preparer throws error with flash-pvmfw=true when no pvmfw.img */
+    @Test
+    public void testSetup_withFlashPvmfw_true_noImage_failure() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("flash-pvmfw", "true");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        mBuildInfo.setFile("gsi_system.img", systemImg, "0");
+
+        try {
+            mPreparer.setUp(mTestInfo);
+            fail("TargetSetupError is expected");
+        } catch (TargetSetupError e) {
+            // expected
+        }
+    }
+
+    /* Verifies that preparer does not flash with flash-pvmfw=false */
+    @Test
+    public void testSetup_withFlashPvmfw_false_noFlash() throws Exception {
+        OptionSetter setter = new OptionSetter(mPreparer);
+        setter.setOptionValue("flash-pvmfw", "false");
+
+        File gsiDir = FileUtil.createTempDir("gsi_folder", mTmpDir);
+        File systemImg = new File(gsiDir, "system.img");
+        File pvmfwImg = new File(gsiDir, "pvmfw.img");
+        File vbmetaImg = new File(gsiDir, "vbmeta.img");
+        FileUtil.writeToFile("ddd", systemImg);
+        FileUtil.writeToFile("ddd", pvmfwImg);
+        FileUtil.writeToFile("ddd", vbmetaImg);
+        File systemZip = FileUtil.createTempFile("system_images", ".zip", mTmpDir);
+        ZipUtil.createZip(List.of(systemImg, pvmfwImg), systemZip);
+        mBuildInfo.setFile("gsi_system.img", systemZip, "0");
+        mBuildInfo.setFile("gsi_vbmeta.img", vbmetaImg, "0");
+
+        when(mMockDevice.getApiLevel()).thenReturn(29);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("--disable-verification"),
+                        Mockito.eq("flash"),
+                        Mockito.eq("vbmeta"),
+                        Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+        doGetSlotExpectation();
+        when(mMockDevice.executeLongFastbootCommand("delete-logical-partition", "product_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("-w")).thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand("erase", "system_a"))
+                .thenReturn(mSuccessResult);
+        when(mMockDevice.executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("system"), Mockito.anyString()))
+                .thenReturn(mSuccessResult);
+
+        doSetupExpectations();
+
+        mPreparer.setUp(mTestInfo);
+
+        verifyExpectations();
+        verify(mMockDevice, Mockito.never())
+                .executeLongFastbootCommand(
+                        Mockito.eq("flash"), Mockito.eq("pvmfw"), Mockito.anyString());
     }
 }

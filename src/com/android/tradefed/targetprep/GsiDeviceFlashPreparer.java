@@ -51,6 +51,12 @@ import java.util.regex.Pattern;
 @OptionClass(alias = "gsi-device-flash-preparer")
 public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPreparer {
 
+    public enum PvmfwFlashMode {
+        AUTO,
+        ON,
+        OFF,
+    }
+
     private static final int DYNAMIC_PARTITION_API_LEVEL = 29;
     // Wait time for device state to stablize in millisecond
     private static final int STATE_STABLIZATION_WAIT_TIME_MLLISECS = 60000;
@@ -75,9 +81,21 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     private String mSystemImageFileName = "system.img";
 
     @Option(
+            name = "pvmfw-flash-mode",
+            description =
+                    "The mode for flashing pvmfw.img. "
+                            + "AUTO: flash if pvmfw.img exists and pvmfw partition exists. "
+                            + "ON: flash if pvmfw.img and partition exist, fail otherwise. "
+                            + "OFF: do not flash.")
+    private PvmfwFlashMode mPvmfwFlashMode = PvmfwFlashMode.AUTO;
+
+    @Deprecated
+    @Option(
             name = "flash-pvmfw",
-            description = "Fastboot flash pvmfw.img in the file system-image-zip-name.")
-    private boolean mFlashPvmfw = false;
+            description =
+                    "Deprecated, use 'pvmfw-flash-mode' instead. Fastboot flash pvmfw.img in the"
+                            + " file system-image-zip-name.")
+    private Boolean mFlashPvmfw = null;
 
     @Option(
             name = "vbmeta-image-zip-name",
@@ -129,8 +147,13 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
         File tmpDir = null;
         try {
             tmpDir = FileUtil.createTempDir("gsi_preparer");
-            validateGsiImg(device, buildInfo, tmpDir);
-            flashGsi(device, buildInfo);
+            PvmfwFlashMode flashMode = mPvmfwFlashMode;
+            if (mFlashPvmfw != null) {
+                CLog.w("The 'flash-pvmfw' option is deprecated. Use 'pvmfw-flash-mode' instead.");
+                flashMode = mFlashPvmfw ? PvmfwFlashMode.ON : PvmfwFlashMode.OFF;
+            }
+            validateGsiImg(device, buildInfo, tmpDir, flashMode);
+            flashGsi(device, buildInfo, flashMode);
         } catch (IOException ioe) {
             throw new TargetSetupError(ioe.getMessage(), ioe, device.getDeviceDescriptor());
         } finally {
@@ -190,7 +213,7 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
      * @param buildInfo the {@link IBuildInfo} the build info
      * @throws TargetSetupError, DeviceNotAvailableException, IOException
      */
-    private void flashGsi(ITestDevice device, IBuildInfo buildInfo)
+    private void flashGsi(ITestDevice device, IBuildInfo buildInfo, PvmfwFlashMode mode)
             throws TargetSetupError, DeviceNotAvailableException {
         device.waitForDeviceOnline();
         // After Android 10, system parition and product partion are moved to dynamic partitions
@@ -228,8 +251,8 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                 if (shouldUseFastbootd) {
                     device.rebootIntoFastbootd();
                     if (mShouldEraseProductPartition) {
-                        device.executeLongFastbootCommand(
-                                "delete-logical-partition", "product" + currSlot);
+                        executeFastbootCmd(
+                                device, "delete-logical-partition", "product" + currSlot);
                     }
                 }
                 executeFastbootCmd(device, "erase", "system" + currSlot);
@@ -242,7 +265,25 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                 executeFastbootCmd(device, "flash", "boot", mBootImg.getAbsolutePath());
             }
             if (mPvmfwImg != null) {
-                executeFastbootCmd(device, "flash", "pvmfw", mPvmfwImg.getAbsolutePath());
+                try {
+                    executeFastbootCmd(device, "flash", "pvmfw", mPvmfwImg.getAbsolutePath());
+                } catch (TargetSetupError e) {
+                    if (e.getMessage().toLowerCase().contains("partition")) {
+                        if (mode == PvmfwFlashMode.ON) {
+                            throw new TargetSetupError(
+                                    "Device does not have a pvmfw partition.",
+                                    e,
+                                    device.getDeviceDescriptor(),
+                                    DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE);
+                        }
+                        CLog.i(
+                                "Skipping pvmfw flash because device does not have a pvmfw"
+                                        + " partition (mode=%s).",
+                                mode);
+                    } else {
+                        throw e;
+                    }
+                }
             }
         } finally {
             getHostOptions().returnPermit(PermitLimitType.CONCURRENT_FLASHER);
@@ -262,7 +303,8 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
      * @param tmpDir the temporary directory {@link File}
      * @throws TargetSetupError if there is no valid gki boot.img
      */
-    private void validateGsiImg(ITestDevice device, IBuildInfo buildInfo, File tmpDir)
+    private void validateGsiImg(
+            ITestDevice device, IBuildInfo buildInfo, File tmpDir, PvmfwFlashMode flashMode)
             throws TargetSetupError {
         if (buildInfo.getFile(mSystemImageZipName) == null) {
             throw new TargetSetupError(
@@ -275,13 +317,32 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                         mSystemImageFileName,
                         buildInfo.getFile(mSystemImageZipName),
                         tmpDir);
-        if (mFlashPvmfw) {
-            mPvmfwImg =
-                    getRequestedFile(
-                            device,
-                            PVMFW_IMG_FILE_NAME,
-                            buildInfo.getFile(mSystemImageZipName),
-                            tmpDir);
+        if (flashMode != PvmfwFlashMode.OFF) {
+            File systemImageSource = buildInfo.getFile(mSystemImageZipName);
+            try {
+                if (!(systemImageSource.getName().endsWith(".zip")
+                        || systemImageSource.isDirectory())) {
+                    throw new TargetSetupError(
+                            String.format(
+                                    "%s is not a zip or directory, cannot find %s.",
+                                    systemImageSource.getAbsolutePath(), PVMFW_IMG_FILE_NAME),
+                            device.getDeviceDescriptor());
+                }
+                mPvmfwImg =
+                        getRequestedFile(
+                                device,
+                                PVMFW_IMG_FILE_NAME,
+                                buildInfo.getFile(mSystemImageZipName),
+                                tmpDir);
+            } catch (TargetSetupError e) {
+                if (flashMode == PvmfwFlashMode.ON) {
+                    throw e;
+                }
+                CLog.i(
+                        "Skipping pvmfw flash because %s not found in %s (mode=%s).",
+                        PVMFW_IMG_FILE_NAME, mSystemImageZipName, flashMode);
+                mPvmfwImg = null;
+            }
         }
         if (buildInfo.getFile(mVbmetaImageZipName) != null) {
             mVbmetaImg =
