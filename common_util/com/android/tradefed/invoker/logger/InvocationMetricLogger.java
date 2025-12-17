@@ -464,6 +464,7 @@ public class InvocationMetricLogger {
         MODULE_RESULTS_CACHE_DEVICE_MISMATCH("module_results_cache_device_mismatch", true),
         // Invocation level caching
         INVOCATION_RESULTS_CHECKING_CACHE("invocation_results_checking_cache", true),
+        INVOCATION_RESULTS_CHECKING_CACHE_KEY("invocation_results_checking_cache_key", true),
         INVOCATION_CACHE_HIT("invocation_cache_hit", true),
         INVOCATION_CACHE_HIT_WITH_FAILURE("invocation_cache_hit_with_failure", true),
 
