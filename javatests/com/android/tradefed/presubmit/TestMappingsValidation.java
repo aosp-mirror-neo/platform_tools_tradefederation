@@ -234,7 +234,8 @@ public class TestMappingsValidation implements IBuildReceiver {
                     "InputMethodStressTest",
                     "SystemUIClocksTests",
                     "GtsStagedInstallHostTestCases",
-                    "binderRpcTestNoLegacy");
+                    "binderRpcTestNoLegacy",
+                    "binderRpcTest_flake_prone");
 
     private static final Set<String> REMOUNT_MODULES =
             ImmutableSet.of(
