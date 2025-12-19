@@ -58,6 +58,12 @@ import java.util.zip.ZipOutputStream;
  */
 @OptionClass(alias = "dynamic-system-update")
 public class DynamicSystemPreparer extends BaseTargetPreparer implements ILabPreparer {
+    public enum PvmfwFlashMode {
+        AUTO,
+        ON,
+        OFF,
+    }
+
     static final int DSU_MAX_WAIT_SEC = 10 * 60;
 
     private static final int ANDROID_API_R = 30;
@@ -109,9 +115,21 @@ public class DynamicSystemPreparer extends BaseTargetPreparer implements ILabPre
     private boolean mCompressImages = false;
 
     @Option(
+            name = "pvmfw-flash-mode",
+            description =
+                    "The mode for flashing pvmfw.img. "
+                            + "AUTO: flash if pvmfw.img exists and pvmfw partition exists. "
+                            + "ON: flash if pvmfw.img and partition exist, fail otherwise. "
+                            + "OFF: do not flash.")
+    private PvmfwFlashMode mPvmfwFlashMode = PvmfwFlashMode.AUTO;
+
+    @Deprecated
+    @Option(
             name = "flash-pvmfw",
-            description = "Fastboot flash pvmfw.img in the file system-image-zip-name.")
-    private boolean mFlashPvmfw = false;
+            description =
+                    "Deprecated, use 'pvmfw-flash-mode' instead. Fastboot flash pvmfw.img in the"
+                            + " file system-image-zip-name.")
+    private Boolean mFlashPvmfw = null;
 
     private boolean isDSURunning(ITestDevice device) throws DeviceNotAvailableException {
         CollectingOutputReceiver receiver = new CollectingOutputReceiver();
@@ -200,60 +218,82 @@ public class DynamicSystemPreparer extends BaseTargetPreparer implements ILabPre
         }
     }
 
-    private void flashPvmfw(ITestDevice device, File systemImageZipFile)
+    private void flashPvmfw(ITestDevice device, File systemImageZipFile, PvmfwFlashMode mode)
             throws DeviceNotAvailableException, TargetSetupError {
         File pvmfwImg = null;
         try {
             if (systemImageZipFile.isDirectory()) {
-                pvmfwImg = systemImageZipFile.toPath().resolve("pvmfw.img").toFile();
-                if (!pvmfwImg.isFile()) {
-                    throw new TargetSetupError(
-                            String.format(
-                                    "Cannot find pvmfw.img in directory %s", systemImageZipFile),
-                            device.getDeviceDescriptor(),
-                            InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
+                File img = systemImageZipFile.toPath().resolve("pvmfw.img").toFile();
+                if (img.isFile()) {
+                    pvmfwImg = img;
                 }
             } else {
-                // Unzip pvmfw.img and save to temp file
-                CLog.i("Unzip pvmfw.img from %s", systemImageZipFile.getAbsolutePath());
                 try (ZipFile zipFile = new ZipFile(systemImageZipFile)) {
                     ZipEntry pvmfwEntry = zipFile.getEntry("pvmfw.img");
-                    if (pvmfwEntry == null) {
-                        throw new TargetSetupError(
-                                String.format("Cannot find pvmfw.img in %s", systemImageZipFile),
-                                device.getDeviceDescriptor(),
-                                InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
-                    }
-                    pvmfwImg = FileUtil.createTempFile("pvmfw", ".img");
-                    try (InputStream in = zipFile.getInputStream(pvmfwEntry);
-                            OutputStream out = new FileOutputStream(pvmfwImg)) {
-                        StreamUtil.copyStreams(in, out);
+                    if (pvmfwEntry != null) {
+                        CLog.i("Unzip pvmfw.img from %s", systemImageZipFile.getAbsolutePath());
+                        pvmfwImg = FileUtil.createTempFile("pvmfw", ".img");
+                        try (InputStream in = zipFile.getInputStream(pvmfwEntry);
+                                OutputStream out = new FileOutputStream(pvmfwImg)) {
+                            StreamUtil.copyStreams(in, out);
+                        }
                     }
                 } catch (IOException e) {
                     throw new TargetSetupError(
-                            String.format("Fail unzip pvmfw.img from %s", systemImageZipFile),
+                            String.format("Fail to unzip pvmfw.img from %s", systemImageZipFile),
+                            e,
                             device.getDeviceDescriptor(),
                             InfraErrorIdentifier.FAIL_TO_CREATE_FILE);
                 }
             }
 
-            device.waitForDeviceOnline();
-
-            // Flash pvmfw.img and reboot back
-            CLog.i("Reboot into booloader and flash pvmfw.img");
-            device.rebootIntoBootloader();
-            CommandResult r =
-                    device.executeLongFastbootCommand("flash", "pvmfw", pvmfwImg.getAbsolutePath());
-            if (r.getStatus() != CommandStatus.SUCCESS) {
-                throw new TargetSetupError(
-                        String.format("Fail fastboot flash pvmfw: %s", r.getStderr()),
-                        device.getDeviceDescriptor());
+            if (pvmfwImg == null) {
+                if (mode == PvmfwFlashMode.ON) {
+                    throw new TargetSetupError(
+                            String.format("Cannot find pvmfw.img in %s", systemImageZipFile),
+                            device.getDeviceDescriptor(),
+                            InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
+                }
+                CLog.i("Skipping pvmfw flash because pvmfw.img does not exist (mode=%s).", mode);
+                return;
             }
-            CLog.i("Reboot back to system.");
-            device.reboot();
-            device.waitForDeviceAvailable();
+
+            device.waitForDeviceOnline();
+            CLog.i("Reboot into bootloader to check partition and flash pvmfw.img");
+            device.rebootIntoBootloader();
+            try {
+                CLog.i("Flashing pvmfw.img");
+                CommandResult r =
+                        device.executeLongFastbootCommand(
+                                "flash", "pvmfw", pvmfwImg.getAbsolutePath());
+                if (r.getStatus() != CommandStatus.SUCCESS) {
+                    if (r.getStderr().toLowerCase().contains("partition")) {
+                        if (mode == PvmfwFlashMode.ON) {
+                            throw new TargetSetupError(
+                                    "Device does not have a pvmfw partition.",
+                                    device.getDeviceDescriptor(),
+                                    DeviceErrorIdentifier.DEVICE_UNEXPECTED_RESPONSE);
+                        }
+                        CLog.i(
+                                "Skipping pvmfw flash because device does not have a pvmfw"
+                                        + " partition (mode=%s).",
+                                mode);
+                    } else {
+                        throw new TargetSetupError(
+                                String.format("Fail fastboot flash pvmfw: %s", r.getStderr()),
+                                device.getDeviceDescriptor());
+                    }
+                }
+            } finally {
+                CLog.i("Reboot back to system.");
+                device.reboot();
+                device.waitForDeviceAvailable();
+            }
         } finally {
-            FileUtil.deleteFile(pvmfwImg);
+            // Only delete if it's a temp file.
+            if (pvmfwImg != null && !systemImageZipFile.isDirectory()) {
+                FileUtil.deleteFile(pvmfwImg);
+            }
         }
     }
 
@@ -271,8 +311,14 @@ public class DynamicSystemPreparer extends BaseTargetPreparer implements ILabPre
                     InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
         }
 
-        if (mFlashPvmfw) {
-            flashPvmfw(device, systemImageZipFile);
+        PvmfwFlashMode flashMode = mPvmfwFlashMode;
+        if (mFlashPvmfw != null) {
+            CLog.w("The 'flash-pvmfw' option is deprecated. Use 'pvmfw-flash-mode' instead.");
+            flashMode = mFlashPvmfw ? PvmfwFlashMode.ON : PvmfwFlashMode.OFF;
+        }
+
+        if (flashMode != PvmfwFlashMode.OFF) {
+            flashPvmfw(device, systemImageZipFile, flashMode);
         }
 
         List<File> tempFiles = new ArrayList<File>();
