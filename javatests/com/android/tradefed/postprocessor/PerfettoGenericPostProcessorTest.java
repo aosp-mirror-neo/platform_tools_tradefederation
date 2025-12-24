@@ -16,12 +16,12 @@
 
 package com.android.tradefed.postprocessor;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.MockitoAnnotations.initMocks;
 
@@ -64,10 +64,10 @@ import perfetto.protos.PerfettoMergedMetrics.TraceMetrics;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -651,6 +651,57 @@ public class PerfettoGenericPostProcessorTest {
                 parsedV2Metrics, "biz-(Paused)KernelPreparation-12907-456", 345.0);
         assertMetricsContainDouble(
                 parsedV2Metrics, "biz-(Paused)MarkingPause-1234567890-234", 321.0);
+    }
+
+    @Test
+    public void testParsingMultipleRunV2Metrics() throws ConfigurationException, IOException {
+        setupPerfettoV2MetricFile(METRIC_FILE_FORMAT.text, true);
+
+        mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
+        mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
+        Map<String, LogFile> testLogs = new HashMap<>();
+
+        // Add the same file twice to test merging.
+        testLogs.put(
+                PREFIX_OPTION_VALUE,
+                new LogFile(
+                        perfettoV2MetricProtoFile.getAbsolutePath(), "some.url", LogDataType.ZIP));
+        testLogs.put(
+                PREFIX_OPTION_VALUE + "2",
+                new LogFile(
+                        perfettoV2MetricProtoFile.getAbsolutePath(), "some.url", LogDataType.ZIP));
+
+        Map<String, Metric.Builder> parsedV2Metrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
+
+        if (DEBUG) {
+            printOutputMetricsForDebug(parsedV2Metrics);
+        }
+        // 6 unique test metrics + 1 perfetto_post_processor_runtime metric.
+        assertEquals("count of metrics is correct", 7, parsedV2Metrics.size());
+        // All metrics are merged and now lists of doubles.
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics,
+                "foo_bar-.ShannonImsService",
+                Arrays.asList(123.0, 456.0, 123.0, 456.0));
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics, "foo_bar-null", Arrays.asList(10464441.0, 10464441.0));
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics,
+                "baza-(Paused)KernelPreparation-1234567890-123",
+                Arrays.asList(260051.0, 260051.0));
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics,
+                "baza-(Paused)KernelPreparation-12907-456",
+                Arrays.asList(158854.0, 158854.0));
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics,
+                "biz-(Paused)KernelPreparation-12907-456",
+                Arrays.asList(345.0, 345.0));
+        assertMetricsContainDoubleRow(
+                parsedV2Metrics,
+                "biz-(Paused)MarkingPause-1234567890-234",
+                Arrays.asList(321.0, 321.0));
     }
 
     @Test
