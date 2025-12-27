@@ -328,6 +328,7 @@ java_library_host {
         // TODO(b/1859290570: Delete platform-test-annotations dep
         "platform-test-annotations",
         "snakeyaml",
+        "test_configs_proto_java",
         "tf-remote-client",
         "tradefed-protos",
         "tradefed-isolation-protos",
