@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright 2020 Google Inc. All Rights Reserved. -->
-<configuration description="Base test suite config that runs all tests.">
+<!-- Copyright 2025 Google Inc. All Rights Reserved. -->
+<configuration description="Test suite config template for execution plans.">
     <test class="com.android.tradefed.testtype.suite.ExecutionPlanSuiteRunner">
            <option name="config-zip-paths" value="test-configs.zip" />
            <option name="skip-loading-config-jar" value="true" />
