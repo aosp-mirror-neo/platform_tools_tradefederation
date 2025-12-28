@@ -3803,6 +3803,7 @@ public class TestDevice extends NativeDevice {
      * per-user-type max value shell commands.
      */
     private boolean doesApiLevelHaveNoMaxUsersLimit() throws DeviceNotAvailableException {
+        // TODO(b/472054808): Change to just checking ApiLevel >= 36.1 once possible.
         return getApiLevel() >= 37 || getDeviceConfigFlag(
                 "multiuser/android.multiuser.consistent_max_users");
     }
