@@ -125,8 +125,6 @@ public class TestDiscoveryInfo {
         MAPPED_NON_MAIN_MODULE_DEPENDENCIES.put(
                 "NetworkStackIntegrationTests", "net-tests-utils-host-common.jar");
         MAPPED_NON_MAIN_MODULE_DEPENDENCIES.put(
-                "NetworkStackNextIntegrationTests", "net-tests-utils-host-common.jar");
-        MAPPED_NON_MAIN_MODULE_DEPENDENCIES.put(
                 "NetworkStackRootTests", "net-tests-utils-host-common.jar");
 
         // b/343464660
