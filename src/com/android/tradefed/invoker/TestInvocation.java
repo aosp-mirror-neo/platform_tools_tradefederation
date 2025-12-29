@@ -1670,7 +1670,7 @@ public class TestInvocation implements ITestInvocation {
                 continue;
             }
             try {
-                if (device.isHeadlessSystemUserMode()) {
+                if (device.getApiLevel() >= 29 && device.isHeadlessSystemUserMode()) {
                     CLog.d("Applying HSUM setup for device %s", device.getSerialNumber());
                     String deviceName = context.getDeviceName(device);
                     if (deviceName == null) {
