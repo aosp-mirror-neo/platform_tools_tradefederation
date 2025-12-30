@@ -81,7 +81,9 @@ public class ImageContentAnalyzer {
                             "/boot_otas/boot_ota_4k.zip",
                             "/boot_otas/boot_ota_16k.zip",
                             // b/451525832
-                            "SYSTEM/apex/com.google.android.virt.apex")) {
+                            "SYSTEM/apex/com.google.android.virt.apex",
+                            // b/472373846
+                            "VENDOR/apex/com.google.pixel.camera.hal.apex")) {
                 removed = allDescriptors.removeIf(d -> d.path.endsWith(path)) || removed;
             }
             if (removed) {
