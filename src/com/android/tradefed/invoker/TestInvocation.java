@@ -1376,7 +1376,7 @@ public class TestInvocation implements ITestInvocation {
                     InvocationMetricLogger.addInvocationPairMetrics(
                             InvocationMetricKey.TEST_TEARDOWN_PAIR, timestamp, timestamp);
                     listener.invocationSkipped(new SkipReason(skipReason, ""));
-                    reportModuleSkip(config, listener);
+                    reportModuleSkip(config, listener, skipReason);
                     reportHostLog(listener, config);
                     reportInvocationEnded(config, info.getContext(), listener, 0L);
                     // Still upload results for caching
@@ -2069,7 +2069,8 @@ public class TestInvocation implements ITestInvocation {
         return dnae;
     }
 
-    private void reportModuleSkip(IConfiguration config, ITestInvocationListener listener) {
+    private void reportModuleSkip(
+            IConfiguration config, ITestInvocationListener listener, String skipReason) {
         if (!config.getSkipManager().reportInvocationSkippedModule()) {
             return;
         }
@@ -2098,9 +2099,7 @@ public class TestInvocation implements ITestInvocation {
             moduleContext.addInvocationAttribute(ModuleDefinition.MODULE_NAME, moduleName);
             moduleContext.addInvocationAttribute(
                     ModuleDefinition.MODULE_ID, abi + " " + moduleName);
-            moduleContext.addInvocationAttribute(
-                    ModuleDefinition.MODULE_SKIPPED,
-                    config.getSkipManager().getInvocationSkipReason());
+            moduleContext.addInvocationAttribute(ModuleDefinition.MODULE_SKIPPED, skipReason);
             moduleContext.addInvocationAttribute(
                     ModuleDefinition.SPARSE_MODULE,
                     "true");
