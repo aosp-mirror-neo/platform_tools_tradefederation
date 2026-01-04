@@ -864,7 +864,7 @@ public class ResultReporter
                 moduleSkip =
                         new SkipReason(
                                 mModuleContext.getAttribute(ModuleDefinition.MODULE_SKIPPED), "");
-                CLog.d("Received a module skipped: %s", moduleSkip);
+                CLog.d("Received a skip reason %s for module %s", moduleSkip, mCurrentModule);
             }
             final long currentTimeStamp = value;
             mModuleContext = null;
