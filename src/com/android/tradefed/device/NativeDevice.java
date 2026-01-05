@@ -1962,6 +1962,9 @@ public class NativeDevice
         long startTime = System.currentTimeMillis();
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.PUSH_FILE_COUNT, 1);
         try {
+            CLog.d(
+                    "Push file %s with size of %d bytes to the device.",
+                    localFile, localFile.length());
             if (!skipContentProvider) {
                 // Skip Content provider for user 0
                 if (isSdcardOrEmulated(remoteFilePath) && userId != 0) {
