@@ -43,18 +43,28 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import javax.annotation.Nullable;
 
-/** Unit tests for {@link SwitchUserTargetPreparer}. */
+/**
+ * Unit tests for {@link SwitchUserTargetPreparer}.
+ *
+ * @deprecated {@link SwitchUserTargetPreparer}'s main logic is handled by {@link UserSwitcher} and
+ *     tested by {@link UserSwitcherTest}; hence, this class is obsolete and shouldn't get new
+ *     tests, just fixes for changes of behavior (ideally it should be refactored to test the
+ *     interaction with {@link UserSwitcher} itself, but such refactoring is not worth the effort).
+ */
 @RunWith(JUnit4.class)
+@Deprecated
 public final class SwitchUserTargetPreparerTest {
 
     @Rule public final Expect expect = Expect.create();
+    @Rule public final MockitoRule mockito = MockitoJUnit.rule();
 
     @Mock private ITestDevice mMockDevice;
 
@@ -64,7 +74,6 @@ public final class SwitchUserTargetPreparerTest {
 
     @Before
     public void setUp() throws ConfigurationException {
-        MockitoAnnotations.initMocks(this);
         IInvocationContext context = new InvocationContext();
         context.addAllocatedDevice(ConfigurationDef.DEFAULT_DEVICE_NAME, mMockDevice);
         mTestInformation = TestInformation.newBuilder().setInvocationContext(context).build();

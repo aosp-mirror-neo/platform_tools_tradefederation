@@ -21,6 +21,7 @@ import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.UserInfo.UserType;
 import com.android.tradefed.device.UserSwitcher;
+import com.android.tradefed.device.UserSwitcher.UserTypeMode;
 import com.android.tradefed.invoker.TestInformation;
 
 import javax.annotation.Nullable;
@@ -32,18 +33,26 @@ import javax.annotation.Nullable;
 @OptionClass(alias = "switch-user-target-preparer")
 public class SwitchUserTargetPreparer extends BaseSwitchUserTargetPreparer {
     public static final String OPTION_USER_TYPE = "user-type";
+    public static final String OPTION_USER_TYPE_MODE = "user-type-mode";
 
     @Option(
             name = OPTION_USER_TYPE,
             description = "The type of user to switch to before the module run.")
     private UserType mUserType = UserType.CURRENT;
 
+    @Option(
+            name = OPTION_USER_TYPE_MODE,
+            description =
+                    "Behavior when the requested user type is not switchable (e.g., SYSTEM user on"
+                            + " non-interactive HSUM devices)")
+    private UserTypeMode mUserTypeMode = UserTypeMode.LEGACY;
+
     private @Nullable UserSwitcher mUserSwitcher; // instantiated on setUp
 
     @Override
     public void setUp(TestInformation testInformation)
             throws TargetSetupError, DeviceNotAvailableException {
-        mUserSwitcher = new UserSwitcher(testInformation.getDevice(), mUserType);
+        mUserSwitcher = new UserSwitcher(testInformation.getDevice(), mUserType, mUserTypeMode);
         int switchedUser = mUserSwitcher.switchUser();
         setPreparedUser(testInformation, switchedUser);
     }
