@@ -168,6 +168,7 @@ public class TestInvocation implements ITestInvocation {
 
     public static final String TRADEFED_LOG_NAME = "host_log";
     public static final String TRADEFED_END_HOST_LOG = "end_host_log";
+    public static final String TRADEFED_EVENT_LOG = "event-logs";
     public static final String TRADEFED_INVOC_COMPLETE_HOST_LOG = "invoc_complete_host_log";
     private static final String TRADEFED_DELEGATED_LOG_NAME = "delegated_parent_log";
     public static final String TRADEFED_CONFIG_NAME = "tradefed-expanded-config";
@@ -223,8 +224,8 @@ public class TestInvocation implements ITestInvocation {
     private boolean mForcedStopRequestedAfterTest = false;
     private boolean mIsRemoteInvocation = false;
 
-    // True if the invocation is forced to be skipped.
-    private boolean mInvocationSkipped = false;
+    // True if the InvocationExecution tear down is not called yet.
+    private boolean mInvocationExecutionTearDownPending = true;
     private boolean mInvocationFailed = false;
     private boolean mDelegatedInvocation = false;
     private List<IScheduledInvocationListener> mSchedulerListeners = new ArrayList<>();
@@ -490,6 +491,7 @@ public class TestInvocation implements ITestInvocation {
             try (CloseableTraceScope ignore =
                     new CloseableTraceScope(InvocationMetricKey.test_teardown.name())) {
                 invocationPath.doTeardown(testInfo, config, listener, exception);
+                mInvocationExecutionTearDownPending = false;
             } catch (Throwable e) {
                 tearDownException = e;
                 CLog.e("Exception when tearing down invocation: %s", tearDownException.toString());
@@ -1356,7 +1358,6 @@ public class TestInvocation implements ITestInvocation {
                 }
                 if (skipInvocation) {
                     CLog.d("Skipping invocation early.");
-                    mInvocationSkipped = true;
                     startInvocation(config, info.getContext(), listener);
                     // Backfill accounting metrics with zeros
                     long timestamp = System.currentTimeMillis();
@@ -1536,14 +1537,14 @@ public class TestInvocation implements ITestInvocation {
             TfObjectTracker.clearTracking();
             CurrentInvocation.clearInvocationInfos();
             config.getSkipManager().clearManager();
-            // If invocation is skipped by SkipManager, IInvocationExecution.doTeardown is not
-            // called yet.
-            if (mInvocationSkipped) {
-                invocationPath.doTeardown(info, config, listener, null);
-            }
             // Ensure build infos are always cleaned up at the end of invocation.
             CLog.i("Cleaning up builds");
             invocationPath.cleanUpBuilds(context, config);
+            // If invocation is ended before performInvocation is called, IInvocationExecution
+            // doTeardown is not called yet. Force to call here to do proper cleanup.
+            if (mInvocationExecutionTearDownPending) {
+                invocationPath.doTeardown(info, config, listener, null);
+            }
             if (!sharding) {
                 // If we are the parent shard, we do not delete the test information
                 deleteInvocationFiles(info, config);
@@ -1719,7 +1720,7 @@ public class TestInvocation implements ITestInvocation {
     private void logEventsFile(File eventsLog, ITestLogger logger) {
         if (eventsLog != null && eventsLog.length() > 0) {
             try (FileInputStreamSource source = new FileInputStreamSource(eventsLog, true)) {
-                logger.testLog("event-logs", LogDataType.TF_EVENTS, source);
+                logger.testLog(TRADEFED_EVENT_LOG, LogDataType.TF_EVENTS, source);
             }
         }
         FileUtil.deleteFile(eventsLog);

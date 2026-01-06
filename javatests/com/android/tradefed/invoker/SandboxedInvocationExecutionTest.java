@@ -320,7 +320,9 @@ public class SandboxedInvocationExecutionTest {
         // Device early preInvocationSetup was called and even if no tests run we still call tear
         // down
         Mockito.verify(mMockDevice).preInvocationSetup(any(), any());
-        Mockito.verify(mMockDevice).postInvocationTearDown(null);
+        // Device teardown is called first in TestInvocation when `No tests to run`, then in
+        // InvocationExecution.doTearDown.
+        Mockito.verify(mMockDevice, times(2)).postInvocationTearDown(null);
     }
 
     /**

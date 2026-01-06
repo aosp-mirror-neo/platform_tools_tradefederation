@@ -17,6 +17,7 @@ package com.android.tradefed.invoker;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -36,6 +37,7 @@ import com.android.tradefed.config.DynamicRemoteFileResolver;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.device.StubDevice;
+import com.android.tradefed.device.TestDeviceOptions;
 import com.android.tradefed.invoker.shard.IShardHelper;
 import com.android.tradefed.invoker.shard.ShardHelper;
 import com.android.tradefed.log.ILeveledLogOutput;
@@ -143,7 +145,7 @@ public class TestInvocationMultiTest {
         mProvider1 = mock(IBuildProvider.class);
         holder1.addSpecificConfig(mProvider1);
         when(mMockConfig.getDeviceConfigByName("device1")).thenReturn(holder1);
-        mDevice1.setOptions(Mockito.any());
+        when(mDevice1.getOptions()).thenReturn(new TestDeviceOptions());
         mDevice1.setRecovery(Mockito.any());
         when(mDevice1.getLogcat()).thenReturn(new ByteArrayInputStreamSource(new byte[0]));
         mDevice1.clearLogcat();
@@ -156,12 +158,35 @@ public class TestInvocationMultiTest {
         mProvider2 = mock(IBuildProvider.class);
         holder2.addSpecificConfig(mProvider2);
         when(mMockConfig.getDeviceConfigByName("device2")).thenReturn(holder2);
-        mDevice2.setOptions(Mockito.any());
+        when(mDevice2.getOptions()).thenReturn(new TestDeviceOptions());
         when(mDevice2.getLogcat()).thenReturn(new ByteArrayInputStreamSource(new byte[0]));
         mDevice2.clearLogcat();
 
         mContext.addAllocatedDevice("device1", mDevice1);
         mContext.addAllocatedDevice("device2", mDevice2);
+    }
+
+    private void mockLogData() throws Exception {
+        when(mMockLogSaver.saveLogData(
+                        Mockito.eq(TestInvocation.TRADEFED_CONFIG_NAME),
+                        Mockito.any(),
+                        Mockito.any()))
+                .thenReturn(new LogFile("", "", LogDataType.HARNESS_CONFIG));
+        when(mMockLogSaver.saveLogData(
+                        Mockito.eq(TestInvocation.TRADEFED_LOG_NAME), Mockito.any(), Mockito.any()))
+                .thenReturn(new LogFile("", "", LogDataType.TEXT));
+        when(mMockLogSaver.saveLogData(
+                        Mockito.eq(TestInvocation.TRADEFED_END_HOST_LOG),
+                        Mockito.any(),
+                        Mockito.any()))
+                .thenReturn(new LogFile("", "", LogDataType.TEXT));
+        when(mMockLogSaver.saveLogFile(
+                        Mockito.eq(TestInvocation.TRADEFED_EVENT_LOG),
+                        Mockito.any(),
+                        Mockito.any()))
+                .thenReturn(new LogFile("", "", LogDataType.TEXT));
+        when(mMockLogSaver.saveLogData(Mockito.eq("host_adb_log"), Mockito.any(), Mockito.any()))
+                .thenReturn(new LogFile("", "", LogDataType.TEXT));
     }
 
     /**
@@ -194,19 +219,7 @@ public class TestInvocationMultiTest {
         ArgumentCaptor<IBuildInfo> captured = ArgumentCaptor.forClass(IBuildInfo.class);
 
         when(mMockTestListener.getSummary()).thenReturn(null);
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.HARNESS_CONFIG));
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-        when(mMockLogSaver.saveLogData(
-                        Mockito.eq(TestInvocation.TRADEFED_END_HOST_LOG),
-                        Mockito.any(),
-                        Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-
-        when(mMockTestListener.getSummary()).thenReturn(null);
+        mockLogData();
 
         try {
             mInvocation.invoke(
@@ -229,7 +242,9 @@ public class TestInvocationMultiTest {
         verify(mMockLogSaver).invocationStarted(mContext);
         verify(mMockConfig)
                 .dumpXml(Mockito.any(), Mockito.any(), Mockito.eq(true), Mockito.eq(false));
-        verify(mMockTestListener, times(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
+        // Log collection should be triggered for tradefed-expanded-config, host_log and event-logs
+        // For test host with adb running, host_adb_log will also be collected.
+        verify(mMockTestListener, atLeast(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
         verify(mMockTestListener).invocationFailed(Mockito.<FailureDescription>any());
         verify(mMockTestListener).invocationEnded(Mockito.anyLong());
         verify(mMockLogSaver).invocationEnded(Mockito.anyLong());
@@ -246,10 +261,12 @@ public class TestInvocationMultiTest {
     @Test
     public void testResolveDynamicFails() throws Throwable {
         mDevice1 = mock(ITestDevice.class);
+        when(mDevice1.getOptions()).thenReturn(new TestDeviceOptions());
         when(mDevice1.getIDevice()).thenReturn(new StubDevice("serial1"));
         when(mDevice1.getLogcat()).thenReturn(new ByteArrayInputStreamSource(new byte[0]));
 
         mDevice2 = mock(ITestDevice.class);
+        when(mDevice2.getOptions()).thenReturn(new TestDeviceOptions());
         when(mDevice2.getIDevice()).thenReturn(new StubDevice("serial1"));
         when(mDevice2.getLogcat()).thenReturn(new ByteArrayInputStreamSource(new byte[0]));
 
@@ -279,23 +296,11 @@ public class TestInvocationMultiTest {
         when(mDevice1.getSerialNumber()).thenReturn("serial1");
 
         when(mMockTestListener.getSummary()).thenReturn(null);
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.HARNESS_CONFIG));
+        mockLogData();
 
         FailureDescription failure =
                 FailureDescription.create(configException.getMessage(), FailureStatus.INFRA_FAILURE)
                         .setActionInProgress(ActionInProgress.FETCHING_ARTIFACTS);
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-        when(mMockLogSaver.saveLogData(
-                        Mockito.eq(TestInvocation.TRADEFED_END_HOST_LOG),
-                        Mockito.any(),
-                        Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-
-        when(mMockTestListener.getSummary()).thenReturn(null);
 
         try {
             mInvocation.invoke(
@@ -317,7 +322,9 @@ public class TestInvocationMultiTest {
         verify(mMockLogSaver).invocationStarted(mContext);
         verify(mMockConfig)
                 .dumpXml(Mockito.any(), Mockito.any(), Mockito.eq(true), Mockito.eq(false));
-        verify(mMockTestListener, times(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
+        // Log collection should be triggered for tradefed-expanded-config, host_log and event-logs
+        // For test host with adb running, host_adb_log will also be collected.
+        verify(mMockTestListener, atLeast(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
         verify(mMockTestListener).invocationFailed(Mockito.eq(failure));
         verify(mMockTestListener).invocationEnded(Mockito.anyLong());
         verify(mMockLogSaver).invocationEnded(Mockito.anyLong());
@@ -341,19 +348,7 @@ public class TestInvocationMultiTest {
         when(mMockConfig.getTests()).thenReturn(new ArrayList<>());
 
         when(mMockTestListener.getSummary()).thenReturn(null);
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.HARNESS_CONFIG));
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-        when(mMockLogSaver.saveLogData(
-                        Mockito.eq(TestInvocation.TRADEFED_END_HOST_LOG),
-                        Mockito.any(),
-                        Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-
-        when(mMockTestListener.getSummary()).thenReturn(null);
+        mockLogData();
 
         IBuildInfo build1 = new BuildInfo();
         when(mProvider1.getBuild()).thenReturn(build1);
@@ -385,7 +380,9 @@ public class TestInvocationMultiTest {
         verify(mMockLogSaver).invocationStarted(mContext);
         verify(mMockConfig)
                 .dumpXml(Mockito.any(), Mockito.any(), Mockito.eq(true), Mockito.eq(false));
-        verify(mMockTestListener, times(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
+        // Log collection should be triggered for tradefed-expanded-config, host_log and event-logs
+        // For test host with adb running, host_adb_log will also be collected.
+        verify(mMockTestListener, atLeast(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
         verify(mMockTestListener).invocationFailed(Mockito.<FailureDescription>any());
         verify(mMockTestListener).invocationEnded(Mockito.anyLong());
         verify(mMockLogSaver).invocationEnded(Mockito.anyLong());
@@ -415,19 +412,7 @@ public class TestInvocationMultiTest {
         when(mMockConfig.getTests()).thenReturn(new ArrayList<>());
 
         when(mMockTestListener.getSummary()).thenReturn(null);
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.HARNESS_CONFIG));
-
-        when(mMockLogSaver.saveLogData(Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-        when(mMockLogSaver.saveLogData(
-                        Mockito.eq(TestInvocation.TRADEFED_END_HOST_LOG),
-                        Mockito.any(),
-                        Mockito.any()))
-                .thenReturn(new LogFile("", "", LogDataType.TEXT));
-
-        when(mMockTestListener.getSummary()).thenReturn(null);
+        mockLogData();
 
         IBuildInfo build1 = new BuildInfo();
         when(mProvider1.getBuild()).thenReturn(build1);
@@ -460,7 +445,9 @@ public class TestInvocationMultiTest {
         verify(mMockLogSaver).invocationStarted(mContext);
         verify(mMockConfig)
                 .dumpXml(Mockito.any(), Mockito.any(), Mockito.eq(true), Mockito.eq(false));
-        verify(mMockTestListener, times(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
+        // Log collection should be triggered for tradefed-expanded-config, host_log and event-logs
+        // For test host with adb running, host_adb_log will also be collected.
+        verify(mMockTestListener, atLeast(3)).testLog(Mockito.any(), Mockito.any(), Mockito.any());
         verify(mMockTestListener).invocationFailed(Mockito.<FailureDescription>any());
         verify(mMockTestListener).invocationEnded(Mockito.anyLong());
         verify(mMockLogSaver).invocationEnded(Mockito.anyLong());
