@@ -223,6 +223,8 @@ public class TestInvocation implements ITestInvocation {
     private boolean mForcedStopRequestedAfterTest = false;
     private boolean mIsRemoteInvocation = false;
 
+    // True if the invocation is forced to be skipped.
+    private boolean mInvocationSkipped = false;
     private boolean mInvocationFailed = false;
     private boolean mDelegatedInvocation = false;
     private List<IScheduledInvocationListener> mSchedulerListeners = new ArrayList<>();
@@ -1354,6 +1356,7 @@ public class TestInvocation implements ITestInvocation {
                 }
                 if (skipInvocation) {
                     CLog.d("Skipping invocation early.");
+                    mInvocationSkipped = true;
                     startInvocation(config, info.getContext(), listener);
                     // Backfill accounting metrics with zeros
                     long timestamp = System.currentTimeMillis();
@@ -1533,6 +1536,11 @@ public class TestInvocation implements ITestInvocation {
             TfObjectTracker.clearTracking();
             CurrentInvocation.clearInvocationInfos();
             config.getSkipManager().clearManager();
+            // If invocation is skipped by SkipManager, IInvocationExecution.doTeardown is not
+            // called yet.
+            if (mInvocationSkipped) {
+                invocationPath.doTeardown(info, config, listener, null);
+            }
             // Ensure build infos are always cleaned up at the end of invocation.
             CLog.i("Cleaning up builds");
             invocationPath.cleanUpBuilds(context, config);
