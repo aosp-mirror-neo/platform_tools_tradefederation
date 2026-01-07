@@ -223,6 +223,8 @@ public class TestInvocation implements ITestInvocation {
     private boolean mForcedStopRequestedAfterTest = false;
     private boolean mIsRemoteInvocation = false;
 
+    // True if the invocation is forced to be skipped.
+    private boolean mInvocationSkipped = false;
     private boolean mInvocationFailed = false;
     private boolean mDelegatedInvocation = false;
     private List<IScheduledInvocationListener> mSchedulerListeners = new ArrayList<>();
@@ -1354,6 +1356,7 @@ public class TestInvocation implements ITestInvocation {
                 }
                 if (skipInvocation) {
                     CLog.d("Skipping invocation early.");
+                    mInvocationSkipped = true;
                     startInvocation(config, info.getContext(), listener);
                     // Backfill accounting metrics with zeros
                     long timestamp = System.currentTimeMillis();
@@ -1373,7 +1376,7 @@ public class TestInvocation implements ITestInvocation {
                     InvocationMetricLogger.addInvocationPairMetrics(
                             InvocationMetricKey.TEST_TEARDOWN_PAIR, timestamp, timestamp);
                     listener.invocationSkipped(new SkipReason(skipReason, ""));
-                    reportModuleSkip(config, listener);
+                    reportModuleSkip(config, listener, skipReason);
                     reportHostLog(listener, config);
                     reportInvocationEnded(config, info.getContext(), listener, 0L);
                     // Still upload results for caching
@@ -1533,6 +1536,11 @@ public class TestInvocation implements ITestInvocation {
             TfObjectTracker.clearTracking();
             CurrentInvocation.clearInvocationInfos();
             config.getSkipManager().clearManager();
+            // If invocation is skipped by SkipManager, IInvocationExecution.doTeardown is not
+            // called yet.
+            if (mInvocationSkipped) {
+                invocationPath.doTeardown(info, config, listener, null);
+            }
             // Ensure build infos are always cleaned up at the end of invocation.
             CLog.i("Cleaning up builds");
             invocationPath.cleanUpBuilds(context, config);
@@ -2061,7 +2069,8 @@ public class TestInvocation implements ITestInvocation {
         return dnae;
     }
 
-    private void reportModuleSkip(IConfiguration config, ITestInvocationListener listener) {
+    private void reportModuleSkip(
+            IConfiguration config, ITestInvocationListener listener, String skipReason) {
         if (!config.getSkipManager().reportInvocationSkippedModule()) {
             return;
         }
@@ -2090,9 +2099,7 @@ public class TestInvocation implements ITestInvocation {
             moduleContext.addInvocationAttribute(ModuleDefinition.MODULE_NAME, moduleName);
             moduleContext.addInvocationAttribute(
                     ModuleDefinition.MODULE_ID, abi + " " + moduleName);
-            moduleContext.addInvocationAttribute(
-                    ModuleDefinition.MODULE_SKIPPED,
-                    config.getSkipManager().getInvocationSkipReason());
+            moduleContext.addInvocationAttribute(ModuleDefinition.MODULE_SKIPPED, skipReason);
             moduleContext.addInvocationAttribute(
                     ModuleDefinition.SPARSE_MODULE,
                     "true");
