@@ -16,6 +16,7 @@
 package com.android.tradefed.testtype.junit4;
 
 import com.android.tradefed.config.Option;
+import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.testtype.HostTest;
 import com.android.tradefed.testtype.IAbi;
@@ -32,6 +33,7 @@ import org.junit.runners.model.InitializationError;
 import org.junit.runners.model.Statement;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import junitparams.JUnitParamsRunner;
@@ -59,6 +61,17 @@ public class DeviceParameterizedRunner extends JUnitParamsRunner
      */
     public DeviceParameterizedRunner(Class<?> klass) throws InitializationError {
         super(klass);
+    }
+
+    protected ITestDevice getDevice() {
+        if (mTestInformation == null) {
+            return null;
+        }
+        return mTestInformation.getDevice();
+    }
+
+    protected List<String> getKeyValueOptions() {
+        return Collections.unmodifiableList(mKeyValueOptions);
     }
 
     @Override
