@@ -17,8 +17,6 @@ package com.android.ddmlib;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.tradefed.device.server.Client;
-import com.android.tradefed.device.server.ProfileableClient;
 import com.android.tradefed.device.server.SyncService;
 
 import com.google.common.base.Splitter;
@@ -68,14 +66,8 @@ public interface IDevice extends IShellEnabledDevice {
     /** Device change bit mask: {@link DeviceState} change. */
     int CHANGE_STATE = 0x0001;
 
-    /** Device change bit mask: {@link Client} list change. */
-    int CHANGE_CLIENT_LIST = 0x0002;
-
     /** Device change bit mask: build info change. */
     int CHANGE_BUILD_INFO = 0x0004;
-
-    /** Device change bit mask: {@link ProfileableClient} list change. */
-    int CHANGE_PROFILEABLE_CLIENT_LIST = 0x0008;
 
     /** Device level software features. */
     enum Feature {
@@ -338,25 +330,6 @@ public interface IDevice extends IShellEnabledDevice {
      */
     boolean isBootLoader();
 
-    /** Returns whether the {@link IDevice} has {@link Client}s. */
-    boolean hasClients();
-
-    /** Returns the array of clients. */
-    Client[] getClients();
-
-    /**
-     * Returns a {@link Client} by its application name.
-     *
-     * @param applicationName the name of the application
-     * @return the <code>Client</code> object or <code>null</code> if no match was found.
-     */
-    Client getClient(String applicationName);
-
-    /** Returns the array of profileable clients. */
-    default ProfileableClient[] getProfileableClients() {
-        return new ProfileableClient[0]; // Returns an empty array by default
-    }
-
     /**
      * Force stop an application by its application name. This removes all pending alarms and queued
      * computation.
@@ -577,13 +550,6 @@ public interface IDevice extends IShellEnabledDevice {
             throws TimeoutException, AdbCommandRejectedException, IOException {
         throw new UnsupportedOperationException();
     }
-
-    /**
-     * Returns the name of the client by pid or <code>null</code> if pid is unknown
-     *
-     * @param pid the pid of the client.
-     */
-    String getClientName(int pid);
 
     /**
      * Pushes several files or directories.

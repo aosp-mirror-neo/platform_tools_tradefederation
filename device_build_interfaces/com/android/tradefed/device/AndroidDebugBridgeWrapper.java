@@ -78,8 +78,8 @@ class AndroidDebugBridgeWrapper implements IAndroidDebugBridge {
      * {@inheritDoc}
      */
     @Override
-    public void init(boolean clientSupport, String adbOsLocation) {
-        AndroidDebugBridge.init(clientSupport);
+    public void init(String adbOsLocation) {
+        AndroidDebugBridge.init();
         mAdbBridge = AndroidDebugBridge.createBridge(adbOsLocation, false);
     }
 

@@ -26,7 +26,6 @@ import com.android.ddmlib.ScreenRecorderOptions;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.SyncException;
 import com.android.ddmlib.TimeoutException;
-import com.android.tradefed.device.server.Client;
 import com.android.tradefed.device.server.SyncService;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -82,23 +81,6 @@ public class AdbShimDevice implements IDevice {
         return null;
     }
 
-    /** {@inheritDoc} */
-    @Override
-    public Client getClient(String applicationName) {
-        return null;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public String getClientName(int pid) {
-        return null;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public Client[] getClients() {
-        return null;
-    }
 
     /** {@inheritDoc} */
     @Override
@@ -180,11 +162,7 @@ public class AdbShimDevice implements IDevice {
         throw new IOException("shim");
     }
 
-    /** {@inheritDoc} */
-    @Override
-    public boolean hasClients() {
-        return false;
-    }
+
 
     /** {@inheritDoc} */
     @Override

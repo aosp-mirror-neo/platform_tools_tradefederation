@@ -30,31 +30,6 @@ public class AdbInitOptions {
     /** Default init options. See {@link AdbInitOptions.Builder} for default values. */
     public static final AdbInitOptions DEFAULT = builder().build();
 
-    /**
-     * Indicates whether or not ddmlib should actively monitor clients using JDWP.
-     *
-     * <p>Ddmlib monitors devices via ADB, but won't monitor the applications running on these
-     * devices unless <var>clientSupport</var> is enabled.
-     *
-     * <ul>
-     *   <li>When <var>clientSupport</var> == <code>true</code>:<br>
-     *       The library monitors the devices and the applications running on them. It will connect
-     *       to each application, as a debugger of sort, to be able to interact with them through
-     *       JDWP packets.
-     *   <li>When <var>clientSupport</var> == <code>false</code>:<br>
-     *       The library only monitors devices. The applications are left untouched, letting other
-     *       tools built on <code>ddmlib</code> to connect a debugger to them.
-     * </ul>
-     *
-     * <p><b>Only one client support enabled tool can run at any given time. If other tools need to
-     * communicate with the underlying ADB daemon, disable client support to avoid clobbering
-     * communications of other tools.</b>
-     *
-     * <p>Note that client support does not prevent debugging of applications running on devices. It
-     * lets debuggers connect to <code>ddmlib</code> which acts as a proxy between the debuggers and
-     * the applications to debug. See {@link ClientImpl#getDebuggerListenPort()}.
-     */
-    public final boolean clientSupport;
 
     /**
      * Enable user managed ADB mode where ddmlib will not start, restart, or terminate the ADB
@@ -79,11 +54,9 @@ public class AdbInitOptions {
 
     /** {@link AdbInitOptions.Builder} for default values. */
     private AdbInitOptions(
-            boolean clientSupport,
             boolean userManagedAdbMode,
             int userManagedAdbPort,
             ImmutableMap<String, String> adbEnvVars) {
-        this.clientSupport = clientSupport;
         this.userManagedAdbMode = userManagedAdbMode;
         this.userManagedAdbPort = userManagedAdbPort;
         this.adbEnvVars = adbEnvVars;
@@ -95,21 +68,13 @@ public class AdbInitOptions {
      * <p>Default settings are:
      *
      * <ul>
-     *   <li>clientSupport = false
      *   <li>userManagedAdbMode = false
      * </ul>
      */
     public static class Builder {
-        boolean clientSupport = false;
         boolean userManagedAdbMode = false;
         int userManagedAdbPort = 0;
         ImmutableMap.Builder<String, String> envVarBuilder = ImmutableMap.builder();
-
-        /** See {@link AdbInitOptions#clientSupport}. */
-        public Builder setClientSupportEnabled(boolean enabled) {
-            clientSupport = enabled;
-            return this;
-        }
 
         /**
          * See {@link AdbInitOptions#userManagedAdbMode} and {@link
@@ -143,7 +108,7 @@ public class AdbInitOptions {
 
         public AdbInitOptions build() {
             return new AdbInitOptions(
-                    clientSupport, userManagedAdbMode, userManagedAdbPort, envVarBuilder.build());
+                    userManagedAdbMode, userManagedAdbPort, envVarBuilder.build());
         }
     }
 }
