@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 Google Inc.
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<configuration description="Runs a compatibility test suite on AOSP branches in the lab">
+    <!-- logcat will be logged in subprocess instead of parent process -->
+    <option name="skip-parent-process-logcat" value="true" />
+    <!-- Gce enabled this configuration -->
+    <include name="google/template/virtual/default_acloud" />
+    <template-include name="log-saver" default="google/template/reporters/android-build-api-log-saver" />
+    <option name="invocation-data" key="use_artifact_v3_api" value="true" />
+    <template-include name="preparers" default="google/compatibility/default-cts-build-provider-and-preparers" />
+
+    <!-- place holder for additional preparers -->
+    <template-include name="extra-preparers" default="empty" />
+
+    <template-include name="metrics_collectors" default="empty" />
+
+    <test class="com.google.android.tradefed.testtype.CtsTestLauncher">
+        <option name="max-run-time" value="1h30m" />
+    </test>
+    <result_reporter class="com.google.android.tradefed.result.CoverageMetadataCollector" />
+    <result_reporter class="com.google.android.tradefed.result.teststorage.ResultReporter" />
+    <result_reporter class="com.android.tradefed.result.resultdb.ResultDBReporter" />
+
+    <template-include name="reporters" default="empty" />
+
+    <logger class="com.android.tradefed.log.FileLogger">
+        <option name="max-log-size" value="300" />
+    </logger>
+
+</configuration>

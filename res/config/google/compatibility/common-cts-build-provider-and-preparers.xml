@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 Google Inc.
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<!--
+     TODO(b/133523580): Once mainline related module and train test configs migrate away from
+     using multi-device, move the contents to default-cts-build-provider-and-preparers and add
+     template-include.
+-->
+<configuration description="Common build_provider and target_preparer(s), except those updating device images, for running a compatibility test suite on AOSP branches in the lab">
+    <build_provider class="com.google.android.tradefed.build.CtsDeviceLaunchControlProvider" >
+        <option name="cts-query-type" value="NOTIFY_TEST_BUILD" />
+	<option name="skip-download" value="TESTS_ZIP" />
+    </build_provider>
+    <target_preparer class="com.google.android.tradefed.targetprep.GoogleAppsSetup" >
+        <option name="disable" value="true" />
+    </target_preparer>
+    <lab_preparer class="com.google.android.tradefed.targetprep.GoogleDeviceSetup">
+        <option name="disable-dialing" value="false" />
+        <option name="disable-audio" value="false" />
+        <option name="set-global-setting" key="verifier_verify_adb_installs" value="0" />
+        <option name="set-global-setting" key="verifier_engprod" value="1" />
+        <!-- below 3 settings disables GMSCore and mainline updates, and autoOTA download -->
+        <option name="set-global-setting" key="google_play_store_system_component_update" value="0" />
+        <option name="set-global-setting" key="google_play_store_system_component_update_last_user_id" value="-1" />
+        <option name="set-global-setting" key="google_ota_automatic_download" value="0" />
+    </lab_preparer>
+    <target_preparer class="com.google.android.tradefed.targetprep.RamdumpPreparer" >
+        <option name="disable" value="true" />
+        <option name="set-ramdump" value="on" />
+    </target_preparer>
+    <target_preparer class="com.android.tradefed.targetprep.PushFilePreparer">
+    </target_preparer>
+    <target_preparer class="com.android.tradefed.targetprep.RunCommandTargetPreparer" />
+    <target_preparer class="com.google.android.tradefed.targetprep.CtsSettingsSetup" />
+    <target_preparer class="com.android.tradefed.targetprep.InstallApkSetup" />
+    <target_preparer class="com.google.android.tradefed.targetprep.GoogleAccountPreparer" />
+    <target_preparer class="com.android.tradefed.targetprep.FeatureFlagTargetPreparer" />
+</configuration>
