@@ -65,6 +65,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -1344,15 +1345,15 @@ public class DeviceManager implements IDeviceManager {
                     new ArrayList<>(
                             Arrays.asList(
                                     serial,
-                                    desc.getDeviceState().toString(),
-                                    desc.getState().toString(),
+                                    Objects.toString(desc.getDeviceState()),
+                                    Objects.toString(desc.getState()),
                                     desc.getProduct(),
                                     desc.getProductVariant(),
                                     desc.getBuildId(),
                                     desc.getBatteryLevel()));
             if (includeStub) {
                 infos.add(desc.getDeviceClass());
-                infos.add(desc.getTestDeviceState().toString());
+                infos.add(Objects.toString(desc.getTestDeviceState()));
             }
             displayRows.add(infos);
         }
