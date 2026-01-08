@@ -402,6 +402,7 @@ import com.android.tradefed.testtype.rust.RustTestBaseTest;
 import com.android.tradefed.testtype.rust.RustTestResultParserTest;
 import com.android.tradefed.testtype.suite.AtestRunnerTest;
 import com.android.tradefed.testtype.suite.BaseTestSuiteTest;
+import com.android.tradefed.testtype.suite.ExecutionPlanSuiteRunnerTest;
 import com.android.tradefed.testtype.suite.GranularRetriableTestWrapperTest;
 import com.android.tradefed.testtype.suite.ITestSuiteIntegrationTest;
 import com.android.tradefed.testtype.suite.ITestSuiteMultiTest;
@@ -1058,6 +1059,7 @@ import org.junit.runners.Suite.SuiteClasses;
     // testtype/suite
     AtestRunnerTest.class,
     BaseTestSuiteTest.class,
+    ExecutionPlanSuiteRunnerTest.class,
     GranularRetriableTestWrapperTest.class,
     ITestSuiteIntegrationTest.class,
     ITestSuiteMultiTest.class,
