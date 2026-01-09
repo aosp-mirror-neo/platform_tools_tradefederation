@@ -16,13 +16,12 @@
 package com.android.tradefed.device;
 
 import com.android.tradefed.device.UserInfo.UserType;
-import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.targetprep.TargetSetupError;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
-import java.util.Locale;
 import java.util.Objects;
 
 import javax.annotation.Nullable;
@@ -41,17 +40,35 @@ public final class UserSwitcher {
 
     private final ITestDevice mDevice;
     private final UserType mUserType;
+    private final UserTypeMode mUserTypeMode;
     private @Nullable Integer mPreviousUserId;
 
     /**
      * Default constructor.
      *
-     * @param device guess what?
+     * <p>It sets the user-type mode as {@link UserTypeMode#LEGACY}.
+     *
      * @param userType type of user to switch to
      */
     public UserSwitcher(ITestDevice device, UserType userType) {
+        this(device, userType, UserTypeMode.LEGACY);
+    }
+
+    /**
+     * Full constructor.
+     *
+     * @param userType type of user to switch to
+     * @param userTypeMode defines the preparer's behavior based on some properties of the user type
+     */
+    public UserSwitcher(ITestDevice device, UserType userType, UserTypeMode userTypeMode) {
         mDevice = Objects.requireNonNull(device, "device cannot be null");
         mUserType = Objects.requireNonNull(userType, "userType cannot be null");
+        mUserTypeMode = Objects.requireNonNull(userTypeMode, "userTypeMode cannot be null");
+    }
+
+    @VisibleForTesting
+    UserTypeMode getUserTypeMode() {
+        return mUserTypeMode;
     }
 
     /**
@@ -64,16 +81,45 @@ public final class UserSwitcher {
      */
     public int switchUser() throws TargetSetupError, DeviceNotAvailableException {
         Preconditions.checkState(mPreviousUserId == null, "switchUser() already called");
-        var userType = getEffectiveUserType(mDevice, mUserType);
+        var userType = mUserType;
         mPreviousUserId = mDevice.getCurrentUser();
-        int userIdToSwitch = getUserIdOfType(mDevice, userType);
+        // NOTE: currently it only checks if HSU can be switched to, but ideally it should check for
+        // other cases like profile types.
+        if (UserType.SYSTEM.equals(mUserType)
+                && mDevice.isHeadlessSystemUserMode()
+                && !mDevice.canSwitchToHeadlessSystemUser()) {
+            switch (mUserTypeMode) {
+                case LEGACY:
+                    userType = UserInfo.UserType.FULL;
+                    CLog.i(
+                            "effective user type is %s (not %s) because user-type mode is %s",
+                            userType, mUserType, mUserTypeMode);
+                    break;
+                case REQUIRED_ONLY:
+                    CLog.i(
+                            "Device doesn't allow switching to system user and user-type mode is"
+                                    + " %s, so current user will stay the same (%d)",
+                            mUserTypeMode, mPreviousUserId);
+                    return mPreviousUserId;
+                case REQUIRED_AND_SWITCHABLE:
+                    throw new TargetSetupError(
+                            String.format(
+                                    "Device doesn't support switching to user of type %s.",
+                                    mUserType),
+                            mDevice.getDeviceDescriptor());
+                default:
+                    // New modes should be explicitly handled
+                    throw new IllegalStateException("Unexpected mode: " + mUserType);
+            }
+        }
+
+        int userIdToSwitch = getUserIdOfType(userType);
         if (userIdToSwitch == UserInfo.USER_NULL) {
             throw new TargetSetupError(
                     String.format(
-                            Locale.ENGLISH,
-                            "Failed to switch to user type %s: No user of this type was found on"
-                                    + " the device.",
-                            userType),
+                            "Failed to switch to user of type %s: no user of this type was "
+                                    + "found in the device.",
+                            mUserType),
                     mDevice.getDeviceDescriptor());
         }
         if (userIdToSwitch == mPreviousUserId) {
@@ -84,8 +130,7 @@ public final class UserSwitcher {
         }
         if (!mDevice.switchUser(userIdToSwitch)) {
             throw new TargetSetupError(
-                    String.format(
-                            Locale.ENGLISH, "Device failed to switch to user %d.", userIdToSwitch),
+                    String.format("Device failed to switch to user %d.", userIdToSwitch),
                     mDevice.getDeviceDescriptor());
         }
         return userIdToSwitch;
@@ -113,42 +158,42 @@ public final class UserSwitcher {
     }
 
     /**
-     * In some form factors running on headless system user mode, it is restricted to switch to the
-     * {@link UserInfo.UserType#SYSTEM SYSTEM} user. In such cases, change the {@link
-     * #mUserToSwitchTo} to the first {@link UserInfo.UserType#FULL FULL} user.
-     */
-    private UserType getEffectiveUserType(ITestDevice device, UserType type)
-            throws DeviceNotAvailableException {
-        UserType effectiveType = type;
-        try {
-            if (UserInfo.UserType.SYSTEM.equals(type)
-                    && device.isHeadlessSystemUserMode()
-                    && !device.canSwitchToHeadlessSystemUser()) {
-                effectiveType = UserInfo.UserType.FULL;
-                CLog.i("effective user type is %s (not %s)", effectiveType, type);
-            }
-        } catch (HarnessRuntimeException e) {
-            CLog.w("Unable to get the main user switch-ability. Error: ", e);
-        }
-        return effectiveType;
-    }
-
-    /**
      * Returns the ID of the first user matching the specified {@link UserInfo.UserType}. Returns
      * {@code UserInfo.USER_NULL} if no such user is found.
      */
-    private int getUserIdOfType(ITestDevice device, UserType userType)
-            throws DeviceNotAvailableException {
-        int currentUser = device.getCurrentUser();
-        for (UserInfo userInfo : device.getUserInfos().values()) {
+    private int getUserIdOfType(UserType userType) throws DeviceNotAvailableException {
+        int currentUser = mDevice.getCurrentUser();
+        for (UserInfo userInfo : mDevice.getUserInfos().values()) {
             if (userInfo.isUserType(userType, currentUser)) {
                 CLog.i(
                         "Found user %d (type: %s) as the target for switching.",
-                        userInfo.userId(), userType.toString());
+                        userInfo.userId(), userType);
                 return userInfo.userId();
             }
         }
-        CLog.w("No user found matching the type: %s.", userType.toString());
+        CLog.w("No user found matching the type: %s.", userType);
         return UserInfo.USER_NULL;
+    }
+
+    /**
+     * Defines the expected behavior depending on the {@link UserType} associated with it.
+     *
+     * <p><b>NOTE: </b> currently the switchability is only checked when the user type is {@link
+     * UserType#SYSTEM}.
+     */
+    public enum UserTypeMode {
+        /**
+         * If the user type is {@code SYSTEM} and the device doesn't allow switching to the system
+         * user, it will switch to the first full user instead.
+         *
+         * @deprecated TODO(b/419372865): remove once tests that can be ignored when the HSU cannot
+         *     be switched to are changed to use mode REQUIRED_ONLY.
+         */
+        @Deprecated
+        LEGACY,
+        /** The user must exist and be switchable to, otherwise the preparer will fail. */
+        REQUIRED_AND_SWITCHABLE,
+        /** The user must exist, but the test won't switch users if it's not switchable to. */
+        REQUIRED_ONLY
     }
 }

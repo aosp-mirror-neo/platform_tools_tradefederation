@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.android.tradefed.device.UserInfo.UserType;
+import com.android.tradefed.device.UserSwitcher.UserTypeMode;
 import com.android.tradefed.targetprep.TargetSetupError;
 
 import com.google.common.collect.ImmutableMap;
@@ -69,7 +70,7 @@ public final class UserSwitcherTest {
         int switchedUserId = userSwitcher.switchUser();
 
         expect.withMessage("result").that(switchedUserId).isEqualTo(SYSTEM_USER.userId());
-        verifyUserNeverSwitched();
+        verifySwitchUserNeverCalled();
     }
 
     @Test
@@ -82,8 +83,9 @@ public final class UserSwitcherTest {
         int switchedUserId = userSwitcher.switchUser();
 
         expect.withMessage("result").that(switchedUserId).isEqualTo(SYSTEM_USER.userId());
-        verifyUserNeverSwitched();
+        verifySwitchUserNeverCalled();
     }
+
 
     @Test
     public void testSwitchUser_typeSystem_ifSystemSwitchIsNotAllowed_switchToFull()
@@ -114,7 +116,96 @@ public final class UserSwitcherTest {
         int switchedUserId = userSwitcher.switchUser();
 
         expect.withMessage("result").that(switchedUserId).isEqualTo(FULL_USER.userId());
-        verifyUserNeverSwitched();
+        verifySwitchUserNeverCalled();
+    }
+
+    @Test
+    public void testSwitchUser_typeSystem_ifHsuSwitchIsNotAllowed_nonHsum_modeIsRequiredOnly()
+            throws Exception {
+        var userSwitcher =
+                new UserSwitcher(mMockDevice, UserType.SYSTEM, UserTypeMode.REQUIRED_ONLY);
+
+        mockUsers(SYSTEM_USER, FULL_USER, GUEST_USER);
+        mockCurrentUser(GUEST_USER);
+        mockHeadlessSystemUserMode(false);
+        mockCanSwitchToHeadlessSystemUser(false);
+        mockSuccessfulUserSwitch(SYSTEM_USER);
+
+        int switchedUserId = userSwitcher.switchUser();
+
+        expect.withMessage("result").that(switchedUserId).isEqualTo(SYSTEM_USER.userId());
+        verifySwitchUserNotCalled(FULL_USER, GUEST_USER);
+    }
+
+    @Test
+    public void testSwitchUser_typeSystem_ifHsuSwitchIsNotAllowed_hsum_modeIsRequiredOnly()
+            throws Exception {
+        var userSwitcher =
+                new UserSwitcher(mMockDevice, UserType.SYSTEM, UserTypeMode.REQUIRED_ONLY);
+
+        mockUsers(SYSTEM_USER, FULL_USER, GUEST_USER);
+        mockCurrentUser(GUEST_USER);
+        mockHeadlessSystemUserMode(true);
+        mockCanSwitchToHeadlessSystemUser(false);
+
+        int switchedUserId = userSwitcher.switchUser();
+
+        expect.withMessage("result").that(switchedUserId).isEqualTo(GUEST_USER.userId());
+        verifySwitchUserNeverCalled();
+    }
+
+    @Test
+    public void testSwitchUser_typeSystem_ifHsuSwitchIsNotAllowed_hsum_modeRequiredAndSwitchable()
+            throws Exception {
+        testSwitchUserTypeSystemWhenSwitchingToHsuIsNotAllowed(
+                UserTypeMode.REQUIRED_AND_SWITCHABLE);
+    }
+
+    private void testSwitchUserTypeSystemWhenSwitchingToHsuIsNotAllowed(UserTypeMode mode)
+            throws Exception {
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.SYSTEM, mode);
+
+        mockUsers(SYSTEM_USER, FULL_USER);
+        mockHeadlessSystemUserMode(true);
+        mockCanSwitchToHeadlessSystemUser(false);
+        mockSuccessfulUserSwitch(SYSTEM_USER);
+
+        assertSwitchUserThrows(
+                userSwitcher, "Device doesn't support switching to user of type SYSTEM.");
+
+        verifySwitchUserNeverCalled();
+    }
+
+    @Test
+    public void testSwitchUser_typeNonSystem_noSuchUser_modeRequiredOnly() throws Exception {
+        testSwitchUserTypeNonSystemFailsBecauseUserTypeNotFound(UserTypeMode.REQUIRED_ONLY);
+    }
+
+    @Test
+    public void testSwitchUser_typeNonSystem_noSuchUser_modeRequiredAndSwitchable()
+            throws Exception {
+        testSwitchUserTypeNonSystemFailsBecauseUserTypeNotFound(
+                UserTypeMode.REQUIRED_AND_SWITCHABLE);
+    }
+
+    @Test
+    public void testSwitchUser_typeNonSystem_noSuchUser_modeLegacy() throws Exception {
+        testSwitchUserTypeNonSystemFailsBecauseUserTypeNotFound(UserTypeMode.LEGACY);
+    }
+
+    private void testSwitchUserTypeNonSystemFailsBecauseUserTypeNotFound(UserTypeMode mode)
+            throws Exception {
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.FULL, mode);
+
+        mockUsers(SYSTEM_USER);
+        mockCurrentUser(SYSTEM_USER);
+
+        assertSwitchUserThrows(
+                userSwitcher,
+                "Failed to switch to user of type FULL: no user of this type was found in the"
+                        + " device.");
+
+        verifySwitchUserNeverCalled();
     }
 
     @Test
@@ -165,7 +256,7 @@ public final class UserSwitcherTest {
         int switchedUserId = userSwitcher.switchUser();
 
         expect.withMessage("result").that(switchedUserId).isEqualTo(FULL_USER.userId());
-        verifyUserNeverSwitched();
+        verifySwitchUserNeverCalled();
     }
 
     @Test
@@ -175,7 +266,7 @@ public final class UserSwitcherTest {
         mockCurrentUser(FULL_USER);
         mockFailedUserSwitch(SYSTEM_USER);
 
-        assertThrows(TargetSetupError.class, () -> userSwitcher.switchUser());
+        assertSwitchUserThrows(userSwitcher, "Device failed to switch to user 0.");
     }
 
     @Test
@@ -187,7 +278,7 @@ public final class UserSwitcherTest {
         // 1st call
         int switchedUserId = userSwitcher.switchUser();
         expect.withMessage("result").that(switchedUserId).isEqualTo(FULL_USER.userId());
-        verifyUserNeverSwitched();
+        verifySwitchUserNeverCalled();
 
         // 2nd call
         assertThrows(IllegalStateException.class, () -> userSwitcher.switchUser());
@@ -237,7 +328,7 @@ public final class UserSwitcherTest {
         mockUsers(SYSTEM_USER, FULL_USER, GUEST_USER);
         mockCurrentUser(FULL_USER);
         mockFailedUserSwitch(SYSTEM_USER);
-        assertThrows(TargetSetupError.class, () -> userSwitcher.switchUser());
+        assertSwitchUserThrows(userSwitcher, "Device failed to switch to user 0.");
 
         userSwitcher.switchBack();
 
@@ -249,6 +340,15 @@ public final class UserSwitcherTest {
         var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
 
         assertThrows(IllegalStateException.class, () -> userSwitcher.switchBack());
+    }
+
+    @Test
+    public void testUserTypeMode_defaultConstructor() {
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
+
+        expect.withMessage("user type mode")
+                .that(userSwitcher.getUserTypeMode())
+                .isEqualTo(UserTypeMode.LEGACY);
     }
 
     private void mockUsers(UserInfo... users) throws DeviceNotAvailableException {
@@ -280,12 +380,27 @@ public final class UserSwitcherTest {
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(value);
     }
 
-    private void verifyUserNeverSwitched() throws DeviceNotAvailableException {
+    private void verifySwitchUserNeverCalled() throws DeviceNotAvailableException {
         verify(mMockDevice, never()).switchUser(anyInt());
+    }
+
+    private void verifySwitchUserNotCalled(UserInfo... users) throws DeviceNotAvailableException {
+        for (var user : users) {
+            verify(mMockDevice, never()).switchUser(user.userId());
+        }
     }
 
     private void verifySwitchUser(UserInfo fullUser) throws DeviceNotAvailableException {
         verify(mMockDevice).switchUser(fullUser.userId());
+    }
+
+    private void assertSwitchUserThrows(UserSwitcher userSwitcher, String expectedMessage) {
+        var thrown = assertThrows(TargetSetupError.class, () -> userSwitcher.switchUser());
+
+        expect.withMessage("message exception")
+                .that(thrown)
+                .hasMessageThat()
+                .isEqualTo(expectedMessage);
     }
 
     private static UserInfo newUser(int id, int flag) {

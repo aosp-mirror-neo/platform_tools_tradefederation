@@ -83,7 +83,6 @@ public class MoblyBinaryHostTest
     private static final String ANDROID_SERIAL_VAR = "ANDROID_SERIAL";
     private static final String MOBLY_TEST_SUMMARY = "test_summary.yaml";
 
-    // TODO(b/159366744): merge this and next options.
     @Option(
             name = "mobly-par-file-name",
             description = "The binary names inside the build info to run.")
