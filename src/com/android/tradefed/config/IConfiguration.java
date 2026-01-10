@@ -178,6 +178,9 @@ public interface IConfiguration {
     /** Gets the {@link GlobalTestFilter} for the invocation. */
     public GlobalTestFilter getGlobalFilters();
 
+    /** Sets the {@link SkipManager} for the invocation. */
+    public void setSkipManager(SkipManager skipManager);
+
     /** Gets the {@link SkipManager} for the invocation. */
     public SkipManager getSkipManager();
 

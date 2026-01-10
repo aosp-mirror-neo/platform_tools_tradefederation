@@ -20,6 +20,7 @@ import com.android.ddmlib.IDevice;
 import com.android.ddmlib.Log.LogLevel;
 import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.build.IBuildInfo;
+import com.android.tradefed.build.IDeviceBuildInfo;
 import com.android.tradefed.device.cloud.GceAvdInfo;
 import com.android.tradefed.device.connection.AdbTcpConnection;
 import com.android.tradefed.device.connection.DefaultConnection;
@@ -207,6 +208,24 @@ public class LocalAndroidVirtualDevice extends RemoteAndroidDevice implements IT
         return file;
     }
 
+    /** Find device images in build info and extract them to a temporary directory. */
+    private File findAndExtractDeviceImages(IBuildInfo buildInfo) throws TargetSetupError {
+        // IDeviceBuildInfo may need to preprocess the file.
+        File file =
+                buildInfo instanceof IDeviceBuildInfo
+                        ? ((IDeviceBuildInfo) buildInfo).getDeviceImageFile()
+                        : buildInfo.getFile(BuildInfoFileKey.DEVICE_IMAGE);
+        try {
+            return file != null ? extractArchive(file) : null;
+        } catch (IOException ex) {
+            throw new TargetSetupError(
+                    String.format("Cannot extract image zip."),
+                    ex,
+                    getDeviceDescriptor(),
+                    InfraErrorIdentifier.FAIL_TO_CREATE_FILE);
+        }
+    }
+
     /** Find a file in build info and extract it to a temporary directory. */
     private File findAndExtractFile(IBuildInfo buildInfo, String fileKey) throws TargetSetupError {
         File file = buildInfo.getFile(fileKey);
@@ -272,7 +291,7 @@ public class LocalAndroidVirtualDevice extends RemoteAndroidDevice implements IT
                         getDeviceDescriptor(),
                         InfraErrorIdentifier.CONFIGURED_ARTIFACT_NOT_FOUND);
             }
-            mImageDir = findAndExtractFile(info, BuildInfoFileKey.DEVICE_IMAGE.getFileKey());
+            mImageDir = findAndExtractDeviceImages(info);
             if (mImageDir == null && !fileMap.containsKey(ACLOUD_LOCAL_IMAGE_OPTION)) {
                 throw new TargetSetupError(
                         "Cannot find image zip in build info.",

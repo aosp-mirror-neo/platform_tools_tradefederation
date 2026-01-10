@@ -531,6 +531,13 @@ public class Configuration implements IConfiguration {
     /** {@inheritDoc} */
     @SuppressWarnings("unchecked")
     @Override
+    public void setSkipManager(SkipManager skipManager) {
+        setConfigurationObjectNoThrow(SKIP_MANAGER_TYPE_NAME, skipManager);
+    }
+
+    /** {@inheritDoc} */
+    @SuppressWarnings("unchecked")
+    @Override
     public SkipManager getSkipManager() {
         return (SkipManager) getConfigurationObject(SKIP_MANAGER_TYPE_NAME);
     }

@@ -2615,4 +2615,66 @@ public class TestInvocationTest {
         verifySummaryListener();
         */
     }
+
+    /** Test that doTeardown is called when build fetching (provider) fails. */
+    @Test
+    public void testTeardown_onProviderFailure() throws Throwable {
+        IInvocationExecution mockExec = mock(IInvocationExecution.class);
+        TestInvocation spyInvoc = Mockito.spy(mTestInvocation);
+        doReturn(mockExec).when(spyInvoc).createInvocationExec(Mockito.any());
+
+        // Setup the fetchBuild call to fail
+        when(mockExec.fetchBuild(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenThrow(new BuildRetrievalError("No build found"));
+
+        when(mMockLogger.getLog()).thenReturn(mHostLogSource);
+
+        try {
+            spyInvoc.invoke(mStubInvocationMetadata, mStubConfiguration, mockRescheduler);
+            fail("Should have thrown an exception.");
+        } catch (BuildRetrievalError expected) {
+            // Expected
+        }
+
+        // Verify doTeardown is called in the finally block
+        verify(mockExec)
+                .doTeardown(
+                        Mockito.any(),
+                        Mockito.eq(mStubConfiguration),
+                        Mockito.any(),
+                        Mockito.any());
+    }
+
+    /** Test that doTeardown is called when the SkipManager decides to skip the invocation. */
+    @Test
+    public void testTeardown_onInvocationSkipped() throws Throwable {
+        IInvocationExecution mockExec = mock(IInvocationExecution.class);
+        TestInvocation spyInvoc = Mockito.spy(mTestInvocation);
+        doReturn(mockExec).when(spyInvoc).createInvocationExec(Mockito.any());
+
+        // Use the actual SkipManager class for mocking
+        com.android.tradefed.result.skipped.SkipManager mockSkipManager =
+                mock(com.android.tradefed.result.skipped.SkipManager.class);
+
+        // Inject the mock SkipManager into the configuration
+        mStubConfiguration.setSkipManager(mockSkipManager);
+
+        // Configure mocks to trigger the early skip block
+        when(mockExec.fetchBuild(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(true);
+        when(mockSkipManager.shouldSkipInvocation(Mockito.any(), Mockito.any())).thenReturn(true);
+        when(mockSkipManager.getInvocationSkipReason()).thenReturn("No changes");
+        when(mMockLogger.getLog()).thenReturn(mHostLogSource);
+
+        spyInvoc.invoke(mStubInvocationMetadata, mStubConfiguration, mockRescheduler);
+
+        // Verification: The Java finally block executes even after the 'return;' statement in the
+        // skip logic
+        verify(mockExec)
+                .doTeardown(
+                        Mockito.any(),
+                        Mockito.eq(mStubConfiguration),
+                        Mockito.any(),
+                        Mockito.any());
+    }
 }

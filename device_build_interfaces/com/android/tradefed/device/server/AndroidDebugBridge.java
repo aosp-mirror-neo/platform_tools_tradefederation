@@ -21,15 +21,6 @@ import com.android.annotations.Nullable;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.Log.LogLevel;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleAppName;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleHeap;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleHello;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleNativeHeap;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleProfiling;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleTest;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleThread;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleViewDebug;
-import com.android.tradefed.device.server.jdwp.chunkhandler.HandleWait;
 import com.android.tradefed.log.Log;
 import com.android.tradefed.log.LogUtil.CLog;
 
@@ -48,7 +39,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.Thread.State;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
@@ -109,7 +99,7 @@ public class AndroidDebugBridge {
 
     private static AndroidDebugBridge sThis;
     private static boolean sInitialized = false;
-    private static boolean sClientSupport;
+
     private static Map<String, String> sAdbEnvVars; // env vars to set while launching adb
 
     /** Full path to adb. */
@@ -128,8 +118,6 @@ public class AndroidDebugBridge {
             Sets.newCopyOnWriteArraySet();
 
     private static final Set<IDeviceChangeListener> sDeviceListeners =
-            Sets.newCopyOnWriteArraySet();
-    private static final Set<IClientChangeListener> sClientListeners =
             Sets.newCopyOnWriteArraySet();
 
     /**
@@ -201,38 +189,16 @@ public class AndroidDebugBridge {
     }
 
     /**
-     * Classes which implement this interface provide methods that deal with {@link ClientImpl}
-     * changes.
-     */
-    public interface IClientChangeListener {
-        /**
-         * Sent when an existing client information changed.
-         *
-         * <p>This is sent from a non UI thread.
-         *
-         * @param client the updated client.
-         * @param changeMask the bit mask describing the changed properties. It can contain any of
-         *     the following values: {@link ClientImpl#CHANGE_INFO}, {@link
-         *     ClientImpl#CHANGE_DEBUGGER_STATUS}, {@link ClientImpl#CHANGE_THREAD_MODE}, {@link
-         *     ClientImpl#CHANGE_THREAD_DATA}, {@link ClientImpl#CHANGE_HEAP_MODE}, {@link
-         *     ClientImpl#CHANGE_HEAP_DATA}, {@link ClientImpl#CHANGE_NATIVE_HEAP_DATA}
-         */
-        void clientChanged(@NonNull Client client, int changeMask);
-    }
-
-    /**
      * Initialized the library only if needed; deprecated for non-test usages.
      *
-     * @param clientSupport Indicates whether the library should enable the monitoring and
-     *     interaction with applications running on the devices.
-     * @see #init(boolean)
+     * @see #init()
      */
     @Deprecated
-    public static synchronized void initIfNeeded(boolean clientSupport) {
+    public static synchronized void initIfNeeded() {
         if (sInitialized) {
             return;
         }
-        init(clientSupport);
+        init();
     }
 
     /**
@@ -245,54 +211,36 @@ public class AndroidDebugBridge {
      *
      * <p>When the application quits, {@link #terminate()} should be called.
      *
-     * @param clientSupport Indicates whether the library should enable the monitoring and
-     *     interaction with applications running on the devices.
      * @see AndroidDebugBridge#createBridge(String, boolean)
      * @see DdmPreferences
      */
-    public static synchronized void init(boolean clientSupport) {
-        init(clientSupport, false, ImmutableMap.of());
+    public static synchronized void init() {
+        init(false, ImmutableMap.of());
     }
 
     /**
-     * Similar to {@link #init(boolean)}, with ability to enable libusb and pass a custom set of
-     * env. variables.
+     * Similar to {@link #init()}, with ability to enable libusb and pass a custom set of env.
+     * variables.
      */
-    public static synchronized void init(
-            boolean clientSupport, boolean useLibusb, @NonNull Map<String, String> env) {
+    public static synchronized void init(boolean useLibusb, @NonNull Map<String, String> env) {
         init(
                 AdbInitOptions.builder()
                         .withEnv(env)
-                        .setClientSupportEnabled(clientSupport)
                         .withEnv("ADB_LIBUSB", useLibusb ? "1" : "0")
                         .build());
     }
 
-    /** Similar to {@link #init(boolean)}, with ability to pass a custom set of env. variables. */
+    /** Similar to {@link #init()}, with ability to pass a custom set of env. variables. */
     public static synchronized void init(AdbInitOptions options) {
         Preconditions.checkState(
                 !sInitialized, "AndroidDebugBridge.init() has already been called.");
         sInitialized = true;
-        sClientSupport = options.clientSupport;
         sAdbEnvVars = options.adbEnvVars;
         sUserManagedAdbMode = options.userManagedAdbMode;
         sLastKnownGoodAddress = null;
 
         // Determine port and instantiate socket address.
         initAdbPort(options.userManagedAdbPort);
-
-        MonitorThread monitorThread = MonitorThread.createInstance();
-        monitorThread.start();
-
-        HandleHello.register(monitorThread);
-        HandleAppName.register(monitorThread);
-        HandleTest.register(monitorThread);
-        HandleThread.register(monitorThread);
-        HandleHeap.register(monitorThread);
-        HandleWait.register(monitorThread);
-        HandleProfiling.register(monitorThread);
-        HandleNativeHeap.register(monitorThread);
-        HandleViewDebug.register(monitorThread);
     }
 
     @VisibleForTesting
@@ -323,23 +271,11 @@ public class AndroidDebugBridge {
             sThis.mDeviceMonitor = null;
         }
 
-        MonitorThread monitorThread = MonitorThread.getInstance();
-        if (monitorThread != null) {
-            monitorThread.quit();
-        }
-
         sInitialized = false;
         sThis = null;
         sLastKnownGoodAddress = null;
     }
 
-    /**
-     * Returns whether the ddmlib is setup to support monitoring and interacting with {@link
-     * ClientImpl}s running on the {@link IDevice}s.
-     */
-    public static boolean getClientSupport() {
-        return sClientSupport;
-    }
 
     /**
      * Returns the socket address of the ADB server on the host.
@@ -694,26 +630,6 @@ public class AndroidDebugBridge {
         return sDeviceListeners.size();
     }
 
-    /**
-     * Adds the listener to the collection of listeners who will be notified when a {@link
-     * ClientImpl} property changed, by sending it one of the messages defined in the {@link
-     * IClientChangeListener} interface.
-     *
-     * @param listener The listener which should be notified.
-     */
-    public static void addClientChangeListener(IClientChangeListener listener) {
-        sClientListeners.add(listener);
-    }
-
-    /**
-     * Removes the listener from the collection of listeners who will be notified when a {@link
-     * ClientImpl} property changes.
-     *
-     * @param listener The listener which should no longer be notified.
-     */
-    public static void removeClientChangeListener(IClientChangeListener listener) {
-        sClientListeners.remove(listener);
-    }
 
     /**
      * Returns the devices.
@@ -754,9 +670,8 @@ public class AndroidDebugBridge {
      * Returns whether the {@link AndroidDebugBridge} object is still connected to the adb daemon.
      */
     public boolean isConnected() {
-        MonitorThread monitorThread = MonitorThread.getInstance();
-        if (mDeviceMonitor != null && monitorThread != null) {
-            return mDeviceMonitor.isMonitoring() && monitorThread.getState() != State.TERMINATED;
+        if (mDeviceMonitor != null) {
+            return mDeviceMonitor.isMonitoring();
         }
         return false;
     }
@@ -1241,28 +1156,6 @@ public class AndroidDebugBridge {
         }
     }
 
-    /**
-     * Notify the listener of a modified {@link ClientImpl}.
-     *
-     * <p>The notification of the listeners is done in a synchronized block. It is important to
-     * expect the listeners to potentially access various methods of {@link IDevice} as well as
-     * {@link #getDevices()} which use internal locks.
-     *
-     * @param client the modified <code>Client</code>.
-     * @param changeMask the mask indicating what changed in the <code>Client</code>
-     */
-    public static void clientChanged(@NonNull ClientImpl client, int changeMask) {
-        // Notify the listeners
-        for (IClientChangeListener listener : sClientListeners) {
-            // we attempt to catch any exception so that a bad listener doesn't kill our
-            // thread
-            try {
-                listener.clientChanged(client, changeMask);
-            } catch (Throwable t) {
-                Log.e(DDMS, t);
-            }
-        }
-    }
 
     /**
      * @return If operating in user managed ADB mode where ddmlib will and should not manage the ADB

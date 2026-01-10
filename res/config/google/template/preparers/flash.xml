@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Google Inc. All Rights Reserved -->
+<configuration description="Standalone flash preparer that can be used for inclusion" >
+    <lab_preparer class="com.google.android.tradefed.targetprep.GoogleDeviceFlashPreparer" >
+        <option name="userdata-flash" value="WIPE" />
+    </lab_preparer>
+</configuration>

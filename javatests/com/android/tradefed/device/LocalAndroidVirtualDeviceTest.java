@@ -24,6 +24,7 @@ import static org.mockito.Mockito.when;
 
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.Log.LogLevel;
+import com.android.tradefed.build.BuildInfoKey.BuildInfoFileKey;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.command.remote.DeviceDescriptor;
 import com.android.tradefed.log.ITestLogger;
@@ -181,12 +182,11 @@ public class LocalAndroidVirtualDeviceTest {
         mSystemImageZip = null;
         mOtaToolsZip = null;
 
+        when(mMockBuildInfo.getFile(eq(BuildInfoFileKey.DEVICE_IMAGE))).thenReturn(mImageZip);
         when(mMockBuildInfo.getFile((String) any()))
                 .thenAnswer(
                         invocation -> {
                             switch ((String) invocation.getArguments()[0]) {
-                                case "device":
-                                    return mImageZip;
                                 case "cvd-host_package.tar.gz":
                                     return mHostPackageTarGzip;
                                 case "boot-img.zip":

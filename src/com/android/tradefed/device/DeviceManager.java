@@ -349,7 +349,7 @@ public class DeviceManager implements IDeviceManager {
             mDvcMonRunning = true;
         }
 
-        mAdbBridge.init(false /* client support */, mAdbPath);
+        mAdbBridge.init(mAdbPath);
         try (CloseableTraceScope add = new CloseableTraceScope("add_devices")) {
             addEmulators();
             addNullDevices();

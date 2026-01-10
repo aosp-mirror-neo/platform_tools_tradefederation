@@ -42,11 +42,7 @@ public interface IAndroidDebugBridge {
      */
     void removeDeviceChangeListener(IDeviceChangeListener listener);
 
-    /**
-     * Wrapper for {@link AndroidDebugBridge#init(boolean)} and
-     * {@link AndroidDebugBridge#createBridge(String, boolean)}
-     */
-    void init(boolean clientSupport, String adbOsLocation);
+    void init(String adbOsLocation);
 
     /**
      * Returns the adb full version of the adb location provided, or null if anything goes wrong.

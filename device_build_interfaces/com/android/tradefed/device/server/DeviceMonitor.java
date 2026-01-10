@@ -21,7 +21,6 @@ import com.android.annotations.Nullable;
 import com.android.annotations.concurrency.GuardedBy;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.IDevice.DeviceState;
-import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -29,8 +28,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -51,10 +48,9 @@ import java.util.Set;
  * on the device. Note: a single thread monitors jdwp connections from all devices. The different
  * socket connections to adb (one per device) are multiplexed over a single selector.
  */
-public final class DeviceMonitor implements ClientTracker {
+public final class DeviceMonitor {
     private final AndroidDebugBridge mServer;
     private DeviceListMonitorTask mDeviceListMonitorTask;
-    @Nullable private DeviceClientMonitorTask myDeviceClientMonitorTask;
     private final Object mDevicesGuard = new Object();
 
     @GuardedBy("mDevicesGuard")
@@ -72,41 +68,16 @@ public final class DeviceMonitor implements ClientTracker {
 
     /** Starts the monitoring. */
     public void start() {
-        try {
-
-            // To terminate thread call stop on each respective task.
-            mDeviceListMonitorTask =
-                    new DeviceListMonitorTask(mServer, new DeviceListUpdateListener());
-            if (AndroidDebugBridge.getClientSupport()) {
-                myDeviceClientMonitorTask = new DeviceClientMonitorTask();
-                new Thread(myDeviceClientMonitorTask, "Device Client Monitor").start();
-            }
-            new Thread(mDeviceListMonitorTask, "Device List Monitor").start(); // $NON-NLS-1$
-        } catch (IOException ex) {
-            // Not expected.
-            CLog.e(ex);
-        }
-    }
-
-    private void jdwpProxyChangedState() {
-        DeviceImpl[] devices;
-        synchronized (mDevicesGuard) {
-            devices = mDevices.toArray(new DeviceImpl[0]);
-        }
-        for (DeviceImpl device : devices) {
-            trackDeviceToDropAndReopen(device);
-        }
+        // To terminate thread call stop on each respective task.
+        mDeviceListMonitorTask =
+                new DeviceListMonitorTask(mServer, new DeviceListUpdateListener());
+        new Thread(mDeviceListMonitorTask, "Device List Monitor").start(); // $NON-NLS-1$
     }
 
     /** Stops the monitoring. */
     public void stop() {
-
         if (mDeviceListMonitorTask != null) {
             mDeviceListMonitorTask.stop();
-        }
-
-        if (myDeviceClientMonitorTask != null) {
-            myDeviceClientMonitorTask.stop();
         }
     }
 
@@ -143,35 +114,6 @@ public final class DeviceMonitor implements ClientTracker {
     @NonNull
     AndroidDebugBridge getServer() {
         return mServer;
-    }
-
-    @Override
-    public void trackClientToDropAndReopen(@NonNull ClientImpl client) {
-        assert myDeviceClientMonitorTask != null;
-        myDeviceClientMonitorTask.registerClientToDropAndReopen(client);
-    }
-
-    @Override
-    public void trackDisconnectedClient(@NonNull ClientImpl client) {
-        assert myDeviceClientMonitorTask != null;
-        myDeviceClientMonitorTask.free(client);
-    }
-
-    @Override
-    public void trackDeviceToDropAndReopen(@NonNull DeviceImpl device) {
-        boolean hasDevice;
-        synchronized (mDevicesGuard) {
-            hasDevice = mDevices.contains(device);
-        }
-        // restart the monitoring of that device
-        if (hasDevice
-                && AndroidDebugBridge.getClientSupport()
-                && myDeviceClientMonitorTask != null) {
-            CLog.d("Restarting monitoring service for " + device);
-            if (!myDeviceClientMonitorTask.register(device)) {
-                CLog.e("Failed to start monitoring " + device.getSerialNumber());
-            }
-        }
     }
 
     /**
@@ -233,14 +175,6 @@ public final class DeviceMonitor implements ClientTracker {
             }
         }
 
-        if (AndroidDebugBridge.getClientSupport()) {
-            for (DeviceImpl device : newlyOnline) {
-                if (!myDeviceClientMonitorTask.register(device)) {
-                    CLog.e("Failed to start monitoring " + device.getSerialNumber());
-                }
-            }
-        }
-
         for (DeviceImpl device : newlyOnline) {
             setProperties(device);
 
@@ -252,16 +186,6 @@ public final class DeviceMonitor implements ClientTracker {
 
     private void removeDevice(@NonNull DeviceImpl device) {
         device.setState(DeviceState.DISCONNECTED);
-        device.clearClientList();
-
-        SocketChannel channel = device.getClientMonitoringSocket();
-        if (channel != null) {
-            try {
-                channel.close();
-            } catch (IOException e) {
-                // doesn't really matter if the close fails.
-            }
-        }
     }
 
     private static void setProperties(@NonNull DeviceImpl device) {
@@ -289,7 +213,7 @@ public final class DeviceMonitor implements ClientTracker {
         public void deviceListUpdate(@NonNull Map<String, DeviceState> devices) {
             List<DeviceImpl> l = Lists.newArrayListWithExpectedSize(devices.size());
             for (Map.Entry<String, DeviceState> entry : devices.entrySet()) {
-                l.add(new DeviceImpl(DeviceMonitor.this, entry.getKey(), entry.getValue()));
+                l.add(new DeviceImpl(entry.getKey(), entry.getValue()));
             }
             // now merge the new devices with the old ones.
             updateDevices(l);

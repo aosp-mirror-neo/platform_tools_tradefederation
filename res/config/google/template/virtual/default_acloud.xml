@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 Google Inc. All Rights Reserved -->
+<configuration description="Set the default options for acloud lab">
+    <option name="gce-driver-path" value="/google/data/ro/projects/android/treehugger/acloud/acloud" />
+    <option name="gce-driver-config-path" value="/google/data/ro/projects/android/treehugger/acloud/treehugger_postsubmit.config" />
+    <option name="gce-private-key-path" value="/google/data/ro/teams/tradefed/configs/gce-ssh/id_rsa" />
+</configuration>
+

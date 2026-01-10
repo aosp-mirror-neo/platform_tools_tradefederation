@@ -17,7 +17,6 @@ package com.android.tradefed.device.server;
 
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
-import com.android.annotations.concurrency.GuardedBy;
 import com.android.ddmlib.AdbCommandRejectedException;
 import com.android.ddmlib.AvdData;
 import com.android.ddmlib.CollectingOutputReceiver;
@@ -49,17 +48,14 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -89,17 +85,6 @@ public final class DeviceImpl implements IDevice {
     private final Map<String, String> mMountPoints = new HashMap<>();
 
     private final BatteryFetcher mBatteryFetcher = new BatteryFetcher(this);
-
-    @GuardedBy("mClients")
-    private final List<ClientImpl> mClients = new ArrayList<>();
-
-    /** Maps pid's of clients in {@link #mClients} to their package name. */
-    private final Map<Integer, String> mClientInfo = new ConcurrentHashMap<>();
-
-    @GuardedBy("mProfileableClients")
-    private final List<ProfileableClientImpl> mProfileableClients = new ArrayList<>();
-
-    private final ClientTracker mClientTracer;
 
     private static final String LOG_TAG = "DeviceImpl";
     private static final char SEPARATOR = '-';
@@ -759,56 +744,9 @@ public final class DeviceImpl implements IDevice {
     }
 
     // @VisibleForTesting
-    public DeviceImpl(ClientTracker clientTracer, String serialNumber, DeviceState deviceState) {
-        mClientTracer = clientTracer;
+    public DeviceImpl(String serialNumber, DeviceState deviceState) {
         mSerialNumber = serialNumber;
         mState = deviceState;
-    }
-
-    public ClientTracker getClientTracker() {
-        return mClientTracer;
-    }
-
-    @Override
-    public boolean hasClients() {
-        synchronized (mClients) {
-            return !mClients.isEmpty();
-        }
-    }
-
-    @Override
-    public ClientImpl[] getClients() {
-        throw new UnsupportedOperationException("You should use #getNativeClients instead");
-    }
-
-    @Override
-    public ClientImpl getClient(String applicationName) {
-        throw new UnsupportedOperationException("You should use #getNativeClients instead");
-    }
-
-    public ClientImpl[] getNativeClients() {
-        synchronized (mClients) {
-            return mClients.toArray(new ClientImpl[0]);
-        }
-    }
-
-    public ClientImpl getNativeClients(String applicationName) {
-        synchronized (mClients) {
-            for (ClientImpl c : mClients) {
-                if (applicationName.equals(c.getClientData().getClientDescription())) {
-                    return c;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    @Override
-    public ProfileableClientImpl[] getProfileableClients() {
-        synchronized (mProfileableClients) {
-            return mProfileableClients.toArray(new ProfileableClientImpl[0]);
-        }
     }
 
     @Override
@@ -835,133 +773,12 @@ public final class DeviceImpl implements IDevice {
         }
     }
 
-    void addClient(ClientImpl client) {
-        synchronized (mClients) {
-            mClients.add(client);
-        }
-
-        addClientInfo(client);
-    }
-
-    List<ClientImpl> getClientList() {
-        synchronized (mClients) {
-            return mClients;
-        }
-    }
-
-    void clearClientList() {
-        synchronized (mClients) {
-            mClients.clear();
-        }
-
-        clearClientInfo();
-    }
-
-    /**
-     * Removes a {@link ClientImpl} from the list.
-     *
-     * @param client the client to remove.
-     * @param notify Whether or not to notify the listeners of a change.
-     */
-    void removeClient(ClientImpl client, boolean notify) {
-        mClientTracer.trackDisconnectedClient(client);
-        synchronized (mClients) {
-            mClients.remove(client);
-        }
-        if (notify) {
-            AndroidDebugBridge.deviceChanged(this, CHANGE_CLIENT_LIST);
-        }
-
-        removeClientInfo(client);
-    }
-
-    void updateProfileableClientList(@NonNull List<ProfileableClientImpl> newClientList) {
-        synchronized (mProfileableClients) {
-            mProfileableClients.clear();
-            mProfileableClients.addAll(newClientList);
-            Collections.sort(
-                    mProfileableClients,
-                    Comparator.comparingInt(c -> c.getProfileableClientData().getPid()));
-        }
-    }
-
-    void updateProfileableClientName(int pid, @NonNull String name) {
-        synchronized (mProfileableClients) {
-            for (ProfileableClientImpl client : mProfileableClients) {
-                if (client.getProfileableClientData().getPid() == pid) {
-                    client.getProfileableClientData().setProcessName(name);
-                    break;
-                }
-            }
-        }
-    }
-
-    void clearProfileableClientList() {
-        synchronized (mProfileableClients) {
-            mProfileableClients.clear();
-        }
-    }
-
-    /** Sets the socket channel on which a track-jdwp command for this device has been sent. */
-    void setClientMonitoringSocket(@NonNull SocketChannel socketChannel) {
-        mSocketChannel = socketChannel;
-    }
-
-    /**
-     * Returns the channel on which responses to the track-jdwp command will be available if it has
-     * been set, null otherwise. The channel is set via {@link
-     * #setClientMonitoringSocket(SocketChannel)}, which is usually invoked when the device goes
-     * online.
-     */
-    @Nullable
-    SocketChannel getClientMonitoringSocket() {
-        return mSocketChannel;
-    }
-
     void update(int changeMask) {
         AndroidDebugBridge.deviceChanged(this, changeMask);
     }
 
-    void update(@NonNull ClientImpl client, int changeMask) {
-        AndroidDebugBridge.clientChanged(client, changeMask);
-        updateClientInfo(client, changeMask);
-    }
-
     void setMountingPoint(String name, String value) {
         mMountPoints.put(name, value);
-    }
-
-    private void addClientInfo(ClientImpl client) {
-        ClientData cd = client.getClientData();
-        setClientInfo(cd.getPid(), cd.getPackageName());
-    }
-
-    private void updateClientInfo(ClientImpl client, int changeMask) {
-        if ((changeMask & ClientImpl.CHANGE_NAME) == ClientImpl.CHANGE_NAME) {
-            addClientInfo(client);
-        }
-    }
-
-    private void removeClientInfo(ClientImpl client) {
-        int pid = client.getClientData().getPid();
-        mClientInfo.remove(pid);
-    }
-
-    private void clearClientInfo() {
-        mClientInfo.clear();
-    }
-
-    private void setClientInfo(int pid, String pkgName) {
-        if (pkgName == null) {
-            pkgName = UNKNOWN_PACKAGE;
-        }
-
-        mClientInfo.put(pid, pkgName);
-    }
-
-    @Override
-    public String getClientName(int pid) {
-        return mClientInfo.getOrDefault(pid, UNKNOWN_PACKAGE);
     }
 
     @Override
