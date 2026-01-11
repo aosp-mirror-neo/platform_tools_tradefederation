@@ -141,6 +141,14 @@ public class MoblyBinaryHostTest
                             + " sharding.")
     private boolean mListTests = true;
 
+    // Mobly scripts are not expected to handle "--" in command line, but wrappers are.
+    @Option(
+            name = "no-double-dash",
+            description =
+                    "If true, skip inserting '--' to the command, which allows use of existing"
+                        + " mobly scripts as-is.")
+    private boolean mNoDoubleDash = false;
+
     private ITestDevice mDevice;
     private IBuildInfo mBuildInfo;
     private File mLogDir;
@@ -764,9 +772,9 @@ public class MoblyBinaryHostTest
             String filePath, String configPath, List<String> tests) {
         List<String> commandLine = new ArrayList<>();
         commandLine.add(filePath);
-        // TODO(b/166468397): some test binaries are actually a wrapper of Mobly runner and need --
-        //  to separate Python options.
-        commandLine.add("--");
+        if (!mNoDoubleDash) {
+            commandLine.add("--");
+        }
         if (configPath != null) {
             commandLine.add("--config=" + configPath);
         }

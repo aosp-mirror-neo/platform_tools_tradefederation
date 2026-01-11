@@ -519,6 +519,24 @@ public class MoblyBinaryHostTestTest {
     }
 
     @Test
+    public void testBuildCommandLineArray_withNoDoubleDash() throws Exception {
+        OptionSetter setter = new OptionSetter(mSpyTest);
+        setter.setOptionValue("no-double-dash", "true");
+        Mockito.doReturn(DEVICE_SERIAL).when(mMockDevice).getSerialNumber();
+        Mockito.doReturn(LOG_PATH).when(mSpyTest).getLogDirAbsolutePath();
+
+        String[] cmdArray = mSpyTest.buildCommandLineArray(BINARY_PATH, null);
+
+        Truth.assertThat(cmdArray)
+                .isEqualTo(
+                        new String[] {
+                            BINARY_PATH,
+                            "--device_serial=" + DEVICE_SERIAL,
+                            "--log_path=" + LOG_PATH,
+                        });
+    }
+
+    @Test
     public void testBuildCommandLineArrayWithOutConfigWithWildcardOn() throws Exception {
         OptionSetter setter = new OptionSetter(mSpyTest);
         setter.setOptionValue("mobly-par-file-name", mMoblyBinary2.getName());
