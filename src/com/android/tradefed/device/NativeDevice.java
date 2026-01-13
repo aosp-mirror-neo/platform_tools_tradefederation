@@ -4363,14 +4363,10 @@ public class NativeDevice
         @Nullable
         String formatRebootCommand(@Nullable String reason) {
             if (this == REBOOT_FULL) {
-                return Strings.isNullOrEmpty(reason) ? null : reason;
+                return Strings.isNullOrEmpty(reason) ? "" : reason;
             } else {
                 return Strings.isNullOrEmpty(reason) ? mRebootTarget : mRebootTarget + "," + reason;
             }
-        }
-
-        String getAdbRebootCommand(@Nullable String reason) {
-            return Strings.isNullOrEmpty(reason) ? mRebootTarget : mRebootTarget + "," + reason;
         }
 
         @Override
@@ -4456,7 +4452,7 @@ public class NativeDevice
      */
     protected RebootDeviceAction createRebootDeviceAction(
             RebootMode rebootMode, @Nullable final String reason) {
-        String mode = rebootMode.getAdbRebootCommand(reason);
+        String mode = rebootMode.formatRebootCommand(reason);
         String adbRebootCommand = String.format("reboot %s", mode);
         adbRebootCommand = adbRebootCommand.trim();
         final String[] fullCmd = buildAdbShellCommand(adbRebootCommand, false, false);
