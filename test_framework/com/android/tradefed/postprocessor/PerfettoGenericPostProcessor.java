@@ -291,7 +291,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                                     reportBuilder.mergeFrom(partialReport);
                                 }
                             }
-                            parsedMetrics.putAll(
+                            mergePerfettoV2Metrics(
+                                    parsedMetrics,
                                     replaceAllMetricPrefix(convertPerfettoProtoMessageV2(summary)));
                         } else {
                             TraceMetrics.Builder builder = TraceMetrics.newBuilder();
@@ -312,7 +313,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                                     reportBuilder.mergeFrom(partialReport);
                                 }
                             }
-                            parsedMetrics.putAll(
+                            mergePerfettoV2Metrics(
+                                    parsedMetrics,
                                     replaceAllMetricPrefix(
                                             convertPerfettoProtoMessageV2(traceSummary)));
                         } else {
@@ -437,6 +439,49 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         }
 
         return result;
+    }
+
+    private void mergePerfettoV2Metrics(
+            Map<String, Metric.Builder> parsedMetrics, Map<String, Metric.Builder> newMetrics) {
+        for (Map.Entry<String, Metric.Builder> newMetricEntry : newMetrics.entrySet()) {
+            String key = newMetricEntry.getKey();
+            Metric.Builder newMetricBuilder = newMetricEntry.getValue();
+            if (parsedMetrics.containsKey(key)) {
+                Metric.Builder existingMetricBuilder = parsedMetrics.get(key);
+                Metric existingMetric = existingMetricBuilder.build();
+                Metric newMetric = newMetricBuilder.build();
+
+                List<Double> allValues = new ArrayList<>();
+                if (existingMetric.getMeasurements().hasSingleDouble()) {
+                    allValues.add(existingMetric.getMeasurements().getSingleDouble());
+                }
+                if (existingMetric.getMeasurements().hasDoubleValues()) {
+                    allValues.addAll(
+                            existingMetric
+                                    .getMeasurements()
+                                    .getDoubleValues()
+                                    .getDoubleValueList());
+                }
+
+                if (newMetric.getMeasurements().hasSingleDouble()) {
+                    allValues.add(newMetric.getMeasurements().getSingleDouble());
+                }
+                if (newMetric.getMeasurements().hasDoubleValues()) {
+                    allValues.addAll(
+                            newMetric.getMeasurements().getDoubleValues().getDoubleValueList());
+                }
+
+                if (allValues.size() == 1) {
+                    parsedMetrics.put(
+                            key, TfMetricProtoUtil.doubleToMetric(allValues.get(0)).toBuilder());
+                } else {
+                    parsedMetrics.put(
+                            key, TfMetricProtoUtil.doubleArrayToMetric(allValues).toBuilder());
+                }
+            } else {
+                parsedMetrics.put(key, newMetricBuilder);
+            }
+        }
     }
 
     private Map<String, Metric.Builder> handlePrefixForProcessedMetrics(
