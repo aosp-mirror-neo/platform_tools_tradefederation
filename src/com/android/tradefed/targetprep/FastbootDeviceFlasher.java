@@ -69,6 +69,8 @@ import java.util.stream.Collectors;
 /** A class that relies on fastboot to flash an image on physical Android hardware. */
 public class FastbootDeviceFlasher implements IDeviceFlasher {
     public static final String BASEBAND_IMAGE_NAME = "radio";
+    private static final String SPARSE_FILE_ERROR = "Error reading sparse file";
+    private static final String PTS_FLASH_KNOWN_ISSUE_URL = "go/pts-flash-known-issue";
 
     private static final String FASTBOOT_VERSION = "fastboot_version";
     private static final int MAX_RETRY_ATTEMPTS = 3;
@@ -871,45 +873,66 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                     }
                 }
             }
-            long startWait = System.currentTimeMillis();
-            if (shouldFlash && mIncrementalFlashing != null) {
-                // Take the permit in case of fallback from incremental
-                try (CloseableTraceScope waitFor =
-                        new CloseableTraceScope("wait_for_flashing_permit")) {
-                    // Only #flash is included in the critical section
-                    getHostOptions().takePermit(PermitLimitType.CONCURRENT_FLASHER);
-                    tookPermit = true;
-                    long queueTime = System.currentTimeMillis() - startWait;
-                    CLog.v(
-                            "Flashing permit obtained after %ds",
-                            TimeUnit.MILLISECONDS.toSeconds(queueTime));
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.FLASHING_PERMIT_LATENCY, queueTime);
+            int attempts = 0;
+            while (attempts < MAX_RETRY_ATTEMPTS) {
+                try {
+                    long startWait = System.currentTimeMillis();
+                    if (shouldFlash && mIncrementalFlashing != null && !tookPermit) {
+                        // Take the permit in case of fallback from incremental
+                        try (CloseableTraceScope waitFor =
+                                new CloseableTraceScope("wait_for_flashing_permit")) {
+                            // Only #flash is included in the critical section
+                            getHostOptions().takePermit(PermitLimitType.CONCURRENT_FLASHER);
+                            tookPermit = true;
+                            long queueTime = System.currentTimeMillis() - startWait;
+                            CLog.v(
+                                    "Flashing permit obtained after %ds",
+                                    TimeUnit.MILLISECONDS.toSeconds(queueTime));
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.FLASHING_PERMIT_LATENCY, queueTime);
+                        }
+                    }
+                    if (shouldFlash) {
+                        if (deviceBuild.getDeviceImageFile().isDirectory()) {
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.FLASHING_METHOD,
+                                    FlashingMethod.FASTBOOT_FLASH_ALL.toString());
+                            flashWithAll(device, deviceBuild);
+                        } else if (getHostOptions().shouldFlashWithFuseZip()
+                                && getFuseUtil().canMountZip()) {
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.FLASHING_METHOD,
+                                    FlashingMethod.FASTBOOT_FLASH_ALL_FUSE_ZIP.toString());
+                            flashWithFuseZip(device, deviceBuild);
+                        } else {
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.FLASHING_METHOD,
+                                    FlashingMethod.FASTBOOT_UPDATE.toString());
+                            flashWithUpdateCommand(device, deviceBuild);
+                        }
+                    }
+                    flashRamdiskIfNeeded(device, deviceBuild);
+                    // only transfer last fastboot command status over to system flash status after
+                    // having flashing the system partitions
+                    mSystemFlashStatus = mFbCmdStatus;
+                    break;
+                } catch (TargetSetupError e) {
+                    attempts++;
+                    if (e.getMessage() != null && e.getMessage().contains(SPARSE_FILE_ERROR)) {
+                        if (attempts < MAX_RETRY_ATTEMPTS) {
+                            CLog.w(
+                                    "Detected '%s', retrying. Attempt %d/%d",
+                                    SPARSE_FILE_ERROR, attempts, MAX_RETRY_ATTEMPTS);
+                            getRunUtil().sleep(RETRY_SLEEP);
+                            continue;
+                        }
+                        CLog.e(
+                                "Flashing failed due to a known issue: %s. See %s.",
+                                SPARSE_FILE_ERROR, PTS_FLASH_KNOWN_ISSUE_URL);
+                    }
+                    throw e;
                 }
             }
-            if (shouldFlash) {
-                if (deviceBuild.getDeviceImageFile().isDirectory()) {
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.FLASHING_METHOD,
-                            FlashingMethod.FASTBOOT_FLASH_ALL.toString());
-                    flashWithAll(device, deviceBuild);
-                } else if (getHostOptions().shouldFlashWithFuseZip()
-                        && getFuseUtil().canMountZip()) {
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.FLASHING_METHOD,
-                            FlashingMethod.FASTBOOT_FLASH_ALL_FUSE_ZIP.toString());
-                    flashWithFuseZip(device, deviceBuild);
-                } else {
-                    InvocationMetricLogger.addInvocationMetrics(
-                            InvocationMetricKey.FLASHING_METHOD,
-                            FlashingMethod.FASTBOOT_UPDATE.toString());
-                    flashWithUpdateCommand(device, deviceBuild);
-                }
-            }
-            flashRamdiskIfNeeded(device, deviceBuild);
-            // only transfer last fastboot command status over to system flash status after having
-            // flashing the system partitions
-            mSystemFlashStatus = mFbCmdStatus;
         } finally {
             // if system flash status is still null here, an exception has happened
             if (mSystemFlashStatus == null) {
