@@ -16,12 +16,6 @@
 package com.android.tradefed.util;
 
 import com.android.annotations.VisibleForTesting;
-import com.android.tradefed.log.LogUtil.CLog;
-import com.android.tradefed.metrics.proto.MetricMeasurement.Measurements;
-import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
-import com.android.tradefed.result.LogFile;
-import com.android.tradefed.result.TestDescription;
-import com.android.tradefed.util.proto.TfMetricProtoUtil;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.ComputedStatistics;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Dimension;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.DimensionalMetric;
@@ -32,10 +26,17 @@ import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Stat;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.TestIdentifier;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.TestMetricResult;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Value;
+import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.metrics.proto.MetricMeasurement.Measurements;
+import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.result.LogFile;
+import com.android.tradefed.result.TestDescription;
+import com.android.tradefed.util.proto.TfMetricProtoUtil;
+
 import com.google.common.base.Joiner;
-import com.google.protobuf.TextFormat;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.math.Quantiles;
+import com.google.protobuf.TextFormat;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -53,8 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.regex.Pattern;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -207,7 +208,9 @@ public class MetricUtility {
             ArrayListMultimap<String, Metric> currentTest = mStoredTestMetrics.get(testName);
             int iterations = mTestIterationCounts.getOrDefault(testName, 0);
             Map<String, Metric> aggregateMetrics = new LinkedHashMap<String, Metric>();
-            for (String metricKey : currentTest.keySet()) {
+            List<String> keys = new ArrayList<>(currentTest.keySet());
+            Collections.sort(keys);
+            for (String metricKey : keys) {
                 List<Metric> metrics = currentTest.get(metricKey);
                 List<Measurements> measures =
                         metrics.stream().map(Metric::getMeasurements).collect(Collectors.toList());
