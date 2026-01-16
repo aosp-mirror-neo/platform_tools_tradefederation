@@ -4009,4 +4009,13 @@ public class NativeDeviceTest {
         // And getProperty will issue more calls that we stub out with "" if we haven't cached.
         assertNull(device.getProperty("ro.product.cpu.abi"));
     }
+
+    @Test
+    public void testDeleteFile_withSpecialChars() throws Exception {
+        // Test with a file containing a $ sign
+        mTestDevice.deleteFile("file$name");
+
+        verify(mMockIDevice).executeShellCommand(Mockito.eq("rm -rf file\\$name"),
+                Mockito.any(), Mockito.anyLong(), Mockito.any());
+    }
 }
