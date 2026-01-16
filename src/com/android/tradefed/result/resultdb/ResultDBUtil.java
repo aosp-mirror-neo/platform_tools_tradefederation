@@ -15,18 +15,21 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.ModuleIdentifier;
+import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestIdentifier;
-import com.android.resultdb.proto.Variant;
 import com.android.tradefed.result.TestDescription;
-import com.android.tradefed.result.skipped.SkipReason;
-
-import com.google.common.base.Strings;
+import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
+import com.android.tradefed.result.resultdb.utils.AndroidCompatibility;
+import com.android.tradefed.result.resultdb.utils.TestIdUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /** Utility class for ResultDB reporter. */
 public final class ResultDBUtil {
+
+    private static final String JUNIT_CLASS_PLACEHOLDER = "no-class-name";
 
     /** Converts a byte array to a hexadecimal string. */
     public static String bytesToHex(byte[] bytes) {
@@ -133,26 +136,6 @@ public final class ResultDBUtil {
     }
 
     /**
-     * Serializes a {@link SkipReason} into a summary HTML string.
-     *
-     * <p><b>Note:</b> The caller is responsible for truncating the returned string to comply with
-     * any field size limits (e.g., for the summary HTML field).
-     */
-    public static String testSkipReasonToSummaryHtml(SkipReason reason, boolean includeReason) {
-        StringBuilder summaryHtml = new StringBuilder();
-        if (!Strings.isNullOrEmpty(reason.getBugId())) {
-            summaryHtml.append("bug_id: ").append(reason.getBugId()).append("<br>");
-        }
-        if (!Strings.isNullOrEmpty(reason.getTrigger())) {
-            summaryHtml.append("trigger: ").append(reason.getTrigger()).append("<br>");
-        }
-        if (!Strings.isNullOrEmpty(reason.getReason()) && includeReason) {
-            summaryHtml.append("reason: ").append(reason.getReason()).append("<br>");
-        }
-        return summaryHtml.toString();
-    }
-
-    /**
      * Converts a TestDescription to a TestIdentifier.
      *
      * @param moduleName the module name
@@ -164,7 +147,7 @@ public final class ResultDBUtil {
      *     and character set.
      */
     public static TestIdentifier toTestIdentifier(
-            String moduleName, Variant moduleVariant, TestDescription testDescription) {
+            ModuleIdentifier moduleIdentifier, TestDescription testDescription) {
 
         String fullClassName = testDescription.getClassName();
         int lastDotIndex = fullClassName.lastIndexOf('.');
@@ -172,25 +155,23 @@ public final class ResultDBUtil {
         String packageName;
         String className;
         if (fullClassName.isEmpty()) {
-            packageName = "empty-package";
-            className = "empty-class";
+            packageName = TestIdUtils.JUNIT_PACKAGE_PLACEHOLDER;
+            className = JUNIT_CLASS_PLACEHOLDER;
         } else if (lastDotIndex == -1) {
-            packageName = "empty-package";
+            packageName = TestIdUtils.JUNIT_PACKAGE_PLACEHOLDER;
             className = fullClassName;
         } else {
             packageName = fullClassName.substring(0, lastDotIndex);
             className = fullClassName.substring(lastDotIndex + 1);
         }
-        if (Strings.isNullOrEmpty(moduleName)) {
-            moduleName = "empty-module";
-        }
+
         return TestIdentifier.newBuilder()
-                .setModuleName(moduleName)
+                .setModuleName(moduleIdentifier.getModuleName())
                 .setModuleScheme("junit")
-                .setModuleVariant(moduleVariant)
+                .setModuleVariant(moduleIdentifier.getModuleVariant())
                 .setCoarseName(packageName)
                 .setFineName(className)
-                .setCaseName(testDescription.getTestName())
+                .setCaseName(TestIdUtils.escapeCaseName(testDescription.getTestName()))
                 .build();
     }
 
@@ -203,5 +184,49 @@ public final class ResultDBUtil {
      */
     public static String makeWorkUnitName(String rootInvocationId, String workUnitId) {
         return String.format("rootInvocations/%s/workUnits/%s", rootInvocationId, workUnitId);
+    }
+
+    /**
+     * Returns a StringPair that can be used to record an error type in the `tags` collection.
+     * The value matches AnTS error type values.
+     */
+    public static StringPair primaryErrorTypeTag(FailureStatus failureStatus) {
+        String val;
+        switch (failureStatus) {
+            case TEST_FAILURE:
+                val = "TEST_FAILURE";
+                break;
+            case TIMED_OUT:
+                val = "TIMEOUT";
+                break;
+            case CANCELLED:
+                val = "TEST_CANCELLED";
+                break;
+            case INFRA_FAILURE:
+                val = "INFRA_ERROR";
+                break;
+            case SYSTEM_UNDER_TEST_CRASHED:
+                val = "SYSTEM_UNDER_TEST_CRASHED";
+                break;
+            case NOT_EXECUTED:
+                val = "NOT_EXECUTED";
+                break;
+            case LOST_SYSTEM_UNDER_TEST:
+                val = "LOST_SYSTEM_UNDER_TEST";
+                break;
+            case DEPENDENCY_ISSUE:
+                val = "DEPENDENCY_ISSUE";
+                break;
+            case CUSTOMER_ISSUE:
+                val = "CUSTOMER_ISSUE";
+                break;
+            default:
+                val = "ERROR_TYPE_UNSPECIFIED";
+                break;
+        }
+        return StringPair.newBuilder()
+                .setKey(AndroidCompatibility.PRIMARY_ERROR_TYPE_TAG_KEY)
+                .setValue(val)
+                .build();
     }
 }
