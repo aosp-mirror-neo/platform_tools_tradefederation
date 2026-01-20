@@ -51,6 +51,7 @@ import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -157,6 +158,11 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
 
     @Option(name = "flashstation-script", description = "Path to the cl_flashstation script.")
     private File mFlashstationScript = new File("/tradefed/cl_flashstation");
+
+    @Option(
+            name = "flashstation-args",
+            description = "A list of args that will be passed to the flashstation script.")
+    private List<String> mFlashstationArgs = new LinkedList<>();
 
     private static final String FLASHSTATION_DEVICE_FLASHER_CLASS =
             "com.google.android.tradefed.targetprep.FlashstationDeviceFlasher";
@@ -291,6 +297,11 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
                     Method setFlashstationScriptMethod =
                             loadedClass.getDeclaredMethod("setFlashstationScript", File.class);
                     setFlashstationScriptMethod.invoke(flashstationFlasher, mFlashstationScript);
+                }
+                if (!mFlashstationArgs.isEmpty()) {
+                    Method addFlashstationArgs =
+                            loadedClass.getDeclaredMethod("addFlashstationArgs", List.class);
+                    addFlashstationArgs.invoke(flashstationFlasher, mFlashstationArgs);
                 }
                 return (IDeviceFlasher) flashstationFlasher;
             } catch (Exception e) {
