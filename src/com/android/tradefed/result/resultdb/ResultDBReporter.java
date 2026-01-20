@@ -73,7 +73,7 @@ public class ResultDBReporter
     @Option(
             name = "enable-work-unit-reporting",
             description = "Enable work unit reporting, used for rate control work unit reporting.")
-    private boolean mEnableWorkUnitReporting = false;
+    private boolean mEnableWorkUnitReporting = true;
 
     // Invocation context for the tradefed invocation.
     private IInvocationContext mContext;
