@@ -29,6 +29,8 @@ import java.util.Objects;
 /** Utility class for ResultDB reporter. */
 public final class ResultDBUtil {
 
+    public static final String NO_MODULE_NAME = "no-module-name";
+
     private static final String JUNIT_CLASS_PLACEHOLDER = "no-class-name";
 
     /** Converts a byte array to a hexadecimal string. */
@@ -187,8 +189,8 @@ public final class ResultDBUtil {
     }
 
     /**
-     * Returns a StringPair that can be used to record an error type in the `tags` collection.
-     * The value matches AnTS error type values.
+     * Returns a StringPair that can be used to record an error type in the `tags` collection. The
+     * value matches AnTS error type values.
      */
     public static StringPair primaryErrorTypeTag(FailureStatus failureStatus) {
         String val;

@@ -16,8 +16,15 @@
 package com.android.tradefed.result.resultdb.utils;
 
 import com.android.resultdb.proto.StringPair;
+import com.android.resultdb.proto.TestResultProperties;
 
 import com.google.common.base.Strings;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import com.google.protobuf.util.JsonFormat;
+
+import javax.annotation.Nullable;
 
 /**
  * Provides methods to facilitate uploading Android-specific fields to ResultDB.
@@ -62,6 +69,33 @@ public final class AndroidCompatibility {
     public static final int MAX_TAG_KEY_BYTES = 64;
 
     private AndroidCompatibility() {}
+
+    /**
+     * Marshals a TestResultProperties proto (a copy of
+     * wireless.android.busytown.proto.TestResultProperties) to a google.protobuf.Struct for storage
+     * in ResultDB.
+     */
+    @Nullable
+    public static Struct marshalTestResultProperties(@Nullable TestResultProperties properties)
+            throws InvalidProtocolBufferException {
+        Struct.Builder structBuilder = Struct.newBuilder();
+        if (properties != null) {
+            JsonFormat.parser()
+                    .merge(
+                            JsonFormat.printer()
+                                    .omittingInsignificantWhitespace()
+                                    .print(properties),
+                            structBuilder);
+        }
+        putStructType(structBuilder, "wireless.android.busytown.proto.TestResultProperties");
+        return structBuilder.build();
+    }
+
+    private static void putStructType(Struct.Builder structBuilder, String typeName) {
+        structBuilder.putFields(
+                "@type",
+                Value.newBuilder().setStringValue("type.googleapis.com/" + typeName).build());
+    }
 
     /**
      * MakeValidTagKey converts the key of an AnTS property to a valid ResultDB tag key.

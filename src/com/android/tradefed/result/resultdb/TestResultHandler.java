@@ -15,12 +15,15 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.AntsProperty;
+import com.android.resultdb.proto.AntsTestIdentifier;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.ModuleIdentifier;
 import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestResult;
+import com.android.resultdb.proto.TestResultProperties;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.log.LogUtil.CLog;
@@ -36,6 +39,8 @@ import com.android.tradefed.testtype.suite.SuiteTestFilter;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
@@ -81,7 +86,12 @@ class TestResultHandler {
     }
 
     public void testStarted(
-            TestDescription test, long startTime, ModuleIdentifier moduleIdentifier) {
+            TestDescription test,
+            long startTime,
+            ModuleIdentifier moduleIdentifier,
+            List<AntsProperty> antsModuleParameters) {
+
+        Struct properties = getTestResultProperties(test, moduleIdentifier, antsModuleParameters);
         mCurrentTestResult =
                 TestResult.newBuilder()
                         .setTestIdStructured(ResultDBUtil.toTestIdentifier(moduleIdentifier, test))
@@ -90,7 +100,30 @@ class TestResultHandler {
                                         "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
                         .setStartTime(Timestamps.fromMillis(startTime))
                         .setStatusV2(TestResult.Status.PASSED)
+                        .setProperties(properties)
                         .build();
+    }
+
+    private Struct getTestResultProperties(
+            TestDescription test,
+            ModuleIdentifier moduleIdentifier,
+            List<AntsProperty> antsModuleParameters) {
+        String moduleName = moduleIdentifier.getModuleName();
+        AntsTestIdentifier.Builder antsTestIdBuilder =
+                AntsTestIdentifier.newBuilder()
+                        .setModule(moduleName.equals(ResultDBUtil.NO_MODULE_NAME) ? "" : moduleName)
+                        .addAllModuleParameters(antsModuleParameters)
+                        .setTestClass(test.getClassName())
+                        .setMethod(test.getTestName());
+        TestResultProperties properties =
+                TestResultProperties.newBuilder().setAntsTestId(antsTestIdBuilder.build()).build();
+        Struct propertiesStruct = Struct.getDefaultInstance();
+        try {
+            propertiesStruct = AndroidCompatibility.marshalTestResultProperties(properties);
+        } catch (InvalidProtocolBufferException e) {
+            CLog.e("Failed to marshal TestResultProperties to Struct: %s", e.getMessage());
+        }
+        return propertiesStruct;
     }
 
     public void testEnded(
@@ -208,11 +241,10 @@ class TestResultHandler {
         // Add local instructions to the test result tags.
         String localInstructions = instructions.forTest(test);
         if (!localInstructions.isEmpty()) {
-            testResultBuilder
-                    .addTags(
-                            StringPair.newBuilder()
-                                    .setKey(LOCAL_INSTRUCTION_PROPERTY)
-                                    .setValue(localInstructions));
+            testResultBuilder.addTags(
+                    StringPair.newBuilder()
+                            .setKey(LOCAL_INSTRUCTION_PROPERTY)
+                            .setValue(localInstructions));
         }
 
         mCurrentTestResult = testResultBuilder.build();
@@ -373,6 +405,7 @@ class TestResultHandler {
             long currentTimestamp,
             ModuleIdentifier moduleIdentifier,
             String workUnitId,
+            List<AntsProperty> antsModuleParameters,
             IRecorderClientLegacy recorderLegacy,
             IRecorderClient recorder) {
         String moduleAbi = null;
@@ -398,6 +431,8 @@ class TestResultHandler {
                 continue;
             }
             TestDescription test = TestDescription.fromString(filter.getTest());
+            Struct properties =
+                    getTestResultProperties(test, moduleIdentifier, antsModuleParameters);
             // Skip reason of demoted test is not likely to exceed the size limit.
             // But we truncate it just in case.
             SkipReason skipReason = entry.getValue();
@@ -420,6 +455,7 @@ class TestResultHandler {
                             .setStartTime(Timestamps.fromMillis(currentTimestamp))
                             .setStatusV2(TestResult.Status.SKIPPED)
                             .setSkippedReason(skippedReason)
+                            .setProperties(properties)
                             .addTags(AndroidCompatibility.skipTriggerTag(skipReason.getTrigger()))
                             .addTags(AndroidCompatibility.skipBugTag(skipReason.getBugId()))
                             .build();
