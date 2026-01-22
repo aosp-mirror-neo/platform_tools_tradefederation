@@ -46,11 +46,13 @@ java_library {
     name: "dimensional_metrics_proto",
     srcs: ["proto/crystalball/dimensional_metrics.proto"],
     static_libs: [
-        "libprotobuf-java-lite",
+        "libprotobuf-java-full",
     ],
     proto: {
-        type: "lite",
+        type: "full",
     },
+    host_supported: true,
+    device_supported: false,
 }
 
 java_library_host {
