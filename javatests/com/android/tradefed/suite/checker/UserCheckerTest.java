@@ -226,7 +226,10 @@ public class UserCheckerTest {
         OptionSetter mOptionSetter = new OptionSetter(checker);
         mOptionSetter.setOptionValue("user-type", "secondary");
         ITestDevice device =
-                mockDeviceUserState(/* currentUser=  */ 0, /* userIds= */ new Integer[] {0, 10});
+                mockDeviceUserState(
+                        /* currentUser= */ 0,
+                        /* userIds= */ new Integer[] {0, 10},
+                        /* userTypes= */ new String[] {null, UserInfo.USER_TYPE_FULL_SECONDARY});
 
         when(device.switchUser(10)).thenReturn(true);
 
@@ -242,7 +245,10 @@ public class UserCheckerTest {
         OptionSetter mOptionSetter = new OptionSetter(checker);
         mOptionSetter.setOptionValue("user-type", "secondary");
         ITestDevice device =
-                mockDeviceUserState(/* currentUser=  */ 0, /* userIds= */ new Integer[] {0, 10});
+                mockDeviceUserState(
+                        /* currentUser= */ 0,
+                        /* userIds= */ new Integer[] {0, 10},
+                        /* userTypes= */ new String[] {null, UserInfo.USER_TYPE_FULL_SECONDARY});
 
         when(device.switchUser(10)).thenReturn(false);
 
@@ -311,6 +317,13 @@ public class UserCheckerTest {
 
     /** Return a device with the user state calls mocked. */
     private ITestDevice mockDeviceUserState(int currentUser, Integer[] userIds) throws Exception {
+        String[] userTypes = new String[userIds.length];
+        return mockDeviceUserState(currentUser, userIds, userTypes);
+    }
+
+    /** Return a device with the user state calls mocked. */
+    private ITestDevice mockDeviceUserState(int currentUser, Integer[] userIds, String[] userTypes)
+            throws Exception {
         Integer[] flags = new Integer[userIds.length];
         Arrays.fill(flags, 0);
 
@@ -318,23 +331,39 @@ public class UserCheckerTest {
         Arrays.fill(isRunning, false);
         isRunning[0] = true;
 
-        return mockDeviceUserState(currentUser, userIds, flags, isRunning);
+        return mockDeviceUserState(currentUser, userIds, flags, isRunning, userTypes);
     }
 
     /** Return a device with the user state calls mocked. */
     private ITestDevice mockDeviceUserState(
             int currentUser, Integer[] userIds, Integer[] flags, Boolean[] isRunning)
             throws Exception {
+        String[] userTypes = new String[userIds.length];
+        return mockDeviceUserState(currentUser, userIds, flags, isRunning, userTypes);
+    }
+
+    /** Return a device with the user state calls mocked. */
+    private ITestDevice mockDeviceUserState(
+            int currentUser,
+            Integer[] userIds,
+            Integer[] flags,
+            Boolean[] isRunning,
+            String[] userTypes)
+            throws Exception {
         ITestDevice device = mock(ITestDevice.class);
 
         when(device.getCurrentUser()).thenReturn(currentUser);
-        mockListUsersInfo(device, userIds, flags, isRunning);
+        mockListUsersInfo(device, userIds, flags, isRunning, userTypes);
 
         return device;
     }
 
     private void mockListUsersInfo(
-            ITestDevice device, Integer[] userIds, Integer[] flags, Boolean[] isRunning)
+            ITestDevice device,
+            Integer[] userIds,
+            Integer[] flags,
+            Boolean[] isRunning,
+            String[] userTypes)
             throws Exception {
         Map<Integer, UserInfo> result = new HashMap<>();
         for (int i = 0; i < userIds.length; i++) {
@@ -345,7 +374,8 @@ public class UserCheckerTest {
                             /* userId= */ userId,
                             /* userName= */ "usr" + userId,
                             /* flag= */ flags[i],
-                            /* isRunning= */ isRunning[i]));
+                            /* isRunning= */ isRunning[i],
+                            /* userType= */ userTypes[i]));
         }
         when(device.getUserInfos()).thenReturn(result);
     }

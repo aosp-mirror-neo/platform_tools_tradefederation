@@ -54,6 +54,8 @@ public final class UserInfo {
 
     public static final String PRIVATE_PROFILE_TYPE = "profile.PRIVATE";
 
+    public static final String USER_TYPE_FULL_SECONDARY = "android.os.usertype.full.SECONDARY";
+
     private final int mUserId;
     private final String mUserName;
     private final int mFlag;
@@ -183,7 +185,7 @@ public final class UserInfo {
     }
 
     public boolean isSecondary() {
-        return !isSystem() && (mFlag & FLAGS_NOT_SECONDARY) == 0;
+        return USER_TYPE_FULL_SECONDARY.equals(mUserType);
     }
 
     public boolean isSystem() {

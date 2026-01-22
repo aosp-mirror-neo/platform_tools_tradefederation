@@ -110,7 +110,7 @@ public class RunOnSecondaryUserTargetPreparer extends BaseTargetPreparer {
             testInfo.getDevice().startUser(secondaryUserId, waitFlag);
             testInfo.getDevice().switchUser(secondaryUserId);
             testInfo.properties().put(RUN_TESTS_AS_USER_KEY, Integer.toString(secondaryUserId));
-        } else {
+        } else if (mStartBackgroundUser) {
             Set<Integer> secondaryDisplayIdSet =
                     testInfo.getDevice().listDisplayIdsForStartingVisibleBackgroundUsers();
             if (!assumeTrue(

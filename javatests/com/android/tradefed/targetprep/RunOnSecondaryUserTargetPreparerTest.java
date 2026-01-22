@@ -155,7 +155,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 2,
-                new UserInfo(2, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true));
+                new UserInfo(2, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
 
         mPreparer.setUp(mTestInfo);
@@ -170,7 +171,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 2,
-                new UserInfo(2, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true));
+                new UserInfo(2, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
         when(mTestInfo.getDevice().getCurrentUser()).thenReturn(0);
 
@@ -216,7 +218,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 3,
-                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true));
+                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
 
         mPreparer.setUp(mTestInfo);
@@ -239,7 +242,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 3,
-                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true));
+                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
         mOptionSetter.setOptionValue(
                 RunOnWorkProfileTargetPreparer.TEST_PACKAGE_NAME_OPTION, "com.android.testpackage");
@@ -422,7 +426,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 3,
-                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true));
+                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
         mOptionSetter.setOptionValue(TEST_PACKAGE_NAME_OPTION, "com.android.testpackage");
 
@@ -441,7 +446,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
         Map<Integer, UserInfo> userInfos = new HashMap<>();
         userInfos.put(
                 3,
-                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true));
+                new UserInfo(3, "secondary", /* flag= */ FLAG_FOR_TESTING, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
         mOptionSetter.setOptionValue(TEST_PACKAGE_NAME_OPTION, "com.android.testpackage");
 
@@ -524,7 +530,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
                 new UserInfo(systemUser, "system", /* flag= */ 0, /* isRunning= */ true));
         userInfos.put(
                 secondaryUser1,
-                new UserInfo(secondaryUser1, "current", /* flag= */ 0, /* isRunning= */ true));
+                new UserInfo(secondaryUser1, "current", /* flag= */ 0,
+                        /* isRunning= */ true, UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
 
         int secondaryDisplayId = 200;
@@ -574,7 +581,8 @@ public class RunOnSecondaryUserTargetPreparerTest {
                 new UserInfo(secondaryUser1, "current", /* flag= */ 0, /* isRunning= */ true));
         userInfos.put(
                 secondaryUser2,
-                new UserInfo(secondaryUser2, "secondary", /* flag= */ 0, /* isRunning= */ true));
+                new UserInfo(secondaryUser2, "secondary", /* flag= */ 0, /* isRunning= */ true,
+                        UserInfo.USER_TYPE_FULL_SECONDARY));
         when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
 
         int secondaryDisplayId = 200;
