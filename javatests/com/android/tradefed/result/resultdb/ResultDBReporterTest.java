@@ -23,6 +23,7 @@ import com.android.resultdb.proto.Invocation;
 import com.android.resultdb.proto.ModuleIdentifier;
 import com.android.resultdb.proto.RootInvocation;
 import com.android.resultdb.proto.SkippedReason;
+import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.TestResult;
 import com.android.resultdb.proto.Variant;
@@ -537,9 +538,12 @@ public class ResultDBReporterTest {
                         .setResultId("1234abcd-00005")
                         .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
                         .setStartTime(Timestamps.fromMillis(1536333825800L))
-                        .setSummaryHtml(
-                                "bug_id: bugId<br>trigger: skip trigger<br>reason:"
-                                        + " skip reason message<br>")
+                        .setSummaryHtml("skip reason message")
+                        .addTags(
+                                StringPair.newBuilder()
+                                        .setKey("skip_trigger")
+                                        .setValue("skip trigger"))
+                        .addTags(StringPair.newBuilder().setKey("skip_bug_id").setValue("bugId"))
                         .build();
         // Assert test results uploaded to mRecorder.
         assertThat(mReporter.mRecorder.getTestResultItems())
@@ -592,7 +596,10 @@ public class ResultDBReporterTest {
                                 FailureReason.newBuilder()
                                         .setKind(FailureReason.Kind.ORDINARY)
                                         .addErrors(expectedRDBError))
-                        .setSummaryHtml("TF error type: TEST_FAILURE")
+                        .addTags(
+                                StringPair.newBuilder()
+                                        .setKey("primary_error_type")
+                                        .setValue("TEST_FAILURE"))
                         .build();
         String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
         // Assert test results uploaded to mRecorder.
@@ -650,7 +657,10 @@ public class ResultDBReporterTest {
                                                                 "Failure Message\n"
                                                                     + " java.lang.RuntimeException:"
                                                                     + " Failure Message")))
-                        .setSummaryHtml("TF error type: SYSTEM_UNDER_TEST_CRASHED")
+                        .addTags(
+                                StringPair.newBuilder()
+                                        .setKey("primary_error_type")
+                                        .setValue("SYSTEM_UNDER_TEST_CRASHED"))
                         .build();
         // Assert test results are uploaded to mRecorder.
         assertThat(mReporter.mRecorder.getTestResultItems())
@@ -687,7 +697,10 @@ public class ResultDBReporterTest {
                                                 FailureReason.Error.newBuilder()
                                                         .setMessage("Failure Message")
                                                         .setTrace("Failure Message")))
-                        .setSummaryHtml("TF error type: TIMED_OUT")
+                        .addTags(
+                                StringPair.newBuilder()
+                                        .setKey("primary_error_type")
+                                        .setValue("TIMEOUT"))
                         .build();
         // Assert test results are uploaded to mRecorder.
         assertThat(mReporter.mRecorder.getTestResultItems())
@@ -696,6 +709,28 @@ public class ResultDBReporterTest {
         assertThat(mReporter.mRecorderLegacy.getTestResults()).containsExactly(expected);
         // No need to verify work unit and work unit updates as they are already verified in the
         // test uploadToUpstreamRootInvocation_multipleModulesAndTestRuns.
+    }
+
+    @Test
+    public void shouldReportLocalInstructions() {
+        mSimulator
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
+                .withTest(
+                        "com.google.ExampleClass",
+                        "testExampleMethod",
+                        InvocationSimulator.TestStatus.FAIL)
+                .withInvocationAttribute("local-test-runner", "atest")
+                .simulateInvocation(mReporter);
+        StringPair instruction =
+                StringPair.newBuilder()
+                        .setKey("local_repro_instruction")
+                        .setValue(
+                                "atest example-module:com.google.ExampleClass#testExampleMethod --")
+                        .build();
+        assertThat(mReporter.mRecorder.getTestResultItems().get(0).getTestResult().getTagsList())
+                .contains(instruction);
     }
 
     @Test
@@ -721,7 +756,7 @@ public class ResultDBReporterTest {
                                         .setModuleName("example-module")
                                         .setModuleScheme("junit")
                                         .setModuleVariant(variant)
-                                        .setCoarseName("empty-package")
+                                        .setCoarseName("no-package-name")
                                         .setFineName("testClassSkipped")
                                         .setCaseName("test-name-skipped")
                                         .build())
@@ -732,7 +767,11 @@ public class ResultDBReporterTest {
                                 SkippedReason.newBuilder()
                                         .setKind(SkippedReason.Kind.DEMOTED)
                                         .setReasonMessage("test-skip-reason"))
-                        .setSummaryHtml("trigger: UNKNOWN_TRIGGER<br>")
+                        .addTags(
+                                StringPair.newBuilder()
+                                        .setKey("skip_trigger")
+                                        .setValue("UNKNOWN_TRIGGER"))
+                        .addTags(StringPair.newBuilder().setKey("skip_bug_id").setValue(""))
                         .build();
         // Assert test results are uploaded to mRecorder.
         assertThat(mReporter.mRecorder.getTestResultItems())

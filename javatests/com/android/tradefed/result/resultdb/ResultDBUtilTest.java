@@ -17,6 +17,7 @@ package com.android.tradefed.result.resultdb;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.android.resultdb.proto.ModuleIdentifier;
 import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.Variant;
 import com.android.tradefed.result.TestDescription;
@@ -81,24 +82,31 @@ public final class ResultDBUtilTest {
     public void toTestIdentifier() {
         TestDescription testDescription =
                 new TestDescription("com.example.package.ExampleClass", "test_name");
-
+        ModuleIdentifier moduleIdentifier =
+                ModuleIdentifier.newBuilder()
+                        .setModuleName("example-module")
+                        .setModuleVariant(Variant.getDefaultInstance())
+                        .build();
         TestIdentifier testIdentifier =
-                ResultDBUtil.toTestIdentifier(
-                        "example-module", Variant.getDefaultInstance(), testDescription);
+                ResultDBUtil.toTestIdentifier(moduleIdentifier, testDescription);
         assertThat(testIdentifier).isEqualTo(expectedTestIdentifier.build());
     }
 
     @Test
     public void toTestIdentifierNoPackage() {
         TestDescription testDescription = new TestDescription("ExampleClass", "test_name");
+        ModuleIdentifier moduleIdentifier =
+                ModuleIdentifier.newBuilder()
+                        .setModuleName("example-module")
+                        .setModuleVariant(Variant.getDefaultInstance())
+                        .build();
         TestIdentifier testIdentifier =
-                ResultDBUtil.toTestIdentifier(
-                        "example-module", Variant.getDefaultInstance(), testDescription);
+                ResultDBUtil.toTestIdentifier(moduleIdentifier, testDescription);
 
         assertThat(testIdentifier)
                 .isEqualTo(
                         expectedTestIdentifier
-                                .setCoarseName("empty-package")
+                                .setCoarseName("no-package-name")
                                 .setFineName("ExampleClass")
                                 .build());
     }
@@ -106,15 +114,19 @@ public final class ResultDBUtilTest {
     @Test
     public void toTestIdentifierEmptyClassName() {
         TestDescription testDescription = new TestDescription("", "test_name");
+        ModuleIdentifier moduleIdentifier =
+                ModuleIdentifier.newBuilder()
+                        .setModuleName("example-module")
+                        .setModuleVariant(Variant.getDefaultInstance())
+                        .build();
         TestIdentifier testIdentifier =
-                ResultDBUtil.toTestIdentifier(
-                        "example-module", Variant.getDefaultInstance(), testDescription);
+                ResultDBUtil.toTestIdentifier(moduleIdentifier, testDescription);
 
         assertThat(testIdentifier)
                 .isEqualTo(
                         expectedTestIdentifier
-                                .setCoarseName("empty-package")
-                                .setFineName("empty-class")
+                                .setCoarseName("no-package-name")
+                                .setFineName("no-class-name")
                                 .build());
     }
 }

@@ -2095,7 +2095,7 @@ public class NativeDevice
             String path = StringEscapeUtils.escapeShell(deviceFilePath);
             // Escape spaces to handle filename with spaces
             path = path.replaceAll(" ", "\\ ");
-            executeShellCommand(String.format("rm -rf %s", StringEscapeUtils.escapeShell(path)));
+            executeShellCommand(String.format("rm -rf %s", path));
         } finally {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.DELETE_DEVICE_FILE_TIME,

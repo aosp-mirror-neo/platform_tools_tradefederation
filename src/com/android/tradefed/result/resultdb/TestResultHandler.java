@@ -28,6 +28,7 @@ import com.android.tradefed.metrics.proto.MetricMeasurement;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
+import com.android.tradefed.result.resultdb.utils.AndroidCompatibility;
 import com.android.tradefed.result.skipped.SkipReason;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 import com.android.tradefed.testtype.suite.SuiteTestFilter;
@@ -56,6 +57,9 @@ class TestResultHandler {
     // Tag name for the test mapping source
     private static final String TEST_MAPPING_TAG = "test_mapping_source";
 
+    // Tag name for local instructions
+    private static final String LOCAL_INSTRUCTION_PROPERTY = "local_repro_instruction";
+
     private TestResult mCurrentTestResult;
     // Counter for generate test result ID.
     private AtomicInteger mResultCounter = new AtomicInteger(0);
@@ -80,11 +84,7 @@ class TestResultHandler {
             TestDescription test, long startTime, ModuleIdentifier moduleIdentifier) {
         mCurrentTestResult =
                 TestResult.newBuilder()
-                        .setTestIdStructured(
-                                ResultDBUtil.toTestIdentifier(
-                                        moduleIdentifier.getModuleName(),
-                                        moduleIdentifier.getModuleVariant(),
-                                        test))
+                        .setTestIdStructured(ResultDBUtil.toTestIdentifier(moduleIdentifier, test))
                         .setResultId(
                                 String.format(
                                         "%s-%05d", mResultIdBase, mResultCounter.incrementAndGet()))
@@ -155,6 +155,7 @@ class TestResultHandler {
             TestDescription test,
             FailureDescription failure,
             String workUnitId,
+            LocalInstructions instructions,
             IRecorderClientLegacy recorderLegacy,
             IRecorderClient recorder) {
         if (mCurrentTestResult == null) {
@@ -201,8 +202,19 @@ class TestResultHandler {
                         .setStatusV2(TestResult.Status.FAILED);
 
         if (status != null && status != FailureStatus.UNSET) {
-            testResultBuilder.setSummaryHtml("TF error type: " + status);
+            testResultBuilder.addTags(ResultDBUtil.primaryErrorTypeTag(status));
         }
+
+        // Add local instructions to the test result tags.
+        String localInstructions = instructions.forTest(test);
+        if (!localInstructions.isEmpty()) {
+            testResultBuilder
+                    .addTags(
+                            StringPair.newBuilder()
+                                    .setKey(LOCAL_INSTRUCTION_PROPERTY)
+                                    .setValue(localInstructions));
+        }
+
         mCurrentTestResult = testResultBuilder.build();
 
         if (truncationResult.wasTruncated()) {
@@ -215,8 +227,6 @@ class TestResultHandler {
                 recorder.enqueueArtifact(workUnitId, atf);
             }
         }
-        // TODO: extract local instruction from test description and set in ResultDB test result.
-
     }
 
     public void testSkipped(
@@ -230,23 +240,24 @@ class TestResultHandler {
             return;
         }
 
-        String summaryHtml = ResultDBUtil.testSkipReasonToSummaryHtml(reason, true);
-        ResultDBUtil.TruncationResult truncated =
-                ResultDBUtil.truncateString(summaryHtml, MAX_SUMMARY_HTML_BYTES);
+        // Put the skip reason in the summary HTML field, because the SkippedReason
+        // field and FailureReason failure can only be set when the status is
+        // SKIPPED or FAILED, respectively.
+        ResultDBUtil.TruncationResult summaryHtmlTruncated =
+                ResultDBUtil.truncateString(reason.getReason(), MAX_SUMMARY_HTML_BYTES);
 
         mCurrentTestResult =
                 mCurrentTestResult.toBuilder()
                         // Execution errored is used for tests that did not run to completion,
                         // because an infrastructure error precluded it from doing so.
                         .setStatusV2(TestResult.Status.EXECUTION_ERRORED)
-                        // Put the skip reason in the summary HTML field, because the SkippedReason
-                        // field and FailureReason failure can only be set when the status is
-                        // SKIPPED or FAILED, respectively.
-                        .setSummaryHtml(truncated.getTruncatedString())
+                        .setSummaryHtml(summaryHtmlTruncated.getTruncatedString())
+                        .addTags(AndroidCompatibility.skipTriggerTag(reason.getTrigger()))
+                        .addTags(AndroidCompatibility.skipBugTag(reason.getBugId()))
                         .build();
-        if (truncated.wasTruncated()) {
+        if (summaryHtmlTruncated.wasTruncated()) {
             // Upload the full skip reason as test artifact.
-            Artifact atf = artifactFromString("testSkipped_reason", summaryHtml);
+            Artifact atf = artifactFromString("testSkipped_reason", reason.getReason());
             if (recorderLegacy != null) {
                 recorderLegacy.enqueueArtifact(atf);
             }
@@ -389,30 +400,19 @@ class TestResultHandler {
             TestDescription test = TestDescription.fromString(filter.getTest());
             // Skip reason of demoted test is not likely to exceed the size limit.
             // But we truncate it just in case.
+            SkipReason skipReason = entry.getValue();
             ResultDBUtil.TruncationResult truncatedSkipReason =
                     ResultDBUtil.truncateString(
-                            entry.getValue().getReason(), MAX_SKIP_REASON_MESSAGE_BYTES);
+                            skipReason.getReason(), MAX_SKIP_REASON_MESSAGE_BYTES);
             SkippedReason skippedReason =
                     SkippedReason.newBuilder()
                             .setKind(SkippedReason.Kind.DEMOTED)
                             .setReasonMessage(truncatedSkipReason.getTruncatedString())
                             .build();
-            // Some skip reason field doesn't have a dedicated field in ResultDB, put them in the
-            // summary HTML field for now. This is not likely to exceed the size limit.
-            // But we truncate it just in case.
-            String summaryHtml =
-                    ResultDBUtil.truncateString(
-                                    ResultDBUtil.testSkipReasonToSummaryHtml(
-                                            entry.getValue(), false),
-                                    MAX_SUMMARY_HTML_BYTES)
-                            .getTruncatedString();
             TestResult currentTest =
                     TestResult.newBuilder()
                             .setTestIdStructured(
-                                    ResultDBUtil.toTestIdentifier(
-                                            moduleIdentifier.getModuleName(),
-                                            moduleIdentifier.getModuleVariant(),
-                                            test))
+                                    ResultDBUtil.toTestIdentifier(moduleIdentifier, test))
                             .setResultId(
                                     String.format(
                                             "%s-%05d",
@@ -420,7 +420,8 @@ class TestResultHandler {
                             .setStartTime(Timestamps.fromMillis(currentTimestamp))
                             .setStatusV2(TestResult.Status.SKIPPED)
                             .setSkippedReason(skippedReason)
-                            .setSummaryHtml(summaryHtml)
+                            .addTags(AndroidCompatibility.skipTriggerTag(skipReason.getTrigger()))
+                            .addTags(AndroidCompatibility.skipBugTag(skipReason.getBugId()))
                             .build();
             if (recorderLegacy != null) {
                 recorderLegacy.enqueueTestResult(currentTest);
