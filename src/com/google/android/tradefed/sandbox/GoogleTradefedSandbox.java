@@ -141,6 +141,8 @@ public class GoogleTradefedSandbox extends TradefedSandbox {
                             "^tradefed-tests.jar",
                             // AVD util test jar
                             "^tradefed-avd-util-tests.jar",
+                            // Isolation test jar
+                            "^tradefed-isolation-tests.jar",
                             // libs
                             "^tools-common-prebuilt.jar",
                             // Aosp contrib jars

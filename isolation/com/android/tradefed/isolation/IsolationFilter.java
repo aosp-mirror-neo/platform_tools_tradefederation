@@ -19,30 +19,45 @@ import org.junit.runner.Description;
 import org.junit.runner.manipulation.Filter;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.regex.PatternSyntaxException;
 
+// LINT.IfChange
 /**
  * Implements JUnit's Filter interface to allow TradeFed style filters to be evaluated during
  * execution of JUnit tests. Very similar to TradeFed's internal FilterHelper, but freed of the
  * dependencies that one has.
  */
-final class IsolationFilter extends Filter {
-    private Set<String> mIncludeFilters = new HashSet<>();
-    private Set<String> mExcludeFilters = new HashSet<>();
-    private Set<String> mIncludeAnnotations = new HashSet<>();
-    private Set<String> mExcludeAnnotations = new HashSet<>();
+public final class IsolationFilter extends Filter {
+    /** The include filters of the test name to run */
+    private Set<String> mIncludeFilters = new LinkedHashSet<>();
+
+    /** The exclude filters of the test name to run */
+    private Set<String> mExcludeFilters = new LinkedHashSet<>();
+
+    /** The include annotations of the test to run */
+    private Set<String> mIncludeAnnotations = new LinkedHashSet<>();
+
+    /** The exclude annotations of the test to run */
+    private Set<String> mExcludeAnnotations = new LinkedHashSet<>();
 
     public IsolationFilter(
             Collection<String> includeFilters,
             Collection<String> excludeFilters,
             Collection<String> includeAnnotations,
             Collection<String> excludeAnnotations) {
-        mIncludeFilters = new HashSet<String>(includeFilters);
-        mExcludeFilters = new HashSet<String>(excludeFilters);
-        mIncludeAnnotations = new HashSet<String>(includeAnnotations);
-        mExcludeAnnotations = new HashSet<String>(excludeAnnotations);
+        mIncludeFilters = new LinkedHashSet<>(includeFilters);
+        mExcludeFilters = new LinkedHashSet<>(excludeFilters);
+        mIncludeAnnotations = new LinkedHashSet<>(includeAnnotations);
+        mExcludeAnnotations = new LinkedHashSet<>(excludeAnnotations);
     }
 
     public IsolationFilter(FilterSpec filter) {
@@ -60,49 +75,102 @@ final class IsolationFilter extends Filter {
         return "Tradefed filtering based on name and annotations.";
     }
 
+    /**
+     * Check if an element that has annotation passes the filter
+     *
+     * <p>Synced from the method in TestFilterHelper class, with extraJars removed.
+     *
+     * @param desc a {@link Description} that describes the test.
+     * @return true if the test method should run, false otherwise
+     */
     @Override
     public boolean shouldRun(Description desc) {
-        return this.checkFilters(desc) && this.checkAnnotations(desc);
-    }
+        // We need to build the packageName for a description object
+        Class<?> classObj = desc.getTestClass();
 
-    private boolean checkFilters(Description desc) {
-        // If it's a suite, we check if at least one of the children can run, if yes then we run it
-        if (desc.isSuite()) {
-            for (Description child : desc.getChildren()) {
-                if (checkFilters(child)) {
-                    return true;
-                }
-            }
-            // If no child can run, then the suite is skipped
+        // Parameterized tests might not have a test class
+        if (classObj == null && desc.isSuite()) {
+            classObj = desc.getChildren().get(0).getTestClass();
+        }
+        if (classObj == null) {
+            System.out.println(
+                    String.format(
+                            "INFO: Description %s has no test class. Filtering result may not be"
+                                    + " reliable.",
+                            desc));
+        }
+
+        // If class is explicitly annotated to be excluded, exclude it.
+        if (classObj != null && isExcluded(Arrays.asList(classObj.getAnnotations()))) {
             return false;
         }
-        String packageName = getPackageName(desc);
+        String packageName = classObj == null ? "" : classObj.getPackage().getName();
         String className = desc.getClassName();
         String methodName = String.format("%s#%s", className, desc.getMethodName());
-        return this.checkIncludeFilters(packageName, className, methodName)
-                && this.checkExcludeFilters(packageName, className, methodName);
-    }
-
-    private boolean checkAnnotations(Description desc) {
-        Collection<Annotation> annotations = desc.getAnnotations();
-        return this.checkIncludeAnnotations(annotations)
-                && this.checkExcludeAnnotations(annotations);
-    }
-
-    private boolean checkIncludeFilters(String packageName, String className, String methodName) {
+        if (!shouldRunFilter(packageName, className, methodName)) {
+            return false;
+        }
+        // Carry the parent class annotations to ensure includeAnnotations are respected
+        List<Annotation> annotations = new ArrayList<>(desc.getAnnotations());
+        if (classObj != null) {
+            annotations.addAll(Arrays.asList(classObj.getAnnotations()));
+        }
+        if (!shouldTestRun(annotations)) {
+            return false;
+        }
         return mIncludeFilters.isEmpty()
                 || mIncludeFilters.contains(methodName)
                 || mIncludeFilters.contains(className)
-                || mIncludeFilters.contains(packageName);
+                || mIncludeFilters.contains(packageName)
+                || includeFilterMatches(methodName);
     }
 
-    private boolean checkExcludeFilters(String packageName, String className, String methodName) {
-        return !(mExcludeFilters.contains(methodName)
-                || mExcludeFilters.contains(className)
-                || mExcludeFilters.contains(packageName));
+    //
+    // Methods below are synced from class TestFilterHelper. Any change should be synced in both
+    // classes.
+    //
+
+    /**
+     * Check if an element that has annotation passes the filter
+     *
+     * @param annotatedElement the element to filter
+     * @return true if the test should run, false otherwise
+     */
+    private boolean shouldTestRun(AnnotatedElement annotatedElement) {
+        return shouldTestRun(Arrays.asList(annotatedElement.getAnnotations()));
     }
 
-    private boolean checkIncludeAnnotations(Collection<Annotation> annotationsList) {
+    /**
+     * Check if the {@link Description} that contains annotations passes the filter
+     *
+     * @param desc the element to filter
+     * @return true if the test should run, false otherwise
+     */
+    private boolean shouldTestRun(Description desc) {
+        return shouldTestRun(desc.getAnnotations());
+    }
+
+    /** Internal helper to determine if a particular test should run based on its annotations. */
+    private boolean shouldTestRun(Collection<Annotation> annotationsList) {
+        if (isExcluded(annotationsList)) {
+            return false;
+        }
+        return isIncluded(annotationsList);
+    }
+
+    private boolean isExcluded(Collection<Annotation> annotationsList) {
+        if (!mExcludeAnnotations.isEmpty()) {
+            for (Annotation a : annotationsList) {
+                if (mExcludeAnnotations.contains(a.annotationType().getName())) {
+                    // If any of the method annotation match an ExcludeAnnotation, don't run it
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isIncluded(Collection<Annotation> annotationsList) {
         if (!mIncludeAnnotations.isEmpty()) {
             Set<String> neededAnnotation = new HashSet<String>();
             neededAnnotation.addAll(mIncludeAnnotations);
@@ -111,7 +179,7 @@ final class IsolationFilter extends Filter {
                     neededAnnotation.remove(a.annotationType().getName());
                 }
             }
-            if (!neededAnnotation.isEmpty()) {
+            if (neededAnnotation.size() != 0) {
                 // The test needs to have all the include annotation to pass.
                 return false;
             }
@@ -119,27 +187,94 @@ final class IsolationFilter extends Filter {
         return true;
     }
 
-    private boolean checkExcludeAnnotations(Collection<Annotation> annotationsList) {
-        if (!mExcludeAnnotations.isEmpty()) {
-            for (Annotation a : annotationsList) {
-                if (mExcludeAnnotations.contains(a.annotationType().getName())) {
-                    // If any of the method annotation match an ExcludeAnnotation, don't run it
+    /**
+     * Check if an element that has annotation passes the filter
+     *
+     * @param packageName name of the method's package
+     * @param classObj method's class
+     * @param method test method
+     * @return true if the test method should run, false otherwise
+     */
+    private boolean shouldRun(String packageName, Class<?> classObj, Method method) {
+        String className = classObj.getName();
+        String methodName = String.format("%s#%s", className, method.getName());
+
+        if (!shouldRunFilter(packageName, className, methodName)) {
+            return false;
+        }
+        // If class is explicitly annotated to be excluded.
+        if (isExcluded(Arrays.asList(classObj.getAnnotations()))) {
+            return false;
+        }
+        // if class include but method exclude, we exclude
+        if (isIncluded(Arrays.asList(classObj.getAnnotations()))
+                && isExcluded(Arrays.asList(method.getAnnotations()))) {
+            return false;
+        }
+        // If a class is explicitly included and check above says method could run, we skip method
+        // check, it will be included.
+        if (mIncludeAnnotations.isEmpty()
+                || !isIncluded(Arrays.asList(classObj.getAnnotations()))) {
+            if (!shouldTestRun(method)) {
+                return false;
+            }
+        }
+        return mIncludeFilters.isEmpty()
+                || mIncludeFilters.contains(methodName)
+                || mIncludeFilters.contains(className)
+                || mIncludeFilters.contains(packageName)
+                || includeFilterMatches(methodName);
+    }
+
+    private boolean includeFilterMatches(String methodName) {
+        for (var filter : mIncludeFilters) {
+            // if (methodName.contains(filter)) {
+            // The Whole method name must match so user must pass .* on ends.
+            // This is good so we don't accidentally two method when user
+            // passes 'testFoo':
+            //   #testFoo
+            //   #testFooAndBar
+            try {
+                if (methodName.matches(filter)) {
+                    return true;
+                }
+            } catch (PatternSyntaxException pse) {
+                // Ignore names that form a bad regex,
+                // like ones using a versioned parameter or module MyClass#myTest[foo-1.23]
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Internal helper to check if a particular test should run based on its package, class, method
+     * names.
+     */
+    private boolean shouldRunFilter(String packageName, String className, String methodName) {
+        if (mExcludeFilters.contains(packageName)) {
+            // Skip package because it was excluded
+            return false;
+        }
+        if (mExcludeFilters.contains(className)) {
+            // Skip class because it was excluded
+            return false;
+        }
+        if (mExcludeFilters.contains(methodName)) {
+            // Skip method because it was excluded
+            return false;
+        }
+        for (String filter : mExcludeFilters) {
+            // The whole method name must match so user must pass .* on ends.
+            try {
+                if (methodName.matches(filter)) {
                     return false;
                 }
+            } catch (PatternSyntaxException pse) {
+                // Ignore names that form a bad regex,
+                // like ones using a versioned parameter or module MyClass#myTest[foo-1.23]
             }
         }
         return true;
     }
-
-    private String getPackageName(Description desc) {
-        // Thankfully, the classname contained in a standard junit Description is derived from
-        // class.getName(), which separates inner static classes with a '$' symbol rather than a
-        // period '.'
-        int loc = desc.getClassName().lastIndexOf('.');
-        if (loc > 0) {
-            return desc.getClassName().substring(0, loc);
-        } else {
-            return "";
-        }
-    }
 }
+// LINT.ThenChange(//tools/tradefederation/core/com/android/tradefed/testtype/TestFilterHelper.java)

@@ -1219,6 +1219,8 @@ import org.junit.runners.Suite.SuiteClasses;
     TestInfoTest.class,
     TestMappingTest.class,
 
+    // isolation
+
     // monitoring
     LabResourceDeviceMonitorTest.class,
     // monitoring/collector

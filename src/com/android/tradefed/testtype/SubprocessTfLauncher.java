@@ -159,6 +159,8 @@ public abstract class SubprocessTfLauncher
                             "tradefed-tests.jar",
                             // AVD util test jar
                             "^tradefed-avd-util-tests.jar",
+                            // Isolation test jar
+                            "^tradefed-isolation-tests.jar",
                             // libs
                             "tools-common-prebuilt.jar",
                             // jar in older branches

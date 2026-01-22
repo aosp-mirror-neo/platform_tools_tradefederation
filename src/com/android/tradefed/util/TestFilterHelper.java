@@ -36,9 +36,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
 
-/**
- * Helper class for filtering tests
- */
+// LINT.IfChange
+/** Helper class for filtering tests */
 public class TestFilterHelper {
 
     /** The include filters of the test name to run */
@@ -353,3 +352,4 @@ public class TestFilterHelper {
         return true;
     }
 }
+// LINT.ThenChange(//tools/tradefederation/core/isolation/com/android/tradefed/isolation/IsolationFilter.java)
