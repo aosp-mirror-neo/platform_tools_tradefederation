@@ -1585,6 +1585,15 @@ public interface INativeDevice {
     public int getApiLevel() throws DeviceNotAvailableException;
 
     /**
+     * Similar to {@link #getApiLevel()}, but returns the full version.
+     *
+     * @see frameworks/base/core/java/android/os/Build.java#parseFullVersion(String, String)
+     * @return an integer indicating the full API Level of device
+     * @throws DeviceNotAvailableException
+     */
+    public int getApiLevelFull() throws DeviceNotAvailableException;
+
+    /**
      * Get the device's first launched API Level. Defaults to {@link #UNKNOWN_API_LEVEL}.
      *
      * @return an integer indicating the first launched API Level of device

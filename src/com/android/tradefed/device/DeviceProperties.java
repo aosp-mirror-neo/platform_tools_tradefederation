@@ -32,6 +32,8 @@ public class DeviceProperties {
     public static final String VARIANT_LEGACY_LESS_EQUAL_O = "ro.product.device";
     /** proprty name to indicate SDK version */
     public static final String SDK_VERSION = "ro.build.version.sdk";
+    /** property name to indicate full SDK version */
+    public static final String SDK_FULL_VERSION = "ro.build.version.sdk_full";
     /** property name for device brand */
     public static final String BRAND = "ro.product.brand";
     /** property name for device product name */
