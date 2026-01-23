@@ -3,6 +3,5 @@
 <configuration description="Test suite config template for execution plans.">
     <test class="com.android.tradefed.testtype.suite.ExecutionPlanSuiteRunner">
            <option name="config-zip-paths" value="test-configs.zip" />
-           <option name="skip-loading-config-jar" value="true" />
     </test>
 </configuration>
