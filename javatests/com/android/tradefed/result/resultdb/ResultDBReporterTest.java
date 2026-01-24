@@ -17,6 +17,8 @@ package com.android.tradefed.result.resultdb;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.android.resultdb.proto.AntsProperty;
+import com.android.resultdb.proto.AntsTestIdentifier;
 import com.android.resultdb.proto.Artifact;
 import com.android.resultdb.proto.FailureReason;
 import com.android.resultdb.proto.Invocation;
@@ -26,6 +28,7 @@ import com.android.resultdb.proto.SkippedReason;
 import com.android.resultdb.proto.StringPair;
 import com.android.resultdb.proto.TestIdentifier;
 import com.android.resultdb.proto.TestResult;
+import com.android.resultdb.proto.TestResultProperties;
 import com.android.resultdb.proto.Variant;
 import com.android.resultdb.proto.WorkUnit;
 import com.android.tradefed.build.BuildInfo;
@@ -37,10 +40,14 @@ import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.proto.TestRecordProto;
+import com.android.tradefed.result.resultdb.utils.AndroidCompatibility;
 import com.android.tradefed.result.skipped.SkipManager;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
 
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 
@@ -52,6 +59,7 @@ import org.junit.runners.JUnit4;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RunWith(JUnit4.class)
 public class ResultDBReporterTest {
@@ -158,10 +166,15 @@ public class ResultDBReporterTest {
     }
 
     private TestResult.Builder newTestResult(String method) {
-        return newTestResult(method, "example-module", Variant.getDefaultInstance());
+        return newTestResult(
+                method, "example-module", Variant.getDefaultInstance(), ImmutableList.of());
     }
 
-    private TestResult.Builder newTestResult(String method, String moduleName, Variant variant) {
+    private TestResult.Builder newTestResult(
+            String method,
+            String moduleName,
+            Variant variant,
+            List<AntsProperty> antsModuleParameters) {
         TestIdentifier.Builder testId =
                 TestIdentifier.newBuilder()
                         .setModuleName(moduleName)
@@ -170,13 +183,31 @@ public class ResultDBReporterTest {
                         .setCoarseName("com.google")
                         .setFineName("ExampleClass")
                         .setCaseName(method);
+        Struct properties;
+        try {
+            properties =
+                    AndroidCompatibility.marshalTestResultProperties(
+                            TestResultProperties.newBuilder()
+                                    .setAntsTestId(
+                                            AntsTestIdentifier.newBuilder()
+                                                    .setModule(moduleName)
+                                                    .addAllModuleParameters(antsModuleParameters)
+                                                    .setTestClass("com.google.ExampleClass")
+                                                    .setMethod(method)
+                                                    .build())
+                                    .build());
+        } catch (InvalidProtocolBufferException e) {
+            // This should not happen.
+            throw new AssertionError(e);
+        }
 
         return TestResult.newBuilder()
                 .setTestIdStructured(testId.build())
                 .setResultId("1234abcd-00001")
                 .setStartTime(Timestamps.fromSeconds(1536333825L))
                 .setDuration(Durations.fromMillis(100))
-                .setStatusV2(TestResult.Status.PASSED);
+                .setStatusV2(TestResult.Status.PASSED)
+                .setProperties(properties);
     }
 
     private static WorkUnit newWorkUnitUpdate(
@@ -363,7 +394,23 @@ public class ResultDBReporterTest {
                         .putDef("module_abi", "module-1-abi")
                         .putDef("module_param", "test-parameterization")
                         .build();
+        ImmutableList<AntsProperty> antsModuleParameters1 =
+                ImmutableList.of(
+                        AntsProperty.newBuilder()
+                                .setName("module-abi")
+                                .setValue("module-1-abi")
+                                .build(),
+                        AntsProperty.newBuilder()
+                                .setName("module-param")
+                                .setValue("test-parameterization")
+                                .build());
         Variant moduleVariant2 = Variant.newBuilder().putDef("module_abi", "module-2-abi").build();
+        ImmutableList<AntsProperty> antsModuleParameters2 =
+                ImmutableList.of(
+                        AntsProperty.newBuilder()
+                                .setName("module-abi")
+                                .setValue("module-2-abi")
+                                .build());
         assertThat(mReporter.mRecorder.getWorkUnitItems())
                 .containsExactly(
                         // Module work unit 1.
@@ -446,11 +493,19 @@ public class ResultDBReporterTest {
                                 WorkUnit.State.SUCCEEDED));
         // Verify test results uploaded to mRecorder.
         TestResult expectedTestResult1 =
-                newTestResult("testExampleMethod", "module-1", moduleVariant1)
+                newTestResult(
+                                "testExampleMethod",
+                                "module-1",
+                                moduleVariant1,
+                                antsModuleParameters1)
                         .setResultId("1234abcd-00001")
                         .build();
         TestResult expectedTestResult2 =
-                newTestResult("testExampleMethod", "module-2", moduleVariant2)
+                newTestResult(
+                                "testExampleMethod",
+                                "module-2",
+                                moduleVariant2,
+                                antsModuleParameters2)
                         .setResultId("1234abcd-00002")
                         .build();
         assertThat(mReporter.mRecorder.getTestResultItems())
@@ -749,6 +804,28 @@ public class ResultDBReporterTest {
         Variant variant = Variant.newBuilder().putDef("module_abi", "x86").build();
 
         String testRunWorkUnitId = mReporter.mRecorder.getWorkUnitItems().get(1).getWorkUnitId();
+        Struct properties;
+        try {
+            properties =
+                    AndroidCompatibility.marshalTestResultProperties(
+                            TestResultProperties.newBuilder()
+                                    .setAntsTestId(
+                                            AntsTestIdentifier.newBuilder()
+                                                    .setModule("example-module")
+                                                    .addModuleParameters(
+                                                            AntsProperty.newBuilder()
+                                                                    .setName("module-abi")
+                                                                    .setValue("x86")
+                                                                    .build())
+                                                    .setTestClass("testClassSkipped")
+                                                    .setMethod("test-name-skipped")
+                                                    .build())
+                                    .build());
+        } catch (InvalidProtocolBufferException e) {
+            // This should not happen.
+            throw new AssertionError(e);
+        }
+
         TestResult expected =
                 TestResult.newBuilder()
                         .setTestIdStructured(
@@ -772,6 +849,7 @@ public class ResultDBReporterTest {
                                         .setKey("skip_trigger")
                                         .setValue("UNKNOWN_TRIGGER"))
                         .addTags(StringPair.newBuilder().setKey("skip_bug_id").setValue(""))
+                        .setProperties(properties)
                         .build();
         // Assert test results are uploaded to mRecorder.
         assertThat(mReporter.mRecorder.getTestResultItems())
@@ -822,9 +900,30 @@ public class ResultDBReporterTest {
                                 testRunWorkUnitId,
                                 WorkUnit.State.SUCCEEDED));
         // Assert test results uploaded to mRecorder.
+        Struct properties;
+        try {
+            properties =
+                    AndroidCompatibility.marshalTestResultProperties(
+                            TestResultProperties.newBuilder()
+                                    .setAntsTestId(
+                                            AntsTestIdentifier.newBuilder()
+                                                    .setModule("")
+                                                    .setTestClass("com.google.ExampleClass")
+                                                    .setMethod("testExampleMethod")
+                                                    .build())
+                                    .build());
+        } catch (InvalidProtocolBufferException e) {
+            // This should not happen.
+            throw new AssertionError(e);
+        }
         TestResult tr1 =
-                newTestResult("testExampleMethod", "no-module-name", Variant.getDefaultInstance())
+                newTestResult(
+                                "testExampleMethod",
+                                "no-module-name",
+                                Variant.getDefaultInstance(),
+                                ImmutableList.of())
                         .setResultId("1234abcd-00001")
+                        .setProperties(properties)
                         .build();
         assertThat(mReporter.mRecorder.getTestResultItems())
                 .containsExactly(new RecorderClient.TestResultItem(testRunWorkUnitId, tr1));

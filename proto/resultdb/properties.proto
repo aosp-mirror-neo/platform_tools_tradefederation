@@ -1,0 +1,60 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto3";
+
+package luci.resultdb.v1;
+
+option java_package = "com.android.resultdb.proto";
+option java_multiple_files = true;
+
+// TestResultProperties contains additional properties for Android test results
+// uploaded to ResultDB.
+//
+// This message is stored in the ResultDB TestResult.properties field and
+// represents Android-specific properties that are not part of the core
+// ResultDB schema.
+//
+// Note: the schema below is not validated or enforced by ResultDB.
+// An 8KB limit applies to the serialized size of the entire properties field.
+//
+// See go/resultdb-uploader-guidance#TestResultProperties for more details.
+message TestResultProperties {
+  // aconfig_flag_overrides is excluded because tradefed does not report test
+  // result level aconfig overrides.
+
+  // Required. Specify the legacy AnTS test ID corresponding to this test
+  // result for data matching. This field will be removed in future.
+  AntsTestIdentifier ants_test_id = 2;
+}
+
+// A AntsProperty describes a generic key-value property definition.
+message AntsProperty {
+  string name = 1;
+  string value = 2;
+}
+
+// A copy of AnTS TestIdentifier proto.
+message AntsTestIdentifier {
+  // Name of the module this test belongs to.
+  string module = 1;
+  // Parameters for the test module.
+  repeated AntsProperty module_parameters = 2;
+  // The name for a group of tests that are logically grouped together.
+  // Typically in the format of <package name>.<class name>.
+  string test_class = 3;
+  // The name of the test that is the smallest test execution unit.
+  string method = 4;
+}

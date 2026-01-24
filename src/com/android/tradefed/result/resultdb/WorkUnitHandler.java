@@ -15,6 +15,7 @@
  */
 package com.android.tradefed.result.resultdb;
 
+import com.android.resultdb.proto.AntsProperty;
 import com.android.resultdb.proto.ModuleIdentifier;
 import com.android.resultdb.proto.Variant;
 import com.android.resultdb.proto.WorkUnit;
@@ -28,7 +29,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.FieldMask;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,15 +48,19 @@ class WorkUnitHandler {
     // Set containing the allowed variant module parameter keys
     private static final ImmutableSet<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
+
     private static final ModuleIdentifier PLACEHOLDER_MODULE_IDENTIFIER =
             ModuleIdentifier.newBuilder()
-                    .setModuleName("no-module-name")
+                    .setModuleName(ResultDBUtil.NO_MODULE_NAME)
                     .setModuleScheme("junit")
                     .setModuleVariant(Variant.getDefaultInstance())
                     .build();
     // Module level variant for test in the same test module.
     private IInvocationContext mModuleContext;
     private ModuleIdentifier mCurrentModuleIdentifier;
+    // Module level parameters reported to AnTS (module-abi & module-param), ResultDB saves them
+    // in test result properties.
+    private List<AntsProperty> mCurrentAntsModuleParameters;
 
     // We keep work units in a stack, so that we can build them as a tree.
     // This is only set when the recorder client is not null (i.e. work unit reporting is enabled).
@@ -65,10 +73,11 @@ class WorkUnitHandler {
     public void testModuleStarted(
             IInvocationContext moduleContext, String invTopWorkUnitId, IRecorderClient recorder) {
         mModuleContext = moduleContext;
+        mCurrentAntsModuleParameters = extractAntsModuleParameters(moduleContext.getAttributes());
         String currentModuleName = moduleContext.getConfigurationDescriptor().getModuleName();
         Variant moduleVariant = extractModuleVariant(moduleContext.getAttributes());
         if (Strings.isNullOrEmpty(currentModuleName)) {
-            currentModuleName = "no-module-name";
+            currentModuleName = ResultDBUtil.NO_MODULE_NAME;
         }
         mCurrentModuleIdentifier =
                 ModuleIdentifier.newBuilder()
@@ -103,6 +112,7 @@ class WorkUnitHandler {
     public void testModuleEnded(String rootInvocationId, IRecorderClient recorder) {
         mModuleContext = null;
         mCurrentModuleIdentifier = null;
+        mCurrentAntsModuleParameters = null;
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
         // ResultDB reporting is disabled. This check can then be removed.
@@ -210,6 +220,18 @@ class WorkUnitHandler {
         return mCurrentModuleIdentifier;
     }
 
+    /**
+     * Returns the current AnTS module parameters.
+     *
+     * <p>If called outside of a module context, returns an empty list.
+     */
+    public List<AntsProperty> getCurrentAntsModuleParameters() {
+        if (mCurrentAntsModuleParameters == null) {
+            return new ArrayList<>();
+        }
+        return mCurrentAntsModuleParameters;
+    }
+
     public @Nullable String getCurrentWorkUnitId() {
         if (mWorkUnitInfos.isEmpty()) {
             return null;
@@ -237,6 +259,22 @@ class WorkUnitHandler {
             }
         }
         return variantBuilder.build();
+    }
+
+    private List<AntsProperty> extractAntsModuleParameters(MultiMap<String, String> properties) {
+        List<AntsProperty> antsModuleParameters = new ArrayList<>();
+        for (Map.Entry<String, String> property : properties.entries()) {
+            if (ALLOWED_MODULE_PARAMETERS.contains(property.getKey())) {
+                antsModuleParameters.add(
+                        AntsProperty.newBuilder()
+                                .setName(property.getKey())
+                                .setValue(property.getValue())
+                                .build());
+            }
+        }
+        antsModuleParameters.sort(
+                Comparator.comparing(AntsProperty::getName).thenComparing(AntsProperty::getValue));
+        return antsModuleParameters;
     }
 
     private static class WorkUnitInfo {

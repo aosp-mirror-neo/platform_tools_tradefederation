@@ -480,6 +480,7 @@ public class ResultDBReporter
                     currentTimestamp(),
                     mWorkUnitHandler.getCurrentModuleIdentifier(),
                     mWorkUnitHandler.getCurrentWorkUnitId(),
+                    mWorkUnitHandler.getCurrentAntsModuleParameters(),
                     mRecorderLegacy,
                     mRecorder);
         } catch (RuntimeException e) {
@@ -544,7 +545,10 @@ public class ResultDBReporter
             return;
         }
         mTestResultHandler.testStarted(
-                test, startTime, mWorkUnitHandler.getCurrentModuleIdentifier());
+                test,
+                startTime,
+                mWorkUnitHandler.getCurrentModuleIdentifier(),
+                mWorkUnitHandler.getCurrentAntsModuleParameters());
     }
 
     @Override
