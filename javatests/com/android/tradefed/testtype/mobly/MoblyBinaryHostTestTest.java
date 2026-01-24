@@ -1347,4 +1347,26 @@ public class MoblyBinaryHostTestTest {
         // Check if original still exists.
         assertThat(updatedConfigString).contains(LOG_PATH);
     }
+
+    @Test
+    public void testBuildCommandLineForListTests() throws Exception {
+        String[] cmdArray = mSpyTest.buildCommandLineForListTests(BINARY_PATH);
+        Truth.assertThat(cmdArray)
+                .isEqualTo(
+                        new String[] {
+                            BINARY_PATH, "--", "--list_tests",
+                        });
+    }
+
+    @Test
+    public void testBuildCommandLineForListTests_noDoubleDash() throws Exception {
+        OptionSetter setter = new OptionSetter(mSpyTest);
+        setter.setOptionValue("no-double-dash", "true");
+        String[] cmdArray = mSpyTest.buildCommandLineForListTests(BINARY_PATH);
+        Truth.assertThat(cmdArray)
+                .isEqualTo(
+                        new String[] {
+                            BINARY_PATH, "--list_tests",
+                        });
+    }
 }

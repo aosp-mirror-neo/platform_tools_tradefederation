@@ -435,8 +435,8 @@ public class MoblyBinaryHostTest
         List<String> includedTests = Collections.emptyList();
         long startTime = System.currentTimeMillis();
         if (mListTests) {
-            CommandResult list_result =
-                    getRunUtil().runTimedCmd(60000, parFilePath, "--", "--list_tests");
+            String[] command = buildCommandLineForListTests(parFilePath);
+            CommandResult list_result = getRunUtil().runTimedCmd(60000, command);
             if (!CommandStatus.SUCCESS.equals(list_result.getStatus())) {
                 String message;
                 if (CommandStatus.TIMED_OUT.equals(list_result.getStatus())) {
@@ -791,6 +791,17 @@ public class MoblyBinaryHostTest
         }
         // Add all the other options
         commandLine.addAll(getTestOptions());
+        return commandLine.toArray(new String[0]);
+    }
+
+    @VisibleForTesting
+    protected String[] buildCommandLineForListTests(String filePath) {
+        List<String> commandLine = new ArrayList<>();
+        commandLine.add(filePath);
+        if (!mNoDoubleDash) {
+            commandLine.add("--");
+        }
+        commandLine.add("--list_tests");
         return commandLine.toArray(new String[0]);
     }
 
