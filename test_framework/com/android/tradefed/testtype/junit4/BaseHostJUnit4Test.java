@@ -499,6 +499,7 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
                 options.isIsolatedStorageDisabled(),
                 options.isWindowAnimationDisabled(),
                 options.isRestartDisabled(),
+                options.isInstrumentInPcc(),
                 options.getInstrumentationArgs(),
                 options.getExtraListeners());
     }
@@ -661,6 +662,7 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
                 isIsolatedStorageDisabled,
                 isWindowAnimationDisabled,
                 false, // leave restart enabled
+                false, // leave instrument in pcc disabled
                 instrumentationArgs,
                 extraListeners);
     }
@@ -701,6 +703,7 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
             boolean isIsolatedStorageDisabled,
             boolean isWindowAnimationDisabled,
             boolean isRestartDisabled,
+            boolean instrumentInPcc,
             Map<String, String> instrumentationArgs,
             List<ITestLifeCycleReceiver> extraListeners)
             throws DeviceNotAvailableException {
@@ -720,6 +723,7 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
                         isIsolatedStorageDisabled,
                         isWindowAnimationDisabled,
                         isRestartDisabled,
+                        instrumentInPcc,
                         instrumentationArgs,
                         extraListeners);
         mLatestInstruRes = runResult;
@@ -788,6 +792,7 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
             boolean isIsolatedStorageDisabled,
             boolean isWindowAnimationDisabled,
             boolean isRestartDisabled,
+            boolean instrumentInPcc,
             Map<String, String> instrumentationArgs,
             List<ITestLifeCycleReceiver> extraListeners)
             throws DeviceNotAvailableException {
@@ -816,6 +821,10 @@ public abstract class BaseHostJUnit4Test implements IAbiReceiver, ITestInformati
         // restart flag only exists in S and after.
         if (isRestartDisabled && device.checkApiLevelAgainstNextRelease(31)) {
             runOptions += "--no-restart ";
+        }
+
+        if (instrumentInPcc) {
+            runOptions += "--instrument-in-pcc ";
         }
 
         if (getAbi() != null) {

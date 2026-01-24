@@ -44,6 +44,7 @@ public class DeviceTestRunOptions {
     private boolean mDisableIsolatedStorage = false; // optional
     private boolean mDisableWindowAnimation = false; // optional
     private boolean mDisableRestart = false; // optional
+    private boolean mInstrumentInPcc = false; // optional
     private boolean mGrantPermission = false; // optional
     private boolean mForceQueryable = true; // optional
     private Map<String, String> mInstrumentationArgs = new LinkedHashMap<>(); // optional
@@ -305,6 +306,20 @@ public class DeviceTestRunOptions {
     /** Sets {@code false} if the apk to be installed should not be queryable. */
     public DeviceTestRunOptions setForceQueryable(boolean forceQueryable) {
         mForceQueryable = forceQueryable;
+        return this;
+    }
+
+    /** Whether or not to add --instrument-in-pcc to the 'am instrument' used from the host side. */
+    public boolean isInstrumentInPcc() {
+        return mInstrumentInPcc;
+    }
+
+    /**
+     * Sets whether or not to add --instrument-in-pcc to the 'am instrument' used from the host
+     * side.
+     */
+    public DeviceTestRunOptions setInstrumentInPcc(boolean instrumentInPcc) {
+        mInstrumentInPcc = instrumentInPcc;
         return this;
     }
 }
