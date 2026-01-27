@@ -17,6 +17,8 @@
 package com.google.android.tradefed.build;
 
 import com.android.tradefed.build.BuildRetrievalError;
+import com.android.tradefed.config.GlobalConfiguration;
+import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
@@ -26,17 +28,27 @@ import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.TimeUtil;
 
+import com.google.android.ci.build.v4.BuildArtifactServiceClient;
+import com.google.android.ci.build.v4.GetBuildArtifactRequest;
+import com.google.android.ci.build.v4.GetBuildArtifactResponse;
+import com.google.android.ci.build.v4.GetDownloadUrlRequest;
+import com.google.android.ci.build.v4.GetDownloadUrlResponse;
 import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.client.googleapis.media.MediaHttpDownloader;
 import com.google.api.client.googleapis.media.MediaHttpDownloaderProgressListener;
 import com.google.api.client.http.HttpHeaders;
 import com.google.api.services.androidbuildinternal.v3.Androidbuildinternal;
 import com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.security.GeneralSecurityException;
 import java.text.SimpleDateFormat;
 
@@ -44,6 +56,7 @@ import java.text.SimpleDateFormat;
 public class AndroidBuildFetcher {
 
     private Androidbuildinternal mClient;
+    private BuildArtifactServiceClient mV4Client;
     private boolean mUseMd5 = true;
     private static final long MAX_RETRY_CONSIDERED_MILLISECONDS = 4 * 60000;
 
@@ -56,6 +69,19 @@ public class AndroidBuildFetcher {
      */
     public AndroidBuildFetcher(String buildEnv) throws IOException, GeneralSecurityException {
         mClient = AndroidBuildAPIHelper.getClient(buildEnv);
+        if (getHostOptions().useAndroidBuildApiV4()) {
+            mV4Client = AndroidBuildAPIHelper.getV4BuildArtifactClient(buildEnv);
+        }
+    }
+
+    /**
+     * Gets the {@link IHostOptions} instance to use.
+     *
+     * <p>Exposed for unit testing
+     */
+    @VisibleForTesting
+    IHostOptions getHostOptions() {
+        return GlobalConfiguration.getInstance().getHostOptions();
     }
 
     public void setUseMd5(boolean useMd5) {
@@ -74,6 +100,28 @@ public class AndroidBuildFetcher {
      */
     public BuildArtifactMetadata getArtifactMetadata(
             String target, String buildId, String resourceId, String attemptId) throws IOException {
+        if (mV4Client != null) {
+            try {
+                GetBuildArtifactRequest request =
+                        GetBuildArtifactRequest.newBuilder()
+                                .setBuildId(buildId)
+                                .setTarget(target)
+                                .setBuildAttemptId(
+                                        Strings.isNullOrEmpty(attemptId) ? "latest" : attemptId)
+                                .setBuildArtifactName(resourceId)
+                                .build();
+                GetBuildArtifactResponse response = mV4Client.get(request);
+                com.google.android.ci.build.v4.BuildArtifactMetadata artifact =
+                        response.getBuildArtifactMetadata();
+                BuildArtifactMetadata metadata = new BuildArtifactMetadata();
+                metadata.setMd5(artifact.getMd5());
+                metadata.setCrc32(Integer.toUnsignedLong(artifact.getCrc32C()));
+                metadata.setSize(artifact.getSize());
+                return metadata;
+            } catch (Exception e) {
+                throw new IOException("Failed to get V4 artifact metadata", e);
+            }
+        }
         Androidbuildinternal.Buildartifact.Get getObject =
                 mClient.buildartifact().get(buildId, target, attemptId, resourceId);
         return getObject.execute();
@@ -127,8 +175,38 @@ public class AndroidBuildFetcher {
             boolean retry = false;
             do {
                 try {
-                    internalDownload(
-                            target, buildId, resourceId, attemptId, outputFile, startOffset, size);
+                    if (mV4Client != null) {
+                        GetDownloadUrlRequest request =
+                                GetDownloadUrlRequest.newBuilder()
+                                        .setBuildId(buildId)
+                                        .setTarget(target)
+                                        .setBuildAttemptId(attemptId)
+                                        .setBuildArtifactName(resourceId)
+                                        .build();
+                        GetDownloadUrlResponse response = mV4Client.getDownloadUrl(request);
+                        URL url = new URL(response.getSignedUrl());
+                        URLConnection connection = url.openConnection();
+                        if (size >= 0) {
+                            connection.setRequestProperty(
+                                    "Range",
+                                    String.format(
+                                            "bytes=%d-%d", startOffset, startOffset + size - 1));
+                        }
+                        try (ReadableByteChannel rbc =
+                                        Channels.newChannel(connection.getInputStream());
+                                FileOutputStream fos = new FileOutputStream(outputFile)) {
+                            fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+                        }
+                    } else {
+                        internalDownload(
+                                target,
+                                buildId,
+                                resourceId,
+                                attemptId,
+                                outputFile,
+                                startOffset,
+                                size);
+                    }
                     InvocationMetricLogger.addInvocationPairMetrics(
                             InvocationMetricKey.AB_DOWNLOAD_SIZE_ELAPSED_TIME,
                             outputFile.length(),
@@ -181,11 +259,7 @@ public class AndroidBuildFetcher {
             }
             try (CloseableTraceScope ignored =
                     new CloseableTraceScope("md5" + outputFile.getName())) {
-                String md5 =
-                        mClient.buildartifact()
-                                .get(buildId, target, attemptId, resourceId)
-                                .execute()
-                                .getMd5();
+                String md5 = getArtifactMetadata(target, buildId, resourceId, attemptId).getMd5();
                 if (md5 == null) {
                     CLog.w(
                             "No MD5 checksum found for %s. Skipping file corruption check...",

@@ -21,6 +21,11 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.GoogleApiClientUtil;
 
+import com.google.android.ci.build.shadow.api.gax.core.FixedCredentialsProvider;
+import com.google.android.ci.build.v4.BuildArtifactServiceClient;
+import com.google.android.ci.build.v4.BuildArtifactServiceSettings;
+import com.google.android.ci.build.v4.BuildServiceClient;
+import com.google.android.ci.build.v4.BuildServiceSettings;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpRequestInitializer;
 import com.google.api.client.json.gson.GsonFactory;
@@ -204,5 +209,45 @@ public class AndroidBuildAPIHelper {
             options = new AndroidBuildAPIOptions();
         }
         return options;
+    }
+
+    public static BuildServiceClient getV4BuildClient(String environment)
+            throws IOException, GeneralSecurityException {
+        com.google.android.ci.build.shadow.auth.oauth2.GoogleCredentials credentials =
+                createV4Credential();
+        BuildServiceSettings.Builder builder = BuildServiceSettings.newHttpJsonBuilder();
+        if (credentials != null) {
+            builder.setCredentialsProvider(FixedCredentialsProvider.create(credentials));
+        }
+        return BuildServiceClient.create(builder.build());
+    }
+
+    public static BuildArtifactServiceClient getV4BuildArtifactClient(String environment)
+            throws IOException, GeneralSecurityException {
+        com.google.android.ci.build.shadow.auth.oauth2.GoogleCredentials credentials =
+                createV4Credential();
+        BuildArtifactServiceSettings.Builder builder =
+                BuildArtifactServiceSettings.newHttpJsonBuilder();
+        if (credentials != null) {
+            builder.setCredentialsProvider(FixedCredentialsProvider.create(credentials));
+        }
+        return BuildArtifactServiceClient.create(builder.build());
+    }
+
+    private static com.google.android.ci.build.shadow.auth.oauth2.GoogleCredentials
+            createV4Credential() throws IOException {
+        AndroidBuildAPIOptions abOptions = getAndroidBuildAPIOptions();
+        File abOptionJsonKey = null;
+        if (abOptions != null) {
+            abOptionJsonKey = abOptions.getJsonKeyFile();
+        }
+        if (abOptionJsonKey != null && abOptionJsonKey.exists()) {
+            return com.google.android.ci.build.shadow.auth.oauth2.GoogleCredentials.fromStream(
+                            new java.io.FileInputStream(abOptionJsonKey))
+                    .createScoped(ACCESS_SCOPE);
+        }
+        return com.google.android.ci.build.shadow.auth.oauth2.GoogleCredentials
+                .getApplicationDefault()
+                .createScoped(ACCESS_SCOPE);
     }
 }

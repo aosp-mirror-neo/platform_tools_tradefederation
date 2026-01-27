@@ -18,6 +18,8 @@ package com.google.android.tradefed.build;
 import com.android.tradefed.build.BuildInfo;
 import com.android.tradefed.build.BuildRetrievalError;
 import com.android.tradefed.build.IBuildInfo;
+import com.android.tradefed.config.GlobalConfiguration;
+import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
@@ -27,6 +29,16 @@ import com.android.tradefed.util.ArrayUtil;
 import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 
+import com.google.android.ci.build.shadow.api.gax.rpc.ApiException;
+import com.google.android.ci.build.shadow.api.gax.rpc.StatusCode;
+import com.google.android.ci.build.v4.BuildArtifactServiceClient;
+import com.google.android.ci.build.v4.BuildAttempt.BuildStatus;
+import com.google.android.ci.build.v4.BuildServiceClient;
+import com.google.android.ci.build.v4.BuildType;
+import com.google.android.ci.build.v4.GetBuildRequest;
+import com.google.android.ci.build.v4.GetBuildResponse;
+import com.google.android.ci.build.v4.ListBuildArtifactsRequest;
+import com.google.android.ci.build.v4.ListBuildsRequest;
 import com.google.android.tradefed.build.RemoteBuildInfo.BuildAttributeKey;
 import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.client.http.HttpHeaders;
@@ -77,6 +89,8 @@ public class AndroidBuildArtifactHelper {
 
     private static final long PAGE_SIZE = 100;
     private Androidbuildinternal mClient;
+    private BuildServiceClient mV4BuildClient;
+    private BuildArtifactServiceClient mV4ArtifactClient;
     private int maxRetryAttempts = 3;
     private boolean mStrictMode = false;
     private boolean mThrowOnQueryFailure = false;
@@ -116,6 +130,10 @@ public class AndroidBuildArtifactHelper {
             throws BuildRetrievalError {
         try {
             mClient = AndroidBuildAPIHelper.getClient(buildEnv);
+            if (getHostOptions().useAndroidBuildApiV4()) {
+                mV4BuildClient = AndroidBuildAPIHelper.getV4BuildClient(buildEnv);
+                mV4ArtifactClient = AndroidBuildAPIHelper.getV4BuildArtifactClient(buildEnv);
+            }
         } catch (GeneralSecurityException | IOException e) {
             throw new BuildRetrievalError(
                     "Unable to initialize build API client",
@@ -124,6 +142,16 @@ public class AndroidBuildArtifactHelper {
         }
         mStrictMode = strictMode;
         mThrowOnQueryFailure = throwOnQueryFailure;
+    }
+
+    /**
+     * Gets the {@link IHostOptions} instance to use.
+     *
+     * <p>Exposed for unit testing
+     */
+    @VisibleForTesting
+    IHostOptions getHostOptions() {
+        return GlobalConfiguration.getInstance().getHostOptions();
     }
 
     /**
@@ -413,6 +441,60 @@ public class AndroidBuildArtifactHelper {
             throws BuildRetrievalError {
         List<String> ret = new ArrayList<>();
         String target = getBuildFlavor(buildFlavor, os);
+        if (mV4ArtifactClient != null) {
+            // V4 Logic
+            for (int attempts = 0; ; attempts++) {
+                long startList = System.currentTimeMillis();
+                try {
+                    ListBuildArtifactsRequest.Builder requestBuilder =
+                            ListBuildArtifactsRequest.newBuilder()
+                                    .setBuildId(buildId)
+                                    .setTarget(target)
+                                    .setBuildAttemptId(BUILD_ATTEMPT_LATEST)
+                                    .setPageSize((int) PAGE_SIZE);
+
+                    // Pattern handling in V4
+                    if (pattern != null) {
+                        requestBuilder.setNameRegexp(pattern);
+                    } else if (exclusionPatterns != null && !exclusionPatterns.isEmpty()) {
+                        String excludePatterns = Joiner.on('|').join(exclusionPatterns);
+                        String notMatch = "NOT_MATCH(" + excludePatterns + ")";
+                        CLog.d("Using %s as list pattern.", notMatch);
+                        requestBuilder.setNameRegexp(notMatch);
+                    }
+
+                    for (com.google.android.ci.build.v4.BuildArtifactMetadata artifact :
+                            mV4ArtifactClient.list(requestBuilder.build()).iterateAll()) {
+                        ret.add(artifact.getName());
+                    }
+
+                    return ret;
+                } catch (ApiException e) {
+                    if (attempts < maxRetryAttempts && isV4Retryable(e)) {
+                        CLog.w(
+                                "Retrying V4 artifact list on error: %s. Attempt: %d",
+                                e.getMessage(), attempts + 1);
+                        escalatingSleep(attempts);
+                        continue;
+                    }
+                    throw new BuildRetrievalError(
+                            "Failed to list V4 artifacts",
+                            e,
+                            InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR);
+                } catch (Exception e) {
+                    throw new BuildRetrievalError(
+                            "Failed to list V4 artifacts",
+                            e,
+                            InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR);
+                } finally {
+                    InvocationMetricLogger.addInvocationPairMetrics(
+                            InvocationMetricKey.AB_LIST_API_TIME_PAIR,
+                            startList,
+                            System.currentTimeMillis());
+                }
+            }
+        }
+
         for (int attempts = 0; ; attempts++) {
             long startList = System.currentTimeMillis();
             try (CloseableTraceScope ignored = new CloseableTraceScope("getBuildArtifactList")) {
@@ -472,6 +554,56 @@ public class AndroidBuildArtifactHelper {
 
     protected Build getLatestBuild(String branch, String buildFlavor, String os)
             throws BuildRetrievalError {
+        if (mV4BuildClient != null) {
+            for (int attempts = 0; ; attempts++) {
+                try {
+                    String target = getBuildFlavor(buildFlavor, os);
+                    ListBuildsRequest request =
+                            ListBuildsRequest.newBuilder()
+                                    .addBranches(branch)
+                                    .addTargets(target)
+                                    .setPageSize(1)
+                                    .setBuildAttemptStatus(BuildStatus.COMPLETE)
+                                    .setSuccessful(true)
+                                    .setBuildType(BuildType.SUBMITTED)
+                                    .build();
+                    for (com.google.android.ci.build.v4.Build v4Build :
+                            mV4BuildClient.list(request).iterateAll()) {
+                        return mapV4BuildToV3(v4Build);
+                    }
+                    String errMessage =
+                            String.format(
+                                    "List of builds returned is null or empty for branch '%s' and "
+                                            + "target '%s'",
+                                    branch, target);
+                    CLog.w(errMessage);
+                    throw new BuildRetrievalError(
+                            errMessage,
+                            null,
+                            InfraErrorIdentifier.ARTIFACT_NOT_FOUND,
+                            createErrorBuild(branch, "-1", buildFlavor));
+                } catch (ApiException e) {
+                    if (attempts < maxRetryAttempts && isV4Retryable(e)) {
+                        InvocationMetricLogger.addInvocationMetrics(
+                                InvocationMetricKey.METADATA_RETRY_COUNT, 1);
+                        CLog.w(
+                                "Retrying V4 build list on error: %s. Attempt: %d",
+                                e.getMessage(), attempts + 1);
+                        escalatingSleep(attempts);
+                        continue;
+                    }
+                    throw new BuildRetrievalError(
+                            "Failed to query V4 build service",
+                            e,
+                            InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR);
+                } catch (Exception e) {
+                    throw new BuildRetrievalError(
+                            "Failed to query V4 build service",
+                            e,
+                            InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR);
+                }
+            }
+        }
         for (int attempts = 0; ; attempts++) {
             try {
                 String target = getBuildFlavor(buildFlavor, os);
@@ -537,6 +669,47 @@ public class AndroidBuildArtifactHelper {
 
     protected Build getBuild(String branch, String buildId, String buildFlavor, String os)
             throws BuildRetrievalError {
+        if (mV4BuildClient != null) {
+            long start = System.currentTimeMillis();
+            try {
+                for (int attempts = 0; ; attempts++) {
+                    try {
+                        GetBuildRequest request =
+                                GetBuildRequest.newBuilder()
+                                        .setBuildId(buildId)
+                                        .setTarget(getBuildFlavor(buildFlavor, os))
+                                        .build();
+                        GetBuildResponse response = mV4BuildClient.get(request);
+                        return mapV4BuildToV3(response.getBuild());
+                    } catch (ApiException e) {
+                        if (attempts < maxRetryAttempts && isV4Retryable(e)) {
+                            InvocationMetricLogger.addInvocationMetrics(
+                                    InvocationMetricKey.METADATA_RETRY_COUNT, 1);
+                            CLog.w(
+                                    "Retrying V4 build get on error: %s. Attempt: %d",
+                                    e.getMessage(), attempts + 1);
+                            escalatingSleep(attempts);
+                            continue;
+                        }
+                        throw new BuildRetrievalError(
+                                "Failed to get V4 build",
+                                e,
+                                InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR,
+                                createErrorBuild(branch, buildId, buildFlavor));
+                    } catch (Exception e) {
+                        throw new BuildRetrievalError(
+                                "Failed to get V4 build",
+                                e,
+                                InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR,
+                                createErrorBuild(branch, buildId, buildFlavor));
+                    }
+                }
+            } finally {
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.AB_BUILD_GET_API_TIME,
+                        System.currentTimeMillis() - start);
+            }
+        }
         BuildRetrievalError exception = null;
         long start = System.currentTimeMillis();
         try {
@@ -580,6 +753,14 @@ public class AndroidBuildArtifactHelper {
         return statusCode >= 500 && statusCode < 600;
     }
 
+    private boolean isV4Retryable(ApiException e) {
+        StatusCode.Code code = e.getStatusCode().getCode();
+        return StatusCode.Code.UNAVAILABLE.equals(code)
+                || StatusCode.Code.DEADLINE_EXCEEDED.equals(code)
+                || StatusCode.Code.INTERNAL.equals(code)
+                || StatusCode.Code.RESOURCE_EXHAUSTED.equals(code);
+    }
+
     /**
      * Get the {@link IRunUtil} instance to use.
      *
@@ -598,6 +779,28 @@ public class AndroidBuildArtifactHelper {
     private void escalatingSleep(int attempts) {
         long sleepTime = Math.round(HTTP_POLL_TIME_MS * Math.pow(attempts, 3));
         getRunUtil().sleep(sleepTime);
+    }
+
+    /**
+     * Maps a v4 Build object to v3 Build object.
+     *
+     * <p>This mapping is needed for backward compatibility while migration is happeing to v4.
+     * Without mapping, we will have to abstract the usage of build, which will require significant
+     * refactoring. We can remove this mapping once we fully migrate to v4 and remove usages of v3.
+     *
+     * @param v4Build
+     * @return the v3 Build object.
+     */
+    private Build mapV4BuildToV3(com.google.android.ci.build.v4.Build v4Build) {
+        Build build = new Build();
+        build.setBuildId(v4Build.getBuildId());
+        build.setBranch(v4Build.getBranch());
+        build.setBuildAttemptStatus(v4Build.getBuildAttemptStatus().toString());
+        // V3 ReleaseCandidateName maps to release_candidate_name in V4
+        if (!v4Build.getReleaseCandidateName().isEmpty()) {
+            build.setReleaseCandidateName(v4Build.getReleaseCandidateName());
+        }
+        return build;
     }
 
     /**

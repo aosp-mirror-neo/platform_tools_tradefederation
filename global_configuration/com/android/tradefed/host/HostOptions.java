@@ -410,4 +410,15 @@ public class HostOptions implements IHostOptions {
     public boolean isHostMetricReportingDisabled() {
         return mDisableHostMetricReporting;
     }
+
+    @Option(
+            name = "use-android-build-api-v4",
+            description = "Whether to use the v4 Android Build API.")
+    private boolean mUseAndroidBuildApiV4 = false;
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean useAndroidBuildApiV4() {
+        return mUseAndroidBuildApiV4;
+    }
 }
