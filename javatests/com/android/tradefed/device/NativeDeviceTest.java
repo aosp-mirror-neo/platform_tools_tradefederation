@@ -3846,6 +3846,70 @@ public class NativeDeviceTest {
         assertEquals(29, mTestDevice.getLaunchApiLevel());
     }
 
+    /** Unit test for {@link NativeDevice#getApiLevelFull()}. */
+    @Test
+    public void testGetApiLevelFull_nullProperty() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public String getProperty(String name) throws DeviceNotAvailableException {
+                        if (DeviceProperties.SDK_FULL_VERSION.equals(name)) {
+                            return null;
+                        }
+                        return "";
+                    }
+                };
+        assertEquals(ITestDevice.UNKNOWN_API_LEVEL, mTestDevice.getApiLevelFull());
+    }
+
+    /** Unit test for {@link NativeDevice#getApiLevelFull()}. */
+    @Test
+    public void testGetApiLevelFull_majorOnly() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public String getProperty(String name) throws DeviceNotAvailableException {
+                        if (DeviceProperties.SDK_FULL_VERSION.equals(name)) {
+                            return "33";
+                        }
+                        return "";
+                    }
+                };
+        assertEquals(3300000, mTestDevice.getApiLevelFull());
+    }
+
+    /** Unit test for {@link NativeDevice#getApiLevelFull()}. */
+    @Test
+    public void testGetApiLevelFull_majorMinor() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public String getProperty(String name) throws DeviceNotAvailableException {
+                        if (DeviceProperties.SDK_FULL_VERSION.equals(name)) {
+                            return "33.1";
+                        }
+                        return "";
+                    }
+                };
+        assertEquals(3300001, mTestDevice.getApiLevelFull());
+    }
+
+    /** Unit test for {@link NativeDevice#getApiLevelFull()} when device is not available. */
+    @Test
+    public void testGetApiLevelFull_deviceNotAvailable() throws DeviceNotAvailableException {
+        mTestDevice =
+                new TestableAndroidNativeDevice() {
+                    @Override
+                    public String getProperty(String name) throws DeviceNotAvailableException {
+                        if (DeviceProperties.SDK_FULL_VERSION.equals(name)) {
+                            throw new DeviceNotAvailableException("test", "serial");
+                        }
+                        return "";
+                    }
+                };
+        assertThrows(DeviceNotAvailableException.class, () -> mTestDevice.getApiLevelFull());
+    }
+
     private void setGetPropertyExpectation(String property, String value) {
         CommandResult stubResult = new CommandResult(CommandStatus.SUCCESS);
         stubResult.setStdout(value);

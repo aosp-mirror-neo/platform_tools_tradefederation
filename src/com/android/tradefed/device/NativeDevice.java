@@ -79,6 +79,7 @@ import com.android.tradefed.util.ProcessInfo;
 import com.android.tradefed.util.QuotationAwareTokenizer;
 import com.android.tradefed.util.RunInterruptedException;
 import com.android.tradefed.util.RunUtil;
+import com.android.tradefed.util.SdkVersionUtil;
 import com.android.tradefed.util.ShellOutputReceiverStream;
 import com.android.tradefed.util.SizeLimitedOutputStream;
 import com.android.tradefed.util.StringEscapeUtils;
@@ -5212,6 +5213,16 @@ public class NativeDevice
             // ignore, return unknown instead
         }
         return apiLevel;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getApiLevelFull() throws DeviceNotAvailableException {
+        String sdkFull = getProperty(DeviceProperties.SDK_FULL_VERSION);
+        if (sdkFull != null) {
+            return SdkVersionUtil.parseFullVersion(sdkFull);
+        }
+        return UNKNOWN_API_LEVEL;
     }
 
     /** {@inheritDoc} */
