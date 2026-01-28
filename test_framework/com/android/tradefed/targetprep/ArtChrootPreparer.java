@@ -53,6 +53,7 @@ public class ArtChrootPreparer extends BaseTargetPreparer {
         "/apex/com.android.i18n",
         "/apex/com.android.os.statsd",
         "/apex/com.android.runtime",
+        "/apex/com.android.tethering",
         "/dev",
         "/dev/cpuset",
         "/etc",
