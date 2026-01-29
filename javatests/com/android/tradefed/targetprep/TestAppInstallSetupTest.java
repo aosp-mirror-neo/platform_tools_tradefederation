@@ -374,7 +374,7 @@ public class TestAppInstallSetupTest {
 
         Mockito.verify(mMockTestDevice).installPackage(Mockito.eq(fakeApk), Mockito.eq(true));
         Mockito.verify(mMockTestDevice)
-            .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
+                .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
     }
 
     @Test
@@ -388,7 +388,7 @@ public class TestAppInstallSetupTest {
 
         Mockito.verify(mMockTestDevice).installPackage(Mockito.eq(fakeApk), Mockito.eq(true));
         Mockito.verify(mMockTestDevice)
-            .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
+                .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
     }
 
     @Test
@@ -430,10 +430,10 @@ public class TestAppInstallSetupTest {
     @Test
     public void testInstallFailedConflictingProvider() throws Exception {
         final String obsoletePackageName = "obsolete.package.name";
-        final String failure = String.format(
-            "%s: the provider name a.b.c is already used by %s [other info]",
-            "INSTALL_FAILED_CONFLICTING_PROVIDER",
-            obsoletePackageName);
+        final String failure =
+                String.format(
+                        "%s: the provider name a.b.c is already used by %s [other info]",
+                        "INSTALL_FAILED_CONFLICTING_PROVIDER", obsoletePackageName);
         when(mMockTestDevice.installPackage(Mockito.eq(fakeApk), Mockito.eq(true)))
                 .thenReturn(failure);
         when(mMockTestDevice.uninstallPackage(obsoletePackageName)).thenReturn(null);
@@ -442,6 +442,29 @@ public class TestAppInstallSetupTest {
         when(mMockTestDevice.installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true)))
                 .thenReturn(failure);
         when(mMockTestDevice.uninstallPackage(obsoletePackageName)).thenReturn(null);
+        when(mMockTestDevice.installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true)))
+                .thenReturn(null);
+
+        mPrep.setUp(mTestInfo);
+        verify(mMockTestDevice, atLeastOnce())
+                .installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true));
+    }
+
+    @Test
+    public void testInstallFailedSessionInvalid() throws Exception {
+        final String failure =
+                String.format(
+                        "INSTALL_FAILED_SESSION_INVALID: Can't replace full app with instant app:"
+                                + " %s for user",
+                        PACKAGE_NAME);
+        when(mMockTestDevice.installPackage(Mockito.eq(fakeApk), Mockito.eq(true)))
+                .thenReturn(failure);
+        when(mMockTestDevice.uninstallPackage(PACKAGE_NAME)).thenReturn(null);
+        when(mMockTestDevice.installPackage(Mockito.eq(fakeApk), Mockito.eq(true)))
+                .thenReturn(null);
+        when(mMockTestDevice.installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true)))
+                .thenReturn(failure);
+        when(mMockTestDevice.uninstallPackage(PACKAGE_NAME)).thenReturn(null);
         when(mMockTestDevice.installPackages(Mockito.eq(mTestSplitApkFiles), Mockito.eq(true)))
                 .thenReturn(null);
 

@@ -95,6 +95,16 @@ public class TestAppInstallSetup extends BaseTargetPreparer
     private static final Pattern CONFLICTING_PROVIDER_PATTERN =
         Pattern.compile("is already used by (?<packageName>[A-Za-z0-9\\.]+)");
 
+    // An error message that occurs when the install type is incompatible with some other
+    // installation flags supplied for the operation; or other circumstances such as trying to
+    // upgrade a system app via an Incremental or instant app install. When this occurs, the package
+    // is removed from the device so that installation can continue like normal.
+    private static final String INSTALL_FAILED_SESSION_INVALID = "INSTALL_FAILED_SESSION_INVALID";
+    private static final Pattern REPLACE_FULL_WITH_INSTANT_PATTERN =
+            Pattern.compile(
+                    "Can't replace full app with instant app: (?<packageName>[A-Za-z0-9\\.]+) for"
+                        + " user");
+
     @VisibleForTesting static final String TEST_FILE_NAME_OPTION = "test-file-name";
 
     @Option(
@@ -592,6 +602,18 @@ public class TestAppInstallSetup extends BaseTargetPreparer
             if (result.contains(INSTALL_FAILED_CONFLICTING_PROVIDER)) {
                 // Try to uninstall the conflicting package and reinstall this package.
                 Matcher matcher = CONFLICTING_PROVIDER_PATTERN.matcher(result);
+                if (matcher.find()) {
+                    String oldPackageName = matcher.group("packageName");
+                    uninstallPackage(testDevice, oldPackageName);
+                    result = installPackage(testDevice, apkFiles);
+                }
+            }
+        }
+
+        if (result != null) {
+            if (result.contains(INSTALL_FAILED_SESSION_INVALID)) {
+                // Try to uninstall the package in full mode and reinstall in instant mode.
+                Matcher matcher =  REPLACE_FULL_WITH_INSTANT_PATTERN.matcher(result);
                 if (matcher.find()) {
                     String oldPackageName = matcher.group("packageName");
                     uninstallPackage(testDevice, oldPackageName);

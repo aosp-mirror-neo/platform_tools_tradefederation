@@ -70,6 +70,7 @@ import com.android.tradefed.util.executor.ParallelDeviceExecutor;
 import com.android.tradefed.util.net.HttpHelper;
 import com.android.tradefed.util.net.IHttpHelper;
 import com.android.tradefed.util.net.IHttpHelper.DataSizeException;
+
 import com.google.android.tradefed.build.RemoteBuildInfo.BuildAttributeKey;
 import com.google.android.tradefed.build.RemoteBuildInfo.InvalidResponseException;
 import com.google.android.tradefed.build.content.ContentBasedHelper;
@@ -79,6 +80,9 @@ import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.client.util.Strings;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+
+import org.apache.commons.compress.archivers.zip.ZipFile;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -423,7 +427,8 @@ public class LaunchControlProvider
     private Set<String> mContentBasedReportingDefault = new LinkedHashSet<>();
 
     /** Standard platforms */
-    private static final Set<String> STANDARD_PLATFORMS = ImmutableSet.of("linux", "mac", "mac_arm64");
+    private static final Set<String> STANDARD_PLATFORMS =
+            ImmutableSet.of("linux", "mac", "mac_arm64");
 
     @Override
     public void setTestLogger(ITestLogger testLogger) {
@@ -1517,8 +1522,8 @@ public class LaunchControlProvider
             CLog.d("Start unziping %s.", zippedFile);
             // Extract inside the workfolder so everything is in one place.
             File extracted = FileUtil.createTempDir(prefix, getWorkFolder());
-            try {
-                ZipUtil2.extractZip(zippedFile, extracted);
+            try (ZipFile zip = new ZipFile(zippedFile)) {
+                ZipUtil2.extractZip(zip, extracted);
             } catch (IOException e) {
                 FileUtil.recursiveDelete(extracted);
                 throw e;

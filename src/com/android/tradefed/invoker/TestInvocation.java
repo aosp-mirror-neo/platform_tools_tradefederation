@@ -1652,7 +1652,7 @@ public class TestInvocation implements ITestInvocation {
 
     protected void applyDeviceAutomatedSetup(IInvocationContext context, IConfiguration config) {
         if (!config.getCommandOptions().shouldEnableDeviceSpecificSetup()) {
-            CLog.i("Skipping device automated setup due to --no-device-specific-setup");
+            CLog.i("Skipping device automated setup due to --no-enable-device-specific-setup");
             return;
         }
         CLog.i("Applying device automated setup");
