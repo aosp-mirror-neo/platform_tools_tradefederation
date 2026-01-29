@@ -60,14 +60,18 @@ public class MetricFilePostProcessorTest {
         boolean isMetricWrittenToFile = false;
         boolean isRunMetricAggregated = false;
         boolean isTestMetricAggregated = false;
+        boolean testFailedInStore = false;
         boolean isDimensionalMetricAggregated = false;
         int dimensionalFilesAggregatedCount = 0;
         Map<String, String> mMetricsInFile;
 
         @Override
         public void storeTestMetrics(
-                TestDescription testDescription, Map<String, Metric> testMetrics) {
+                TestDescription testDescription,
+                Map<String, Metric> testMetrics,
+                boolean testFailed) {
             isMetricStored = true;
+            testFailedInStore = testFailed;
         }
 
         @Override
@@ -158,6 +162,33 @@ public class MetricFilePostProcessorTest {
 
         // Store the metrics to aggregate later at the end of test run.
         assertTrue(mTestableMetricUtil.isMetricStored);
+        // Verify that the test was considered passed.
+        assertFalse(mTestableMetricUtil.testFailedInStore);
+    }
+
+    @Test
+    public void processTestMetricWithAggregate_failedTest() throws ConfigurationException {
+        ITestInvocationListener mockListener = Mockito.mock(ITestInvocationListener.class);
+        mMetricFilePostProcessor.init(mockListener);
+
+        OptionSetter setter = new OptionSetter(mMetricFilePostProcessor);
+        setter.setOptionValue("aggregate-similar-tests", "true");
+
+        HashMap<String, Metric> firstTestMetric = new HashMap<String, Metric>();
+        Metric.Builder metricBuilder1 = Metric.newBuilder();
+        metricBuilder1.getMeasurementsBuilder().setSingleString("2.9");
+        Metric currentTestMetric = metricBuilder1.build();
+        firstTestMetric.put("first_test_metric", currentTestMetric);
+
+        // Simulate a test failure by calling the official listener method.
+        mMetricFilePostProcessor.testFailed(TEST_1, "I am a failure");
+
+        mMetricFilePostProcessor.processTestMetricsAndLogs(TEST_1, firstTestMetric, null);
+
+        // Store the metrics to aggregate later at the end of test run.
+        assertTrue(mTestableMetricUtil.isMetricStored);
+        // Verify that the test was considered failed.
+        assertTrue(mTestableMetricUtil.testFailedInStore);
     }
 
     @Test
