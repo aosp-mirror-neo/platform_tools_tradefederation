@@ -103,6 +103,7 @@ import java.util.zip.ZipFile;
 public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceiver {
     private static final int ADB_TIMEOUT = 900;
     private static final int ADB_RETRIES = 3;
+    private static final int ADB_PUSH_RETRIES = 7;
 
     protected TestInformation mTestInfo;
     protected File mRunnerDir;
@@ -386,7 +387,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         }
     }
 
-    Boolean run(Test test, ITestInvocationListener listener) throws DeviceNotAvailableException {
+    boolean run(Test test, ITestInvocationListener listener) throws DeviceNotAvailableException {
         synchronized (test) {
             // Check if the test has already completed (e.g., as a dependency of another test)
             if (test.mResult.isPresent()) {
@@ -461,14 +462,8 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
                 mPushSemaphore.acquire();
                 try {
-                    if (src.isDirectory()) {
-                        if (!device.pushDir(src, dst)) {
-                            return "Failed to push directory '" + src + "'";
-                        }
-                    } else {
-                        if (!device.pushFile(src, dst)) {
-                            return "Failed to push file '" + src + "'";
-                        }
+                    if (!adbPush(src, dst)) {
+                        return "Failed to push '" + src + "'";
                     }
                 } finally {
                     mPushSemaphore.release();
@@ -500,8 +495,24 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         device.deleteFile("/data/local/tmp/art");
     }
 
+    boolean adbPush(File src, String dst) throws DeviceNotAvailableException {
+        for (int i = 0; i < ADB_PUSH_RETRIES; i++) {
+            ITestDevice device = mTestInfo.getDevice();
+            if (src.isDirectory() ? device.pushDir(src, dst) : device.pushFile(src, dst)) {
+                return true;
+            }
+            CLog.e("Retry push %s -> %s", src, dst);
+            try {
+                TimeUnit.SECONDS.sleep(1 << i); // Explonential increase.
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return false;
+    }
+
     // Check device health by executing trivial shell command.
-    Boolean adbPing() {
+    boolean adbPing() {
         try {
             String cmd = "echo ping";
             CommandResult res = mTestInfo.getDevice().executeShellV2Command(cmd);
