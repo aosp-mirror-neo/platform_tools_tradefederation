@@ -106,12 +106,14 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     private static final int ADB_PUSH_RETRIES = 7;
 
     protected TestInformation mTestInfo;
+    protected ITestDevice mDevice;
     protected File mRunnerDir;
     protected List<Test> mTests = new ArrayList<>();
     protected int mShardIndex = 0;
     protected int mShardCount = 1;
 
     private IAbi mAbi;
+    private boolean mIsRoot = false;
     private Set<String> mIncludeFilters = new TreeSet<>();
     private Set<String> mExcludeFilters = new TreeSet<>();
 
@@ -198,9 +200,12 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     public void run(TestInformation testInfo, ITestInvocationListener listener)
             throws DeviceNotAvailableException {
         mTestInfo = testInfo;
+        mDevice = testInfo.getDevice();
         File tmp_dir = null;
         ExecutorService executor = null;
         try {
+            init();
+
             try {
                 tmp_dir = FileUtil.createTempDir("art-tf-");
                 mRunnerDir = extractTarBall(tmp_dir);
@@ -212,7 +217,6 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
             long startTime = System.currentTimeMillis();
             try {
-                init();
                 clean();
                 int jobs = mTestJobs + mPushJobs;
                 CLog.i("Using %s threads (testJobs:%s, pushJobs:%s)", jobs, mTestJobs, mPushJobs);
@@ -255,6 +259,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     }
 
     void init() throws DeviceNotAvailableException {
+        mIsRoot = mDevice.enableAdbRoot();
         if (mTestJobs == 0) {
             mTestJobs = (int) getDeviceCpuCount();
         }
@@ -308,10 +313,14 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         // Filter tests by name and abi.
         List<Test> tests =
                 allTests.values().stream()
-                        .sorted(Comparator.comparing(a -> a.mName))
                         .filter(test -> shouldIncludeTest(test.mName))
                         .filter(test -> mAbi == null || test.mTags.contains(mAbi.getName()))
+                        .filter(test -> test.mTags.contains(mIsRoot ? "root" : "no-root"))
+                        .sorted(Comparator.comparing(a -> a.mName))
                         .collect(Collectors.toList());
+        if (tests.isEmpty()) {
+            throw new RuntimeException("No tests found that match filters");
+        }
 
         // Shuffle tests in a deterministic and well-distributed way.
         // This will uniformly spread expensive tests over time and over shards.
@@ -380,8 +389,9 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
         Test() {}
 
-        Test(String name, List<String> deps, Command... commands) {
+        Test(String name, List<String> tags, List<String> deps, Command... commands) {
             mName = name;
+            mTags.addAll(tags);
             mDependencies.addAll(deps);
             mCommands.addAll(Arrays.asList(commands));
         }
@@ -451,7 +461,6 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
 
     String executeCommands(List<Command> commands)
             throws DeviceNotAvailableException, InterruptedException {
-        ITestDevice device = mTestInfo.getDevice();
         for (Command cmd : commands) {
             if (cmd.mKind.equals("push")) {
                 if (cmd.mArgs.size() != 2) {
@@ -473,7 +482,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                 try {
                     String shellCmd = String.join(" ", cmd.mArgs);
                     CommandResult res =
-                            device.executeShellV2Command(
+                            mDevice.executeShellV2Command(
                                     shellCmd, ADB_TIMEOUT, TimeUnit.SECONDS, ADB_RETRIES);
                     if (res.getStatus() != CommandStatus.SUCCESS) {
                         return String.format(
@@ -490,15 +499,12 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     }
 
     void clean() throws DeviceNotAvailableException {
-        ITestDevice device = mTestInfo.getDevice();
-        device.enableAdbRoot(); // Ensure we have the rights to delete everything.
-        device.deleteFile("/data/local/tmp/art");
+        mDevice.deleteFile("/data/local/tmp/art");
     }
 
     boolean adbPush(File src, String dst) throws DeviceNotAvailableException {
         for (int i = 0; i < ADB_PUSH_RETRIES; i++) {
-            ITestDevice device = mTestInfo.getDevice();
-            if (src.isDirectory() ? device.pushDir(src, dst) : device.pushFile(src, dst)) {
+            if (src.isDirectory() ? mDevice.pushDir(src, dst) : mDevice.pushFile(src, dst)) {
                 return true;
             }
             CLog.e("Retry push %s -> %s", src, dst);

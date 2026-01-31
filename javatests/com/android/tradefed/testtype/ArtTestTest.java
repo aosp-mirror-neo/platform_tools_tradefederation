@@ -65,10 +65,13 @@ public class ArtTestTest {
     @Mock TestInformation mTestInfo;
 
     static class ArtTestForTesting extends ArtTest {
+        public static final List<String> TAGS = Arrays.asList("root", "no-root");
+
         Test[] mockInput() {
             return new Test[] {
                 new Test(
                         "001-HelloWorld#1f5cdb07",
+                        TAGS,
                         Arrays.asList("setup#compile-boot-image"),
                         new Command(
                                 "push",
@@ -79,10 +82,11 @@ public class ArtTestTest {
                                 "001-HelloWorld/1f5cdb07.sh",
                                 "/data/local/tmp/art/test/1f5cdb07/run.sh"),
                         new Command("shell", "sh", "/data/local/tmp/art/test/1f5cdb07/run.sh")),
-                new Test("002-Foo#1f5cdb08", new ArrayList<>()),
-                new Test("003-Bar#1f5cdb09", new ArrayList<>()),
+                new Test("002-Foo#1f5cdb08", TAGS, new ArrayList<>()),
+                new Test("003-Bar#1f5cdb09", TAGS, new ArrayList<>()),
                 new Test(
                         "setup#compile-boot-image",
+                        TAGS,
                         new ArrayList<>(),
                         new Command("push", "setup.sh", "/data/local/tmp/art/setup.sh"),
                         new Command("shell", "rm", "-rf", "/data/local/tmp/art/test"),
