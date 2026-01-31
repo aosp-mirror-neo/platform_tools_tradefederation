@@ -83,6 +83,8 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
 
     private boolean mIsRunInProgress = false;
 
+    private boolean mIsTestFailed = false;
+
     private String mRunName;
 
     /** {@inheritDoc} */
@@ -276,12 +278,14 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
     @Override
     public final void testStarted(TestDescription test) {
         testStarted(test, System.currentTimeMillis());
+        mIsTestFailed = false;
     }
 
     @Override
     public final void testStarted(TestDescription test, long startTime) {
         mIsRunInProgress = true;
         mCurrentTest = test;
+        mIsTestFailed = false;
         if (mTestLogs.containsKey(test)) {
             mTestLogs.get(test).clear();
         } else {
@@ -294,12 +298,14 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
     public final void testFailed(TestDescription test, String trace) {
         mForwarder.testFailed(test, trace);
         mStackTrace = trace;
+        mIsTestFailed = true;
     }
 
     @Override
     public final void testFailed(TestDescription test, FailureDescription failure) {
         mForwarder.testFailed(test, failure);
         mStackTrace = failure.getErrorMessage();
+        mIsTestFailed = true;
     }
 
     @Override
@@ -500,6 +506,10 @@ public abstract class BasePostProcessor implements IPostProcessor, IConfiguratio
 
     protected final String getStackTrace() {
         return mStackTrace;
+    }
+
+    protected final boolean isTestFailed() {
+        return mIsTestFailed;
     }
 
     protected void cleanUp() {

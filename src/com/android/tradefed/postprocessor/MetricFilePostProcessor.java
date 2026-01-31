@@ -92,18 +92,19 @@ public class MetricFilePostProcessor extends BasePostProcessor {
     private Set<Integer> mPercentiles = new HashSet<>();
 
     @Option(
-            name = "use-test-iterations-for-stats",
-            description =
-                    "Use the actual test iterations when computing the stats instead of using the"
-                            + " metric count.")
-    private boolean mEnableCountTestIterations = false;
-
-    @Option(
             name = "strict-include-metric-filter",
             description =
                     "Regular expression that will be used for filtering the metrics from individual"
                             + " test metrics and aggregated metrics.")
     private Set<String> mStrictIncludeRegEx = new HashSet<>();
+
+    @Option(
+            name = "metrics-stats-using-passed-iterations-count",
+            description =
+                    "A set of regular expressions for metrics that should use passed test"
+                        + " iterations for stats calculation. If set, only matched metrics will use"
+                        + " passed iterations, and the rest will use metric count.")
+    private Set<String> mMetricsStatsForPassedIterations = new HashSet<>();
 
     @Option(
             name = "aggregate-dimensional-metrics",
@@ -131,7 +132,10 @@ public class MetricFilePostProcessor extends BasePostProcessor {
         // Store the test metric and use it for aggregation later at the end of
         // test run.
         if (mAggregateSimilarTests) {
-            mMetricUtil.storeTestMetrics(testDescription, testMetrics);
+            // If isTestFailed() returns false, it means the test iteration passed. Otherwise, the
+            // test iteration failed.
+            boolean testFailed = isTestFailed();
+            mMetricUtil.storeTestMetrics(testDescription, testMetrics, testFailed);
         }
 
         if (mAggregateDimensionalMetrics) {
@@ -241,6 +245,6 @@ public class MetricFilePostProcessor extends BasePostProcessor {
         mMetricUtil.setPercentiles(mPercentiles);
         mMetricUtil.setIterationSeparator(mTestIterationSeparator);
         mMetricUtil.buildMetricFilterPatterns(mStrictIncludeRegEx);
-        mMetricUtil.setCountTestIterationsFlag(mEnableCountTestIterations);
+        mMetricUtil.setMetricsUseForTestIterations(mMetricsStatsForPassedIterations);
     }
 }

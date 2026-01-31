@@ -15,8 +15,6 @@
  */
 package com.android.tradefed.util;
 
-import static org.junit.Assert.assertTrue;
-
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.ComputedStatistics;
@@ -32,13 +30,8 @@ import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Value;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.protobuf.TextFormat;
 import org.junit.After;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,12 +39,17 @@ import org.junit.runners.JUnit4;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /** Unit tests for {@link MetricUtility}. */
 @RunWith(JUnit4.class)
@@ -68,6 +66,8 @@ public class MetricUtilityTest {
     private static final String OUTPUT_9 = "case_9";
     private static final String OUTPUT_10 = "case_10";
     private static final String OUTPUT_11 = "case_11";
+    private static final String OUTPUT_12 = "case_12";
+    private static final String OUTPUT_13 = "case_13";
 
     private MetricUtility mMetricUtil;
     private File mResultsFile;
@@ -88,8 +88,8 @@ public class MetricUtilityTest {
             new TestDescription("pkg", "test1$3");
     private static final TestDescription TEST_2_ITERATION_1_ON_METHOD =
             new TestDescription("pkg", "test2$1");
-    private static final TestDescription TEST_3_WITHOUT_ITERATION = new TestDescription("pkg",
-            "test3");
+    private static final TestDescription TEST_3_WITHOUT_ITERATION =
+            new TestDescription("pkg", "test3");
 
     @Before
     public void setUp() {
@@ -131,19 +131,33 @@ public class MetricUtilityTest {
         Metric currentTestMetric2 = metricBuilder2.build();
         secondTestMetric.put("second_test_metric", currentTestMetric2);
 
-        mMetricUtil.storeTestMetrics(test1, firstTestMetric);
-        mMetricUtil.storeTestMetrics(test2, secondTestMetric);
+        mMetricUtil.storeTestMetrics(test1, firstTestMetric, false);
+        mMetricUtil.storeTestMetrics(test2, secondTestMetric, false);
 
-        Map<String, ArrayListMultimap<String, Metric>> storedTestmetrics = mMetricUtil
-                .getStoredTestMetric();
+        Map<String, List<MetricUtility.IterationData>> storedTestmetrics =
+                mMetricUtil.getTestIterations();
 
-        Assert.assertTrue(storedTestmetrics.size() == 2);
-        Assert.assertTrue(storedTestmetrics.get("pkg#test1").get("first_test_metric").size() == 1);
-        Assert.assertTrue(storedTestmetrics.get("pkg#test2").get("second_test_metric").size() == 1);
-        Assert.assertTrue(storedTestmetrics.get("pkg#test1").get("first_test_metric").get(0)
-                .getMeasurements().getSingleString().equals("2.9"));
-        Assert.assertTrue(storedTestmetrics.get("pkg#test2").get("second_test_metric").get(0)
-                .getMeasurements().getSingleString().equals("1.5"));
+        assertTrue(storedTestmetrics.size() == 2);
+        assertTrue(storedTestmetrics.get("pkg#test1").size() == 1);
+        assertTrue(storedTestmetrics.get("pkg#test2").size() == 1);
+        assertEquals(
+                "2.9",
+                storedTestmetrics
+                        .get("pkg#test1")
+                        .get(0)
+                        .metrics
+                        .get("first_test_metric")
+                        .getMeasurements()
+                        .getSingleString());
+        assertEquals(
+                "1.5",
+                storedTestmetrics
+                        .get("pkg#test2")
+                        .get(0)
+                        .metrics
+                        .get("second_test_metric")
+                        .getMeasurements()
+                        .getSingleString());
     }
 
     @Test
@@ -176,20 +190,32 @@ public class MetricUtilityTest {
         Metric currentTestMetric2 = metricBuilder2.build();
         secondIterationMetric.put("first_test_metric", currentTestMetric2);
 
-        mMetricUtil.storeTestMetrics(test1, firstIterationMetric);
-        mMetricUtil.storeTestMetrics(test2, secondIterationMetric);
+        mMetricUtil.storeTestMetrics(test1, firstIterationMetric, false);
+        mMetricUtil.storeTestMetrics(test2, secondIterationMetric, false);
 
-        Map<String, ArrayListMultimap<String, Metric>> storedTestmetrics = mMetricUtil
-                .getStoredTestMetric();
+        Map<String, List<MetricUtility.IterationData>> storedTestmetrics =
+                mMetricUtil.getTestIterations();
 
-        Assert.assertTrue(storedTestmetrics.size() == 1);
+        assertTrue(storedTestmetrics.size() == 1);
 
-        Assert.assertTrue(storedTestmetrics.get("pkg#test1").get("first_test_metric").size() == 2);
-        Assert.assertTrue(storedTestmetrics.get("pkg#test1").get("first_test_metric").get(0)
-                .getMeasurements().getSingleString().equals("2.9"));
-        Assert.assertTrue(storedTestmetrics.get("pkg#test1").get("first_test_metric").get(1)
-                .getMeasurements().getSingleString().equals("1.5"));
-
+        List<MetricUtility.IterationData> test1Data = storedTestmetrics.get("pkg#test1");
+        assertTrue(test1Data.size() == 2);
+        assertEquals(
+                "2.9",
+                test1Data
+                        .get(0)
+                        .metrics
+                        .get("first_test_metric")
+                        .getMeasurements()
+                        .getSingleString());
+        assertEquals(
+                "1.5",
+                test1Data
+                        .get(1)
+                        .metrics
+                        .get("first_test_metric")
+                        .getMeasurements()
+                        .getSingleString());
     }
 
     @Test
@@ -201,26 +227,27 @@ public class MetricUtilityTest {
         Metric currentTestMetric = metricBuilder1.build();
         thirdTestMetric.put("third_test_metric", currentTestMetric);
 
-        mMetricUtil.storeTestMetrics(TEST_3_WITHOUT_ITERATION, thirdTestMetric);
+        mMetricUtil.storeTestMetrics(TEST_3_WITHOUT_ITERATION, thirdTestMetric, false);
 
-        Map<String, ArrayListMultimap<String, Metric>> storedTestmetrics = mMetricUtil
-                .getStoredTestMetric();
+        Map<String, List<MetricUtility.IterationData>> storedTestmetrics =
+                mMetricUtil.getTestIterations();
 
-        Assert.assertTrue(storedTestmetrics.size() == 1);
-        Assert.assertTrue(storedTestmetrics.get("pkg#test3").get("third_test_metric").size() == 1);
+        assertTrue(storedTestmetrics.size() == 1);
+        assertTrue(storedTestmetrics.get("pkg#test3").size() == 1);
     }
 
     @Test
     public void testStoreEmptyTestMetrics() {
         mMetricUtil.setIterationSeparator("$");
         // Make sure we have the entry for the test name with empty metrics.
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, new HashMap<String, Metric>());
-        Map<String, ArrayListMultimap<String, Metric>> storedTestmetrics = mMetricUtil
-                .getStoredTestMetric();
+        mMetricUtil.storeTestMetrics(
+                TEST_1_ITERATION_1_ON_CLASS, new HashMap<String, Metric>(), false);
+        Map<String, List<MetricUtility.IterationData>> storedTestmetrics =
+                mMetricUtil.getTestIterations();
 
         // Entry for test name with zero metrics.
-        Assert.assertTrue(
-                storedTestmetrics.size() == 1 && storedTestmetrics.get("pkg#test1").size() == 0);
+        assertTrue(storedTestmetrics.size() == 1 && storedTestmetrics.get("pkg#test1").size() == 1);
+        assertTrue(storedTestmetrics.get("pkg#test1").get(0).metrics.isEmpty());
     }
 
     @Test
@@ -231,8 +258,9 @@ public class MetricUtilityTest {
         firstTestMetric.put("first_test_metric_1", "2.9");
         firstTestMetric.put("first_test_metric_2", "3");
 
-        mResultsFile = mMetricUtil.writeResultsToFile("file_suffix", "pkg_name#test_name",
-                firstTestMetric, null);
+        mResultsFile =
+                mMetricUtil.writeResultsToFile(
+                        "file_suffix", "pkg_name#test_name", firstTestMetric, null);
 
         assertTrue(mResultsFile.getName().contains("file_suffix"));
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_1)));
@@ -253,16 +281,16 @@ public class MetricUtilityTest {
         secondTestMetric.put("second_test_metric_1", "5.9");
         secondTestMetric.put("second_test_metric_2", "0");
 
-        mResultsFile = mMetricUtil.writeResultsToFile("file_suffix", "pkg_name#test_name_1",
-                firstTestMetric, null);
+        mResultsFile =
+                mMetricUtil.writeResultsToFile(
+                        "file_suffix", "pkg_name#test_name_1", firstTestMetric, null);
 
         // Write second test metrics
-        mMetricUtil.writeResultsToFile("file_suffix", "pkg_name#test_name_2",
-                secondTestMetric, mResultsFile);
+        mMetricUtil.writeResultsToFile(
+                "file_suffix", "pkg_name#test_name_2", secondTestMetric, mResultsFile);
 
         assertTrue(mResultsFile.getName().contains("file_suffix"));
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_2)));
-
     }
 
     @Test
@@ -272,8 +300,9 @@ public class MetricUtilityTest {
         Map<String, String> firstTestMetric = new LinkedHashMap<String, String>();
 
         // Create a file with empty test metrics
-        mResultsFile = mMetricUtil.writeResultsToFile("file_suffix", "pkg_name#test_name",
-                firstTestMetric, null);
+        mResultsFile =
+                mMetricUtil.writeResultsToFile(
+                        "file_suffix", "pkg_name#test_name", firstTestMetric, null);
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_3)));
     }
 
@@ -291,11 +320,12 @@ public class MetricUtilityTest {
 
         Map<String, Metric> aggregatedMetric = mMetricUtil.aggregateMetrics(thirdTestMetric);
 
-        Map<String, String> compatibleTestMetrics = TfMetricProtoUtil
-                .compatibleConvert(aggregatedMetric);
+        Map<String, String> compatibleTestMetrics =
+                TfMetricProtoUtil.compatibleConvert(aggregatedMetric);
 
-        mResultsFile = mMetricUtil.writeResultsToFile("file_suffix", "pkg_name#test_name",
-                compatibleTestMetrics, null);
+        mResultsFile =
+                mMetricUtil.writeResultsToFile(
+                        "file_suffix", "pkg_name#test_name", compatibleTestMetrics, null);
 
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_4)));
     }
@@ -303,7 +333,7 @@ public class MetricUtilityTest {
     @Test
     public void testCustomPercentiles() throws IOException {
 
-        mMetricUtil.setPercentiles(new LinkedHashSet<> (Arrays.asList(50, 90, 99)));
+        mMetricUtil.setPercentiles(new LinkedHashSet<>(Arrays.asList(50, 90, 99)));
 
         // Build first test metric.
         Map<String, Metric> thirdTestMetric = new HashMap<String, Metric>();
@@ -314,11 +344,12 @@ public class MetricUtilityTest {
 
         Map<String, Metric> aggregatedMetric = mMetricUtil.aggregateMetrics(thirdTestMetric);
 
-        Map<String, String> compatibleTestMetrics = TfMetricProtoUtil
-                .compatibleConvert(aggregatedMetric);
+        Map<String, String> compatibleTestMetrics =
+                TfMetricProtoUtil.compatibleConvert(aggregatedMetric);
 
-        mResultsFile = mMetricUtil.writeResultsToFile("file_suffix", "pkg_name#test_name",
-                compatibleTestMetrics, null);
+        mResultsFile =
+                mMetricUtil.writeResultsToFile(
+                        "file_suffix", "pkg_name#test_name", compatibleTestMetrics, null);
 
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_5)));
     }
@@ -342,6 +373,12 @@ public class MetricUtilityTest {
 
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
+        // Scenario 1:
+        // Default Metric Count for All Metrics: This is achieved by keeping
+        // metrics-adjust-for-passed-iterations as an empty set. When no regex patterns are
+        // provided, the system defaults to calculating the mean using the total number of metric
+        // values collected.
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>());
 
         // Build first test metric.
         Map<String, Metric> firstIterationMetric = new HashMap<String, Metric>();
@@ -357,13 +394,12 @@ public class MetricUtilityTest {
         Metric currentTestMetric2 = metricBuilder2.build();
         secondIterationMetric.put("first_test_metric", currentTestMetric2);
 
-        mMetricUtil.storeTestMetrics(test1, firstIterationMetric);
-        mMetricUtil.storeTestMetrics(test2, secondIterationMetric);
+        mMetricUtil.storeTestMetrics(test1, firstIterationMetric, false);
+        mMetricUtil.storeTestMetrics(test2, secondIterationMetric, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
 
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_6)));
-
     }
 
     @Test
@@ -384,6 +420,7 @@ public class MetricUtilityTest {
             TestDescription test1, TestDescription test2) throws IOException {
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>()); // Scenario 1
 
         // Build first test metric.
         Map<String, Metric> firstTestMetric = new HashMap<String, Metric>();
@@ -399,8 +436,8 @@ public class MetricUtilityTest {
         Metric currentTestMetric2 = metricBuilder2.build();
         secondTestMetric.put("second_test_metric", currentTestMetric2);
 
-        mMetricUtil.storeTestMetrics(test1, firstTestMetric);
-        mMetricUtil.storeTestMetrics(test2, secondTestMetric);
+        mMetricUtil.storeTestMetrics(test1, firstTestMetric, false);
+        mMetricUtil.storeTestMetrics(test2, secondTestMetric, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
 
@@ -426,6 +463,7 @@ public class MetricUtilityTest {
 
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>()); // Scenario 1
 
         // Build first empty test metric.
         Map<String, Metric> firstIterationMetric = new HashMap<String, Metric>();
@@ -433,8 +471,8 @@ public class MetricUtilityTest {
         // Build second empty test metric.
         Map<String, Metric> secondIterationMetric = new HashMap<String, Metric>();
 
-        mMetricUtil.storeTestMetrics(test1, firstIterationMetric);
-        mMetricUtil.storeTestMetrics(test2, secondIterationMetric);
+        mMetricUtil.storeTestMetrics(test1, firstIterationMetric, false);
+        mMetricUtil.storeTestMetrics(test2, secondIterationMetric, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
 
@@ -461,6 +499,7 @@ public class MetricUtilityTest {
         mMetricUtil.setPercentiles(new HashSet<>());
         mMetricUtil.buildMetricFilterPatterns(
                 new HashSet<>(Arrays.asList("first_test_metric-min", "second_test_metric-min")));
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>()); // Scenario 1
 
         // Build first test metric.
         Map<String, Metric> firstTestMetric = new HashMap<String, Metric>();
@@ -476,8 +515,8 @@ public class MetricUtilityTest {
         Metric currentTestMetric2 = metricBuilder2.build();
         secondTestMetric.put("second_test_metric", currentTestMetric2);
 
-        mMetricUtil.storeTestMetrics(test1, firstTestMetric);
-        mMetricUtil.storeTestMetrics(test2, secondTestMetric);
+        mMetricUtil.storeTestMetrics(test1, firstTestMetric, false);
+        mMetricUtil.storeTestMetrics(test2, secondTestMetric, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
 
@@ -489,15 +528,16 @@ public class MetricUtilityTest {
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
         mMetricUtil.buildMetricFilterPatterns(new HashSet<>(Arrays.asList("no_metric")));
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>()); // Scenario 1
 
         // Build first test metric.
         Map<String, Metric> firstTestMetric = new HashMap<String, Metric>();
         Metric.Builder metricBuilder1 = Metric.newBuilder();
         metricBuilder1.getMeasurementsBuilder().setSingleString("2.9");
         Metric currentTestMetric = metricBuilder1.build();
-        firstTestMetric.put("first_test_metric", currentTestMetric);
+        firstTestMetric.put("first_test_metric", currentTestMetric); // No change here
 
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, firstTestMetric);
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, firstTestMetric, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
 
@@ -505,123 +545,130 @@ public class MetricUtilityTest {
     }
 
     @Test
-    public void
-            testAggregateStoredTestMetrics_countIterationsWithPartialMetricsWithMultipleValues_iterationOnClass()
-                    throws IOException {
+    public void testAggregateStoredTestMetrics_allMetricsUsePassedIterations() throws IOException {
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
-        mMetricUtil.setCountTestIterationsFlag(true);
+        // Scenario 2:
+        // Passed Test Iterations for All Metrics: This can be configured by setting
+        // metrics-adjust-for-passed-iterations to include a wildcard regex, specifically [".*"].
+        // Since . matches all metric keys, every metric will have its mean calculated based on the
+        // passed test iterations.
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>(Arrays.asList(".*")));
 
         // Iteration 1
         Map<String, Metric> i1_metrics = new HashMap<>();
         i1_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("1.0,2.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, i1_metrics, false);
 
         // Iteration 2
         Map<String, Metric> i2_metrics = new HashMap<>();
         i2_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("3.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_CLASS, i2_metrics, false);
 
         // Iteration 3
         Map<String, Metric> i3_metrics = new HashMap<>();
         i3_metrics.put("another_metric", TfMetricProtoUtil.stringToMetric("2.0,4.0"));
-
-        // All iterations resolve to the same base name: "pkg#test1"
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, i1_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_CLASS, i2_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_CLASS, i3_metrics);
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_CLASS, i3_metrics, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
-
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_10)));
     }
 
     @Test
-    public void
-            testAggregateStoredTestMetrics_countIterationsWithPartialMetricsWithMultipleValues_iterationOnMethod()
-                    throws IOException {
+    public void testAggregateStoredTestMetrics_allMetricsUsePassedIterations_singleValue()
+            throws IOException {
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
-        mMetricUtil.setCountTestIterationsFlag(true);
-
-        // Iteration 1
-        Map<String, Metric> i1_metrics = new HashMap<>();
-        i1_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("1.0,2.0"));
-
-        // Iteration 2
-        Map<String, Metric> i2_metrics = new HashMap<>();
-        i2_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("3.0"));
-
-        // Iteration 3
-        Map<String, Metric> i3_metrics = new HashMap<>();
-        i3_metrics.put("another_metric", TfMetricProtoUtil.stringToMetric("2.0,4.0"));
-
-        // All iterations resolve to the same base name: "pkg#test1"
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_METHOD, i1_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_METHOD, i2_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_METHOD, i3_metrics);
-
-        mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
-
-        assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_10)));
-    }
-
-    @Test
-    public void
-            testAggregateStoredTestMetrics_countIterationsWithPartialMetricsWithSingleValue_iterationOnClass()
-                    throws IOException {
-        mMetricUtil.setIterationSeparator("$");
-        mMetricUtil.setPercentiles(new HashSet<>());
-        mMetricUtil.setCountTestIterationsFlag(true);
+        // Scenario 2: Use passed iterations for all metrics
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>(Arrays.asList(".*")));
 
         // Iteration 1: has my_metric
         Map<String, Metric> i1_metrics = new HashMap<>();
         i1_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("1.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, i1_metrics, false);
 
         // Iteration 2: also has my_metric
         Map<String, Metric> i2_metrics = new HashMap<>();
         i2_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("2.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_CLASS, i2_metrics, false);
 
         // Iteration 3: has a different metric
         Map<String, Metric> i3_metrics = new HashMap<>();
         i3_metrics.put("another_metric", TfMetricProtoUtil.stringToMetric("9.0"));
-
-        // All iterations resolve to the same base name: "pkg#test1"
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, i1_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_CLASS, i2_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_CLASS, i3_metrics);
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_CLASS, i3_metrics, false);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
-
         assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_11)));
     }
 
     @Test
-    public void
-            testAggregateStoredTestMetrics_countIterationsWithPartialMetricsWithSingleValue_iterationOnMethod()
-                    throws IOException {
+    public void testAggregateStoredTestMetrics_withFailedIterationsAndUsePassed()
+            throws IOException {
         mMetricUtil.setIterationSeparator("$");
         mMetricUtil.setPercentiles(new HashSet<>());
-        mMetricUtil.setCountTestIterationsFlag(true);
+        // Scenario 2: Use passed iterations for all metrics
+        mMetricUtil.setMetricsUseForTestIterations(new HashSet<>(Arrays.asList(".*")));
 
-        // Iteration 1: has my_metric
+        // Iteration 1: passes
         Map<String, Metric> i1_metrics = new HashMap<>();
-        i1_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("1.0"));
+        i1_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("10.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, i1_metrics, false);
 
-        // Iteration 2: also has my_metric
+        // Iteration 2: fails
         Map<String, Metric> i2_metrics = new HashMap<>();
-        i2_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("2.0"));
+        i2_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("20.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_CLASS, i2_metrics, true);
 
-        // Iteration 3: has a different metric
+        // Iteration 3: fails
         Map<String, Metric> i3_metrics = new HashMap<>();
-        i3_metrics.put("another_metric", TfMetricProtoUtil.stringToMetric("9.0"));
-
-        // All iterations resolve to the same base name: "pkg#test1"
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_METHOD, i1_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_METHOD, i2_metrics);
-        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_METHOD, i3_metrics);
+        i3_metrics.put("my_metric", TfMetricProtoUtil.stringToMetric("30.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_CLASS, i3_metrics, true);
 
         mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
+        assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_12)));
+    }
 
-        assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_11)));
+    @Test
+    public void testAggregateStoredTestMetrics_withRegexFilterForIterations() throws IOException {
+        mMetricUtil.setIterationSeparator("$");
+        mMetricUtil.setPercentiles(new HashSet<>());
+        // Scenario 3:
+        // Passed Test Iterations for Matched Metrics: Providing specific regex patterns in
+        // metrics-adjust-for-passed-iterations (e.g., ["your_metric_regex"]) enables the passed
+        // iteration mean calculation only for those metrics whose keys match the provided patterns.
+        mMetricUtil.setMetricsUseForTestIterations(
+                new HashSet<>(Collections.singletonList(".*matching_metric.*")));
+
+        // 3 iterations, all passing, so passedIterations = 3.
+        Map<String, Metric> i1_metrics = new HashMap<>();
+        i1_metrics.put("matching_metric", TfMetricProtoUtil.stringToMetric("10.0"));
+        i1_metrics.put("unmatched_metric", TfMetricProtoUtil.stringToMetric("100.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_1_ON_CLASS, i1_metrics, false);
+
+        Map<String, Metric> i2_metrics = new HashMap<>();
+        i2_metrics.put("matching_metric", TfMetricProtoUtil.stringToMetric("20.0"));
+        i2_metrics.put("unmatched_metric", TfMetricProtoUtil.stringToMetric("200.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_2_ON_CLASS, i2_metrics, false);
+
+        Map<String, Metric> i3_metrics = new HashMap<>();
+        i3_metrics.put("matching_metric", TfMetricProtoUtil.stringToMetric("30.0"));
+        i3_metrics.put("unmatched_metric", TfMetricProtoUtil.stringToMetric("300.0"));
+        mMetricUtil.storeTestMetrics(TEST_1_ITERATION_3_ON_CLASS, i3_metrics, false);
+
+        mResultsFile = mMetricUtil.aggregateStoredTestMetricsAndWriteToFile("run_name");
+        assertTrue(FileUtil.readStringFromFile(mResultsFile).equals(getSampleOutput(OUTPUT_13)));
+    }
+
+    @Test
+    public void testGetStats_medianIsZero() {
+        List<Double> values = Arrays.asList(-1.0, 0.0, 1.0);
+        Map<String, Double> stats = MetricUtility.getStats(values, new HashSet<>(), 0);
+        // mad is median of absolute deviations from median.
+        // median is 0.0.
+        // absolute deviations: [1.0, 0.0, 1.0] -> sorted [0.0, 1.0, 1.0] -> median is 1.0
+        assertEquals(1.0, stats.get("mad"), 0.001);
+        // mad-coeff should be 0 when median is 0 to avoid division by zero.
+        assertEquals(0.0, stats.get("mad-coeff"), 0.001);
     }
 
     @Test
@@ -660,12 +707,8 @@ public class MetricUtilityTest {
 
             assertEquals(1, aggregatedReport.getTestMetricResultsCount());
             TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
-            assertEquals(
-                    "pkg.class#test",
-                    aggregatedResult.getIdentifier().getFullTestName());
-            assertEquals(
-                    "pkg.class",
-                    aggregatedResult.getIdentifier().getTestClass());
+            assertEquals("pkg.class#test", aggregatedResult.getIdentifier().getFullTestName());
+            assertEquals("pkg.class", aggregatedResult.getIdentifier().getTestClass());
             assertEquals(12, aggregatedResult.getMetricRecordsCount());
 
         } finally {
@@ -743,8 +786,7 @@ public class MetricUtilityTest {
                         .build();
         File reportFile1 =
                 createDimensionalMetricReportFile("report1.textproto", testId, "1.0", "3.0, 5.0");
-        File reportFile2 =
-                createDimensionalMetricReportFile("report2.textproto", testId, "2.0");
+        File reportFile2 = createDimensionalMetricReportFile("report2.textproto", testId, "2.0");
 
         List<LogFile> reportFiles =
                 Arrays.asList(
@@ -834,123 +876,118 @@ public class MetricUtilityTest {
 
     /**
      * Method to get the sample output based on the give test cases.
+     *
      * @param outputType
      * @return sample output in string format.
      */
     private String getSampleOutput(String outputType) {
         switch (outputType) {
             case OUTPUT_1:
-                return "pkg_name#test_name\n" +
-                        "\n" +
-                        "first_test_metric_1:2.9\n" +
-                        "first_test_metric_2:3\n" +
-                        "\n" +
-                        "\n";
+                return "pkg_name#test_name\n"
+                        + "\n"
+                        + "first_test_metric_1:2.9\n"
+                        + "first_test_metric_2:3\n"
+                        + "\n"
+                        + "\n";
             case OUTPUT_2:
-                return "pkg_name#test_name_1\n" +
-                        "\n" +
-                        "first_test_metric_1:2.9\n" +
-                        "first_test_metric_2:3\n" +
-                        "\n" +
-                        "\n" +
-                        "pkg_name#test_name_2\n" +
-                        "\n" +
-                        "second_test_metric_1:5.9\n" +
-                        "second_test_metric_2:0\n" +
-                        "\n" +
-                        "\n";
+                return "pkg_name#test_name_1\n"
+                        + "\n"
+                        + "first_test_metric_1:2.9\n"
+                        + "first_test_metric_2:3\n"
+                        + "\n"
+                        + "\n"
+                        + "pkg_name#test_name_2\n"
+                        + "\n"
+                        + "second_test_metric_1:5.9\n"
+                        + "second_test_metric_2:0\n"
+                        + "\n"
+                        + "\n";
             case OUTPUT_3:
-                return "pkg_name#test_name\n" +
-                        "\n" +
-                        "\n" +
-                        "\n";
+                return "pkg_name#test_name\n" + "\n" + "\n" + "\n";
             case OUTPUT_4:
-                return "pkg_name#test_name\n" +
-                        "\n" +
-                        "third_test_metric-min:1.00\n" +
-                        "third_test_metric-max:3.00\n" +
-                        "third_test_metric-mean:2.00\n" +
-                        "third_test_metric-var:0.67\n" +
-                        "third_test_metric-stdev:0.82\n" +
-                        "third_test_metric-median:2.00\n" +
-                        "third_test_metric-total:6.00\n" +
-                        "third_test_metric-metric-count:3.00\n" +
-                        "third_test_metric-last-first-diff:2.00\n" +
-                        "third_test_metric-mad:1.00\n" +
-                        "third_test_metric-mad-coeff:50.00\n" +
-                        "\n" +
-                        "\n";
+                return "pkg_name#test_name\n"
+                        + "\n"
+                        + "third_test_metric-min:1.00\n"
+                        + "third_test_metric-max:3.00\n"
+                        + "third_test_metric-mean:2.00\n"
+                        + "third_test_metric-var:0.67\n"
+                        + "third_test_metric-stdev:0.82\n"
+                        + "third_test_metric-median:2.00\n"
+                        + "third_test_metric-total:6.00\n"
+                        + "third_test_metric-metric-count:3.00\n"
+                        + "third_test_metric-last-first-diff:2.00\n"
+                        + "third_test_metric-mad:1.00\n"
+                        + "third_test_metric-mad-coeff:50.00\n"
+                        + "\n"
+                        + "\n";
             case OUTPUT_5:
-                return "pkg_name#test_name\n" +
-                        "\n" +
-                        "third_test_metric-min:1.00\n" +
-                        "third_test_metric-max:3.00\n" +
-                        "third_test_metric-mean:2.00\n" +
-                        "third_test_metric-var:0.67\n" +
-                        "third_test_metric-stdev:0.82\n" +
-                        "third_test_metric-median:2.00\n" +
-                        "third_test_metric-total:6.00\n" +
-                        "third_test_metric-metric-count:3.00\n" +
-                        "third_test_metric-last-first-diff:2.00\n" +
-                        "third_test_metric-mad:1.00\n" +
-                        "third_test_metric-mad-coeff:50.00\n" +
-                        "third_test_metric-p50:2.00\n" +
-                        "third_test_metric-p90:2.80\n" +
-                        "third_test_metric-p99:2.98\n" +
-                        "\n" +
-                        "\n";
+                return "pkg_name#test_name\n"
+                        + "\n"
+                        + "third_test_metric-min:1.00\n"
+                        + "third_test_metric-max:3.00\n"
+                        + "third_test_metric-mean:2.00\n"
+                        + "third_test_metric-var:0.67\n"
+                        + "third_test_metric-stdev:0.82\n"
+                        + "third_test_metric-median:2.00\n"
+                        + "third_test_metric-total:6.00\n"
+                        + "third_test_metric-metric-count:3.00\n"
+                        + "third_test_metric-last-first-diff:2.00\n"
+                        + "third_test_metric-mad:1.00\n"
+                        + "third_test_metric-mad-coeff:50.00\n"
+                        + "third_test_metric-p50:2.00\n"
+                        + "third_test_metric-p90:2.80\n"
+                        + "third_test_metric-p99:2.98\n"
+                        + "\n"
+                        + "\n";
             case OUTPUT_6:
-                return "pkg#test1\n" +
-                        "\n" +
-                        "first_test_metric-min:1.50\n" +
-                        "first_test_metric-max:2.90\n" +
-                        "first_test_metric-mean:2.20\n" +
-                        "first_test_metric-var:0.49\n" +
-                        "first_test_metric-stdev:0.70\n" +
-                        "first_test_metric-median:2.20\n" +
-                        "first_test_metric-total:4.40\n" +
-                        "first_test_metric-metric-count:2.00\n" +
-                        "first_test_metric-last-first-diff:-1.40\n" +
-                        "first_test_metric-mad:0.70\n" +
-                        "first_test_metric-mad-coeff:31.82\n" +
-                        "\n" +
-                        "\n";
+                return "pkg#test1\n"
+                        + "\n"
+                        + "first_test_metric-min:1.50\n"
+                        + "first_test_metric-max:2.90\n"
+                        + "first_test_metric-mean:2.20\n"
+                        + "first_test_metric-var:0.49\n"
+                        + "first_test_metric-stdev:0.70\n"
+                        + "first_test_metric-median:2.20\n"
+                        + "first_test_metric-total:4.40\n"
+                        + "first_test_metric-metric-count:2.00\n"
+                        + "first_test_metric-last-first-diff:-1.40\n"
+                        + "first_test_metric-mad:0.70\n"
+                        + "first_test_metric-mad-coeff:31.82\n"
+                        + "\n"
+                        + "\n";
             case OUTPUT_7:
-                return "pkg#test1\n" +
-                        "\n" +
-                        "first_test_metric-min:2.90\n" +
-                        "first_test_metric-max:2.90\n" +
-                        "first_test_metric-mean:2.90\n" +
-                        "first_test_metric-var:0.00\n" +
-                        "first_test_metric-stdev:0.00\n" +
-                        "first_test_metric-median:2.90\n" +
-                        "first_test_metric-total:2.90\n" +
-                        "first_test_metric-metric-count:1.00\n" +
-                        "first_test_metric-last-first-diff:2.90\n" +
-                        "first_test_metric-mad:0.00\n" +
-                        "first_test_metric-mad-coeff:0.00\n" +
-                        "\n" +
-                        "\n" +
-                        "pkg#test2\n" +
-                        "\n" +
-                        "second_test_metric-min:1.50\n" +
-                        "second_test_metric-max:1.50\n" +
-                        "second_test_metric-mean:1.50\n" +
-                        "second_test_metric-var:0.00\n" +
-                        "second_test_metric-stdev:0.00\n" +
-                        "second_test_metric-median:1.50\n" +
-                        "second_test_metric-total:1.50\n" +
-                        "second_test_metric-metric-count:1.00\n" +
-                        "second_test_metric-last-first-diff:1.50\n" +
-                        "second_test_metric-mad:0.00\n" +
-                        "second_test_metric-mad-coeff:0.00\n" +
-                        "\n" +
-                        "\n";
+                return "pkg#test1\n"
+                        + "\n"
+                        + "first_test_metric-min:2.90\n"
+                        + "first_test_metric-max:2.90\n"
+                        + "first_test_metric-mean:2.90\n"
+                        + "first_test_metric-var:0.00\n"
+                        + "first_test_metric-stdev:0.00\n"
+                        + "first_test_metric-median:2.90\n"
+                        + "first_test_metric-total:2.90\n"
+                        + "first_test_metric-metric-count:1.00\n"
+                        + "first_test_metric-last-first-diff:2.90\n"
+                        + "first_test_metric-mad:0.00\n"
+                        + "first_test_metric-mad-coeff:0.00\n"
+                        + "\n"
+                        + "\n"
+                        + "pkg#test2\n"
+                        + "\n"
+                        + "second_test_metric-min:1.50\n"
+                        + "second_test_metric-max:1.50\n"
+                        + "second_test_metric-mean:1.50\n"
+                        + "second_test_metric-var:0.00\n"
+                        + "second_test_metric-stdev:0.00\n"
+                        + "second_test_metric-median:1.50\n"
+                        + "second_test_metric-total:1.50\n"
+                        + "second_test_metric-metric-count:1.00\n"
+                        + "second_test_metric-last-first-diff:1.50\n"
+                        + "second_test_metric-mad:0.00\n"
+                        + "second_test_metric-mad-coeff:0.00\n"
+                        + "\n"
+                        + "\n";
             case OUTPUT_8:
-                return "pkg#test1\n" +
-                        "\n" +
-                        "\n" +
-                        "\n";
+                return "pkg#test1\n" + "\n" + "\n" + "\n";
             case OUTPUT_9:
                 return "pkg#test1\n"
                         + "\n"
@@ -962,7 +999,9 @@ public class MetricUtilityTest {
                         + "second_test_metric-min:1.50\n"
                         + "\n"
                         + "\n";
-            case OUTPUT_10:
+            case OUTPUT_10: // Scenario 2: metrics-use-for-test-iterations = [".*"]
+                // my_metric-mean: (1.0 + 2.0 + 3.0) / 3 passed iterations = 2.00
+                // another_metric-mean: (2.0 + 4.0) / 3 passed iterations = 2.00
                 return "pkg#test1\n"
                         + "\n"
                         + "another_metric-min:2.00\n"
@@ -989,7 +1028,9 @@ public class MetricUtilityTest {
                         + "my_metric-mad-coeff:50.00\n"
                         + "\n"
                         + "\n";
-            case OUTPUT_11:
+            case OUTPUT_11: // Scenario 2: metrics-use-for-test-iterations = [".*"]
+                // another_metric-mean: 9.0 / 3 passed iterations = 3.00
+                // my_metric-mean: (1.0 + 2.0) / 3 passed iterations = 1.00
                 return "pkg#test1\n"
                         + "\n"
                         + "another_metric-min:9.00\n"
@@ -1014,6 +1055,54 @@ public class MetricUtilityTest {
                         + "my_metric-last-first-diff:1.00\n"
                         + "my_metric-mad:0.50\n"
                         + "my_metric-mad-coeff:33.33\n"
+                        + "\n"
+                        + "\n";
+            case OUTPUT_12: // Failed iterations excluded from sum and count for mean
+                // my_metric-mean: 10.0 / 1 passed iterations = 10.00
+                // my_metric-total is sum of passed: 10 = 10
+                // my_metric-metric-count is from passed iterations
+                return "pkg#test1\n"
+                        + "\n"
+                        + "my_metric-min:10.00\n"
+                        + "my_metric-max:10.00\n"
+                        + "my_metric-mean:10.00\n"
+                        + "my_metric-var:0.00\n"
+                        + "my_metric-stdev:0.00\n"
+                        + "my_metric-median:10.00\n"
+                        + "my_metric-total:10.00\n"
+                        + "my_metric-metric-count:1.00\n"
+                        + "my_metric-last-first-diff:10.00\n"
+                        + "my_metric-mad:0.00\n"
+                        + "my_metric-mad-coeff:0.00\n"
+                        + "\n"
+                        + "\n";
+            case OUTPUT_13: // Scenario 3: Regex filter for passed iterations
+                // matching_metric-mean: (10+20+30) / 3 passed iterations = 20.00
+                // unmatched_metric-mean: (100+200+300) / 3 metric values = 200.00
+                return "pkg#test1\n"
+                        + "\n"
+                        + "matching_metric-min:10.00\n"
+                        + "matching_metric-max:30.00\n"
+                        + "matching_metric-mean:20.00\n"
+                        + "matching_metric-var:66.67\n"
+                        + "matching_metric-stdev:8.16\n"
+                        + "matching_metric-median:20.00\n"
+                        + "matching_metric-total:60.00\n"
+                        + "matching_metric-metric-count:3.00\n"
+                        + "matching_metric-last-first-diff:20.00\n"
+                        + "matching_metric-mad:10.00\n"
+                        + "matching_metric-mad-coeff:50.00\n"
+                        + "unmatched_metric-min:100.00\n"
+                        + "unmatched_metric-max:300.00\n"
+                        + "unmatched_metric-mean:200.00\n"
+                        + "unmatched_metric-var:6666.67\n"
+                        + "unmatched_metric-stdev:81.65\n"
+                        + "unmatched_metric-median:200.00\n"
+                        + "unmatched_metric-total:600.00\n"
+                        + "unmatched_metric-metric-count:3.00\n"
+                        + "unmatched_metric-last-first-diff:200.00\n"
+                        + "unmatched_metric-mad:100.00\n"
+                        + "unmatched_metric-mad-coeff:50.00\n"
                         + "\n"
                         + "\n";
             default:

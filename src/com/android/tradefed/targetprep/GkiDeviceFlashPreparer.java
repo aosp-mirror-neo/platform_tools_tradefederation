@@ -210,6 +210,9 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     @Option(name = "oem-disable-verity", description = "Whether to run oem disable-verity.")
     private boolean mShouldDisableOemVerity = false;
 
+    @Option(name = "disable-verification", description = "Whether to disable-verification.")
+    private boolean mShouldDisableVerification = false;
+
     @Option(
             name = "fastboot-flash-option",
             description = "additional options to pass with fastboot flash command.")
@@ -351,8 +354,26 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
             executeFastbootCmd(device, "-w");
         }
         if (mShouldDisableOemVerity) {
-            executeFastbootCmd(device, "oem disable-verity");
+            // Run oem disable-verity command at best effort
+            try {
+                executeFastbootCmd(device, "oem disable-verity");
+            } catch (TargetSetupError e) {
+                CLog.w("fastboot oem disable-verity is not supported");
+            }
         }
+        if (mShouldDisableVerification) {
+            // Run fastboot oem disable-verification command at best effort
+            try {
+                executeFastbootCmd(device, "oem disable-verification");
+            } catch (TargetSetupError e) {
+                // fastboot oem disable-verification is not supported
+                CLog.w("fastboot oem disable-verification is not supported");
+                if (!mFlashOptions.contains("--disable-verification")) {
+                    mFlashOptions.add("--disable-verification");
+                }
+            }
+        }
+
         long start = System.currentTimeMillis();
         getHostOptions().takePermit(PermitLimitType.CONCURRENT_FLASHER);
         // Ensure snapuserd isn't running

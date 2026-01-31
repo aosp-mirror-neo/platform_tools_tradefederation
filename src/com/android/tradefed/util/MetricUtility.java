@@ -34,7 +34,6 @@ import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.math.Quantiles;
 import com.google.protobuf.TextFormat;
 
@@ -44,7 +43,6 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -54,8 +52,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -88,23 +86,32 @@ public class MetricUtility {
     // Percentiles to include when calculating the aggregates.
     private Set<Integer> mActualPercentiles = new LinkedHashSet<>();
 
-    // Store the test metrics for aggregation at the end of test run.
-    // Outer map key is the test id and inner map key is the metric key name.
-    private Map<String, ArrayListMultimap<String, Metric>> mStoredTestMetrics =
-            new LinkedHashMap<String, ArrayListMultimap<String, Metric>>();
-
-    private Map<String, Integer> mTestIterationCounts = new HashMap<>();
-    private boolean mEnableCountTestIterations = false;
+    // Stores metrics per test iteration, along with pass/fail status.
+    private Map<String, List<IterationData>> mTestIterations = new LinkedHashMap<>();
 
     private List<Pattern> mMetricPatterns = new ArrayList<>();
+    private List<Pattern> mMetricsUseForTestIterationsPatterns = new ArrayList<>();
+
+    /** Helper class to hold metrics and status for a single test iteration. */
+    static class IterationData {
+        Map<String, Metric> metrics;
+        boolean passed;
+
+        IterationData(Map<String, Metric> metrics, boolean passed) {
+            this.metrics = metrics;
+            this.passed = passed;
+        }
+    }
 
     /**
      * Used for storing the individual test metrics and use it for aggregation.
      *
      * @param testDescription contains the test details like class name and test name.
      * @param testMetrics metrics collected for the test.
+     * @param testFailed whether the test has failed.
      */
-    public void storeTestMetrics(TestDescription testDescription, Map<String, Metric> testMetrics) {
+    public void storeTestMetrics(
+            TestDescription testDescription, Map<String, Metric> testMetrics, boolean testFailed) {
 
         if (testMetrics == null) {
             return;
@@ -116,20 +123,10 @@ public class MetricUtility {
                 CLASS_METHOD_JOINER
                         .join(testDescription.getClassName(), testDescription.getTestName())
                         .replaceFirst(Pattern.quote(mTestIterationSeparator) + "\\d+", "");
-        if (!mStoredTestMetrics.containsKey(newTestId)) {
-            mStoredTestMetrics.put(newTestId, ArrayListMultimap.create());
-            if (mEnableCountTestIterations) {
-                mTestIterationCounts.put(newTestId, 0);
-            }
-        }
-        if (mEnableCountTestIterations) {
-            mTestIterationCounts.put(newTestId, mTestIterationCounts.get(newTestId) + 1);
-        }
-        ArrayListMultimap<String, Metric> storedMetricsForThisTest =
-                mStoredTestMetrics.get(newTestId);
-        for (Map.Entry<String, Metric> entry : testMetrics.entrySet()) {
-            storedMetricsForThisTest.put(entry.getKey(), entry.getValue());
-        }
+
+        mTestIterations
+                .computeIfAbsent(newTestId, k -> new ArrayList<>())
+                .add(new IterationData(testMetrics, !testFailed));
     }
 
     /**
@@ -204,41 +201,82 @@ public class MetricUtility {
      */
     public File aggregateStoredTestMetricsAndWriteToFile(String fileName) {
         File resultsFile = null;
-        for (String testName : mStoredTestMetrics.keySet()) {
-            ArrayListMultimap<String, Metric> currentTest = mStoredTestMetrics.get(testName);
-            int iterations = mTestIterationCounts.getOrDefault(testName, 0);
-            Map<String, Metric> aggregateMetrics = new LinkedHashMap<String, Metric>();
-            List<String> keys = new ArrayList<>(currentTest.keySet());
-            Collections.sort(keys);
-            for (String metricKey : keys) {
-                List<Metric> metrics = currentTest.get(metricKey);
-                List<Measurements> measures =
-                        metrics.stream().map(Metric::getMeasurements).collect(Collectors.toList());
-                // Parse metrics into a list of SingleString values, concating lists in the process
-                List<String> rawValues =
-                        measures.stream()
-                                .map(MetricUtility::getMeasurementAsString)
-                                .map(
-                                        m -> {
-                                            // Split results; also deals with the case of empty
-                                            // results
-                                            // in a certain run
-                                            List<String> splitVals = Arrays.asList(m.split(",", 0));
-                                            if (splitVals.size() == 1
-                                                    && splitVals.get(0).isEmpty()) {
-                                                return Collections.<String>emptyList();
-                                            }
-                                            return splitVals;
-                                        })
-                                .flatMap(Collection::stream)
-                                .map(String::trim)
-                                .collect(Collectors.toList());
-                // Do not report empty metrics
-                if (rawValues.isEmpty()) {
-                    continue;
+        for (String testName : mTestIterations.keySet()) {
+            List<IterationData> iterations = mTestIterations.get(testName);
+            long passedIterations = iterations.stream().filter(d -> d.passed).count();
+
+            // Collect all unique metric keys across all iterations for this testName
+            List<String> allMetricKeys =
+                    iterations.stream()
+                            .flatMap(data -> data.metrics.keySet().stream())
+                            .distinct() // Ensure uniqueness
+                            .collect(Collectors.toList());
+            Collections.sort(allMetricKeys); // Sort the metric keys alphabetically
+
+            Map<String, Metric> aggregateMetrics = new LinkedHashMap<>();
+
+            for (String metricKey : allMetricKeys) {
+                List<String> allRawValues = new ArrayList<>();
+                List<String> passedRawValues = new ArrayList<>();
+
+                for (IterationData data : iterations) {
+                    Metric metric = data.metrics.get(metricKey);
+                    if (metric != null) {
+                        String values = getMeasurementAsString(metric.getMeasurements());
+                        List<String> splitVals = Arrays.asList(values.split(",", 0));
+                        if (!(splitVals.size() == 1 && splitVals.get(0).isEmpty())) {
+                            List<String> trimmedVals =
+                                    splitVals.stream()
+                                            .map(String::trim)
+                                            .collect(Collectors.toList());
+                            allRawValues.addAll(trimmedVals);
+                            if (data.passed) {
+                                passedRawValues.addAll(trimmedVals);
+                            }
+                        }
+                    }
                 }
-                if (isAllDoubleValues(rawValues)) {
-                    buildStats(metricKey, rawValues, aggregateMetrics, iterations);
+
+                if (allRawValues.isEmpty()) {
+                    continue; // No values for this metric key
+                }
+
+                // Scenario 1: Use default metric count for all metrics.
+                // Scenario 2: Use passed test iterations for all metrics extracted from passed
+                // iterations.
+                // Scenario 3: Use passed test iterations for the matched metrics extracted from
+                // passed iterations only.
+                if (isAllDoubleValues(allRawValues)) {
+                    boolean usePassedIterationsForMean = false;
+                    // Scenario 1: If patterns are empty, do not use passed iterations for mean.
+                    if (!mMetricsUseForTestIterationsPatterns.isEmpty()) {
+                        // Scenario 2 & 3: Check if the metric key matches any pattern.
+                        for (Pattern pattern : mMetricsUseForTestIterationsPatterns) {
+                            if (pattern.matcher(metricKey).matches()) {
+                                usePassedIterationsForMean = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    List<String> valuesForMean = allRawValues;
+                    int meanDivisor = 0; // Initialize meanDivisor to 0 (default: use metric count)
+                    if (usePassedIterationsForMean) {
+                        if (passedIterations > 0) {
+                            // Scenario 2 & 3
+                            valuesForMean = passedRawValues;
+                            meanDivisor = (int) passedIterations;
+                        } else {
+                            // If no passed iterations, valuesForMean should be empty.
+                            // aggregations are based solely on passed iterations.
+                            // This list is empty when passedIterations is 0.
+                            valuesForMean = passedRawValues;
+                        }
+                    } else {
+                        // Scenario 1
+                        valuesForMean = allRawValues;
+                    }
+                    buildStats(metricKey, valuesForMean, aggregateMetrics, meanDivisor);
                 }
             }
 
@@ -261,19 +299,16 @@ public class MetricUtility {
         mTestIterationSeparator = separator;
     }
 
-    public void setCountTestIterationsFlag(boolean enableCountTestIterations) {
-        mEnableCountTestIterations = enableCountTestIterations;
-    }
-
     @VisibleForTesting
-    public Map<String, ArrayListMultimap<String, Metric>> getStoredTestMetric() {
-        return mStoredTestMetrics;
+    public Map<String, List<IterationData>> getTestIterations() {
+        return mTestIterations;
     }
 
     /**
-     * Return true is all the values can be parsed to double value. Otherwise return false.
+     * Checks if all the values in the list are double values.
      *
-     * @param rawValues list whose values are validated.
+     * @param rawValues list of values to check.
+     * @return true if all the values are double values, false otherwise.
      */
     public static boolean isAllDoubleValues(List<String> rawValues) {
         return rawValues.stream()
@@ -293,12 +328,16 @@ public class MetricUtility {
      *
      * @param values raw values to compute the aggregation.
      * @param percentiles stats to include in the final metrics.
-     * @param testIterations number of iterations of the test.
+     * @param testIterations number of iterations to use as the divisor for the mean. If 0, mean is
+     *     calculated using the size of the 'values' list.
      * @return aggregated values.
      */
     public static Map<String, Double> getStats(
             List<Double> values, Set<Integer> percentiles, int testIterations) {
         Map<String, Double> stats = new LinkedHashMap<>();
+        if (values.isEmpty()) {
+            return stats;
+        }
         double sum = values.stream().mapToDouble(Double::doubleValue).sum();
         double count = values.size();
         // The orElse situation should never happen.
@@ -329,7 +368,7 @@ public class MetricUtility {
         List<Double> absoluteDeviations =
                 values.stream().map(v -> Math.abs(v - median)).collect(Collectors.toList());
         double mad = Quantiles.median().compute(absoluteDeviations);
-        double madCoefficient = (mad / median) * 100;
+        double madCoefficient = (median == 0) ? 0 : (mad / median) * 100;
 
         stats.put(STATS_KEY_MIN, Collections.min(values));
         stats.put(STATS_KEY_MAX, Collections.max(values));
@@ -363,13 +402,17 @@ public class MetricUtility {
      * @param metricKey key to which the values correspond to.
      * @param values list of raw values.
      * @param aggregateMetrics where final metrics will be stored.
-     * @param testIterations number of iterations of the test.
+     * @param testIterations number of iterations to use as the divisor for the mean. If 0, the size
+     *     of 'values' is used.
      */
     private void buildStats(
             String metricKey,
             List<String> values,
             Map<String, Metric> aggregateMetrics,
             int testIterations) {
+        if (values.isEmpty()) {
+            return;
+        }
         List<Double> doubleValues =
                 values.stream().map(Double::parseDouble).collect(Collectors.toList());
         Map<String, Double> stats = getStats(doubleValues, mActualPercentiles, testIterations);
@@ -425,6 +468,21 @@ public class MetricUtility {
             return String.valueOf(measurements.getSingleInt());
         }
         return "";
+    }
+
+    /**
+     * Sets the regular expressions for metrics that should use passed test iterations for mean
+     * calculation during aggregation.
+     *
+     * @param metricsUseForTestIterations A set of regular expression strings.
+     */
+    public void setMetricsUseForTestIterations(Set<String> metricsUseForTestIterations) {
+        if (metricsUseForTestIterations != null) {
+            mMetricsUseForTestIterationsPatterns.clear(); // Clear existing patterns
+            for (String regEx : metricsUseForTestIterations) {
+                mMetricsUseForTestIterationsPatterns.add(Pattern.compile(regEx));
+            }
+        }
     }
 
     /** A type-safe key for grouping dimensional metrics for aggregation. */
