@@ -2895,6 +2895,16 @@ public class NativeDevice
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CommandResult fastbootOemRamdumpNow() {
+        return simpleFastbootCommand(
+            mOptions.getFastbootOutputTimeout(),
+            buildFastbootCommand("oem", "ramdump", "now"));
+    }
+
+    /**
      * Evaluate the given fastboot result to determine if recovery mode needs to be entered
      *
      * @param fastbootResult the {@link CommandResult} from a fastboot command
