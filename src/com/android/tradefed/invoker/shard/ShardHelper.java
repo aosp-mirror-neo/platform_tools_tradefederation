@@ -128,7 +128,13 @@ public class ShardHelper implements IShardHelper {
         Map<Integer, List<IRemoteTest>> multiDevicesShards = buildMultiDevicesShard(shardableTests);
         int expectedShard = shardableTests.size();
         if (shardCount != null) {
-            expectedShard = Math.min(shardCount, shardableTests.size());
+            if (config.getCommandOptions().shouldUseTokenSharding()) {
+                // Strictly respects the shard count if token sharding is enabled so that the token
+                // tests can be allocated and executed on devices with SIM cards.
+                expectedShard = shardCount;
+            } else {
+                expectedShard = Math.min(shardCount, shardableTests.size());
+            }
         }
         if (!multiDevicesShards.isEmpty()) {
             // Account for one shard for the multi-devices
