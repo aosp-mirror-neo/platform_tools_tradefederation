@@ -151,6 +151,19 @@ public final class UserSwitcher {
         return userIdToSwitch;
     }
 
+    @VisibleForTesting
+    boolean canSwitchToHeadlessSystemUser() throws DeviceNotAvailableException {
+        int apiLevel = mDevice.getApiLevel();
+        if (apiLevel < 34) {
+            CLog.w(
+                    "canSwitchToHeadlessSystemUser(): returning true on device with API level %d, "
+                            + "as that API was introduced on API level 34",
+                    apiLevel);
+            return true;
+        }
+        return mDevice.canSwitchToHeadlessSystemUser();
+    }
+
     /**
      * Switches back to the current user prior to the {@link #switchUser(ITestDevice, UserType)}
      * call.

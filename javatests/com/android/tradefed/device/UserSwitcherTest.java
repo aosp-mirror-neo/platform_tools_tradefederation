@@ -389,6 +389,28 @@ public final class UserSwitcherTest {
                 .isEqualTo("exception switching users");
     }
 
+    @Test
+    public void testCanSwitchToHeadlessSystemUser_supportedAPILevel() throws Exception {
+        mockGetApiLevel(34);
+        mockCanSwitchToHeadlessSystemUser(true);
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
+
+        expect.withMessage("canSwitchToHeadlessSystemUser()")
+                .that(userSwitcher.canSwitchToHeadlessSystemUser())
+                .isTrue();
+    }
+
+    @Test
+    public void testCanSwitchToHeadlessSystemUser_unsupportedAPILevel() throws Exception {
+        mockGetApiLevel(33);
+        mockCanSwitchToHeadlessSystemUser(false); // shouldn't have been called
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
+
+        expect.withMessage("canSwitchToHeadlessSystemUser()")
+                .that(userSwitcher.canSwitchToHeadlessSystemUser())
+                .isTrue();
+    }
+
     private void mockUsers(UserInfo... users) throws DeviceNotAvailableException {
         Map<Integer, UserInfo> map =
                 Arrays.stream(users)
@@ -428,6 +450,10 @@ public final class UserSwitcherTest {
             return;
         }
         throw new IllegalArgumentException("Cannot be a checked exception: " + t);
+    }
+
+    private void mockGetApiLevel(int level) throws DeviceNotAvailableException {
+        when(mMockDevice.getApiLevel()).thenReturn(level);
     }
 
     private void verifySwitchUserNeverCalled() throws DeviceNotAvailableException {
