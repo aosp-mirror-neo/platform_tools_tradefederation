@@ -62,6 +62,13 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
 
     @Override
     public LinkedHashMap<String, IConfiguration> loadTests() {
+        if (!getIncludeFilter().isEmpty()) {
+            throw new HarnessRuntimeException(
+                    "The option --include-filter is forbidden in ExecutionPlanSuiteRunner. "
+                            + "Please specify --execution-plans instead.",
+                    InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+        }
+
         // Step 1: load and match execution plan protos from zip files
         List<TestExecutionPlan> matchedExecutionPlanProtos = loadAndMatchExecutionPlans();
 
