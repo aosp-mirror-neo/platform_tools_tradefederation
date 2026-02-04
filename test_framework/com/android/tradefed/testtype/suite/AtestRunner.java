@@ -18,20 +18,16 @@ package com.android.tradefed.testtype.suite;
 import com.android.tradefed.config.ConfigurationFactory;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationFactory;
-import com.android.tradefed.config.IDeviceConfiguration;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.Option.Importance;
 import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.SubprocessResultsReporter;
-import com.android.tradefed.targetprep.ITargetPreparer;
-import com.android.tradefed.targetprep.incremental.IIncrementalSetup;
 import com.android.tradefed.testtype.IAbi;
 import com.android.tradefed.testtype.IRemoteTest;
 import com.android.tradefed.testtype.ITestFilterReceiver;
-import com.android.tradefed.testtype.InstrumentationTest;
-import com.android.tradefed.testtype.IsolatedHostTest;
+import com.android.tradefed.util.AtestUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -42,7 +38,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 
 /** Implementation of {@link ITestSuite} */
 public class AtestRunner extends BaseTestSuite {
@@ -100,18 +95,12 @@ public class AtestRunner extends BaseTestSuite {
     private List<File> mModuleConfigPaths = new ArrayList<>();
 
     @Option(
-        name = "incremental-setup",
-        description =
-                "Indicates the user specification of whether to enable incremental setup, "
-                    + "default to UNSPECIFIED."
-    )
-    private IncrementalSetupEnabled mIncrementalSetupEnabled = IncrementalSetupEnabled.UNSPECIFIED;
-
-    private static enum IncrementalSetupEnabled {
-        UNSPECIFIED,
-        NO,
-        YES,
-    }
+            name = "incremental-setup",
+            description =
+                    "Indicates the user specification of whether to enable incremental setup, "
+                            + "default to UNSPECIFIED.")
+    private AtestUtils.IncrementalSetupEnabled mIncrementalSetupEnabled =
+            AtestUtils.IncrementalSetupEnabled.UNSPECIFIED;
 
     public AtestRunner() {
         setMultiDeviceStrategy(MultiDeviceModuleStrategy.RUN);
@@ -143,16 +132,18 @@ public class AtestRunner extends BaseTestSuite {
         LinkedHashMap<String, HashSet<String>> includeFilters = getIncludeFilters();
         for (IConfiguration testConfig : configMap.values()) {
             if (mSkipSetUp || mSkipTearDown) {
-                disableTargetPreparers(testConfig, mSkipSetUp, mSkipTearDown);
+                AtestUtils.disableTargetPreparers(testConfig, mSkipSetUp, mSkipTearDown);
             }
             if (mDebug) {
-                addDebugger(testConfig);
+                AtestUtils.addDebugger(testConfig);
             }
 
-            if (mIncrementalSetupEnabled == IncrementalSetupEnabled.YES) {
-                setIncrementalSetupEnabledForTargetPreparers(testConfig, /* shouldEnable= */ true);
-            } else if (mIncrementalSetupEnabled == IncrementalSetupEnabled.NO) {
-                setIncrementalSetupEnabledForTargetPreparers(testConfig, /* shouldEnable= */ false);
+            if (mIncrementalSetupEnabled == AtestUtils.IncrementalSetupEnabled.YES) {
+                AtestUtils.setIncrementalSetupEnabledForTargetPreparers(
+                        testConfig, /* shouldEnable= */ true);
+            } else if (mIncrementalSetupEnabled == AtestUtils.IncrementalSetupEnabled.NO) {
+                AtestUtils.setIncrementalSetupEnabledForTargetPreparers(
+                        testConfig, /* shouldEnable= */ false);
             }
 
             // Inject include-filter to test.
@@ -242,51 +233,4 @@ public class AtestRunner extends BaseTestSuite {
         return listeners;
     }
 
-    /** Helper to attach the debugger to any Instrumentation tests in the config. */
-    private void addDebugger(IConfiguration testConfig) {
-        for (IRemoteTest test : testConfig.getTests()) {
-            if (test instanceof InstrumentationTest) {
-                ((InstrumentationTest) test).setDebug(true);
-            }
-            if (test instanceof IsolatedHostTest) {
-                ((IsolatedHostTest) test).setDebug(true);
-            }
-        }
-    }
-
-    /** Helper to disable TargetPreparers of a test. */
-    private void disableTargetPreparers(
-            IConfiguration testConfig, boolean skipSetUp, boolean skipTearDown) {
-        for (ITargetPreparer targetPreparer : testConfig.getTargetPreparers()) {
-            if (skipSetUp) {
-                CLog.d(
-                        "%s: Disabling Target Preparer (%s)",
-                        testConfig.getName(), targetPreparer.getClass().getSimpleName());
-                targetPreparer.setDisable(true);
-            } else if (skipTearDown) {
-                CLog.d(
-                        "%s: Disabling Target Preparer TearDown (%s)",
-                        testConfig.getName(), targetPreparer.getClass().getSimpleName());
-                targetPreparer.setDisableTearDown(true);
-            }
-        }
-    }
-
-    /**
-     * Helper to set incremental setup enabled or disabled to TargetPreparers of a test.
-     *
-     * @param testConfig the test config which contains all target preparers.
-     * @param shouldEnable {@code true} to enable incremental setup, otherwise disable incremental
-     *     setup.
-     */
-    private static void setIncrementalSetupEnabledForTargetPreparers(
-        IConfiguration testConfig, boolean shouldEnable) {
-        for (IDeviceConfiguration deviceConfig : testConfig.getDeviceConfig()) {
-            for (ITargetPreparer targetPreparer : deviceConfig.getTargetPreparers()) {
-                if (targetPreparer instanceof IIncrementalSetup) {
-                    ((IIncrementalSetup) targetPreparer).setIncrementalSetupEnabled(shouldEnable);
-                }
-            }
-        }
-    }
 }
