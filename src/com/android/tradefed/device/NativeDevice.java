@@ -1023,10 +1023,16 @@ public class NativeDevice
      *        device's product type cannot be found.
      */
     private String internalGetProductType(int retryAttempts) throws DeviceNotAvailableException {
-        String productType = internalGetProperty(DeviceProperties.BOARD, "product", "Product type");
-        // fallback to ro.hardware for legacy devices
-        if (Strings.isNullOrEmpty(productType)) {
-            productType = internalGetProperty(DeviceProperties.HARDWARE, "product", "Product type");
+        String productType = null;
+        try {
+            productType = internalGetProperty(DeviceProperties.BOARD, "product", "Product type");
+            // fallback to ro.hardware for legacy devices
+            if (Strings.isNullOrEmpty(productType)) {
+                productType =
+                        internalGetProperty(DeviceProperties.HARDWARE, "product", "Product type");
+            }
+        } catch (DeviceNotAvailableException e) {
+            CLog.e("Failed to get product type for %s, error: %s", getSerialNumber(), e);
         }
 
         // Things will likely break if we don't have a valid product type.  Try recovery (in case
