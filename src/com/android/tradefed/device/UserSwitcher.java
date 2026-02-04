@@ -17,6 +17,8 @@ package com.android.tradefed.device;
 
 import com.android.tradefed.device.UserInfo.UserType;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.error.DeviceErrorIdentifier;
+import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.targetprep.TargetSetupError;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -75,12 +77,25 @@ public final class UserSwitcher {
      * Switches to a user of the {@link UserType type} set on constructor, if necessary.
      *
      * @return id of the current user after the switch
-     * @throws IllegalStateException if this method was already called.
      * @throws TargetSetupError if it could not find a user of the given type or if the user switch
-     *     operation failed.
+     *     operation failed or if this method was already called.
      */
     public int switchUser() throws TargetSetupError, DeviceNotAvailableException {
-        Preconditions.checkState(mPreviousUserId == null, "switchUser() already called");
+        try {
+            return switchUserUnchecked();
+        } catch (RuntimeException | Error e) {
+            throw new TargetSetupError(
+                    "exception switching users", e, DeviceErrorIdentifier.SHELL_COMMAND_ERROR);
+        }
+    }
+
+    private int switchUserUnchecked() throws TargetSetupError, DeviceNotAvailableException {
+        if (mPreviousUserId != null) {
+            throw new TargetSetupError(
+                    "switchUser() already called",
+                    new IllegalStateException(),
+                    InfraErrorIdentifier.UNDETERMINED);
+        }
         var userType = mUserType;
         mPreviousUserId = mDevice.getCurrentUser();
         // NOTE: currently it only checks if HSU can be switched to, but ideally it should check for
