@@ -104,6 +104,14 @@ public class MetricUtility {
     }
 
     /**
+     * Overloaded version of storeTestMetrics for backward compatibility. Defaults testFailed to
+     * false.
+     */
+    public void storeTestMetrics(TestDescription testDescription, Map<String, Metric> testMetrics) {
+        storeTestMetrics(testDescription, testMetrics, false);
+    }
+
+    /**
      * Used for storing the individual test metrics and use it for aggregation.
      *
      * @param testDescription contains the test details like class name and test name.
