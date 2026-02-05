@@ -21,6 +21,7 @@ import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.DeviceUnresponsiveException;
+import com.android.tradefed.device.TestDeviceState;
 import com.android.tradefed.device.metric.CollectorHelper;
 import com.android.tradefed.device.metric.CountTestCasesCollector;
 import com.android.tradefed.device.metric.IMetricCollector;
@@ -33,9 +34,11 @@ import com.android.tradefed.invoker.logger.CurrentInvocation.IsolationGrade;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
+import com.android.tradefed.result.ByteArrayInputStreamSource;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.ILogSaver;
 import com.android.tradefed.result.ITestInvocationListener;
+import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.ModuleResultsAndMetricsForwarder;
 import com.android.tradefed.result.ResultAndLogForwarder;
 import com.android.tradefed.result.TestDescription;
@@ -49,6 +52,7 @@ import com.android.tradefed.retry.RetryStatistics;
 import com.android.tradefed.testtype.IRemoteTest;
 import com.android.tradefed.testtype.ITestCollector;
 import com.android.tradefed.testtype.ITestFilterReceiver;
+import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.StreamUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -111,6 +115,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
     private boolean mUseModuleResultsForwarder = false;
     private boolean mRemoveModuleBuffering = false;
     private boolean mIsEventsBackFilled = false;
+    private boolean mCollectKernelLog = false;
     private int mTargetPreparerRetryCount;
     private StartEndCollector mCurrentStartEndCollector;
 
@@ -126,7 +131,7 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             ModuleDefinition module,
             ITestInvocationListener mainListener,
             int maxRunLimit) {
-        this(test, module, mainListener, maxRunLimit, false, false, 0);
+        this(test, module, mainListener, maxRunLimit, false, false, false, 0);
     }
 
     public GranularRetriableTestWrapper(
@@ -136,12 +141,14 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             int maxRunLimit,
             boolean useModuleResultsForwarder,
             boolean removeModuleBuffering,
+            boolean collectKernelLog,
             int targetPreparerRetryCount) {
         mTest = test;
         mModule = module;
         mUseModuleResultsForwarder = useModuleResultsForwarder;
         mRemoveModuleBuffering = removeModuleBuffering;
         mTargetPreparerRetryCount = targetPreparerRetryCount;
+        mCollectKernelLog = collectKernelLog;
         IInvocationContext context = null;
         if (module != null) {
             context = module.getModuleInvocationContext();
@@ -477,6 +484,25 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
                     "Ignored DeviceUnresponsiveException because recovery was "
                             + "successful, proceeding with next module. Stack trace:");
             CLog.w(due);
+            if (mCollectKernelLog
+                    && TestDeviceState.ONLINE.equals(testInfo.getDevice().getDeviceState())) {
+                CLog.d("Collecting kernel log (device state is online, but unresponsive).");
+                CommandResult dmesgResult = null;
+                try {
+                    dmesgResult = testInfo.getDevice().executeShellV2Command("dmesg");
+                    StringBuilder builder = new StringBuilder();
+                    builder.append(String.format("stdout:\n%s\n", dmesgResult.getStdout()));
+                    builder.append(String.format("stderr:\n%s\n", dmesgResult.getStderr()));
+                    runListener.testLog(
+                            "dmesg_output-on_DNAE.txt",
+                            LogDataType.KERNEL_LOG,
+                            new ByteArrayInputStreamSource(builder.toString().getBytes()));
+                } catch (DeviceNotAvailableException e) {
+                    CLog.e("Failed to collect kernel log due to:");
+                    CLog.e(e);
+                    // ignore in respect of the previous dnae
+                }
+            }
             CLog.w("Proceeding to the next test.");
             if (mRemoveModuleBuffering) {
                 backfillMissingEvents(runListener, createFromException(due));
@@ -490,6 +516,29 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
             // TODO: See if it's possible to report IReportNotExecuted
             CLog.e("Run in progress was not completed due to:");
             CLog.e(dnae);
+            // Collect kernel log
+            if (mCollectKernelLog
+                    && (TestDeviceState.FASTBOOT.equals(testInfo.getDevice().getDeviceState())
+                            || TestDeviceState.FASTBOOTD.equals(
+                                    testInfo.getDevice().getDeviceState()))) {
+                CLog.d("Collecting kernel log (device is in fastboot state).");
+                CommandResult dmesgResult = null;
+                try {
+                    dmesgResult = testInfo.getDevice().executeFastbootCommand("oem", "dmesg");
+                    StringBuilder builder = new StringBuilder();
+                    builder.append(String.format("stdout:\n%s\n", dmesgResult.getStdout()));
+                    builder.append(String.format("stderr:\n%s\n", dmesgResult.getStderr()));
+                    runListener.testLog(
+                            "dmesg_output-on_DNAE.txt",
+                            LogDataType.KERNEL_LOG,
+                            new ByteArrayInputStreamSource(builder.toString().getBytes()));
+                } catch (DeviceNotAvailableException e) {
+                    CLog.e("Failed to collect kernel log due to:");
+                    CLog.e(e);
+                    // ignore in respect of the previous dnae
+                }
+            }
+
             if (mRemoveModuleBuffering) {
                 backfillMissingEvents(runListener, createFromException(dnae));
             } else {
