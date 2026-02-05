@@ -16,6 +16,8 @@
 
 package com.android.tradefed.testtype;
 
+import static com.android.tradefed.device.UserInfo.USER_NULL;
+
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -83,6 +85,8 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import javax.annotation.Nullable;
 
 /** A Test that runs an instrumentation test package on given device. */
 @OptionClass(alias = "instrumentation")
@@ -360,6 +364,15 @@ public class InstrumentationTest
             name = "instrument-in-pcc",
             description = "If set to true, will exclusively run the test in PCC sandbox")
     protected boolean mInstrumentInPcc = false;
+
+    @Option(
+            name = "user-id",
+            description =
+                    "If set, '--user' flag will be passed to the am instrument command with the"
+                            + " given user. NOTE: it's ignored if the test also sets the "
+                            + RUN_TESTS_AS_USER_KEY
+                            + " property")
+    private int mUserId = USER_NULL;
 
     private IAbi mAbi = null;
 
@@ -701,6 +714,17 @@ public class InstrumentationTest
 
         if (mInstrumentInPcc) {
             runOptions.add("--instrument-in-pcc");
+        }
+
+        if (mUserId != USER_NULL) {
+            Integer runAsUserId = getRunTestsAsUserValue(testInformation);
+            if (runAsUserId != null) {
+                CLog.w(
+                        "Ignoring user-id option (%d) because test is setting property %s (%d)",
+                        mUserId, RUN_TESTS_AS_USER_KEY, runAsUserId);
+            } else {
+                runOptions.add("--user " + mUserId);
+            }
         }
 
         if (abiName != null && getDevice().getApiLevel() > 20) {
@@ -1112,13 +1136,21 @@ public class InstrumentationTest
             IRemoteAndroidTestRunner runner,
             ITestInvocationListener... receivers)
             throws DeviceNotAvailableException {
-        if (testInfo != null && testInfo.properties().containsKey(RUN_TESTS_AS_USER_KEY)) {
-            return mDevice.runInstrumentationTestsAsUser(
-                    runner,
-                    Integer.parseInt(testInfo.properties().get(RUN_TESTS_AS_USER_KEY)),
-                    receivers);
+        Integer userId = getRunTestsAsUserValue(testInfo);
+        if (userId != null) {
+            return mDevice.runInstrumentationTestsAsUser(runner, userId, receivers);
         }
         return mDevice.runInstrumentationTests(runner, receivers);
+    }
+
+    private @Nullable Integer getRunTestsAsUserValue(@Nullable TestInformation testInfo) {
+        if (testInfo == null) {
+            return null;
+        }
+        var properties = testInfo.properties();
+        return properties.containsKey(RUN_TESTS_AS_USER_KEY)
+                ? Integer.parseInt(properties.get(RUN_TESTS_AS_USER_KEY))
+                : null;
     }
 
     /**
