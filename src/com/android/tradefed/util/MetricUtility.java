@@ -35,11 +35,10 @@ import com.android.tradefed.util.proto.TfMetricProtoUtil;
 
 import com.google.common.base.Joiner;
 import com.google.common.math.Quantiles;
-import com.google.protobuf.TextFormat;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -594,13 +593,8 @@ public class MetricUtility {
 
         for (LogFile logFile : dimensionalMetricFiles) {
             MetricReport report;
-            try (FileReader reader = new FileReader(logFile.getPath())) {
-                MetricReport.Builder reportBuilder = MetricReport.newBuilder();
-                TextFormat.Parser.newBuilder()
-                        .setAllowUnknownFields(true)
-                        .build()
-                        .merge(reader, reportBuilder);
-                report = reportBuilder.build();
+            try (FileInputStream stream = new FileInputStream(logFile.getPath())) {
+                report = MetricReport.parseFrom(stream);
             } catch (IOException e) {
                 CLog.e("Error reading or parsing dimensional metric file: %s", logFile.getPath());
                 CLog.e(e);
@@ -716,10 +710,10 @@ public class MetricUtility {
     private File writeAggregatedReportToFile(MetricReport aggregatedReport) {
         File aggregatedReportFile = null;
         try {
-            aggregatedReportFile =
-                    FileUtil.createTempFile("aggregated_dimensional_metrics", ".textproto");
-            FileUtil.writeToFile(
-                    TextFormat.printer().printToString(aggregatedReport), aggregatedReportFile);
+            aggregatedReportFile = FileUtil.createTempFile("aggregated_dimensional_metrics", ".pb");
+            try (FileOutputStream outputStream = new FileOutputStream(aggregatedReportFile)) {
+                aggregatedReport.writeTo(outputStream);
+            }
             return aggregatedReportFile;
         } catch (IOException e) {
             CLog.e("Failed to write aggregated dimensional metrics report.");

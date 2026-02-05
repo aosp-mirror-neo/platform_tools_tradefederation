@@ -30,7 +30,8 @@ import com.android.tradefed.dimensional_metrics.proto.DimensionalMetrics.Value;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
-import com.google.protobuf.TextFormat;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -679,20 +680,25 @@ public class MetricUtilityTest {
                         .setTestClass("pkg.class$1")
                         .setMethod("test")
                         .build();
-        File reportFile1 =
-                createDimensionalMetricReportFile("report1.textproto", testId1, 1.0, 3.0);
+        File reportFile1 = createDimensionalMetricReportFile("report1.pb", testId1, 1.0, 3.0);
         TestIdentifier testId2 =
                 TestIdentifier.newBuilder()
                         .setFullTestName("pkg.class$2#test")
                         .setTestClass("pkg.class$2")
                         .setMethod("test")
                         .build();
-        File reportFile2 = createDimensionalMetricReportFile("report2.textproto", testId2, 5.0);
+        File reportFile2 = createDimensionalMetricReportFile("report2.pb", testId2, 5.0);
 
         List<LogFile> reportFiles =
                 Arrays.asList(
-                        new LogFile(reportFile1.getAbsolutePath(), "url1", LogDataType.TEXTPB),
-                        new LogFile(reportFile2.getAbsolutePath(), "url2", LogDataType.TEXTPB));
+                        new LogFile(
+                                reportFile1.getAbsolutePath(),
+                                "url1",
+                                LogDataType.CB_METRICS_REPORT_FILE),
+                        new LogFile(
+                                reportFile2.getAbsolutePath(),
+                                "url2",
+                                LogDataType.CB_METRICS_REPORT_FILE));
 
         try {
             mResultsFile =
@@ -700,10 +706,8 @@ public class MetricUtilityTest {
                             reportFiles, new HashSet<>(Arrays.asList(90)), "$");
 
             assertNotNull(mResultsFile);
-            MetricReport.Builder aggregatedReportBuilder = MetricReport.newBuilder();
-            TextFormat.getParser()
-                    .merge(FileUtil.readStringFromFile(mResultsFile), aggregatedReportBuilder);
-            MetricReport aggregatedReport = aggregatedReportBuilder.build();
+            MetricReport aggregatedReport =
+                    MetricReport.parseFrom(new FileInputStream(mResultsFile));
 
             assertEquals(1, aggregatedReport.getTestMetricResultsCount());
             TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
@@ -725,13 +729,19 @@ public class MetricUtilityTest {
                         .setTestClass("pkg.class")
                         .setMethod("test")
                         .build();
-        File reportFile1 = createDimensionalMetricReportFile("report1.textproto", testId, 1.0, 3.0);
-        File reportFile2 = createDimensionalMetricReportFile("report2.textproto", testId, 5.0);
+        File reportFile1 = createDimensionalMetricReportFile("report1.pb", testId, 1.0, 3.0);
+        File reportFile2 = createDimensionalMetricReportFile("report2.pb", testId, 5.0);
 
         List<LogFile> reportFiles =
                 Arrays.asList(
-                        new LogFile(reportFile1.getAbsolutePath(), "url1", LogDataType.TEXTPB),
-                        new LogFile(reportFile2.getAbsolutePath(), "url2", LogDataType.TEXTPB));
+                        new LogFile(
+                                reportFile1.getAbsolutePath(),
+                                "url1",
+                                LogDataType.CB_METRICS_REPORT_FILE),
+                        new LogFile(
+                                reportFile2.getAbsolutePath(),
+                                "url2",
+                                LogDataType.CB_METRICS_REPORT_FILE));
 
         try {
             mResultsFile =
@@ -739,10 +749,8 @@ public class MetricUtilityTest {
                             reportFiles, new HashSet<>(Arrays.asList(90)), "$");
 
             assertNotNull(mResultsFile);
-            MetricReport.Builder aggregatedReportBuilder = MetricReport.newBuilder();
-            TextFormat.getParser()
-                    .merge(FileUtil.readStringFromFile(mResultsFile), aggregatedReportBuilder);
-            MetricReport aggregatedReport = aggregatedReportBuilder.build();
+            MetricReport aggregatedReport =
+                    MetricReport.parseFrom(new FileInputStream(mResultsFile));
 
             assertEquals(1, aggregatedReport.getTestMetricResultsCount());
             TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
@@ -785,13 +793,19 @@ public class MetricUtilityTest {
                         .setMethod("test")
                         .build();
         File reportFile1 =
-                createDimensionalMetricReportFile("report1.textproto", testId, "1.0", "3.0, 5.0");
-        File reportFile2 = createDimensionalMetricReportFile("report2.textproto", testId, "2.0");
+                createDimensionalMetricReportFile("report1.pb", testId, "1.0", "3.0, 5.0");
+        File reportFile2 = createDimensionalMetricReportFile("report2.pb", testId, "2.0");
 
         List<LogFile> reportFiles =
                 Arrays.asList(
-                        new LogFile(reportFile1.getAbsolutePath(), "url1", LogDataType.TEXTPB),
-                        new LogFile(reportFile2.getAbsolutePath(), "url2", LogDataType.TEXTPB));
+                        new LogFile(
+                                reportFile1.getAbsolutePath(),
+                                "url1",
+                                LogDataType.CB_METRICS_REPORT_FILE),
+                        new LogFile(
+                                reportFile2.getAbsolutePath(),
+                                "url2",
+                                LogDataType.CB_METRICS_REPORT_FILE));
 
         try {
             mResultsFile =
@@ -799,10 +813,8 @@ public class MetricUtilityTest {
                             reportFiles, new HashSet<>(Arrays.asList(90)), "$");
 
             assertNotNull(mResultsFile);
-            MetricReport.Builder aggregatedReportBuilder = MetricReport.newBuilder();
-            TextFormat.getParser()
-                    .merge(FileUtil.readStringFromFile(mResultsFile), aggregatedReportBuilder);
-            MetricReport aggregatedReport = aggregatedReportBuilder.build();
+            MetricReport aggregatedReport =
+                    MetricReport.parseFrom(new FileInputStream(mResultsFile));
 
             assertEquals(1, aggregatedReport.getTestMetricResultsCount());
             TestMetricResult aggregatedResult = aggregatedReport.getTestMetricResults(0);
@@ -869,8 +881,10 @@ public class MetricUtilityTest {
 
         MetricReport report = MetricReport.newBuilder().addTestMetricResults(testResult).build();
 
-        File reportFile = FileUtil.createTempFile(name, ".textproto");
-        FileUtil.writeToFile(TextFormat.printer().printToString(report), reportFile);
+        File reportFile = FileUtil.createTempFile(name, ".pb");
+        try (FileOutputStream output = new FileOutputStream(reportFile)) {
+            report.writeTo(output);
+        }
         return reportFile;
     }
 

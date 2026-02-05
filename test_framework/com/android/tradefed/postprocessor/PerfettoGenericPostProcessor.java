@@ -53,6 +53,7 @@ import perfetto.protos.V2Metric.TraceMetricV2Bundle.Row;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -352,9 +353,11 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         if (reportBuilder.getTestMetricResultsCount() > 0) {
             File dimensionalMetricFile = null;
             try {
-                dimensionalMetricFile = FileUtil.createTempFile("metrics_report", ".textproto");
-                String reportContent = TextFormat.printer().printToString(reportBuilder.build());
-                FileUtil.writeToFile(reportContent, dimensionalMetricFile);
+                dimensionalMetricFile = FileUtil.createTempFile("metrics_report", ".pb");
+                try (FileOutputStream outputStream =
+                        new FileOutputStream(dimensionalMetricFile)) {
+                    reportBuilder.build().writeTo(outputStream);
+                }
 
                 try (FileInputStreamSource source =
                         new FileInputStreamSource(dimensionalMetricFile, true)) {
