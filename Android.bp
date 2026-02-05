@@ -342,6 +342,7 @@ java_library_host {
         "opencensus-java-contrib-grpc-metrics",
         "libandroid_build_v2beta1_java",
         "libandroid_build_v3_java",
+        "libandroid_build_v4_java",
     ],
     libs: [
         "loganalysis",

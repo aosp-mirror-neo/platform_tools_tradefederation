@@ -18,6 +18,7 @@ package com.android.ddmlib;
 import com.android.annotations.NonNull;
 import com.android.annotations.Nullable;
 import com.android.tradefed.device.server.SyncService;
+import com.android.tradefed.log.LogUtil.CLog;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.Sets;
@@ -119,6 +120,7 @@ public interface IDevice extends IShellEnabledDevice {
         SIDELOAD("sideload"), // $NON-NLS-1$
         UNAUTHORIZED("unauthorized"), // $NON-NLS-1$
         DISCONNECTED("disconnected"), // $NON-NLS-1$
+        AUTHORIZING("authorizing"),
         ;
 
         private String mState;
@@ -140,6 +142,7 @@ public interface IDevice extends IShellEnabledDevice {
                     return deviceState;
                 }
             }
+            CLog.w("Failed to match device state for %s.", state);
             return null;
         }
 

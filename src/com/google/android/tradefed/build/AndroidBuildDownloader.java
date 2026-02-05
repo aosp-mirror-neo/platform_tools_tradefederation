@@ -430,6 +430,11 @@ public class AndroidBuildDownloader implements IFileDownloader {
         if (mBuildFetcher == null) {
             mBuildFetcher = new AndroidBuildFetcher(mBuildEnvironment);
             mBuildFetcher.setUseMd5(mUseMd5);
+            if (getHostOptions().useAndroidBuildApiV4()) {
+                CLog.d(
+                        "Using Android Build API V4 in AndroidBuildDownloader for env %s",
+                        mBuildEnvironment);
+            }
         }
         return mBuildFetcher;
     }

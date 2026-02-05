@@ -137,4 +137,7 @@ public interface IHostOptions {
 
     /** Returns whether host metric reporting should be disabled. */
     public boolean isHostMetricReportingDisabled();
+
+    /** Returns whether to use the v4 Android Build API. */
+    public boolean useAndroidBuildApiV4();
 }

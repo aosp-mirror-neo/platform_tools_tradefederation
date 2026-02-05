@@ -20,13 +20,19 @@ import static com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHe
 import com.android.tradefed.build.BuildRetrievalError;
 import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.build.StubBuildProvider;
+import com.android.tradefed.config.GlobalConfiguration;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.testtype.IInvocationContextReceiver;
 
+import com.google.android.ci.build.shadow.protobuf.Timestamp;
+import com.google.android.ci.build.v4.BuildAttempt.BuildStatus;
+import com.google.android.ci.build.v4.BuildServiceClient;
+import com.google.android.ci.build.v4.BuildType;
 import com.google.android.tradefed.result.teststorage.Client;
 import com.google.android.tradefed.result.teststorage.ITestStorageClient;
+import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.services.androidbuildinternal.v3.model.Build;
 import com.google.api.services.androidbuildinternal.v3.model.Target;
 
@@ -92,8 +98,66 @@ public class AbLocalBuildProvider extends StubBuildProvider implements IInvocati
     public static Build createLocalBuild(
             IInvocationContext context, String branch, String buildFlavor)
             throws IOException, GeneralSecurityException {
+        if (GlobalConfiguration.getInstance().getHostOptions().useAndroidBuildApiV4()) {
+            return createLocalBuildV4(context, branch, buildFlavor);
+        }
         ITestStorageClient client = createTestStorageClient(context);
         Build localBuild = newBuild(branch, buildFlavor);
         return client.createLocalBuild(localBuild);
+    }
+
+    private static Build createLocalBuildV4(
+            IInvocationContext context, String branch, String buildFlavor)
+            throws IOException, GeneralSecurityException {
+        String buildEnvironment = context.getAttribute(BUILD_ENV_INVOCATION_CONTEXT_KEY);
+        if (buildEnvironment == null || buildEnvironment.isEmpty()) {
+            buildEnvironment = "prod";
+        }
+        try (BuildServiceClient client = AndroidBuildAPIHelper.getV4BuildClient(buildEnvironment)) {
+            long timestampMillis = System.currentTimeMillis();
+            Timestamp timestamp =
+                    Timestamp.newBuilder()
+                            .setSeconds(timestampMillis / 1000)
+                            .setNanos((int) ((timestampMillis % 1000) * 1000000))
+                            .build();
+
+            com.google.android.ci.build.v4.Build v4Build =
+                    com.google.android.ci.build.v4.Build.newBuilder()
+                            .setBranch(branch)
+                            .setBuildAttemptStatus(BuildStatus.COMPLETE)
+                            .setSuccessful(true)
+                            .setCreationTimestamp(timestamp)
+                            .setCompletionTimestamp(timestamp)
+                            .setTarget(
+                                    com.google.android.ci.build.v4.Target.newBuilder()
+                                            .setName(buildFlavor)
+                                            .build())
+                            .build();
+
+            com.google.android.ci.build.v4.CreateBuildRequest request =
+                    com.google.android.ci.build.v4.CreateBuildRequest.newBuilder()
+                            .setBuild(v4Build)
+                            .setBuildType(BuildType.LOCAL)
+                            .build();
+
+            com.google.android.ci.build.v4.Build createdBuild = client.create(request).getBuild();
+
+            // Map back to V3 Build for compatibility
+            Build v3Build = new Build();
+            v3Build.setBuildId(createdBuild.getBuildId());
+            v3Build.setBranch(createdBuild.getBranch());
+            v3Build.setBuildAttemptStatus(createdBuild.getBuildAttemptStatus().toString());
+            long createdMillis =
+                    createdBuild.getCreationTimestamp().getSeconds() * 1000
+                            + createdBuild.getCreationTimestamp().getNanos() / 1000000;
+            v3Build.setCreationTimestamp(createdMillis);
+            long completedMillis =
+                    createdBuild.getCompletionTimestamp().getSeconds() * 1000
+                            + createdBuild.getCompletionTimestamp().getNanos() / 1000000;
+            v3Build.setCompletionTimestamp(completedMillis);
+            return v3Build;
+        } catch (Exception e) {
+            throw new IOException("Failed to create V4 local build", e);
+        }
     }
 }
