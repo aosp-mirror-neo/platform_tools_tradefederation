@@ -102,7 +102,7 @@ public final class UserSwitcher {
         // other cases like profile types.
         if (UserType.SYSTEM.equals(mUserType)
                 && mDevice.isHeadlessSystemUserMode()
-                && !mDevice.canSwitchToHeadlessSystemUser()) {
+                && !canSwitchToHeadlessSystemUser()) {
             switch (mUserTypeMode) {
                 case LEGACY:
                     userType = UserInfo.UserType.FULL;

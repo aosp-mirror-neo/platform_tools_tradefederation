@@ -133,6 +133,7 @@ public final class SwitchUserTargetPreparerTest {
 
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(true);
         when(mMockDevice.canSwitchToHeadlessSystemUser()).thenReturn(false);
+        when(mMockDevice.getApiLevel()).thenReturn(34);
         when(mMockDevice.switchUser(10)).thenReturn(true);
 
         // act
@@ -159,6 +160,7 @@ public final class SwitchUserTargetPreparerTest {
 
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(true);
         when(mMockDevice.canSwitchToHeadlessSystemUser()).thenReturn(false);
+        when(mMockDevice.getApiLevel()).thenReturn(34);
 
         // act
         mSwitchUserTargetPreparer.setUp(mTestInformation);
