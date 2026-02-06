@@ -35,6 +35,7 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -57,6 +58,11 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
             name = "config-zip-paths",
             description = "One or more paths to zip files containing test configurations.")
     private List<String> mConfigZipPaths = new ArrayList<>();
+
+    @Option(
+            name = RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION,
+            description = RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_DESCRIPTION)
+    private Duration mRemoteTestTimeOut = null;
 
     public ExecutionPlanSuiteRunner() {}
 
@@ -133,6 +139,14 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
 
             if (plans.size() > 1) {
                 clonedConfig.getConfigurationDescription().setNotIRemoteTestShardable(true);
+            }
+
+            if (mRemoteTestTimeOut != null) {
+                clonedConfig
+                        .getConfigurationDescription()
+                        .addMetadata(
+                                RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION,
+                                mRemoteTestTimeOut.toString());
             }
 
             finalConfigs.put(entry.getKey(), clonedConfig);

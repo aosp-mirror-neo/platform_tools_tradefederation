@@ -16,6 +16,8 @@
 package com.android.tradefed.testtype.suite;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -145,7 +147,45 @@ public class ExecutionPlanSuiteRunnerTest {
         when(mBuildInfo.getFile("testconfigs.zip")).thenReturn(new File(zipPath));
         mOptionSetter.setOptionValue("config-zip-paths", "testconfigs.zip");
         mOptionSetter.setOptionValue("execution-plans", "plan_alpha");
+
+        mTestConfigs.clear();
+        addModuleConfig("module_one");
+        addModuleConfig("module_two");
+
+        LinkedHashMap<String, IConfiguration> configMap = mRunner.loadTests();
+        assertEquals(2, configMap.size());
+        assertTrue(configMap.containsKey("module_one"));
+        assertTrue(configMap.containsKey("module_two"));
+        assertFalse(
+                configMap
+                        .get("module_one")
+                        .getConfigurationDescription()
+                        .isNotIRemoteTestShardable());
+        assertFalse(
+                configMap
+                        .get("module_two")
+                        .getConfigurationDescription()
+                        .isNotIRemoteTestShardable());
+        assertNull(
+                configMap
+                        .get("module_one")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION));
+        assertNull(
+                configMap
+                        .get("module_two")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION));
+    }
+
+    @Test
+    public void testLoadTests_multiplePlansWithRemoteTestTimeOut() throws Exception {
+        String zipPath = createTestConfigZip("acme_test_configs_textproto");
+        when(mBuildInfo.getFile("testconfigs.zip")).thenReturn(new File(zipPath));
+        mOptionSetter.setOptionValue("config-zip-paths", "testconfigs.zip");
+        mOptionSetter.setOptionValue("execution-plans", "plan_alpha");
         mOptionSetter.setOptionValue("execution-plans", "plan_gamma");
+        mOptionSetter.setOptionValue(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION, "15m");
 
         mTestConfigs.clear();
         addModuleConfig("module_one");
@@ -160,6 +200,45 @@ public class ExecutionPlanSuiteRunnerTest {
         assertTrue(configMap.containsKey("module_one"));
         assertTrue(configMap.containsKey("module_two"));
         assertTrue(configMap.containsKey("module_five"));
+        assertEquals(
+                1,
+                configMap
+                        .get("module_one")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION)
+                        .size());
+        assertEquals(
+                1,
+                configMap
+                        .get("module_two")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION)
+                        .size());
+        assertEquals(
+                1,
+                configMap
+                        .get("module_five")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION)
+                        .size());
+        assertTrue(
+                configMap
+                        .get("module_one")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION)
+                        .contains("PT15M"));
+        assertTrue(
+                configMap
+                        .get("module_two")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION)
+                        .contains("PT15M"));
+        assertTrue(
+                configMap
+                        .get("module_five")
+                        .getConfigurationDescription()
+                        .getMetaData(RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION)
+                        .contains("PT15M"));
     }
 
     @Test
@@ -199,6 +278,18 @@ public class ExecutionPlanSuiteRunnerTest {
         assertEquals(2, configMap.size());
         assertTrue(configMap.containsKey("module_three"));
         assertTrue(configMap.containsKey("module_four"));
+
+        // When a module runs in multiple execution-plans, it set not shardable.
+        assertFalse(
+                configMap
+                        .get("module_three")
+                        .getConfigurationDescription()
+                        .isNotIRemoteTestShardable());
+        assertTrue(
+                configMap
+                        .get("module_four")
+                        .getConfigurationDescription()
+                        .isNotIRemoteTestShardable());
 
         // One IRemoteTest instance per abi faked in getAbis function.
         assertEquals(2, configMap.get("module_three").getTests().size());
