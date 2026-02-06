@@ -814,6 +814,53 @@ public class TestAppInstallSetupTest {
         assertEquals(result, expected);
     }
 
+    @Test
+    public void testSetup_recordsInstalledPackages() throws Exception {
+        final String package2 = PACKAGE_NAME + "2";
+        mPrep =
+                new TestAppInstallSetup() {
+                    @Override
+                    protected String parsePackageName(File testAppFile) {
+                        if (testAppFile.equals(fakeApk)) {
+                            return PACKAGE_NAME;
+                        }
+                        if (testAppFile.equals(fakeApk2)) {
+                            return package2;
+                        }
+                        return "unknown";
+                    }
+
+                    @Override
+                    protected File getLocalPathForFilename(
+                            TestInformation testInfo, String apkFileName) throws TargetSetupError {
+                        if (apkFileName.equals(fakeApk.getName())) {
+                            return fakeApk;
+                        }
+                        if (apkFileName.equals(fakeApk2.getName())) {
+                            return fakeApk2;
+                        }
+                        return null;
+                    }
+                };
+        mSetter = new OptionSetter(mPrep);
+        mSetter.setOptionValue("cleanup-apks", "true");
+        mSetter.setOptionValue("test-file-name", fakeApk.getName());
+        mSetter.setOptionValue("test-file-name", fakeApk2.getName());
+
+        when(mMockTestDevice.installPackage(Mockito.eq(fakeApk), Mockito.eq(true)))
+                .thenReturn(null);
+        when(mMockTestDevice.installPackage(Mockito.eq(fakeApk2), Mockito.eq(true)))
+                .thenReturn(null);
+
+        mPrep.setUp(mTestInfo);
+
+        String installedPackages =
+                mTestInfo.properties().get(TestAppInstallSetup.INSTALLED_PACKAGES_KEY);
+
+        assertThat(installedPackages).contains(PACKAGE_NAME);
+        assertThat(installedPackages).contains(package2);
+    }
+
     private static Path createSubDirectory(Path parent, String name) throws IOException {
         return Files.createDirectory(parent.resolve(name)).toAbsolutePath();
     }

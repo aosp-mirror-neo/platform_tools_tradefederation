@@ -23,6 +23,8 @@ import static org.mockito.Mockito.when;
 
 import com.android.tradefed.device.UserInfo.UserType;
 import com.android.tradefed.device.UserSwitcher.UserTypeMode;
+import com.android.tradefed.result.error.DeviceErrorIdentifier;
+import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.targetprep.TargetSetupError;
 
 import com.google.common.collect.ImmutableMap;
@@ -281,7 +283,17 @@ public final class UserSwitcherTest {
         verifySwitchUserNeverCalled();
 
         // 2nd call
-        assertThrows(IllegalStateException.class, () -> userSwitcher.switchUser());
+        var thrown = assertThrows(TargetSetupError.class, () -> userSwitcher.switchUser());
+        expect.withMessage("exception's error id")
+                .that(thrown.getErrorId())
+                .isEqualTo(InfraErrorIdentifier.UNDETERMINED);
+        expect.withMessage("exception's cause")
+                .that(thrown)
+                .hasCauseThat()
+                .isInstanceOf(IllegalStateException.class);
+        expect.withMessage("exception's message")
+                .that(thrown.getMessage())
+                .isEqualTo("switchUser() already called");
     }
 
     @Test
@@ -351,6 +363,54 @@ public final class UserSwitcherTest {
                 .isEqualTo(UserTypeMode.LEGACY);
     }
 
+    @Test
+    public void testSwitchUser_throwsTargetSetupErrorOnRuntimeException() throws Exception {
+        testSwitchUserWrapsUncheckedException(new RuntimeException("D'OH"));
+    }
+
+    @Test
+    public void testSwitchUser_throwsTargetSetupErrorOnGenericError() throws Exception {
+        testSwitchUserWrapsUncheckedException(new Error("D'OH"));
+    }
+
+    private void testSwitchUserWrapsUncheckedException(Throwable cause) throws Exception {
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
+        mockUsers(SYSTEM_USER);
+        mockGetCurrentUserThrows(cause);
+
+        var thrown = assertThrows(TargetSetupError.class, () -> userSwitcher.switchUser());
+
+        expect.withMessage("cause").that(thrown).hasCauseThat().isSameInstanceAs(cause);
+        expect.withMessage("error id")
+                .that(thrown.getErrorId())
+                .isEqualTo(DeviceErrorIdentifier.SHELL_COMMAND_ERROR);
+        expect.withMessage("exception's message")
+                .that(thrown.getMessage())
+                .isEqualTo("exception switching users");
+    }
+
+    @Test
+    public void testCanSwitchToHeadlessSystemUser_supportedAPILevel() throws Exception {
+        mockGetApiLevel(34);
+        mockCanSwitchToHeadlessSystemUser(true);
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
+
+        expect.withMessage("canSwitchToHeadlessSystemUser()")
+                .that(userSwitcher.canSwitchToHeadlessSystemUser())
+                .isTrue();
+    }
+
+    @Test
+    public void testCanSwitchToHeadlessSystemUser_unsupportedAPILevel() throws Exception {
+        mockGetApiLevel(33);
+        mockCanSwitchToHeadlessSystemUser(false); // shouldn't have been called
+        var userSwitcher = new UserSwitcher(mMockDevice, UserType.PRIMARY);
+
+        expect.withMessage("canSwitchToHeadlessSystemUser()")
+                .that(userSwitcher.canSwitchToHeadlessSystemUser())
+                .isTrue();
+    }
+
     private void mockUsers(UserInfo... users) throws DeviceNotAvailableException {
         Map<Integer, UserInfo> map =
                 Arrays.stream(users)
@@ -378,6 +438,22 @@ public final class UserSwitcherTest {
 
     private void mockHeadlessSystemUserMode(boolean value) throws DeviceNotAvailableException {
         when(mMockDevice.isHeadlessSystemUserMode()).thenReturn(value);
+    }
+
+    private void mockGetCurrentUserThrows(Throwable t) throws DeviceNotAvailableException {
+        if (t instanceof RuntimeException) {
+            when(mMockDevice.getCurrentUser()).thenThrow((RuntimeException) t);
+            return;
+        }
+        if (t instanceof Error) {
+            when(mMockDevice.getCurrentUser()).thenThrow((Error) t);
+            return;
+        }
+        throw new IllegalArgumentException("Cannot be a checked exception: " + t);
+    }
+
+    private void mockGetApiLevel(int level) throws DeviceNotAvailableException {
+        when(mMockDevice.getApiLevel()).thenReturn(level);
     }
 
     private void verifySwitchUserNeverCalled() throws DeviceNotAvailableException {

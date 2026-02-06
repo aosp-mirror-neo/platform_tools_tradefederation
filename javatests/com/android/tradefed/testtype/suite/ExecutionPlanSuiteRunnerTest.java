@@ -128,6 +128,12 @@ public class ExecutionPlanSuiteRunnerTest {
     }
 
     @Test(expected = HarnessRuntimeException.class)
+    public void testLoadTests_withIncludeFilterSet() throws Exception {
+        mOptionSetter.setOptionValue("include-filter", "a_module_to_include");
+        mRunner.loadTests();
+    }
+
+    @Test(expected = HarnessRuntimeException.class)
     public void testLoadTests_nonExistentPlan() throws Exception {
         mOptionSetter.setOptionValue("execution-plans", "non_existent_plan");
         mRunner.loadTests();

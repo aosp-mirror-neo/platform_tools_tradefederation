@@ -1340,6 +1340,13 @@ public class InstrumentationTest
         mCollectTestsOnly = shouldCollectTest;
     }
 
+    /**
+     * @return whether this test is in collect-tests-only mode.
+     */
+    public boolean isCollectTestsOnly() {
+        return mCollectTestsOnly;
+    }
+
     @Override
     public void setAbi(IAbi abi) {
         mAbi = abi;

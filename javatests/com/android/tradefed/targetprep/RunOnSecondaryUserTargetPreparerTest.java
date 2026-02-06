@@ -17,6 +17,7 @@
 package com.android.tradefed.targetprep;
 
 import static com.android.tradefed.device.UserInfo.FLAG_FOR_TESTING;
+import static com.android.tradefed.targetprep.RunOnSecondaryUserTargetPreparer.START_BACKGROUND_USER;
 import static com.android.tradefed.targetprep.RunOnSecondaryUserTargetPreparer.TEST_PACKAGE_NAME_OPTION;
 import static com.android.tradefed.targetprep.UserHelper.RUN_TESTS_AS_USER_KEY;
 
@@ -596,5 +597,21 @@ public class RunOnSecondaryUserTargetPreparerTest {
         verify(mTestInfo.getDevice())
                 .startVisibleBackgroundUser(
                         secondaryUser2, secondaryDisplayId, /* waitFlag= */ true);
+    }
+
+    @Test
+    public void setUp_startBackgroundUser_notSupported_throwsException() throws Exception {
+        mOptionSetter.setOptionValue(START_BACKGROUND_USER, "true");
+        when(mTestInfo.getDevice().isVisibleBackgroundUsersSupported()).thenReturn(false);
+
+        try {
+            mPreparer.setUp(mTestInfo);
+            throw new AssertionError("Expected TargetSetupError was not thrown");
+        } catch (TargetSetupError e) {
+            // Expected.
+            assertThat(e)
+                    .hasMessageThat()
+                    .contains("This device doesn't support visible background users");
+        }
     }
 }

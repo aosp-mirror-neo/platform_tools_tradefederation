@@ -704,6 +704,21 @@ public interface INativeDevice {
     public CommandResult fastbootWipePartition(String partition) throws DeviceNotAvailableException;
 
     /**
+     * Helper method which triggers ramdump from a fastboot mode.
+     * <p/>
+     * This method executes the "oem ramdump now" command. Unlike {@link #executeFastbootCommand()},
+     * it does not attempt retries or device recovery if the command fails or the status
+     * is invalid, as a device crash is the intended outcome.
+     *
+     * Expected to be used when device is already in fastboot mode.
+     *
+     * @return the CommandResult containing output of command
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     * recovered.
+     */
+    public CommandResult fastbootOemRamdumpNow();
+
+    /**
      * Runs instrumentation tests, and provides device recovery.
      *
      * <p>If connection with device is lost before test run completes, and recovery succeeds, all
