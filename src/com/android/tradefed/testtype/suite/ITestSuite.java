@@ -419,10 +419,11 @@ public abstract class ITestSuite
                             + " or the new forwarder.")
     private boolean mUseModuleResultsForwarder = true;
 
+    // TODO(b/478999022): stop buffering when reporting issues are fixed.
     @Option(
             name = "remove-module-buffering",
             description = "Feature flag to remove module buffering.")
-    private boolean mRemoveModuleBuffering = true;
+    private boolean mRemoveModuleBuffering = false;
 
     @Option(
             name = "keep-post-processor-order",
