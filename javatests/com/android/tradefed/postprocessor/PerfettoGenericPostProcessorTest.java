@@ -723,14 +723,8 @@ public class PerfettoGenericPostProcessorTest {
                         (invocation) -> {
                             InputStreamSource source = invocation.getArgument(2);
                             try {
-                                try (BufferedReader reader =
-                                        new BufferedReader(
-                                                new InputStreamReader(
-                                                        source.createInputStream()))) {
-                                    MetricReport.Builder builder = MetricReport.newBuilder();
-                                    TextFormat.merge(reader, builder);
-                                    capturedReport[0] = builder.build();
-                                }
+                                capturedReport[0] =
+                                        MetricReport.parser().parseFrom(source.createInputStream());
                             } finally {
                                 source.cancel(); // Clean up the source
                             }

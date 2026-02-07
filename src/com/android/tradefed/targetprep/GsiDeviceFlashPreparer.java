@@ -401,7 +401,9 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
             ITestDevice device, String requestedFileName, File sourceFile, File tmpDir)
             throws TargetSetupError {
         File requestedFile = null;
-        if (sourceFile.getName().endsWith(".zip")) {
+        if (sourceFile.isDirectory()) {
+            requestedFile = FileUtil.findFile(sourceFile, requestedFileName);
+        } else if (sourceFile.getName().endsWith(".zip")) {
             try {
                 File destDir =
                         FileUtil.createTempDir(FileUtil.getBaseName(sourceFile.getName()), tmpDir);
@@ -413,8 +415,6 @@ public class GsiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                         e,
                         device.getDeviceDescriptor());
             }
-        } else if (sourceFile.isDirectory()) {
-            requestedFile = FileUtil.findFile(sourceFile, requestedFileName);
         } else {
             requestedFile = sourceFile;
         }

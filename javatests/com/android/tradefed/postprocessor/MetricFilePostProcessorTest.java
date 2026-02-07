@@ -105,7 +105,7 @@ public class MetricFilePostProcessorTest {
             isDimensionalMetricAggregated = true;
             dimensionalFilesAggregatedCount = dimensionalMetricFiles.size();
             try {
-                return File.createTempFile("aggregated-report", ".textproto");
+                return File.createTempFile("aggregated-report", ".pb");
             } catch (IOException e) {
                 return null;
             }
@@ -303,7 +303,7 @@ public class MetricFilePostProcessorTest {
         HashMap<String, Metric> testMetrics = new HashMap<>();
         Map<String, LogFile> testLogs = new HashMap<>();
         File dimensionalMetricsFile1 =
-                FileUtil.createTempFile("dimensional-metrics1", ".textproto");
+                FileUtil.createTempFile("dimensional-metrics1", ".pb");
         LogFile dimensionalMetricsLogFile1 =
                 new LogFile(
                         dimensionalMetricsFile1.getAbsolutePath(),
@@ -314,7 +314,7 @@ public class MetricFilePostProcessorTest {
         LogFile otherLogFile = new LogFile(otherFile.getAbsolutePath(), "url", LogDataType.TEXT);
         testLogs.put("other-log-file", otherLogFile);
         final File aggregatedReportFile =
-                FileUtil.createTempFile("aggregated-report", ".textproto");
+                FileUtil.createTempFile("aggregated-report", ".pb");
 
         Mockito.when(
                         mockMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
@@ -354,7 +354,7 @@ public class MetricFilePostProcessorTest {
         HashMap<String, Metric> testMetrics = new HashMap<>();
         Map<String, LogFile> testLogs = new HashMap<>();
         File dimensionalMetricsFile1 =
-                FileUtil.createTempFile("dimensional-metrics1", ".textproto");
+                FileUtil.createTempFile("dimensional-metrics1", ".pb");
         LogFile dimensionalMetricsLogFile1 =
                 new LogFile(
                         dimensionalMetricsFile1.getAbsolutePath(),

@@ -99,6 +99,7 @@ public final class UserSwitcherTest {
         mockSuccessfulUserSwitch(FULL_USER);
         mockHeadlessSystemUserMode(true);
         mockCanSwitchToHeadlessSystemUser(false);
+        mockGetApiLevel(34);
 
         int switchedUserId = userSwitcher.switchUser();
 
@@ -114,6 +115,7 @@ public final class UserSwitcherTest {
         mockCurrentUser(FULL_USER);
         mockHeadlessSystemUserMode(true);
         mockCanSwitchToHeadlessSystemUser(false);
+        mockGetApiLevel(34);
 
         int switchedUserId = userSwitcher.switchUser();
 
@@ -149,6 +151,7 @@ public final class UserSwitcherTest {
         mockCurrentUser(GUEST_USER);
         mockHeadlessSystemUserMode(true);
         mockCanSwitchToHeadlessSystemUser(false);
+        mockGetApiLevel(34);
 
         int switchedUserId = userSwitcher.switchUser();
 
@@ -171,6 +174,7 @@ public final class UserSwitcherTest {
         mockHeadlessSystemUserMode(true);
         mockCanSwitchToHeadlessSystemUser(false);
         mockSuccessfulUserSwitch(SYSTEM_USER);
+        mockGetApiLevel(34);
 
         assertSwitchUserThrows(
                 userSwitcher, "Device doesn't support switching to user of type SYSTEM.");

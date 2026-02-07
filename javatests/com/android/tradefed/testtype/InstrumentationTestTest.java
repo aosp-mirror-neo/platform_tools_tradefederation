@@ -46,6 +46,7 @@ import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
+import com.android.tradefed.device.UserInfo;
 import com.android.tradefed.device.metric.IMetricCollector;
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.invoker.IInvocationContext;
@@ -321,6 +322,62 @@ public class InstrumentationTestTest {
                         mInstrumentationTest.createRemoteAndroidTestRunner(
                                 "", "", mMockIDevice, mTestInfo);
         assertThat(runner.getRunOptions()).contains("--instrument-sdk-in-sandbox");
+    }
+
+    /** Test normal run scenario with --user-id specified */
+    @Test
+    public void testRun_userId() throws Exception {
+        OptionSetter setter = new OptionSetter(mInstrumentationTest);
+        setter.setOptionValue("user-id", "42");
+        RemoteAndroidTestRunner runner =
+                (RemoteAndroidTestRunner)
+                        mInstrumentationTest.createRemoteAndroidTestRunner(
+                                "", "", mMockIDevice, mTestInfo);
+        assertThat(runner.getRunOptions()).contains("--user 42");
+    }
+
+    /** Test normal run scenario with --user-id USER_NULL specified */
+    @Test
+    public void testRun_userIdUserNull() throws Exception {
+        OptionSetter setter = new OptionSetter(mInstrumentationTest);
+        setter.setOptionValue("user-id", String.valueOf(UserInfo.USER_NULL));
+        RemoteAndroidTestRunner runner =
+                (RemoteAndroidTestRunner)
+                        mInstrumentationTest.createRemoteAndroidTestRunner(
+                                "", "", mMockIDevice, mTestInfo);
+        assertThat(runner.getRunOptions()).doesNotContain("--user");
+    }
+
+    /**
+     * Test normal run scenario with --user-id and RUN_TESTS_AS_USER_KEY specified - the latter
+     * prevails
+     */
+    @Test
+    public void testRun_userIdIgnoreWhenRunTestsAsUserKeyIsSet() throws Exception {
+        testRunWithUserIdIgnoredWhenRunTestsAsUserKeyIsSet(42, 108);
+    }
+
+    /**
+     * Test normal run scenario with --user-id and RUN_TESTS_AS_USER_KEY specified - the latter
+     * prevails
+     */
+    @Test
+    public void testRun_userIdIgnoreWhenRunTestsAsUserKeyIsSet_evenIfSameUser() throws Exception {
+        testRunWithUserIdIgnoredWhenRunTestsAsUserKeyIsSet(42, 42);
+    }
+
+    private void testRunWithUserIdIgnoredWhenRunTestsAsUserKeyIsSet(int userId, int runAsUserId)
+            throws Exception {
+        OptionSetter setter = new OptionSetter(mInstrumentationTest);
+        setter.setOptionValue("user-id", String.valueOf(userId));
+
+        mTestInfo.properties().put(RUN_TESTS_AS_USER_KEY, String.valueOf(runAsUserId));
+
+        RemoteAndroidTestRunner runner =
+                (RemoteAndroidTestRunner)
+                        mInstrumentationTest.createRemoteAndroidTestRunner(
+                                "", "", mMockIDevice, mTestInfo);
+        assertThat(runner.getRunOptions()).doesNotContain("--user");
     }
 
     /** Ensure isolated-Tests is turned off when run in dry-mode */
