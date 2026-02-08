@@ -20,6 +20,8 @@ import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.error.HarnessRuntimeException;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.util.RunInterruptedException;
@@ -351,12 +353,17 @@ public class HostOptions implements IHostOptions {
         if (!mConcurrentLocks.containsKey(type)) {
             return;
         }
+        Integer limit = mInternalConcurrentLimits.get(type);
+        int queueLength = mConcurrentLocks.get(type).getQueueLength();
+        String metricValue = String.format("%s:%s:%s", type, limit, queueLength);
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.PERMIT_METRICS, metricValue);
         CLog.i(
                 "Requesting a '%s' permit out of the max limit of %s. Current queue "
                         + "length: %s",
                 type,
-                mInternalConcurrentLimits.get(type),
-                mConcurrentLocks.get(type).getQueueLength());
+                limit,
+                queueLength);
         try {
             mConcurrentLocks.get(type).acquire();
         } catch (InterruptedException e) {
