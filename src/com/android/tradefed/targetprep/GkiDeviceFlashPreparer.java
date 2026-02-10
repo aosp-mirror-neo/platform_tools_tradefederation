@@ -258,6 +258,11 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     @Option(name = "support-fastbootd", description = "Whether the device supports fastbootd mode")
     private boolean mSupportFastbootd = true;
 
+    @Option(
+            name = "flash-logical-partition-first",
+            description = "Whether to flash logical-partition-first")
+    private boolean mFlashLogicalPartitionFirst = true;
+
     private File mBootImg = null;
     private File mSystemDlkmImg = null;
     private Collection<String> mFlashOptions = new ArrayList<>();
@@ -344,10 +349,15 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
      */
     private void flashGki(ITestDevice device, IBuildInfo buildInfo, File tmpDir)
             throws TargetSetupError, DeviceNotAvailableException {
-        if (mShouldDisableVerity) {
-            device.enableAdbRoot();
-            device.executeAdbCommand("disable-verity");
-            device.reboot();
+        if (TestDeviceState.ONLINE.equals(device.getDeviceState())) {
+            if (mShouldDisableVerity) {
+                device.enableAdbRoot();
+                device.executeAdbCommand("disable-verity");
+            }
+        } else {
+            // Only flash logical partition first if the device boot up in user space properly
+            // before we start
+            mFlashLogicalPartitionFirst = false;
         }
         device.rebootIntoBootloader();
         if (mShouldWipeDeviceBeforeFlash) {
@@ -384,6 +394,12 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
         // Don't allow interruptions during flashing operations.
         getRunUtil().allowInterrupt(false);
         try {
+            if (mFlashLogicalPartitionFirst) {
+                flashLogicalPartitions(device, buildInfo, tmpDir);
+            }
+
+            executeFastbootCmd(device, "flash", "boot", mBootImg.getAbsolutePath());
+
             if (buildInfo.getFile(mVendorBootImageName) != null) {
                 File vendorBootImg =
                         getRequestedFile(
@@ -426,36 +442,6 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                 executeFastbootCmd(device, "flash", "dtbo", dtboImg.getAbsolutePath());
             }
 
-            executeFastbootCmd(device, "flash", "boot", mBootImg.getAbsolutePath());
-
-            if (buildInfo.getFile(mVendorDlkmImageName) != null) {
-                File vendorDlkmImg =
-                        getRequestedFile(
-                                device,
-                                mVendorDlkmImageFileName,
-                                buildInfo.getFile(mVendorDlkmImageName),
-                                tmpDir);
-                if (mSupportFastbootd
-                        && !TestDeviceState.FASTBOOTD.equals(device.getDeviceState())) {
-                    device.rebootIntoFastbootd();
-                }
-                executeFastbootCmd(device, "flash", "vendor_dlkm", vendorDlkmImg.getAbsolutePath());
-            }
-
-            if (buildInfo.getFile(mSystemDlkmImageName) != null) {
-                File systemDlkmImg =
-                        getRequestedFile(
-                                device,
-                                mSystemDlkmImageFileName,
-                                buildInfo.getFile(mSystemDlkmImageName),
-                                tmpDir);
-                if (mSupportFastbootd
-                        && !TestDeviceState.FASTBOOTD.equals(device.getDeviceState())) {
-                    device.rebootIntoFastbootd();
-                }
-                executeFastbootCmd(device, "flash", "system_dlkm", systemDlkmImg.getAbsolutePath());
-            }
-
             if (buildInfo.getFile(mVbmetaImageName) != null) {
                 File vbmetaImg =
                         getRequestedFile(
@@ -463,16 +449,16 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                                 mVbmetaImageFileName,
                                 buildInfo.getFile(mVbmetaImageName),
                                 tmpDir);
-                if (mSupportFastbootd
-                        && !TestDeviceState.FASTBOOTD.equals(device.getDeviceState())) {
-                    device.rebootIntoFastbootd();
-                }
                 executeFastbootCmd(device, "flash", "vbmeta", vbmetaImg.getAbsolutePath());
             }
 
             // Run additional fastboot command
             for (String cmd : mFastbootCommands) {
                 executeFastbootCmd(device, cmd);
+            }
+
+            if (!mFlashLogicalPartitionFirst) {
+                flashLogicalPartitions(device, buildInfo, tmpDir);
             }
         } finally {
             getHostOptions().returnPermit(PermitLimitType.CONCURRENT_FLASHER);
@@ -482,6 +468,47 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                     "Flashing permit returned after %ds",
                     TimeUnit.MILLISECONDS.toSeconds((System.currentTimeMillis() - start)));
         }
+    }
+
+    /**
+     * Flash logical partitions.
+     *
+     * @param device the {@link ITestDevice}
+     * @param buildInfo the {@link IBuildInfo} the build info
+     * @param tmpDir the temporary directory {@link File}
+     */
+    private void flashLogicalPartitions(ITestDevice device, IBuildInfo buildInfo, File tmpDir)
+            throws TargetSetupError, DeviceNotAvailableException {
+        if (buildInfo.getFile(mSystemDlkmImageName) == null
+                && buildInfo.getFile(mVendorDlkmImageName) == null) {
+            return;
+        }
+        if (buildInfo.getFile(mSystemDlkmImageName) != null) {
+            File systemDlkmImg =
+                    getRequestedFile(
+                            device,
+                            mSystemDlkmImageFileName,
+                            buildInfo.getFile(mSystemDlkmImageName),
+                            tmpDir);
+            if (mSupportFastbootd && !TestDeviceState.FASTBOOTD.equals(device.getDeviceState())) {
+                device.rebootIntoFastbootd();
+            }
+            executeFastbootCmd(device, "flash", "system_dlkm", systemDlkmImg.getAbsolutePath());
+        }
+
+        if (buildInfo.getFile(mVendorDlkmImageName) != null) {
+            File vendorDlkmImg =
+                    getRequestedFile(
+                            device,
+                            mVendorDlkmImageFileName,
+                            buildInfo.getFile(mVendorDlkmImageName),
+                            tmpDir);
+            if (mSupportFastbootd && !TestDeviceState.FASTBOOTD.equals(device.getDeviceState())) {
+                device.rebootIntoFastbootd();
+            }
+            executeFastbootCmd(device, "flash", "vendor_dlkm", vendorDlkmImg.getAbsolutePath());
+        }
+        device.rebootIntoBootloader();
     }
 
     /**
