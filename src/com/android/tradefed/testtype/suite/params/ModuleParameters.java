@@ -48,7 +48,8 @@ public enum ModuleParameters {
     RUN_ON_WORK_PROFILE("run_on_work_profile", ModuleParameters.RUN_ON_WORK_PROFILE_FAMILY),
     RUN_ON_SECONDARY_USER("run_on_secondary_user", ModuleParameters.RUN_ON_SECONDARY_USER_FAMILY),
     RUN_ON_CLONE_PROFILE("run_on_clone_profile", ModuleParameters.RUN_ON_CLONE_PROFILE_FAMILY),
-    RUN_ON_PRIVATE_PROFILE("run_on_private_profile", ModuleParameters.RUN_ON_PRIVATE_PROFILE_FAMILY),
+    RUN_ON_PRIVATE_PROFILE(
+            "run_on_private_profile", ModuleParameters.RUN_ON_PRIVATE_PROFILE_FAMILY),
 
     // Foldable mode
     ALL_FOLDABLE_STATES("all_foldable_states", ModuleParameters.FOLDABLE_STATES_FAMILY),
@@ -60,7 +61,11 @@ public enum ModuleParameters {
 
     CONCURRENT_FOREGROUND_AND_VISIBLE_BACKGROUND_USER(
             "concurrent_foreground_and_visible_background_user",
-            ModuleParameters.CONCURRENT_FAMILY);
+            ModuleParameters.CONCURRENT_FAMILY),
+
+    // Compatibility mode
+    COMPATIBILITY_MODE("compatibility_mode", ModuleParameters.COMPATIBILITY_FAMILY),
+    NOT_COMPATIBILITY_MODE("not_compatibility_mode", ModuleParameters.COMPATIBILITY_FAMILY);
 
     public static final String INSTANT_APP_FAMILY = "instant_app_family";
     public static final String MULTI_ABI_FAMILY = "multi_abi_family";
@@ -77,6 +82,7 @@ public enum ModuleParameters {
     public static final String RUN_ON_CLONE_PROFILE_FAMILY = "run_on_clone_profile_family";
     public static final String RUN_ON_PRIVATE_PROFILE_FAMILY = "run_on_private_profile_family";
     public static final String CONCURRENT_FAMILY = "concurrent_family";
+    public static final String COMPATIBILITY_FAMILY = "compatibility_family";
 
     private final String mName;
     /** Defines whether several module parameters are associated and mutually exclusive. */

@@ -286,6 +286,7 @@ import com.android.tradefed.targetprep.AoaTargetPreparerTest;
 import com.android.tradefed.targetprep.AppSetupTest;
 import com.android.tradefed.targetprep.BaseSwitchUserTargetPreparerTest;
 import com.android.tradefed.targetprep.BaseTargetPreparerTest;
+import com.android.tradefed.targetprep.CompatTargetPreparerTest;
 import com.android.tradefed.targetprep.CompileBootImageWithSpeedTargetPreparerTest;
 import com.android.tradefed.targetprep.CreateUserPreparerTest;
 import com.android.tradefed.targetprep.CrosDutTopologyPreparerTest;
@@ -430,6 +431,7 @@ import com.android.tradefed.testtype.suite.module.MinApiLevelModuleControllerTes
 import com.android.tradefed.testtype.suite.module.NativeBridgeModuleControllerTest;
 import com.android.tradefed.testtype.suite.module.PackageInstalledModuleControllerTest;
 import com.android.tradefed.testtype.suite.module.ShippingApiLevelModuleControllerTest;
+import com.android.tradefed.testtype.suite.params.CompatHandlerTest;
 import com.android.tradefed.testtype.suite.params.InstantAppHandlerTest;
 import com.android.tradefed.testtype.suite.params.MainlineModuleHandlerTest;
 import com.android.tradefed.testtype.suite.params.ModuleParametersHelperTest;
@@ -888,6 +890,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AppSetupTest.class,
     BaseTargetPreparerTest.class,
     BaseSwitchUserTargetPreparerTest.class,
+    CompatTargetPreparerTest.class,
     CompileBootImageWithSpeedTargetPreparerTest.class,
     CreateUserPreparerTest.class,
     CrosLsNexusPreparerTest.class,
@@ -1092,6 +1095,7 @@ import org.junit.runners.Suite.SuiteClasses;
     ShippingApiLevelModuleControllerTest.class,
 
     // testtype/suite/params
+    CompatHandlerTest.class,
     InstantAppHandlerTest.class,
     MainlineModuleHandlerTest.class,
     ModuleParametersHelperTest.class,

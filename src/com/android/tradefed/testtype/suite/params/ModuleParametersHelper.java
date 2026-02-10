@@ -16,9 +16,11 @@
 package com.android.tradefed.testtype.suite.params;
 
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.ALL_FOLDABLE_STATES;
+import static com.android.tradefed.testtype.suite.params.ModuleParameters.COMPATIBILITY_MODE;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.INSTANT_APP;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.MULTIUSER;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.MULTI_ABI;
+import static com.android.tradefed.testtype.suite.params.ModuleParameters.NOT_COMPATIBILITY_MODE;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.NOT_INSTANT_APP;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.NOT_MULTI_ABI;
 import static com.android.tradefed.testtype.suite.params.ModuleParameters.NOT_RUN_ON_SDK_SANDBOX;
@@ -72,6 +74,8 @@ public final class ModuleParametersHelper {
         sHandlerMap.put(ALL_FOLDABLE_STATES, new FoldableExpandingHandler());
         sHandlerMap.put(RUN_ON_CLONE_PROFILE, new RunOnCloneProfileParameterHandler());
         sHandlerMap.put(RUN_ON_PRIVATE_PROFILE, new RunOnPrivateProfileParameterHandler());
+        sHandlerMap.put(COMPATIBILITY_MODE, new CompatHandler());
+        sHandlerMap.put(NOT_COMPATIBILITY_MODE, new NegativeHandler());
     }
 
     private static final Set<ModuleParameters> PROFILE_PARAMETERS = new LinkedHashSet<>();
