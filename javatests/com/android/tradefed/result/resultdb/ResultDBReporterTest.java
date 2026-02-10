@@ -35,6 +35,7 @@ import com.android.tradefed.build.BuildInfo;
 import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
+import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.result.FailureDescription;
 import com.android.tradefed.result.LogDataType;
@@ -56,7 +57,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -77,6 +77,7 @@ public class ResultDBReporterTest {
         public Invocation mInvocation;
         public String mRootInvocationId;
         public RootInvocation mRootInvocation;
+        public boolean mLegacyInitialized = false;
 
         public ResultDBReporterTester() {
             super();
@@ -84,13 +85,18 @@ public class ResultDBReporterTest {
 
         @Override
         TestResultHandler createTestResultHandler() {
-            return new TestResultHandlerTester();
+            return new TestResultHandlerTester(
+                    mLegacyInitialized ? mRecorderLegacy : null,
+                    mRecorder,
+                    mContext,
+                    mEnableAlTestProperties);
         }
 
         @Override
         IRecorderClientLegacy createRecorderClientLegacy(
                 String invocationId, String updateToken, Boolean isStaging) {
             mInvocationId = invocationId;
+            mLegacyInitialized = true;
             return mRecorderLegacy;
         }
 
@@ -99,6 +105,7 @@ public class ResultDBReporterTest {
                 String invocationId, Invocation invocation, Boolean isStaging) {
             mInvocationId = invocationId;
             mInvocation = invocation;
+            mLegacyInitialized = true;
             return mRecorderLegacy;
         }
 
@@ -132,8 +139,12 @@ public class ResultDBReporterTest {
     }
 
     private static class TestResultHandlerTester extends TestResultHandler {
-        public TestResultHandlerTester() {
-            super();
+        public TestResultHandlerTester(
+                IRecorderClientLegacy legacy,
+                IRecorderClient recorder,
+                IInvocationContext context,
+                boolean enableAlTestProperties) {
+            super(legacy, recorder, context, enableAlTestProperties);
         }
 
         @Override
@@ -1036,14 +1047,56 @@ public class ResultDBReporterTest {
                 .containsExactly(expected1, expected2, expected3, expected4, expected5);
     }
 
+    @Test
+    public void enableAlTestProperties_moduleVariantSet() throws Exception {
+        mOption.setOptionValue("enable-al-test-properties", "true");
+
+        BuildInfo info = new BuildInfo("1", "target_1");
+        info.setBuildBranch("test-branch");
+        info.setBuildFlavor("test-flavor");
+        mSimulator
+                .withBuildInfo(info)
+                .withInvocationAttribute("resultdb_invocation_id", "invocation_001")
+                .withInvocationAttribute("resultdb_invocation_update_token", "update_token")
+                .withInvocationAttribute("resultdb_root_invocation_id", "root_invocation_001")
+                .withInvocationAttribute("resultdb_work_unit_id", "top_work_unit_001")
+                .withInvocationAttribute("resultdb_work_unit_update_token", "update_token")
+                .withInvocationAttribute("board", "board_1")
+                .withInvocationAttribute("account_id", "1")
+                .withInvocationAttribute("model", "model_1")
+                .withInvocationAttribute("sku", "sku_1")
+                .withTest("com.google.ExampleClass", "testExampleMethod")
+                .simulateInvocation(mReporter);
+
+        Variant moduleVariant =
+                mReporter
+                        .mRecorder
+                        .getWorkUnitItems()
+                        .get(0)
+                        .getWorkUnit()
+                        .getModuleId()
+                        .getModuleVariant();
+        assertThat(moduleVariant.getDefMap())
+                .containsExactly("board", "board_1", "model", "model_1", "sku", "sku_1");
+
+        assertThat(
+                        mReporter
+                                .mRecorder
+                                .getTestResultItems()
+                                .get(0)
+                                .getTestResult()
+                                .getTagsList()
+                                .stream()
+                                .filter(tag -> tag.getKey().equals("account_id"))
+                                .findFirst()
+                                .get()
+                                .getValue())
+                .isEqualTo("1");
+    }
+
     private String getLogUrl(String log) {
-        try {
-            return String.format(
-                    "https://android-build.googleplex.com/builds/submitted/18274/docs/0/tests/1488327372312/18274/stub/inv_9000/%s_9000.dat",
-                    URLEncoder.encode(log, StandardCharsets.UTF_8.name()));
-        } catch (UnsupportedEncodingException e) {
-            // ignore
-        }
-        return "";
+        return String.format(
+                "https://android-build.googleplex.com/builds/submitted/18274/docs/0/tests/1488327372312/18274/stub/inv_9000/%s_9000.dat",
+                URLEncoder.encode(log, StandardCharsets.UTF_8));
     }
 }

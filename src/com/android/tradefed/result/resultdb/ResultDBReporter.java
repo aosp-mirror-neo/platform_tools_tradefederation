@@ -75,8 +75,11 @@ public class ResultDBReporter
             description = "Enable work unit reporting, used for rate control work unit reporting.")
     private boolean mEnableWorkUnitReporting = true;
 
+    @Option(name = "enable-al-test-properties")
+    protected boolean mEnableAlTestProperties = false;
+
     // Invocation context for the tradefed invocation.
-    private IInvocationContext mContext;
+    protected IInvocationContext mContext;
     private IConfiguration mConfiguration;
     private String mInvocationId;
     private String mTopWorkUnitId;
@@ -93,13 +96,13 @@ public class ResultDBReporter
     private IRecorderClient mRecorder;
     private boolean mIsStaging = false;
 
-    private final TestResultHandler mTestResultHandler = createTestResultHandler();
-    private final WorkUnitHandler mWorkUnitHandler = new WorkUnitHandler();
+    private TestResultHandler mTestResultHandler;
+    private WorkUnitHandler mWorkUnitHandler;
     private final TestArtifactHandler mTestArtifactHandler = new TestArtifactHandler();
 
     @VisibleForTesting
     TestResultHandler createTestResultHandler() {
-        return new TestResultHandler();
+        return new TestResultHandler(mRecorderLegacy, mRecorder, mContext, mEnableAlTestProperties);
     }
 
     @Override
@@ -212,6 +215,13 @@ public class ResultDBReporter
             CLog.i("ResultDBReporter is disabled");
             return;
         }
+        mTestResultHandler = createTestResultHandler();
+        mWorkUnitHandler =
+                new WorkUnitHandler(mTopWorkUnitId, mRecorder, context, mEnableAlTestProperties);
+        if (mRecorder != null) {
+            mWorkUnitHandler.setTopWorkUnitInfo(
+                    mTopWorkUnitId, WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE);
+        }
         CLog.logAndDisplay(LogLevel.INFO, "Result links: %s", String.join(", ", getResultLinks()));
     }
 
@@ -278,8 +288,6 @@ public class ResultDBReporter
                 mRecorder =
                         createRecorderClient(
                                 rootInvocationId, workUnitUpdateToken, isStaging(context));
-                mWorkUnitHandler.setTopWorkUnitInfo(
-                        mTopWorkUnitId, WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE);
             } else if (mCreateLocalInvocation) {
                 IBuildInfo primaryBuild = getPrimaryBuild(context);
                 if (primaryBuild == null) {
@@ -332,8 +340,6 @@ public class ResultDBReporter
                                 isStaging(context));
                 mTopWorkUnitId = "root"; // Top work unit is the root work unit.
                 mManageInvocation = true;
-                mWorkUnitHandler.setTopWorkUnitInfo(
-                        mTopWorkUnitId, WorkUnitHandler.TF_INVOCATION_WORK_UNIT_TYPE);
             } else {
                 CLog.i(
                         "ResultDBReporter is disabled as root invocation ID, work unit ID and"
@@ -456,7 +462,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mWorkUnitHandler.testModuleStarted(moduleContext, mTopWorkUnitId, mRecorder);
+        mWorkUnitHandler.testModuleStarted(moduleContext);
     }
 
     @Override
@@ -464,7 +470,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mWorkUnitHandler.testModuleEnded(mRootInvocationId, mRecorder);
+        mWorkUnitHandler.testModuleEnded(mRootInvocationId);
     }
 
     @Override
@@ -480,14 +486,12 @@ public class ResultDBReporter
                     currentTimestamp(),
                     mWorkUnitHandler.getCurrentModuleIdentifier(),
                     mWorkUnitHandler.getCurrentWorkUnitId(),
-                    mWorkUnitHandler.getCurrentAntsModuleParameters(),
-                    mRecorderLegacy,
-                    mRecorder);
+                    mWorkUnitHandler.getCurrentAntsModuleParameters());
         } catch (RuntimeException e) {
             CLog.e("error during skip reporting:");
             CLog.e(e);
         }
-        mWorkUnitHandler.testRunEnded(mRootInvocationId, mTopWorkUnitId, mRecorder);
+        mWorkUnitHandler.testRunEnded(mRootInvocationId, mTopWorkUnitId);
     }
 
     @Override
@@ -515,8 +519,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mWorkUnitHandler.testRunStarted(
-                runName, testCount, attemptNumber, startTime, mTopWorkUnitId, mRecorder);
+        mWorkUnitHandler.testRunStarted(runName, testCount, attemptNumber, startTime);
     }
 
     @VisibleForTesting
@@ -562,7 +565,7 @@ public class ResultDBReporter
             return;
         }
         mTestResultHandler.testAssumptionFailure(
-                test, failure, mWorkUnitHandler.getCurrentWorkUnitId(), mRecorderLegacy, mRecorder);
+                test, failure, mWorkUnitHandler.getCurrentWorkUnitId());
     }
 
     @Override
@@ -570,8 +573,7 @@ public class ResultDBReporter
         if (mDisable) {
             return;
         }
-        mTestResultHandler.testSkipped(
-                test, reason, mWorkUnitHandler.getCurrentWorkUnitId(), mRecorderLegacy, mRecorder);
+        mTestResultHandler.testSkipped(test, reason, mWorkUnitHandler.getCurrentWorkUnitId());
     }
 
     @Override
@@ -585,9 +587,7 @@ public class ResultDBReporter
                 test,
                 FailureDescription.create(trace),
                 mWorkUnitHandler.getCurrentWorkUnitId(),
-                instructions,
-                mRecorderLegacy,
-                mRecorder);
+                instructions);
     }
 
     @Override
@@ -598,12 +598,7 @@ public class ResultDBReporter
         LocalInstructions instructions =
                 new LocalInstructions(mContext, mWorkUnitHandler.getModuleContext());
         mTestResultHandler.testFailed(
-                test,
-                failure,
-                mWorkUnitHandler.getCurrentWorkUnitId(),
-                instructions,
-                mRecorderLegacy,
-                mRecorder);
+                test, failure, mWorkUnitHandler.getCurrentWorkUnitId(), instructions);
     }
 
     @Override
@@ -629,12 +624,7 @@ public class ResultDBReporter
             return;
         }
         mTestResultHandler.testEnded(
-                test,
-                endTime,
-                testMetrics,
-                mWorkUnitHandler.getCurrentWorkUnitId(),
-                mRecorderLegacy,
-                mRecorder);
+                test, endTime, testMetrics, mWorkUnitHandler.getCurrentWorkUnitId());
     }
 
     @Override

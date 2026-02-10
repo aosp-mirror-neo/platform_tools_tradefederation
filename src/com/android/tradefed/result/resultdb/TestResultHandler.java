@@ -38,6 +38,7 @@ import com.android.tradefed.testtype.suite.SuiteTestFilter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
@@ -65,11 +66,34 @@ class TestResultHandler {
     // Tag name for local instructions
     private static final String LOCAL_INSTRUCTION_PROPERTY = "local_repro_instruction";
 
+    private static final ImmutableSet<String> AL_TEST_TAG_ATTRIBUTE_KEYS =
+            ImmutableSet.of("account_id");
+
     private TestResult mCurrentTestResult;
     // Counter for generate test result ID.
     private AtomicInteger mResultCounter = new AtomicInteger(0);
     // Base string for generate test result ID.
     private String mResultIdBase = randomHexString();
+    private final IRecorderClientLegacy mRecorderLegacy;
+    private final IRecorderClient mRecorder;
+    private final HashMap<String, String> mAlTags = new HashMap<>();
+
+    public TestResultHandler(
+            IRecorderClientLegacy legacy,
+            IRecorderClient recorder,
+            IInvocationContext context,
+            boolean enableAlTestProperties) {
+        mRecorderLegacy = legacy;
+        mRecorder = recorder;
+        if (enableAlTestProperties) {
+            for (String key : AL_TEST_TAG_ATTRIBUTE_KEYS) {
+                String value = context.getAttribute(key);
+                if (!Strings.isNullOrEmpty(value)) {
+                    mAlTags.put(key, value);
+                }
+            }
+        }
+    }
 
     // Generate a random hexadecimal string of length 8.
     @VisibleForTesting
@@ -130,9 +154,7 @@ class TestResultHandler {
             TestDescription test,
             long endTime,
             HashMap<String, MetricMeasurement.Metric> testMetrics,
-            String workUnitId,
-            IRecorderClientLegacy recorderLegacy,
-            IRecorderClient recorder) {
+            String workUnitId) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testEnded(%s) without a valid testStart before.", test);
             return;
@@ -164,12 +186,18 @@ class TestResultHandler {
                                 .setValue(source));
             }
         }
+        for (Entry<String, String> entry : mAlTags.entrySet()) {
+            testResultBuilder.addTags(
+                    StringPair.newBuilder()
+                            .setKey(ResultDBUtil.makeValidKey(entry.getKey()))
+                            .setValue(entry.getValue()));
+        }
 
         mCurrentTestResult = testResultBuilder.build();
-        if (recorderLegacy != null) {
-            recorderLegacy.enqueueTestResult(mCurrentTestResult);
+        if (mRecorderLegacy != null) {
+            mRecorderLegacy.enqueueTestResult(mCurrentTestResult);
         }
-        if (recorder != null) {
+        if (mRecorder != null) {
             if (Strings.isNullOrEmpty(workUnitId)) {
                 CLog.e("logic error: test ended %s without a valid work unit id.", test.toString());
             } else {
@@ -178,7 +206,7 @@ class TestResultHandler {
                 // to this tradefed invocation. ResultDB will reject the test result because of
                 // missing module_id in the parent work unit. If this is possible, find a suitable
                 // workaround.
-                recorder.enqueueTestResult(workUnitId, mCurrentTestResult);
+                mRecorder.enqueueTestResult(workUnitId, mCurrentTestResult);
             }
         }
         mCurrentTestResult = null;
@@ -188,9 +216,7 @@ class TestResultHandler {
             TestDescription test,
             FailureDescription failure,
             String workUnitId,
-            LocalInstructions instructions,
-            IRecorderClientLegacy recorderLegacy,
-            IRecorderClient recorder) {
+            LocalInstructions instructions) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testFailed(%s) without a valid testStart before.", test);
             return;
@@ -252,21 +278,16 @@ class TestResultHandler {
         if (truncationResult.wasTruncated()) {
             // Upload the full trace as test artifact.
             Artifact atf = artifactFromString("testFailed_trace", trace);
-            if (recorderLegacy != null) {
-                recorderLegacy.enqueueArtifact(atf);
+            if (mRecorderLegacy != null) {
+                mRecorderLegacy.enqueueArtifact(atf);
             }
-            if (recorder != null) {
-                recorder.enqueueArtifact(workUnitId, atf);
+            if (mRecorder != null) {
+                mRecorder.enqueueArtifact(workUnitId, atf);
             }
         }
     }
 
-    public void testSkipped(
-            TestDescription test,
-            SkipReason reason,
-            String workUnitId,
-            IRecorderClientLegacy recorderLegacy,
-            IRecorderClient recorder) {
+    public void testSkipped(TestDescription test, SkipReason reason, String workUnitId) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testSkipped(%s) without a valid testStart before.", test);
             return;
@@ -290,21 +311,17 @@ class TestResultHandler {
         if (summaryHtmlTruncated.wasTruncated()) {
             // Upload the full skip reason as test artifact.
             Artifact atf = artifactFromString("testSkipped_reason", reason.getReason());
-            if (recorderLegacy != null) {
-                recorderLegacy.enqueueArtifact(atf);
+            if (mRecorderLegacy != null) {
+                mRecorderLegacy.enqueueArtifact(atf);
             }
-            if (recorder != null) {
-                recorder.enqueueArtifact(workUnitId, atf);
+            if (mRecorder != null) {
+                mRecorder.enqueueArtifact(workUnitId, atf);
             }
         }
     }
 
     public void testAssumptionFailure(
-            TestDescription test,
-            FailureDescription failure,
-            String workUnitId,
-            IRecorderClientLegacy recorderLegacy,
-            IRecorderClient recorder) {
+            TestDescription test, FailureDescription failure, String workUnitId) {
         if (mCurrentTestResult == null) {
             CLog.e("Received #testAssumptionFailure(%s) without a valid testStart before.", test);
             return;
@@ -335,11 +352,11 @@ class TestResultHandler {
             // Upload the full skip reason as test artifact if it was truncated.
             Artifact atf =
                     artifactFromString("testAssumptionFailure_reason", failure.getErrorMessage());
-            if (recorderLegacy != null) {
-                recorderLegacy.enqueueArtifact(atf);
+            if (mRecorderLegacy != null) {
+                mRecorderLegacy.enqueueArtifact(atf);
             }
-            if (recorder != null) {
-                recorder.enqueueArtifact(workUnitId, atf);
+            if (mRecorder != null) {
+                mRecorder.enqueueArtifact(workUnitId, atf);
             }
         }
     }
@@ -405,9 +422,7 @@ class TestResultHandler {
             long currentTimestamp,
             ModuleIdentifier moduleIdentifier,
             String workUnitId,
-            List<AntsProperty> antsModuleParameters,
-            IRecorderClientLegacy recorderLegacy,
-            IRecorderClient recorder) {
+            List<AntsProperty> antsModuleParameters) {
         String moduleAbi = null;
         String moduleName = null;
         if (moduleContext != null) {
@@ -459,17 +474,17 @@ class TestResultHandler {
                             .addTags(AndroidCompatibility.skipTriggerTag(skipReason.getTrigger()))
                             .addTags(AndroidCompatibility.skipBugTag(skipReason.getBugId()))
                             .build();
-            if (recorderLegacy != null) {
-                recorderLegacy.enqueueTestResult(currentTest);
+            if (mRecorderLegacy != null) {
+                mRecorderLegacy.enqueueTestResult(currentTest);
             }
-            if (recorder != null) {
+            if (mRecorder != null) {
                 if (Strings.isNullOrEmpty(workUnitId)) {
                     CLog.e(
                             "logic error: reportDemotedTests %s without a valid work unit id.",
                             test.toString());
                     return;
                 }
-                recorder.enqueueTestResult(workUnitId, currentTest);
+                mRecorder.enqueueTestResult(workUnitId, currentTest);
             }
         }
     }
