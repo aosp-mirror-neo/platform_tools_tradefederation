@@ -25,7 +25,10 @@ import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.skipped.AnalysisHeuristic;
 import com.android.tradefed.util.FileUtil;
+
+import build.bazel.remote.execution.v2.Digest;
 
 import java.io.File;
 import java.io.IOException;
@@ -51,18 +54,21 @@ public class TestContentAnalyzer {
     private final List<ContentAnalysisContext> contexts;
     private final List<String> discoveredModules;
     private final List<String> dependencyFiles;
+    private final AnalysisHeuristic mAnalysisLevel;
 
     public TestContentAnalyzer(
             TestInformation information,
             boolean presubmitMode,
             List<ContentAnalysisContext> contexts,
             List<String> discoveredModules,
-            List<String> dependencyFiles) {
+            List<String> dependencyFiles,
+            AnalysisHeuristic analysisLevel) {
         this.information = information;
         this.presubmitMode = presubmitMode;
         this.contexts = contexts;
         this.discoveredModules = discoveredModules;
         this.dependencyFiles = dependencyFiles;
+        this.mAnalysisLevel = analysisLevel;
     }
 
     public ContentAnalysisResults evaluate() {
@@ -149,8 +155,10 @@ public class TestContentAnalyzer {
                     if (key.contains(information.getBuildInfo().getBuildId())) {
                         key = key.replace(information.getBuildInfo().getBuildId(), "ABCDEF");
                     }
-                    results.addArtifactDigestMapping(
-                            key, ContentMerkleTree.buildTestsDirFromContext(ac, discoveredModules));
+                    Digest testsDirDigest =
+                            ContentMerkleTree.buildTestsDirFromContext(
+                                    ac, discoveredModules, mAnalysisLevel);
+                    results.addArtifactDigestMapping(key, testsDirDigest);
                 }
                 allResults.add(results);
             }

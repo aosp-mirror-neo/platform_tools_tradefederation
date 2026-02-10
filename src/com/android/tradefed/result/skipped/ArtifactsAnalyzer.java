@@ -126,7 +126,8 @@ public class ArtifactsAnalyzer {
                                     presubmit,
                                     mTestArtifactsAnalysisContent,
                                     mModulesDiscovered,
-                                    mDependencyFiles);
+                                    mDependencyFiles,
+                                    mAnalysisLevel);
                     ContentAnalysisResults analysisResults = analyzer.evaluate();
                     if (analysisResults == null) {
                         finalReport.setChangesInTests(true);
