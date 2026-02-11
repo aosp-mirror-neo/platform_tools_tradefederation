@@ -1453,8 +1453,8 @@ public class ResultReporter
             // mLogAssociations.
             // So we upload the log association directly here.
             CLog.v(
-                    "Received association after invocation ended %s %s %s",
-                    dataName, log.getPath(), log.getUrl());
+                    "Received association after invocation ended %s %s %s for work unit ID %s",
+                    dataName, log.getPath(), log.getUrl(), mWorkUnitId);
             LogAssociation logAssociation =
                     new LogAssociation(
                             mInvocation, mWorkUnitId, mCurrentTestResult, mLegacyResultId, log);
@@ -1465,8 +1465,10 @@ public class ResultReporter
             }
             return;
         }
-        CLog.v("Received association %s %s %s", dataName, log.getPath(), log.getUrl());
         String workUnitId = mWorkUnits.peek().getId();
+        CLog.v(
+                "Received association %s %s %s for work unit ID %s",
+                dataName, log.getPath(), log.getUrl(), workUnitId);
         mLogAssociations.put(
                 workUnitId,
                 new LogAssociation(
