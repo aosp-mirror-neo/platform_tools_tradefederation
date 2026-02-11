@@ -121,6 +121,7 @@ public class ArtTestTest {
 
         // Implement mocked methods by just always returning SUCCESS (no device is needed).
         CommandResult success = new CommandResult(CommandStatus.SUCCESS);
+        when(mDevice.executeShellCommand(eq("cat /proc/cpuinfo"))).thenReturn("processor: 8\n");
         when(mDevice.pushFile(any(), any())).thenReturn(true);
         when(mDevice.pushDir(any(), any())).thenReturn(true);
         when(mDevice.executeShellV2Command(any(), anyLong(), any(), anyInt())).thenReturn(success);
@@ -128,6 +129,10 @@ public class ArtTestTest {
 
         // Run the test.
         mTest.run(info, mListener);
+        for (ArtTest.Test test : mTest.mTests) {
+            assertTrue(test.mResult.isPresent());
+            assertTrue(test.mResult.get());
+        }
 
         // Check the recorded behaviour of test.  We expected the following commands to be executed:
         verify(mDevice)

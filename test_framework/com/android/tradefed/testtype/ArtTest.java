@@ -408,26 +408,24 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
                 return test.mResult.get();
             }
 
-            String error = null;
+            TestDescription testId = TestDescription.fromString(test.mName);
             for (Test dep : test.mResolvedDependencies) {
                 if (!run(dep, listener)) {
-                    error = "Dependency '" + dep + "' failed";
-                    break;
+                    synchronized (listener) {
+                        listener.testIgnored(testId);
+                    }
+                    return false;
                 }
             }
 
-            TestDescription testId = TestDescription.fromString(test.mName);
+            String error = null;
             long startTime = System.currentTimeMillis();
             try {
-                if (error == null) {
-                    CLog.i("Running ART test %s", test.mName);
-                }
-                if (error == null) {
-                    try {
-                        error = executeCommands(test.mCommands);
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
+                CLog.i("Running ART test %s", test.mName);
+                try {
+                    error = executeCommands(test.mCommands);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
                 }
             } catch (DeviceNotAvailableException e) {
                 error = e.toString();
