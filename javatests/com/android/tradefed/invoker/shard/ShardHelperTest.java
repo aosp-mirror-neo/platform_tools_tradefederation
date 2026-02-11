@@ -213,6 +213,41 @@ public class ShardHelperTest {
                                 }));
     }
 
+    /**
+     * Tests that when a --shard-count 10 and --enable-token-sharding true is requested but there is
+     * only 5 sub tests after sharding. We create 10 shards so that the token tests can be allocated
+     * and executed on devices with SIM cards.
+     */
+    @Test
+    public void testSplitWithShardCount_notEnoughTest_enableTokenSharding() throws Exception {
+        CommandOptions options = new CommandOptions();
+        OptionSetter setter = new OptionSetter(options);
+        setter.setOptionValue("shard-count", "10");
+        setter.setOptionValue("enable-token-sharding", "true");
+        mConfig.setCommandOptions(options);
+        mConfig.setCommandLine(new String[] {"empty"});
+        StubTest test = new StubTest();
+        setter = new OptionSetter(test);
+        // num-shards is a {@link StubTest} option that specify how many tests can stubtest split
+        // into.
+        setter.setOptionValue("num-shards", "5");
+        mConfig.setTest(test);
+        assertEquals(1, mConfig.getTests().size());
+        assertTrue(mHelper.shardConfig(mConfig, mTestInfo, mRescheduler, null));
+        // We reschedule 10 times to respect --shard-count because token tests can only be executed
+        // on devices with SIM cards.
+        Mockito.verify(mRescheduler, Mockito.times(10))
+                .scheduleConfig(
+                        Mockito.argThat(
+                                new ArgumentMatcher<IConfiguration>() {
+                                    @Override
+                                    public boolean matches(IConfiguration argument) {
+                                        assertEquals(1, argument.getTests().size());
+                                        return true;
+                                    }
+                                }));
+    }
+
     private File createTmpConfig(String objType, Object obj) throws IOException {
         File configFile = FileUtil.createTempFile("shard-helper-test", ".xml");
         String content = String.format(TEST_CONFIG, objType, obj.getClass().getCanonicalName());

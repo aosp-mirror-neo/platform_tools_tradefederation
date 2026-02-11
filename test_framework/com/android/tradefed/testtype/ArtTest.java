@@ -117,6 +117,9 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
     private Set<String> mIncludeFilters = new TreeSet<>();
     private Set<String> mExcludeFilters = new TreeSet<>();
 
+    @Option(name = "include-tags", description = "Run tests with these JSON test tags only")
+    private Set<String> mIncludeTags = new TreeSet<>();
+
     @Option(name = "testJobs", description = "The number of parallel adb shell commands")
     private int mTestJobs = 0;
 
@@ -314,6 +317,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         List<Test> tests =
                 allTests.values().stream()
                         .filter(test -> shouldIncludeTest(test.mName))
+                        .filter(test -> test.mTags.containsAll(mIncludeTags))
                         .filter(test -> mAbi == null || test.mTags.contains(mAbi.getName()))
                         .filter(test -> test.mTags.contains(mIsRoot ? "root" : "no-root"))
                         .sorted(Comparator.comparing(a -> a.mName))
