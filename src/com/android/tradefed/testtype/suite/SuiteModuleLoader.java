@@ -371,6 +371,7 @@ public class SuiteModuleLoader {
                         // skip this name/abi combination.
                         continue;
                     }
+                    CLog.e("Failed to create config for %s, error: %s", configFullName, e);
                     throw e;
                 }
 
