@@ -355,7 +355,9 @@ public class HostOptions implements IHostOptions {
         }
         Integer limit = mInternalConcurrentLimits.get(type);
         int queueLength = mConcurrentLocks.get(type).getQueueLength();
-        String metricValue = String.format("%s:%s:%s", type, limit, queueLength);
+        long timestamp = System.currentTimeMillis();
+        String metricValue =
+                String.format("%s:%d:%d:%d", type, limit, queueLength, timestamp);
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.PERMIT_METRICS, metricValue);
         CLog.i(
