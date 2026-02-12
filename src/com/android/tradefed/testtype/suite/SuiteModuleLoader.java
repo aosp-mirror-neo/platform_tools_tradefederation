@@ -371,8 +371,11 @@ public class SuiteModuleLoader {
                         // skip this name/abi combination.
                         continue;
                     }
-                    CLog.e("Failed to create config for %s, error: %s", configFullName, e);
-                    throw e;
+                    String msg =
+                            String.format(
+                                    "Failed to create config for %s, error: %s",
+                                    configFullName, e.getMessage());
+                    throw new ConfigurationException(msg, e, e.getErrorId());
                 }
 
                 // If a suiteTag is used, we load with it.
