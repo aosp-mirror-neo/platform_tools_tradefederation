@@ -58,7 +58,7 @@ java_library_host {
     java_version: "11",
 }
 
-java_library_host {
+tradefed_java_library_host {
     name: "tradefed-isolation-tests",
     // Restrict visibility to only those targets that need to access it.
     visibility: [
