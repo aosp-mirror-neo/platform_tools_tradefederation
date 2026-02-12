@@ -486,13 +486,19 @@ public class ConfigurationDef {
             checkObjectValid(objectTypeName, className, configObject);
             return configObject;
         } catch (InstantiationException | InvocationTargetException | NoSuchMethodException e) {
-            throw new ConfigurationException(String.format(
-                    "Could not instantiate class %s for config object type %s", className,
-                    objectTypeName), e);
+            throw new ConfigurationException(
+                    String.format(
+                            "Could not instantiate class %s for config object type %s in"
+                                    + " configuration %s",
+                            className, objectTypeName, getName()),
+                    e);
         } catch (IllegalAccessException e) {
-            throw new ConfigurationException(String.format(
-                    "Could not access class %s for config object type %s", className,
-                    objectTypeName), e);
+            throw new ConfigurationException(
+                    String.format(
+                            "Could not access class %s for config object type %s in configuration"
+                                    + " %s",
+                            className, objectTypeName, getName()),
+                    e);
         }
     }
 
@@ -513,8 +519,9 @@ public class ConfigurationDef {
             ClassNotFoundConfigurationException exception =
                     new ClassNotFoundConfigurationException(
                             String.format(
-                                    "Could not find class %s for config object type %s",
-                                    className, objectTypeName),
+                                    "Could not find class %s for config object type %s in"
+                                            + " configuration %s",
+                                    className, objectTypeName, getName()),
                             e,
                             InfraErrorIdentifier.CLASS_NOT_FOUND,
                             className,
