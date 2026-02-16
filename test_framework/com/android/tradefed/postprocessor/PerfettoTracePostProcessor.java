@@ -179,6 +179,13 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
                             + " both raw and compressed traces.")
     private String mPerfettoTraceFileRegex = ".*\\.perfetto\\-trace.*";
 
+    @Option(
+            name = "include-failed-tests",
+            description =
+                    "Set it to true to process metrics for the failed tests. By default metrics for"
+                            + " failed tests are not generated including v1 and v2.")
+    private boolean mIncludeFailedTests = false;
+
     private Map<String, File> mTestArtifactFilePathMap = new HashMap<>();
 
     private Map<String, File> mTestArtifactDirectoryMap = new HashMap<>();
@@ -206,6 +213,11 @@ public class PerfettoTracePostProcessor extends BasePostProcessor {
      */
     private Map<String, Metric.Builder> processLogs(Map<String, LogFile> logs) {
         Map<String, Metric.Builder> metrics = new HashMap<>();
+        if (!mIncludeFailedTests && isTestFailed()) {
+            CLog.d("Skipping Perfetto trace processing due to test failure.");
+            return metrics;
+        }
+
         Pattern pattern = Pattern.compile(mPerfettoTraceFileRegex);
         for (String fileName : logs.keySet()) {
             if (pattern.matcher(fileName).matches()) {
