@@ -300,9 +300,11 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         Map<String, Test> allTests = new TreeMap<>();
         for (File jsonFile : mRunnerDir.listFiles((d, n) -> n.endsWith(".json"))) {
             Gson gson = new Gson();
-            for (Test test : gson.fromJson(FileUtil.readStringFromFile(jsonFile), Test[].class)) {
+            Test[] tests = gson.fromJson(FileUtil.readStringFromFile(jsonFile), Test[].class);
+            for (Test test : tests) {
                 allTests.put(test.mName, test);
             }
+            CLog.i("Loaded %s tests from %s", tests.length, jsonFile);
         }
 
         // Finish object initialization.
@@ -314,6 +316,11 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         }
 
         // Filter tests by name and abi.
+        CLog.i("Include filter: %s", mIncludeFilters);
+        CLog.i("Exclude filter: %s", mExcludeFilters);
+        CLog.i("Include tags: %s", mIncludeTags);
+        CLog.i("Abi: %s", mAbi);
+        CLog.i("Is root: %s", mIsRoot);
         List<Test> tests =
                 allTests.values().stream()
                         .filter(test -> shouldIncludeTest(test.mName))
@@ -325,6 +332,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         if (tests.isEmpty()) {
             throw new RuntimeException("No tests found that match filters");
         }
+        CLog.i("Collected %s tests", tests.size());
 
         // Shuffle tests in a deterministic and well-distributed way.
         // This will uniformly spread expensive tests over time and over shards.
@@ -342,6 +350,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
             Stream<Integer> shard = indices.filter(i -> i % mShardCount == mShardIndex);
             final List<Test> testsCopy = tests; // Effectively final copy for lambda
             tests = shard.map(i -> testsCopy.get(i)).collect(Collectors.toList());
+            CLog.i("Shard %s/%s has %s tests", mShardIndex, mShardCount, tests.size());
         }
 
         // Also include all dependencies recursively.
