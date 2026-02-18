@@ -316,6 +316,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         }
 
         // Filter tests by name and abi.
+        CLog.i("Shard %s/%s", mShardIndex, mShardCount);
         CLog.i("Include filter: %s", mIncludeFilters);
         CLog.i("Exclude filter: %s", mExcludeFilters);
         CLog.i("Include tags: %s", mIncludeTags);
@@ -323,6 +324,7 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
         CLog.i("Is root: %s", mIsRoot);
         List<Test> tests =
                 allTests.values().stream()
+                        .filter(t -> Math.floorMod(t.mName.hashCode(), mShardCount) == mShardIndex)
                         .filter(test -> shouldIncludeTest(test.mName))
                         .filter(test -> test.mTags.containsAll(mIncludeTags))
                         .filter(test -> mAbi == null || test.mTags.contains(mAbi.getName()))
@@ -342,15 +344,6 @@ public class ArtTest implements IShardableTest, IAbiReceiver, ITestFilterReceive
             Stream<Integer> permutation = indices.sorted(Comparator.comparingInt(hash));
             final List<Test> testsCopy = tests; // Effectively final copy for lambda
             tests = permutation.map(i -> testsCopy.get(i)).collect(Collectors.toList());
-        }
-
-        // Filter tests for this shard.
-        if (mShardCount > 1) {
-            Stream<Integer> indices = IntStream.range(0, tests.size()).boxed();
-            Stream<Integer> shard = indices.filter(i -> i % mShardCount == mShardIndex);
-            final List<Test> testsCopy = tests; // Effectively final copy for lambda
-            tests = shard.map(i -> testsCopy.get(i)).collect(Collectors.toList());
-            CLog.i("Shard %s/%s has %s tests", mShardIndex, mShardCount, tests.size());
         }
 
         // Also include all dependencies recursively.
