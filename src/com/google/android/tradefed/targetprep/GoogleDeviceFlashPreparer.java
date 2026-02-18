@@ -151,6 +151,13 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
     private String mAltStaticDeviceInfoClass = null;
 
     @Option(
+            name = "device-flasher-class",
+            description =
+                    "A IDeviceFlasher class that will be used to flash the device. When this option"
+                        + " is set, device product type check before flashing will be skipped. ")
+    private String mDeviceFlasherClass = null;
+
+    @Option(
             name = "enable-flashstation",
             description =
                     "Whether to enable Flashstation as the default flasher for flashing devices.")
@@ -325,8 +332,24 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
             productVariant = "";
         }
 
-        Class<? extends IDeviceFlasher> flasherClass =
-                StaticDeviceInfoUtil.getFlasherClass(productType, productVariant);
+        Class<? extends IDeviceFlasher> flasherClass = null;
+        if (!Strings.isNullOrEmpty(mDeviceFlasherClass)) {
+            try {
+                flasherClass = Class.forName(mDeviceFlasherClass).asSubclass(IDeviceFlasher.class);
+            } catch (ClassNotFoundException e) {
+                CLog.w(
+                        "Flasher class %s was explicitly set for flashing, but could not be found"
+                                + " in the classpath.",
+                        mDeviceFlasherClass);
+                CLog.e(e);
+            } catch (ClassCastException e) {
+                CLog.w("%s is not a IDeviceFlasher class.", mDeviceFlasherClass);
+                CLog.e(e);
+            }
+        }
+        if (flasherClass == null) {
+            flasherClass = StaticDeviceInfoUtil.getFlasherClass(productType, productVariant);
+        }
         if (flasherClass == null) {
             throw new DeviceNotAvailableException(
                     String.format(
@@ -369,7 +392,9 @@ public class GoogleDeviceFlashPreparer extends DeviceFlashPreparer
     @Override
     protected void checkDeviceProductType(ITestDevice device, IDeviceBuildInfo deviceBuild)
             throws BuildError, DeviceNotAvailableException {
-        if (mSkipPreFlashProductType) {
+        // skip device product type check when flashers are set via @Options, since a mapping of
+        // StaticDeviceInfo is not provided in such case.
+        if (mSkipPreFlashProductType || !Strings.isNullOrEmpty(mDeviceFlasherClass)) {
             return;
         }
         String deviceTypeFromBuild = deviceBuild.getDeviceBuildFlavor();

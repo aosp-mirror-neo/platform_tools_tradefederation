@@ -183,6 +183,11 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
             description = "Alternative class to use for fetching static device info.")
     private String mAltStaticDeviceInfoClass = null;
 
+    @Option(
+            name = "device-flasher-class",
+            description = "Name of the IDeviceFlasher class that will be used to flash the device.")
+    private String mDeviceFlasherClass = null;
+
     /** stores the current device build's id */
     private String mCurrentBuildId = null;
 
@@ -766,8 +771,26 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
 
     /** Invoke the flasher's getAdditionalFileFilters() method. */
     private void addFileFiltersForFlasher(String product, String variant) {
-        Class<? extends IDeviceFlasher> flasherClass =
-                StaticDeviceInfoUtil.getFlasherClass(product, variant);
+        Class<? extends IDeviceFlasher> flasherClass = null;
+        if (!Strings.isNullOrEmpty(mDeviceFlasherClass)) {
+            try {
+                flasherClass = Class.forName(mDeviceFlasherClass).asSubclass(IDeviceFlasher.class);
+            } catch (ClassNotFoundException e) {
+                CLog.w(
+                        "Flasher class %s was explicitly set for flashing, but could not be found"
+                                + " in the classpath.",
+                        mDeviceFlasherClass);
+                CLog.e(e);
+                return;
+            } catch (ClassCastException e) {
+                CLog.w("%s is not a IDeviceFlasher class.", mDeviceFlasherClass);
+                CLog.e(e);
+                return;
+            }
+        } else {
+            flasherClass = StaticDeviceInfoUtil.getFlasherClass(product, variant);
+        }
+
         if (flasherClass == null) {
             return;
         }
@@ -802,6 +825,14 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
                                         + "build-flavor specified. Please "
                                         + "specify --build-flavor.",
                                 device.getIDevice().getClass()),
+                        InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+            }
+            if (!Strings.isNullOrEmpty(mDeviceFlasherClass)) {
+                throw new HarnessRuntimeException(
+                        String.format(
+                                "Flasher class %s was explicitly used, but no build-flavor was"
+                                        + " specified. Please specify --build-flavor.",
+                                mDeviceFlasherClass),
                         InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
             }
             String product = device.getProductType();
