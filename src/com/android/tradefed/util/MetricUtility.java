@@ -91,6 +91,24 @@ public class MetricUtility {
     private List<Pattern> mMetricPatterns = new ArrayList<>();
     private List<Pattern> mMetricsUseForTestIterationsPatterns = new ArrayList<>();
 
+    /** Helper class to hold dimensional metric file and status for a single test iteration. */
+    public static class DimensionalIterationData {
+        public LogFile metricFile;
+        public boolean passed;
+        public TestDescription baseTest;
+
+        public DimensionalIterationData(LogFile metricFile, boolean passed) {
+            this(metricFile, passed, null);
+        }
+
+        public DimensionalIterationData(
+                LogFile metricFile, boolean passed, TestDescription baseTest) {
+            this.metricFile = metricFile;
+            this.passed = passed;
+            this.baseTest = baseTest;
+        }
+    }
+
     /** Helper class to hold metrics and status for a single test iteration. */
     static class IterationData {
         Map<String, Metric> metrics;
@@ -127,14 +145,27 @@ public class MetricUtility {
         // Group test cases which differs only by the iteration separator or test the same name.
         // Removes iteration numbers like "$17".
         String newTestId =
-                CLASS_METHOD_JOINER
-                        .join(testDescription.getClassName(), testDescription.getTestName())
-                        .replaceFirst(Pattern.quote(mTestIterationSeparator) + "\\d+", "");
+                getGroupedTestId(
+                        testDescription.getClassName(),
+                        testDescription.getTestName(),
+                        mTestIterationSeparator);
 
         mTestIterations
                 .computeIfAbsent(newTestId, k -> new ArrayList<>())
                 .add(new IterationData(testMetrics, !testFailed));
     }
+
+    /**
+     * Generates the clean, grouped test ID by joining class/method and stripping iteration numbers.
+     * Matches the logic used in storeTestMetrics.
+     */
+    private String getGroupedTestId(String className, String testName, String separator) {
+        return CLASS_METHOD_JOINER
+                .join(className, testName)
+                .replaceFirst(Pattern.quote(separator) + "\\d+", "");
+    }
+
+
 
     /**
      * Write metrics to a file.
@@ -494,37 +525,21 @@ public class MetricUtility {
 
     /** A type-safe key for grouping dimensional metrics for aggregation. */
     private static final class DimensionalMetricKey {
-        private final String mBaseTestName;
-        private final String mTestClass;
-        private final String mTestMethod;
+        private final String mCompositeTestId; // The cleaned "Class#Method" string
         private final String mMetricId;
         private final List<Dimension> mDimensions;
 
         public DimensionalMetricKey(
-                String baseTestName,
-                String testClass,
-                String testMethod,
-                String metricId,
-                List<Dimension> dimensions) {
-            mBaseTestName = baseTestName;
-            mTestClass = testClass;
-            mTestMethod = testMethod;
+                String compositeTestId, String metricId, List<Dimension> dimensions) {
+            mCompositeTestId = compositeTestId;
             mMetricId = metricId;
             List<Dimension> sortedDimensions = new ArrayList<>(dimensions);
             sortedDimensions.sort(Comparator.comparing(Dimension::getKey));
             mDimensions = Collections.unmodifiableList(sortedDimensions);
         }
 
-        public String getBaseTestName() {
-            return mBaseTestName;
-        }
-
-        public String getTestClass() {
-            return mTestClass;
-        }
-
-        public String getTestMethod() {
-            return mTestMethod;
+        public String getCompositeTestId() {
+            return mCompositeTestId;
         }
 
         public String getMetricId() {
@@ -536,16 +551,14 @@ public class MetricUtility {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             DimensionalMetricKey that = (DimensionalMetricKey) o;
-            return Objects.equals(mBaseTestName, that.mBaseTestName)
-                    && Objects.equals(mTestClass, that.mTestClass)
-                    && Objects.equals(mTestMethod, that.mTestMethod)
+            return Objects.equals(mCompositeTestId, that.mCompositeTestId)
                     && Objects.equals(mMetricId, that.mMetricId)
                     && Objects.equals(mDimensions, that.mDimensions);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(mBaseTestName, mTestClass, mTestMethod, mMetricId, mDimensions);
+            return Objects.hash(mCompositeTestId, mMetricId, mDimensions);
         }
     }
 
@@ -553,29 +566,29 @@ public class MetricUtility {
     private static class AggregationData {
         MetricRecord recordTemplate;
         DimensionalMetric dimensionalMetricTemplate;
-        List<Double> rawValues = new ArrayList<>();
+        Map<String, List<Double>> allValuesByIteration = new HashMap<>();
+        Map<String, List<Double>> passedValuesByIteration = new HashMap<>();
     }
 
     /**
-     * Reads all collected dimensional metric report files, aggregates the raw values, computes
+     * Reads all stored dimensional metric report files, aggregates the raw values, computes
      * statistics, and writes a new aggregated report file.
      *
-     * @param dimensionalMetricFiles The list of metric report files.
      * @param percentiles The percentiles to compute.
      * @param testIterationSeparator The separator for test iterations.
      * @return A {@link File} containing the aggregated report, or null if no aggregation was
      *     performed.
      */
     public File aggregateDimensionalMetricsAndWriteToFile(
-            List<LogFile> dimensionalMetricFiles,
+            List<DimensionalIterationData> iterationDataList,
             Set<Integer> percentiles,
             String testIterationSeparator) {
-        if (dimensionalMetricFiles.isEmpty()) {
+        if (iterationDataList == null || iterationDataList.isEmpty()) {
             return null;
         }
 
         Map<DimensionalMetricKey, AggregationData> aggregationMap =
-                parseAndCollectRawValues(dimensionalMetricFiles, testIterationSeparator);
+                parseAndCollectRawValues(iterationDataList, testIterationSeparator);
 
         if (aggregationMap.isEmpty()) {
             CLog.w("No dimensional metrics with raw values were found to aggregate.");
@@ -588,10 +601,11 @@ public class MetricUtility {
     }
 
     private Map<DimensionalMetricKey, AggregationData> parseAndCollectRawValues(
-            List<LogFile> dimensionalMetricFiles, String testIterationSeparator) {
+            List<DimensionalIterationData> dimensionalMetricFiles, String testIterationSeparator) {
         Map<DimensionalMetricKey, AggregationData> aggregationMap = new HashMap<>();
 
-        for (LogFile logFile : dimensionalMetricFiles) {
+        for (DimensionalIterationData iterationData : dimensionalMetricFiles) {
+            LogFile logFile = iterationData.metricFile;
             MetricReport report;
             try (FileInputStream stream = new FileInputStream(logFile.getPath())) {
                 report = MetricReport.parseFrom(stream);
@@ -601,42 +615,70 @@ public class MetricUtility {
                 continue;
             }
             for (TestMetricResult result : report.getTestMetricResultsList()) {
-                String baseTestName =
-                        getBaseTestName(result.getIdentifier(), testIterationSeparator);
-                String baseTestClass =
-                        getBaseTestClass(result.getIdentifier(), testIterationSeparator);
-                String baseTestMethod =
-                        getBaseTestMethod(result.getIdentifier(), testIterationSeparator);
-                for (MetricRecord record : result.getMetricRecordsList()) {
-                    for (DimensionalMetric dimensionalMetric : record.getDimensionalMetricsList()) {
-                        if (!dimensionalMetric.hasRawValues()) {
-                            continue;
-                        }
-                        DimensionalMetricKey aggregationKey =
-                                new DimensionalMetricKey(
-                                        baseTestName,
-                                        baseTestClass,
-                                        baseTestMethod,
-                                        record.getMetricId(),
-                                        dimensionalMetric.getDimensionsList());
-
-                        AggregationData data =
-                                aggregationMap.computeIfAbsent(
-                                        aggregationKey, k -> new AggregationData());
-                        // Store the templates. They will be overwritten on each iteration.
-                        // This assumes that for a given metric (test name + id +
-                        // dimensions), all metadata (unit, polarity, etc.) is identical
-                        // across all iterations. The last seen value will be used as the
-                        // template for the new aggregated record.
-                        data.recordTemplate = record.toBuilder().clearDimensionalMetrics().build();
-                        data.dimensionalMetricTemplate =
-                                dimensionalMetric.toBuilder().clearDataPayload().build();
-                        data.rawValues.addAll(extractDoubles(dimensionalMetric.getRawValues()));
-                    }
-                }
+                processTestMetricResult(
+                        result,
+                        testIterationSeparator,
+                        iterationData.passed,
+                        iterationData.baseTest,
+                        aggregationMap);
             }
         }
         return aggregationMap;
+    }
+
+    private void processTestMetricResult(
+            TestMetricResult result,
+            String testIterationSeparator,
+            boolean passed,
+            TestDescription baseTest,
+            Map<DimensionalMetricKey, AggregationData> aggregationMap) {
+
+        String rawClassName =
+                (baseTest != null) ? baseTest.getClassName() : result.getIdentifier().getTestClass();
+
+        String rawTestName =
+                (baseTest != null) ? baseTest.getTestName() : result.getIdentifier().getMethod();
+
+        String cleanTestId = getGroupedTestId(rawClassName, rawTestName, testIterationSeparator);
+        String iterationTestId = CLASS_METHOD_JOINER.join(baseTest.getClassName(), baseTest.getTestName());
+
+
+        for (MetricRecord record : result.getMetricRecordsList()) {
+            for (DimensionalMetric dimensionalMetric : record.getDimensionalMetricsList()) {
+                if (!dimensionalMetric.hasRawValues()) {
+                    continue;
+                }
+                DimensionalMetricKey aggregationKey =
+                        new DimensionalMetricKey(
+                                cleanTestId,
+                                record.getMetricId(),
+                                dimensionalMetric.getDimensionsList());
+                AggregationData data =
+                        aggregationMap.computeIfAbsent(aggregationKey, k -> new AggregationData());
+
+                data.recordTemplate = record.toBuilder().clearDimensionalMetrics().build();
+                data.dimensionalMetricTemplate =
+                        dimensionalMetric.toBuilder().clearDataPayload().build();
+
+                List<Double> rawValues = extractDoubles(dimensionalMetric.getRawValues());
+                updateAggregationData(data, rawValues, iterationTestId, passed);
+            }
+        }
+    }
+
+    private void updateAggregationData(
+            AggregationData data,
+            List<Double> rawValues,
+            String iterationName,
+            boolean passed) {
+        data.allValuesByIteration
+                .computeIfAbsent(iterationName, k -> new ArrayList<>())
+                .addAll(rawValues);
+        if (passed) {
+            data.passedValuesByIteration
+                    .computeIfAbsent(iterationName, k -> new ArrayList<>())
+                    .addAll(rawValues);
+        }
     }
 
     private MetricReport buildAggregatedReport(
@@ -645,66 +687,135 @@ public class MetricUtility {
 
         Map<String, List<Map.Entry<DimensionalMetricKey, AggregationData>>> groupedByTest =
                 aggregationMap.entrySet().stream()
-                        .collect(Collectors.groupingBy(entry -> entry.getKey().getBaseTestName()));
+                        .collect(
+                                Collectors.groupingBy(
+                                        entry -> entry.getKey().getCompositeTestId()));
 
         for (Map.Entry<String, List<Map.Entry<DimensionalMetricKey, AggregationData>>> testEntry :
                 groupedByTest.entrySet()) {
-            String baseTestName = testEntry.getKey();
+            String cleanTestId = testEntry.getKey();
             List<Map.Entry<DimensionalMetricKey, AggregationData>> metricsForTest =
                     testEntry.getValue();
 
-            DimensionalMetricKey firstKey = metricsForTest.get(0).getKey();
-
             TestMetricResult.Builder testResultBuilder = TestMetricResult.newBuilder();
+
+            // Split the ID back into Class/Method for the proto fields
+            String[] parts = cleanTestId.split("#", 2);
+            String className = parts.length > 0 ? parts[0] : cleanTestId;
+            String methodName = parts.length > 1 ? parts[1] : "";
+
             testResultBuilder
                     .getIdentifierBuilder()
-                    .setFullTestName(baseTestName)
-                    .setTestClass(firstKey.getTestClass())
-                    .setMethod(firstKey.getTestMethod());
+                    .setFullTestName(cleanTestId)
+                    .setTestClass(className)
+                    .setMethod(methodName);
 
             for (Map.Entry<DimensionalMetricKey, AggregationData> metricEntry : metricsForTest) {
                 AggregationData data = metricEntry.getValue();
-                if (data.rawValues.isEmpty()) {
-                    continue;
-                }
-
-                Map<String, Double> stats = getStats(data.rawValues, percentiles, 0);
-
+                Map<String, Double> stats =
+                        calculateAggregatedStats(data, metricEntry.getKey(), percentiles);
                 for (Map.Entry<String, Double> statEntry : stats.entrySet()) {
-                    String newLegacyMetricKey =
-                            String.join(
-                                    STATS_KEY_SEPARATOR,
-                                    data.dimensionalMetricTemplate.getLegacyMetricKey(),
-                                    statEntry.getKey());
-
-                    // Create a new dimensional metric with a single computed statistic.
-                    // We can't have multiple computed stats in the same dimensional metric, so
-                    // we create a new one with a new legacy metric key.
-                    testResultBuilder.addMetricRecords(
-                            MetricRecord.newBuilder()
-                                    .mergeFrom(data.recordTemplate)
-                                    .addDimensionalMetrics(
-                                            DimensionalMetric.newBuilder()
-                                                    .mergeFrom(data.dimensionalMetricTemplate)
-                                                    .setComputedStatistics(
-                                                            ComputedStatistics.newBuilder()
-                                                                    .addStats(
-                                                                            Stat.newBuilder()
-                                                                                    .setKey(
-                                                                                            statEntry
-                                                                                                    .getKey())
-                                                                                    .setValue(
-                                                                                            Value
-                                                                                                    .newBuilder()
-                                                                                                    .setDoubleValue(
-                                                                                                            statEntry
-                                                                                                                    .getValue()))))
-                                                    .setLegacyMetricKey(newLegacyMetricKey)));
+                    addStatToTestResult(
+                            testResultBuilder, data, statEntry.getKey(), statEntry.getValue());
                 }
             }
             aggregatedReportBuilder.addTestMetricResults(testResultBuilder);
         }
         return aggregatedReportBuilder.build();
+    }
+
+    private Map<String, Double> calculateAggregatedStats(
+            AggregationData data, DimensionalMetricKey key, Set<Integer> percentiles) {
+
+        boolean usePassedIterationsForMean =
+                mMetricsUseForTestIterationsPatterns.stream()
+                        .anyMatch(p -> p.matcher(key.getMetricId()).matches());
+
+        List<Double> flatListOfAllValues =
+                data.allValuesByIteration.values().stream()
+                        .flatMap(List::stream)
+                        .collect(Collectors.toList());
+        List<Double> flatListOfPassedValues =
+                data.passedValuesByIteration.values().stream()
+                        .flatMap(List::stream)
+                        .collect(Collectors.toList());
+
+        if (usePassedIterationsForMean) {
+            if (flatListOfPassedValues.isEmpty()) {
+                return Collections.emptyMap();
+            }
+            boolean hasMultiValue =
+                    data.passedValuesByIteration.values().stream().anyMatch(l -> l.size() > 1);
+
+            if (hasMultiValue) {
+                // Use 'mean of means' across passed iterations. This correctly weights each
+                // iteration, as the total value count can exceed the number of passed iterations.
+                List<Double> iterationMeans = getIterationMeans(data.passedValuesByIteration);
+                Map<String, Double> stats = getStats(flatListOfPassedValues, percentiles, 0);
+                if (!iterationMeans.isEmpty()) {
+                    double meanOfMeans =
+                            iterationMeans.stream()
+                                    .mapToDouble(Double::doubleValue)
+                                    .average()
+                                    .getAsDouble();
+                    stats.put(STATS_KEY_MEAN, meanOfMeans);
+                }
+                return stats;
+            } else {
+                return getStats(
+                        flatListOfPassedValues, percentiles, data.passedValuesByIteration.size());
+            }
+        } else {
+            if (flatListOfAllValues.isEmpty()) {
+                return Collections.emptyMap();
+            }
+            return getStats(flatListOfAllValues, percentiles, 0);
+        }
+    }
+
+    private List<Double> getIterationMeans(Map<String, List<Double>> valuesByIteration) {
+        return valuesByIteration.values().stream()
+                .map(
+                        l -> {
+                            if (l.isEmpty()) return 0.0;
+                            return l.stream()
+                                    .mapToDouble(Double::doubleValue)
+                                    .average()
+                                    .getAsDouble();
+                        })
+                .collect(Collectors.toList());
+    }
+
+    private void addStatToTestResult(
+            TestMetricResult.Builder testResultBuilder,
+            AggregationData data,
+            String statKey,
+            Double statValue) {
+        String newLegacyMetricKey =
+                String.join(
+                        STATS_KEY_SEPARATOR,
+                        data.dimensionalMetricTemplate.getLegacyMetricKey(),
+                        statKey);
+
+        // Create a new dimensional metric with a single computed statistic.
+        // We can't have multiple computed stats in the same dimensional metric, so
+        // we create a new one with a new legacy metric key.
+        testResultBuilder.addMetricRecords(
+                MetricRecord.newBuilder()
+                        .mergeFrom(data.recordTemplate)
+                        .addDimensionalMetrics(
+                                DimensionalMetric.newBuilder()
+                                        .mergeFrom(data.dimensionalMetricTemplate)
+                                        .setComputedStatistics(
+                                                ComputedStatistics.newBuilder()
+                                                        .addStats(
+                                                                Stat.newBuilder()
+                                                                        .setKey(statKey)
+                                                                        .setValue(
+                                                                                Value.newBuilder()
+                                                                                        .setDoubleValue(
+                                                                                                statValue))))
+                                        .setLegacyMetricKey(newLegacyMetricKey)));
     }
 
     private File writeAggregatedReportToFile(MetricReport aggregatedReport) {
@@ -723,28 +834,12 @@ public class MetricUtility {
         return null;
     }
 
-    /**
-     * Extracts a base test name from a TestIdentifier, stripping any iteration suffixes.
-     *
-     * @param identifier The TestIdentifier proto.
-     * @param separator The separator used for iterations (e.g., "$").
-     * @return The base test name.
-     */
-    private static String getBaseTestName(TestIdentifier identifier, String separator) {
-        String fullTestName = identifier.getFullTestName();
-        if (fullTestName.isEmpty()) {
-            fullTestName =
-                    String.format("%s#%s", identifier.getTestClass(), identifier.getMethod());
+    /** Reliable way to get the full name from the proto, handling missing fields. */
+    private String getFullTestName(TestIdentifier protoId) {
+        if (!protoId.getFullTestName().isEmpty()) {
+            return protoId.getFullTestName();
         }
-        return fullTestName.replaceFirst(Pattern.quote(separator) + "\\d+", "");
-    }
-
-    private static String getBaseTestClass(TestIdentifier identifier, String separator) {
-        return identifier.getTestClass().replaceFirst(Pattern.quote(separator) + "\\d+", "");
-    }
-
-    private static String getBaseTestMethod(TestIdentifier identifier, String separator) {
-        return identifier.getMethod().replaceFirst(Pattern.quote(separator) + "\\d+", "");
+        return String.format("%s#%s", protoId.getTestClass(), protoId.getMethod());
     }
 
     /**

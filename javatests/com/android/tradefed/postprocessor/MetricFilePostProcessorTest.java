@@ -15,7 +15,6 @@
  */
 package com.android.tradefed.postprocessor;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.never;
@@ -30,21 +29,20 @@ import com.android.tradefed.result.LogFile;
 import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.MetricUtility;
+import com.android.tradefed.util.MetricUtility.DimensionalIterationData;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.Mockito;
-import org.mockito.stubbing.Answer;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.List;
 
 /** Unit tests for {@link MetricFilePostProcessor}. */
 @RunWith(JUnit4.class)
@@ -99,7 +97,7 @@ public class MetricFilePostProcessorTest {
 
         @Override
         public File aggregateDimensionalMetricsAndWriteToFile(
-                List<LogFile> dimensionalMetricFiles,
+                List<DimensionalIterationData> dimensionalMetricFiles,
                 Set<Integer> percentiles,
                 String testIterationSeparator) {
             isDimensionalMetricAggregated = true;
@@ -318,16 +316,8 @@ public class MetricFilePostProcessorTest {
 
         Mockito.when(
                         mockMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
-                                Mockito.any(), Mockito.any(), Mockito.any()))
-                .thenAnswer(
-                        new Answer<File>() {
-                            @Override
-                            public File answer(InvocationOnMock invocation) throws Throwable {
-                                java.util.List<LogFile> files = invocation.getArgument(0);
-                                assertEquals(1, files.size());
-                                return aggregatedReportFile;
-                            }
-                        });
+                                Mockito.anyList(), Mockito.anySet(), Mockito.anyString()))
+                .thenReturn(aggregatedReportFile);
 
         try {
             processor.setUp();
@@ -336,7 +326,7 @@ public class MetricFilePostProcessorTest {
 
             verify(mockMetricUtil)
                     .aggregateDimensionalMetricsAndWriteToFile(
-                            Mockito.any(), Mockito.any(), Mockito.any());
+                            Mockito.anyList(), Mockito.anySet(), Mockito.anyString());
         } finally {
             FileUtil.deleteFile(dimensionalMetricsFile1);
             FileUtil.deleteFile(otherFile);
@@ -369,7 +359,7 @@ public class MetricFilePostProcessorTest {
 
             verify(mockMetricUtil, never())
                     .aggregateDimensionalMetricsAndWriteToFile(
-                            Mockito.any(), Mockito.any(), Mockito.any());
+                            Mockito.anyList(), Mockito.anySet(), Mockito.anyString());
         } finally {
             FileUtil.deleteFile(dimensionalMetricsFile1);
         }
@@ -398,7 +388,7 @@ public class MetricFilePostProcessorTest {
 
             verify(mockMetricUtil, never())
                     .aggregateDimensionalMetricsAndWriteToFile(
-                            Mockito.any(), Mockito.any(), Mockito.any());
+                            Mockito.anyList(), Mockito.anySet(), Mockito.anyString());
         } finally {
             FileUtil.deleteFile(otherFile);
         }

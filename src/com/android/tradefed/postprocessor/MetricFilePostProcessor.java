@@ -33,6 +33,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -114,7 +115,8 @@ public class MetricFilePostProcessor extends BasePostProcessor {
     private boolean mAggregateDimensionalMetrics = false;
 
     private MetricUtility mMetricUtil = new MetricUtility();
-    private ArrayList<LogFile> mDimensionalMetricFiles = new ArrayList<>();
+    private List<MetricUtility.DimensionalIterationData> mStoredDimensionalMetrics =
+            new ArrayList<>();
 
     public MetricFilePostProcessor() {}
 
@@ -129,19 +131,20 @@ public class MetricFilePostProcessor extends BasePostProcessor {
             HashMap<String, Metric> testMetrics,
             Map<String, LogFile> testLogs) {
 
+        boolean testFailed = isTestFailed();
+
         // Store the test metric and use it for aggregation later at the end of
         // test run.
         if (mAggregateSimilarTests) {
-            // If isTestFailed() returns false, it means the test iteration passed. Otherwise, the
-            // test iteration failed.
-            boolean testFailed = isTestFailed();
             mMetricUtil.storeTestMetrics(testDescription, testMetrics, testFailed);
         }
 
         if (mAggregateDimensionalMetrics) {
             for (LogFile logFile : testLogs.values()) {
                 if (LogDataType.CB_METRICS_REPORT_FILE.equals(logFile.getType())) {
-                    mDimensionalMetricFiles.add(logFile);
+                    mStoredDimensionalMetrics.add(
+                            new MetricUtility.DimensionalIterationData(
+                                    logFile, !testFailed, testDescription));
                 }
             }
         }
@@ -196,13 +199,13 @@ public class MetricFilePostProcessor extends BasePostProcessor {
             }
         }
 
-        if (mAggregateDimensionalMetrics && !mDimensionalMetricFiles.isEmpty()) {
+        if (mAggregateDimensionalMetrics && !mStoredDimensionalMetrics.isEmpty()) {
             CLog.i(
                     "Starting dimensional metrics aggregation for %d report files.",
-                    mDimensionalMetricFiles.size());
+                    mStoredDimensionalMetrics.size());
             File aggregatedReportFile =
                     mMetricUtil.aggregateDimensionalMetricsAndWriteToFile(
-                            mDimensionalMetricFiles, mPercentiles, mTestIterationSeparator);
+                            mStoredDimensionalMetrics, mPercentiles, mTestIterationSeparator);
             if (aggregatedReportFile != null) {
                 CLog.i(
                         "Dimensional metrics aggregation complete. Uploading report: %s",
@@ -219,7 +222,7 @@ public class MetricFilePostProcessor extends BasePostProcessor {
             } else {
                 CLog.w("Aggregated dimensional metrics report was not generated.");
             }
-            mDimensionalMetricFiles.clear();
+            mStoredDimensionalMetrics.clear();
         }
         return new HashMap<String, Builder>();
     }
