@@ -497,9 +497,11 @@ public class GeneralTestsConfigValidation implements IBuildReceiver {
                             List<String> parameters =
                                     c.getConfigurationDescription()
                                             .getMetaData(ITestSuite.PARAMETER_KEY);
-                            if (parameters == null
-                                    || !parameters.contains(
-                                            ModuleParameters.NOT_MULTI_ABI.toString())) {
+                            if ((parameters == null
+                                            || !parameters.contains(
+                                                    ModuleParameters.NOT_MULTI_ABI.toString()))
+                                    // As most targets are 64bit only, only check 64bit binary.
+                                    && file64 == null) {
                                 String missingVersion = file32 == null ? "32" : "64";
                                 throw new ConfigurationException(
                                         String.format(
