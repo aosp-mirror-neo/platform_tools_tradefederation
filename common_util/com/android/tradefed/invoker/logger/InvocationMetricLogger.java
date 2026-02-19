@@ -233,6 +233,8 @@ public class InvocationMetricLogger {
         FLASHSTATION_DOWNLOAD_SIZE("flashstation_download_size_bytes", true),
         FLASHSTATION_VERSION("flashstation_version", false),
         DOWNLOAD_PERMIT_LATENCY("download_permit_latency_ms", true),
+        // A pair of "wait_time:hold_time" for a download permit.
+        DOWNLOAD_PERMIT_LATENCY_PAIR("download_permit_latency_pair", true),
         // Unzipping metrics
         UNZIP_TESTS_DIR_TIME("unzip_tests_dir_time_ms", true),
         UNZIP_TESTS_DIR_COUNT("unzip_tests_dir_count", true),
