@@ -32,6 +32,7 @@ import com.android.tradefed.config.proxy.TradefedDelegator;
 import com.android.tradefed.device.DeviceSelectionOptions;
 import com.android.tradefed.device.IDeviceSelection.BaseDeviceType;
 import com.android.tradefed.device.ManagedTestDeviceFactory;
+import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.RemoteInvocationExecution;
@@ -135,6 +136,15 @@ public class TradefedSandbox implements ISandbox {
         mCmdArgs.add(getJava());
         mCmdArgs.add(String.format("-Djava.io.tmpdir=%s", mSandboxTmpFolder.getAbsolutePath()));
         mCmdArgs.add(String.format("-DTF_JAR_DIR=%s", mRootFolder.getAbsolutePath()));
+        // have subprocess to use the same cache dir as parent
+        mCmdArgs.add(
+                String.format(
+                        "-D%s=%s",
+                        IHostOptions.CACHE_DIR_PROPERTY,
+                        GlobalConfiguration.getInstance()
+                                .getHostOptions()
+                                .getDownloadCacheDir()
+                                .getAbsolutePath()));
         // Setup heap dump collection
         try {
             mHeapDump = FileUtil.createTempDir("heap-dump", getWorkFolder());

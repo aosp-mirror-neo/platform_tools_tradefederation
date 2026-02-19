@@ -81,11 +81,19 @@ public class HostOptions implements IHostOptions {
             description = "Feature flag to enable the support for fastbootd.")
     private boolean mEnableFastbootdMode = true;
 
-    @Option(name = "download-cache-dir", description = "the directory for caching downloaded "
-            + "flashing files. Should be on the same filesystem as java.io.tmpdir.  Consider "
-            + "changing the java.io.tmpdir property if you want to move downloads to a different "
-            + "filesystem.")
-    private File mDownloadCacheDir = new File(System.getProperty("java.io.tmpdir"), "lc_cache");
+    @Option(
+            name = "download-cache-dir",
+            description =
+                    "the directory for caching downloaded artifacts. Should be on the same"
+                            + " filesystem as java.io.tmpdir.  Consider changing the java.io.tmpdir"
+                            + " property if you want to move downloads to a different filesystem."
+                            + " Can be overridden by the "
+                            + CACHE_DIR_PROPERTY
+                            + " system property.")
+    private File mDownloadCacheDir =
+            System.getProperty(CACHE_DIR_PROPERTY) == null
+                    ? new File(System.getProperty("java.io.tmpdir"), "lc_cache")
+                    : new File(System.getProperty(CACHE_DIR_PROPERTY));
 
     @Option(name = "use-sso-client", description = "Use a SingleSignOn client for HTTP requests.")
     private Boolean mUseSsoClient = true;
