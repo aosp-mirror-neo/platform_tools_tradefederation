@@ -22,6 +22,7 @@ import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
+import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
@@ -39,6 +40,7 @@ import org.mockito.MockitoAnnotations;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +51,7 @@ public class PerfettoTracePostProcessorTest {
 
     private PerfettoTracePostProcessor mProcessor;
     @Mock private ITestInvocationListener mMockListener;
+    private static final TestDescription TEST_1 = new TestDescription("pkg", "test1");
 
     @Before
     public void setUp() throws Exception {
@@ -472,5 +475,72 @@ public class PerfettoTracePostProcessorTest {
                 mProcessor.constructOutputFileName(
                         "metric_", "device-trace_test_name_7152781518484770426.perfetto-trace"),
                 "metric_perfetto_device-trace_test_name_");
+    }
+
+    /**
+     * Test that metrics are still processed for failed tests when "include-failed-tests" is
+     * enabled.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testProcessRunMetricsAndLogs_includesFailedTest() throws Exception {
+        OptionSetter setter = new OptionSetter(mProcessor);
+        setter.setOptionValue("include-failed-tests", "true");
+
+        setUpHostCommandResult(CommandStatus.SUCCESS);
+
+        File traceProcessorTempFile = createTestArtifactsFile("trace_processor_shell");
+
+        // Simulate a test failure
+        mProcessor.testFailed(TEST_1, "It is a failure");
+
+        // Run the post processor.
+        Map<String, Metric.Builder> newMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogsCompressed());
+
+        // Check the trace file was not decompressed before processing.
+        Mockito.verify(mProcessor, Mockito.times(0)).decompressFile(Mockito.any());
+
+        // Check runtime and status metrics are present.
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_runtime"));
+        Assert.assertTrue(getMetricDouble(newMetrics, "perfetto_trace_processor_runtime") >= 0);
+        Assert.assertTrue(newMetrics.containsKey("perfetto_trace_processor_status"));
+        Assert.assertEquals("1", getMetricString(newMetrics, "perfetto_trace_processor_status"));
+
+        traceProcessorTempFile.delete();
+    }
+
+    /**
+     * Test that metrics are skipped for failed tests by default (when "include-failed-tests" is
+     * false).
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testProcessRunMetricsAndLogs_excludesFailedTest() throws Exception {
+        OptionSetter setter = new OptionSetter(mProcessor);
+        setter.setOptionValue("include-failed-tests", "false");
+
+        setUpHostCommandResult(CommandStatus.SUCCESS);
+
+        File traceProcessorTempFile = createTestArtifactsFile("trace_processor_shell");
+
+        // Simulate a test failure
+        mProcessor.testFailed(TEST_1, "It is a failure");
+
+        // Run the post processor.
+        Map<String, Metric.Builder> newMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), createTestLogsCompressed());
+
+        // Check the trace file was not decompressed before processing.
+        Mockito.verify(mProcessor, Mockito.times(0)).decompressFile(Mockito.any());
+
+        // Check that no metrics are returned.
+        Assert.assertFalse(newMetrics.containsKey("perfetto_trace_file_size_bytes"));
+        Assert.assertEquals(Collections.emptyMap(), newMetrics);
+        Assert.assertEquals(0, newMetrics.size());
+
+        traceProcessorTempFile.delete();
     }
 }

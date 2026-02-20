@@ -451,6 +451,12 @@ public abstract class ITestSuite
                             + " be collected regardless of failures.")
     private Map<AutoLogCollector, MetricCollectionLevel> mLogLevelAlwaysOn = new LinkedHashMap<>();
 
+    @Option(
+            name = "collect-kernel-log-on-dnae",
+            description =
+                    "Whether to collect kernel log when DNAE occurs during a module execution.")
+    private boolean mCollectKernelLog = false;
+
     private boolean mCurrentModuleFailedCheckers = false;
 
     public enum IsolatedModuleGrade {
@@ -1476,6 +1482,9 @@ public abstract class ITestSuite
             }
             if (mRemoveModuleBuffering) {
                 module.setRemoveModuleBuffering(mRemoveModuleBuffering);
+            }
+            if (mCollectKernelLog) {
+                module.setCollectKernelLog(mCollectKernelLog);
             }
             // Pass the run defined collectors to be used.
             module.setMetricCollectors(CollectorHelper.cloneCollectors(mMetricCollectors));

@@ -167,9 +167,8 @@ public class ArtTestTest {
             shard0.mRunnerDir = shard0.extractTarBall(new File(tempDir, "shard0_basedir"));
             List<ArtTest.Test> testsShard0 = shard0.loadTests();
             Set<String> names0 = testsShard0.stream().map(t -> t.mName).collect(Collectors.toSet());
-            assertEquals(3, names0.size());
-            assertTrue(names0.contains("001-HelloWorld#1f5cdb07"));
-            assertTrue(names0.contains("002-Foo#1f5cdb08"));
+            assertEquals(2, names0.size());
+            assertTrue(names0.contains("003-Bar#1f5cdb09"));
             assertTrue(names0.contains("setup#compile-boot-image"));
 
             // Shard 1
@@ -179,8 +178,9 @@ public class ArtTestTest {
             shard1.mRunnerDir = shard1.extractTarBall(new File(tempDir, "shard1_basedir"));
             List<ArtTest.Test> testsShard1 = shard1.loadTests();
             Set<String> names1 = testsShard1.stream().map(t -> t.mName).collect(Collectors.toSet());
-            assertEquals(2, names1.size());
-            assertTrue(names1.contains("003-Bar#1f5cdb09"));
+            assertEquals(3, names1.size());
+            assertTrue(names1.contains("001-HelloWorld#1f5cdb07"));
+            assertTrue(names1.contains("002-Foo#1f5cdb08"));
             assertTrue(names1.contains("setup#compile-boot-image"));
 
         } finally {

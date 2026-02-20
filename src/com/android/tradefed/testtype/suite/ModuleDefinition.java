@@ -219,6 +219,8 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
     private boolean mUseModuleResultsForwarder = false;
 
     private boolean mRemoveModuleBuffering = false;
+
+    private boolean mCollectKernelLog = false;
     private boolean mHasFailures = false;
 
     @VisibleForTesting
@@ -852,6 +854,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
                         maxRunLimit,
                         mUseModuleResultsForwarder,
                         mRemoveModuleBuffering,
+                        mCollectKernelLog,
                         mTargetPreparerRetryCount);
         retriableTest.setModuleId(getId());
         retriableTest.setMarkTestsSkipped(skipTestCases);
@@ -1698,5 +1701,9 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
 
     public void setRemoveModuleBuffering(boolean removeModuleBuffering) {
         mRemoveModuleBuffering = removeModuleBuffering;
+    }
+
+    public void setCollectKernelLog(boolean collectKernelLog) {
+        mCollectKernelLog = collectKernelLog;
     }
 }
