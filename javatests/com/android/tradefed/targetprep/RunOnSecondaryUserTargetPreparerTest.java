@@ -600,6 +600,29 @@ public class RunOnSecondaryUserTargetPreparerTest {
     }
 
     @Test
+    public void setUp_hasSecondaryUser_shortType_reusesExistingUser() throws Exception {
+        Map<Integer, UserInfo> userInfos = new HashMap<>();
+        // Use short type "full.SECONDARY"
+        userInfos.put(
+                3,
+                new UserInfo(
+                        3,
+                        "secondary",
+                        /* flag= */ FLAG_FOR_TESTING,
+                        /* isRunning= */ true,
+                        "full.SECONDARY"));
+        when(mTestInfo.getDevice().getUserInfos()).thenReturn(userInfos);
+        when(mTestInfo.getDevice().isUserSecondary(3)).thenReturn(true);
+        when(mTestInfo.getDevice().getCurrentUser()).thenReturn(0);
+
+        mPreparer.setUp(mTestInfo);
+
+        verify(mTestInfo.getDevice(), never())
+                .createUser(any(), anyBoolean(), anyBoolean(), anyBoolean());
+        verify(mTestInfo.properties()).put(RUN_TESTS_AS_USER_KEY, "3");
+    }
+
+    @Test
     public void setUp_startBackgroundUser_notSupported_throwsException() throws Exception {
         mOptionSetter.setOptionValue(START_BACKGROUND_USER, "true");
         when(mTestInfo.getDevice().isVisibleBackgroundUsersSupported()).thenReturn(false);

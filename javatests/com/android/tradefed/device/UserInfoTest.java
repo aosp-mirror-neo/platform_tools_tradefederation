@@ -25,6 +25,8 @@ import static com.android.tradefed.device.UserInfo.FLAG_MANAGED_PROFILE;
 import static com.android.tradefed.device.UserInfo.FLAG_PRIMARY;
 import static com.android.tradefed.device.UserInfo.FLAG_PROFILE;
 import static com.android.tradefed.device.UserInfo.FLAG_RESTRICTED;
+import static com.android.tradefed.device.UserInfo.USER_TYPE_FULL_SECONDARY;
+import static com.android.tradefed.device.UserInfo.USER_TYPE_SHORT_SECONDARY;
 
 import com.google.common.truth.Expect;
 
@@ -97,5 +99,22 @@ public final class UserInfoTest {
 
         var admin = new UserInfo(007, "Bond, James Bond", FLAG_ADMIN, STOPPED);
         expect.withMessage("admin").that(admin.isAdmin()).isTrue();
+    }
+
+    @Test
+    public void testIsSecondary() {
+        var fullSecondary =
+                new UserInfo(10, "Secondary", NO_FLAGS, STOPPED, USER_TYPE_FULL_SECONDARY);
+        expect.withMessage("fullSecondary").that(fullSecondary.isSecondary()).isTrue();
+
+        var shortSecondary =
+                new UserInfo(11, "Secondary", NO_FLAGS, STOPPED, USER_TYPE_SHORT_SECONDARY);
+        expect.withMessage("shortSecondary").that(shortSecondary.isSecondary()).isTrue();
+
+        var systemUser = new UserInfo(0, "System", NO_FLAGS, STOPPED, "system.HEADLESS");
+        expect.withMessage("systemUser").that(systemUser.isSecondary()).isFalse();
+
+        var untypedUser = new UserInfo(12, "Untyped", NO_FLAGS, STOPPED);
+        expect.withMessage("untypedUser").that(untypedUser.isSecondary()).isFalse();
     }
 }
