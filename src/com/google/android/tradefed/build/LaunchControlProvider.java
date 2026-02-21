@@ -934,13 +934,16 @@ public class LaunchControlProvider
     public IBuildInfo fetchRemoteBuild(RemoteBuildInfo remoteBuild) throws BuildRetrievalError {
         IBuildInfo localBuild = null;
         IFileDownloader downloader = null;
+        long permitAcquiredTime = -1;
+        long latency = -1;
         try {
             downloader = createLaunchControlDownloader(remoteBuild);
             long startTime = System.currentTimeMillis();
             try (CloseableTraceScope ignore = new CloseableTraceScope("wait_for_download_permit")) {
                 getHostOptions().takePermit(PermitLimitType.CONCURRENT_DOWNLOAD);
             }
-            long latency = System.currentTimeMillis() - startTime;
+            permitAcquiredTime = System.currentTimeMillis();
+            latency = permitAcquiredTime - startTime;
             CLog.d("Got download permit after %s", TimeUtil.formatElapsedTime(latency));
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.DOWNLOAD_PERMIT_LATENCY, latency);
@@ -983,6 +986,13 @@ public class LaunchControlProvider
                 throw bre;
             }
         } finally {
+            if (permitAcquiredTime != -1) {
+                long permitHeldTime = System.currentTimeMillis() - permitAcquiredTime;
+                CLog.d("Download permit held for %s", TimeUtil.formatElapsedTime(permitHeldTime));
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricKey.DOWNLOAD_PERMIT_LATENCY_PAIR,
+                        String.format("%d:%d", latency, permitHeldTime));
+            }
             getHostOptions().returnPermit(PermitLimitType.CONCURRENT_DOWNLOAD);
         }
     }
