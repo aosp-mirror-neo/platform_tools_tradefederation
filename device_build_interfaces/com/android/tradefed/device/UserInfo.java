@@ -56,6 +56,8 @@ public final class UserInfo {
 
     public static final String USER_TYPE_FULL_SECONDARY = "android.os.usertype.full.SECONDARY";
 
+    public static final String USER_TYPE_SHORT_SECONDARY = "full.SECONDARY";
+
     private final int mUserId;
     private final String mUserName;
     private final int mFlag;
@@ -185,7 +187,8 @@ public final class UserInfo {
     }
 
     public boolean isSecondary() {
-        return USER_TYPE_FULL_SECONDARY.equals(mUserType);
+        return USER_TYPE_FULL_SECONDARY.equals(mUserType)
+                || USER_TYPE_SHORT_SECONDARY.equals(mUserType);
     }
 
     public boolean isSystem() {
