@@ -1024,7 +1024,7 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
                 filters.add(mTestZipFileFilter);
             } else {
                 // Default is to download the -tests- zips under the 'platform_tests' target
-                filters.add("plaform_tests.zip");
+                filters.add("platform_tests.zip");
             }
         }
         return filters;
