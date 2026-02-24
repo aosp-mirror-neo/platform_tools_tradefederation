@@ -24,9 +24,7 @@ import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.client.googleapis.batch.BatchCallback;
 import com.google.api.client.googleapis.batch.BatchRequest;
 import com.google.api.client.googleapis.json.GoogleJsonErrorContainer;
-import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.AbstractInputStreamContent;
-import com.google.api.client.http.ByteArrayContent;
 import com.google.api.client.http.HttpContent;
 import com.google.api.client.http.HttpHeaders;
 import com.google.api.client.http.HttpRequest;
@@ -67,9 +65,6 @@ public final class Client implements ITestStorageClient {
     private final Thread mUploadThread;
     private final int mMaxBatchSize;
     private final int mInsertBatchSize;
-
-    // TODO(b/143365209): Remove the flag once we fully switch over to v3 api.
-    private final boolean mUseLegacyMigration;
 
     private final boolean mUseBatchApi;
 
@@ -135,7 +130,7 @@ public final class Client implements ITestStorageClient {
     private Client(
             Androidbuildinternal client,
             com.google.api.services.androidbuildinternal.Androidbuildinternal legacyClient,
-            boolean useLegacyMigration,
+            boolean unusedLegacyMigration,
             boolean withUploadThread,
             boolean useBatchApi,
             int maxBatchSize,
@@ -153,7 +148,6 @@ public final class Client implements ITestStorageClient {
             mUploader = null;
             mUploadThread = null;
         }
-        mUseLegacyMigration = useLegacyMigration;
         mUseBatchApi = useBatchApi;
     }
 
@@ -164,7 +158,6 @@ public final class Client implements ITestStorageClient {
         mLegacyClient = null;
         mUploader = null;
         mUploadThread = null;
-        mUseLegacyMigration = true;
         mUseBatchApi = false;
     }
 
@@ -189,11 +182,7 @@ public final class Client implements ITestStorageClient {
             throws IOException {
         // Ensure we uploaded last few results before log associations
         mUploader.forceUpload();
-        if (mUseLegacyMigration) {
-            uploadMigratedAssociations(associations, poolSize);
-        } else {
-            legacyUploadAssociations(associations);
-        }
+        uploadMigratedAssociations(associations, poolSize);
     }
 
     // Will upload log association using the migration api available in V3 client.
@@ -307,7 +296,7 @@ public final class Client implements ITestStorageClient {
             String workUnitId,
             String testResultId,
             BuildArtifactMetadata artifact,
-            long legacyId)
+            long unusedLegacyId)
             throws IOException {
         return mAndroidbuildClient
                 .testartifact()
@@ -315,13 +304,13 @@ public final class Client implements ITestStorageClient {
                 .setInvocationId(invocationId)
                 .setWorkUnitId(workUnitId)
                 .setResultId(testResultId)
-                .setLegacyTestResultId(legacyId)
+                .setLegacyTestResultId(-1L)
                 .execute();
     }
 
     @Override
     public BuildArtifactMetadata updateTestArtifact(
-            BuildArtifactMetadata artifact, long legacyId, AbstractInputStreamContent content)
+            BuildArtifactMetadata artifact, long unusedLegacyId, AbstractInputStreamContent content)
             throws IOException {
         return mAndroidbuildClient
                 .testartifact()
@@ -329,104 +318,8 @@ public final class Client implements ITestStorageClient {
                 .setInvocationId(artifact.getInvocationId())
                 .setWorkUnitId(artifact.getWorkUnitId())
                 .setResultId(artifact.getTestResultId())
-                .setLegacyTestResultId(legacyId)
+                .setLegacyTestResultId(-1L)
                 .execute();
-    }
-
-    private void legacyUploadAssociations(List<LogAssociation> associations) throws IOException {
-        for (LogAssociation association : associations) {
-            if (!association.isSupported()) {
-                CLog.w("Log saver does not support association for %s", association);
-                continue;
-            }
-            CLog.v("Updating association %s name: %s", association, association.getResourceId());
-            BuildArtifactMetadata artifact = null;
-            try {
-                artifact =
-                        mAndroidbuildClient
-                                .testartifact()
-                                .get(association.getResourceId())
-                                .setInvocationId(association.getInvocationId())
-                                .setWorkUnitId(association.getWorkUnitId())
-                                .setResultId(association.getTestResultId())
-                                .execute();
-            } catch (GoogleJsonResponseException e) {
-                if (e.getStatusCode() != 404) {
-                    // We received an unexpected error.
-                    throw e;
-                }
-            }
-            BuildArtifactMetadata update =
-                    new BuildArtifactMetadata().setName(association.getResourceId());
-            if (artifact != null) {
-                update.setRevision(artifact.getRevision());
-            } else {
-                // To be compatible with the V2 logs uploaded by AndroidLogSaver, we need to create
-                // an empty log file using v2 API, then link that file with the log created by V3
-                // api.
-                createLegacyArtifact(association);
-            }
-            CLog.v(
-                    "Updating test artifact %s %s %s %s",
-                    association.getResourceId(),
-                    association.getInvocationId(),
-                    association.getWorkUnitId(),
-                    association.getTestResultId());
-            BuildArtifactMetadata result =
-                    mAndroidbuildClient
-                            .testartifact()
-                            .update(association.getResourceId(), update)
-                            .setInvocationId(association.getInvocationId())
-                            .setWorkUnitId(association.getWorkUnitId())
-                            .setResultId(association.getTestResultId())
-                            .execute();
-        }
-    }
-
-    private void createLegacyArtifact(LogAssociation association) throws IOException {
-        try {
-            mLegacyClient
-                    .testartifact()
-                    .get(
-                            association.getBuildType(),
-                            association.getBuildId(),
-                            association.getBuildTarget(),
-                            association.getAttemptId(),
-                            association.getLegacyResultId(),
-                            association.getResourceId())
-                    .execute();
-            // If the get was successful that means that legacy artifact already exists
-            // and we can proceed.
-            return;
-        } catch (GoogleJsonResponseException e) {
-            if (e.getStatusCode() != 404) {
-                // If we get an exception other than 404 report it.
-                throw e;
-            }
-            // If we got 404 means that artifact does not exist, attempt to create it.
-        }
-        try {
-            mLegacyClient
-                    .testartifact()
-                    .update(
-                            association.getBuildType(),
-                            association.getBuildId(),
-                            association.getBuildTarget(),
-                            association.getAttemptId(),
-                            association.getLegacyResultId(),
-                            association.getResourceId(),
-                            new com.google.api.services.androidbuildinternal.model
-                                    .BuildArtifactMetadata(),
-                            ByteArrayContent.fromString(
-                                    "text/plain", "A")) // Empty file is not accepted.
-                    .execute();
-        } catch (GoogleJsonResponseException e) {
-            // We can ignore 409 Conflict response because it means the log was already created for
-            // us by periodic uploader in AndroidBuildLogSaver.
-            if (e.getStatusCode() != 409) {
-                throw e;
-            }
-        }
     }
 
     /** {@inheritDoc} */
