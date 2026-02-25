@@ -16,6 +16,9 @@
 
 package com.android.tradefed.targetprep;
 
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -114,6 +117,16 @@ public class GkiDeviceFlashPreparerTest {
                         return new HostOptions();
                     }
 
+                    @Override
+                    public String[] getKernelVersionFromImage(File image) {
+                        return new String[] {"android16-6.12", "63", "16k"};
+                    }
+
+                    @Override
+                    public String[] getDeviceKernelVersion(ITestDevice device) {
+                        return new String[] {"android16-6.12", "63", "16k"};
+                    }
+
                     /**
                      * Create a system_dlkm staging directory with 3 kernel modules to test moving
                      * the kernel artifacts under the /lib/modules folder directly. Here is what the
@@ -193,6 +206,91 @@ public class GkiDeviceFlashPreparerTest {
     @After
     public void tearDown() throws Exception {
         FileUtil.recursiveDelete(mTmpDir);
+    }
+
+    /* Test parseKernelVersion with android image */
+    @Test
+    public void testParseKernelVersion_Android() {
+        String kernelString = "6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android16-6.12", "63", "4k"}, version);
+    }
+
+    /* Test parseKernelVersion with mainline image */
+    @Test
+    public void testParseKernelVersion_Mainline() {
+        String kernelString = "6.19.0-mainline-g6cea65971bdc-ab14931105-16k";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android-mainline", "0", "16k"}, version);
+    }
+
+    /* Test parseKernelVersion with an old android image */
+    @Test
+    public void testParseKernelVersion_old_Version() {
+        String kernelString = "5.15.180-android14-11-gf55c0c36ffcd-ab13512086";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android14-5.15", "180", "4k"}, version);
+    }
+
+    @Test
+    public void testParseKernelVersion_Android13() {
+        String kernelString = "5.10.150-android13-1-ab12345678";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android13-5.10", "150", "4k"}, version);
+    }
+
+    @Test
+    public void testParseKernelVersion_Android15_16k() {
+        String kernelString = "6.6.10-android15-1-ab12345678";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android15-6.6", "10", "16k"}, version);
+    }
+
+    /* Test parseKernelVersion failure */
+    @Test
+    public void testParseKernelVersion_Failure() {
+        String kernelString = "invalid-kernel-string";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNull(version);
+    }
+
+    /* Test validateKernelCompatibility success */
+    @Test
+    public void testValidateKernelCompatibility_Success() throws Exception {
+        String[] bootVersion = {"android16-6.12", "63", "16k"};
+        String[] imageVersion = {"android16-6.12", "60", "16k"};
+        mPreparer.validateKernelCompatibility("Image", imageVersion, bootVersion, mMockDevice);
+    }
+
+    /* Test validateKernelCompatibility mismatch */
+    @Test
+    public void testValidateKernelCompatibility_Mismatch() throws Exception {
+        String[] bootVersion = {"android16-6.12", "63", "16k"};
+        String[] imageVersion = {"android15-6.6", "60", "16k"};
+        try {
+            mPreparer.validateKernelCompatibility("Image", imageVersion, bootVersion, mMockDevice);
+            fail("TargetSetupError is expected");
+        } catch (TargetSetupError e) {
+            assertTrue(e.getMessage().contains("doesn't match"));
+        }
+    }
+
+    /* Test validateKernelCompatibility lower patch level */
+    @Test
+    public void testValidateKernelCompatibility_LowerPatchLevel() throws Exception {
+        String[] bootVersion = {"android16-6.12", "60", "16k"};
+        String[] imageVersion = {"android16-6.12", "63", "16k"};
+        try {
+            mPreparer.validateKernelCompatibility("Image", imageVersion, bootVersion, mMockDevice);
+            fail("TargetSetupError is expected");
+        } catch (TargetSetupError e) {
+            assertTrue(e.getMessage().contains("less than"));
+        }
     }
 
     /* Verifies that validateGkiBootImg will throw TargetSetupError if there is no BuildInfo files */
