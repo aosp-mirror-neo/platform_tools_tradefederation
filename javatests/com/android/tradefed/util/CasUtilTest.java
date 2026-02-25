@@ -25,6 +25,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -247,5 +249,82 @@ public class CasUtilTest {
         String log = CasUtil.getCasLogFromDir(logDir);
         assertThat(log).isEqualTo(expectedlog);
         assertThat(Files.exists(logDir)).isFalse();
+    }
+
+    @Test
+    public void checkCasClientFlags_success() throws IOException {
+        String usageOutput =
+                "Usage of /usr/local/google/home/frankfeng/cas/tools/downloader:\n"
+                        + "  -batch-read-blobs-timeout=1m0s: RPC timeout for BatchReadBlobs, like"
+                        + " 2m, 5m etc.\n"
+                        + "  -batch-update-blobs-timeout=1m0s: RPC timeout for BatchUpdateBlobs,"
+                        + " like 2m, 5m etc.\n"
+                        + "  -cache-dir=\"\": Cache directory to store downloaded files.\n"
+                        + "  -cache-lock=false: Enable cache lock. When using local cache"
+                        + " (-cache-dir is set) and enable cache lock, the downloader will add lock"
+                        + " when it changes cache, so you can safely run multiple downloader"
+                        + " instances simultaneously.\n"
+                        + "  -cache-max-size=0: Cache is trimmed if the cache gets larger than this"
+                        + " value. If 0, the cache is effectively a leak.\n"
+                        + "  -cas-addr=\"remotebuildexecution.googleapis.com:443\": RBE server"
+                        + " addr\n"
+                        + "  -cas-concurrency=25: the maximum number of concurrent download"
+                        + " operations.\n"
+                        + "  -cas-instance=\"\": RBE instance\n"
+                        + "  -chunks-only=false: Only download chunk files and the index file (skip"
+                        + " file restoration) for chunked version of artifacts.\n"
+                        + "  -digest=\"\": Digest of root directory proto \"<digest hash>/<size"
+                        + " bytes>\".\n"
+                        + "  -dir=\"\": Directory to download the tree. Files in this directory"
+                        + " will be overwritten and will not be restored on errors.\n"
+                        + "  -disable-cache=false: Disable local cache.\n"
+                        + "  -download-timeout=0s: Fixed timeout for the entire download process."
+                        + " If set, the download will fail if it takes longer than this duration,"
+                        + " but stats will still be dumped.\n"
+                        + "  -dump-json=\"\": Dump download stats to json file.\n"
+                        + "  -exclude-filters=[]: Regular expression of paths to be excluded from"
+                        + " uploading.\n"
+                        + "  -get-capabilities-timeout=5s: RPC timeout for GetCapabilities, like"
+                        + " 20s, 1m etc.\n"
+                        + "  -get-tree-timeout=1m0s: RPC timeout for GetTree, like 2m, 5m etc.\n"
+                        + "  -include-filters=[]: Regular expression of paths to be excluded from"
+                        + " uploading.\n"
+                        + "  -invocation-id=\"\": comma-separated list of key-value pairs, like"
+                        + " 'bid=<build-id>,branch=<branch>,flavor=<flavor>'.\n"
+                        + "  -keep-chunks=false: Keep chunk files and the index file around for"
+                        + " chunked version of artifacts.\n"
+                        + "  -memory-limit=0: Memory limit in MiB.\n"
+                        + "  -min-download-mbps=0: Minimum download speed in megabytes per second."
+                        + " If set, an effective timeout will be calculated and applied to the"
+                        + " download.\n"
+                        + "  -rpc-timeout=1m0s: Default RPC timeout as duration, like 20s, 1m"
+                        + " etc.\n"
+                        + "  -service-account-json=\"\": Path to JSON file with service account"
+                        + " credentials to use.\n"
+                        + "  -use-adc=false: True to use Application Default Credentials (ADC).\n"
+                        + "  -use-hardlink=true: By default local cache will use hardlink when push"
+                        + " and pull files.\n"
+                        + "  -version=false: Print version information\n";
+
+        File fakeCasDownloader = tempFolder.newFile("casdownloader");
+        fakeCasDownloader.setExecutable(true);
+        String scriptContent =
+                "#!/bin/bash\n"
+                        + "if [[ \"$1\" == \"--help\" ]]; then\n"
+                        + "  echo \""
+                        + usageOutput.replace("\"", "\\\"")
+                        + "\"\n"
+                        + "fi\n";
+        Files.writeString(fakeCasDownloader.toPath(), scriptContent);
+
+        Set<String> flags = new HashSet<>();
+        CasUtil.checkCasClientFlags(fakeCasDownloader.toPath(), flags::addAll);
+
+        assertThat(flags).contains("download-timeout");
+        assertThat(flags).contains("cache-dir");
+        assertThat(flags).contains("digest");
+        assertThat(flags).contains("version");
+        assertThat(flags).contains("service-account-json");
+        assertThat(flags.size()).isAtLeast(20);
     }
 }

@@ -24,7 +24,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -156,6 +158,52 @@ public final class CasUtil {
 
     public static void logCasClientVersion(Path clientPath) {
         logCasClientVersion(clientPath, null);
+    }
+
+    /**
+     * Checks the supported flags of the CAS client.
+     *
+     * @param clientPath The path to the CAS client binary.
+     * @param flagsConsumerFn A consumer that accepts the set of supported flags.
+     */
+    public static void checkCasClientFlags(
+            Path clientPath, Consumer<Set<String>> flagsConsumerFn) {
+        if (clientPath == null) {
+            return;
+        }
+
+        String clientName = clientPath.getFileName().toString();
+        // casdownloader is a go binary, it supports --help to list flags.
+        // It outputs flags to stderr.
+        CommandResult cr = mRunUtil.runTimedCmd(5000, clientPath.toString(), "--help");
+
+        String output = cr.getStderr();
+        if (output == null || output.isEmpty()) {
+            output = cr.getStdout();
+        }
+
+        if (output == null || output.isEmpty()) {
+            CLog.e(
+                    "Failed to extract '%s' flags. Status: %s\nStdout: %s\nStderr: %s",
+                    clientName, cr.getStatus(), cr.getStdout(), cr.getStderr());
+            return;
+        }
+
+        Set<String> flags = new HashSet<>();
+        // Parse flags. Typically "-flag" or "--flag".
+        // Example output:
+        // Usage of casdownloader:
+        //   -cache-dir="": Cache directory to store downloaded files.
+        //   -cas-instance="": RBE instance
+        Pattern pattern = Pattern.compile("^\\s*-+([a-zA-Z0-9-]+)", Pattern.MULTILINE);
+        Matcher matcher = pattern.matcher(output);
+        while (matcher.find()) {
+            flags.add(matcher.group(1));
+        }
+
+        if (flagsConsumerFn != null) {
+            flagsConsumerFn.accept(flags);
+        }
     }
 
     public static Path createUniqueCasLogDir(Path logDirRootPath) throws IOException {
