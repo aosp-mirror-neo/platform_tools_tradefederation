@@ -32,6 +32,8 @@ import com.android.tradefed.targetprep.ITargetPreparer;
 import com.android.tradefed.targetprep.incremental.IIncrementalSetup;
 import com.android.tradefed.testtype.Abi;
 import com.android.tradefed.testtype.IAbi;
+import com.android.tradefed.testtype.IRemoteTest;
+import com.android.tradefed.testtype.ITestFilterReceiver;
 import com.android.tradefed.testtype.InstrumentationTest;
 import com.android.tradefed.util.AbiUtils;
 
@@ -174,6 +176,28 @@ public class AtestExecutionPlanSuiteRunnerTest {
         mRunner.loadTestsInternal(mTestConfigs);
 
         Mockito.verify((IIncrementalSetup) preparer).setIncrementalSetupEnabled(false);
+    }
+
+    @Test
+    public void testLoadTestsInternal_includeFilters() throws Exception {
+        String filter = "fully.qualified.classA";
+        String complexPath = "/foo/bar/" + MODULE_NAME + ".config";
+        mOptionSetter.setOptionValue("atest-include-filter", MODULE_NAME + ":" + filter);
+
+        when(mMockConfig.getName()).thenReturn(complexPath);
+
+        ITestFilterReceiver mockTestWithFilter =
+                mock(
+                        ITestFilterReceiver.class,
+                        Mockito.withSettings().extraInterfaces(IRemoteTest.class));
+        IRemoteTest mockTestWithoutFilter = mock(IRemoteTest.class);
+        when(mMockConfig.getTests())
+                .thenReturn(Arrays.asList((IRemoteTest) mockTestWithFilter, mockTestWithoutFilter));
+
+        mRunner.loadTestsInternal(mTestConfigs);
+
+        Mockito.verify(mockTestWithFilter).addIncludeFilter(filter);
+        Mockito.verifyNoMoreInteractions(mockTestWithoutFilter);
     }
 
     @Test
