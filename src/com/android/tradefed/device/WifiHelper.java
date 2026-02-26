@@ -592,7 +592,8 @@ public class WifiHelper implements IWifiHelper {
             return WifiConnectionResult.FAILED_TO_ENABLE;
         }
         if (!asBool(runWifiUtil("connectToNetwork", "ssid", ssid, "psk", psk, "urlToCheck",
-                urlToCheck, "scan_ssid", Boolean.toString(scanSsid)))) {
+                urlToCheck, "scan_ssid", Boolean.toString(scanSsid),
+                "disableMacRandomization", "true"))) {
             return WifiConnectionResult.FAILED_TO_CONNECT;
         }
         return WifiConnectionResult.SUCCESS;
@@ -632,7 +633,7 @@ public class WifiHelper implements IWifiHelper {
         }
         String connectCmd =
                 String.format(
-                        "cmd -w wifi connect-network %s %s %s",
+                        "cmd -w wifi connect-network %s %s %s -r none",
                         quote(ssid), networkType, quote(psk));
         if (scanSsid) {
             connectCmd += " -h";

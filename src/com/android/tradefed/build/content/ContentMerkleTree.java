@@ -17,8 +17,11 @@ package com.android.tradefed.build.content;
 
 import com.android.tradefed.build.content.ArtifactDetails.ArtifactFileDescriptor;
 import com.android.tradefed.cache.DigestCalculator;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger;
+import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.skipped.AnalysisHeuristic;
 
 import build.bazel.remote.execution.v2.Digest;
 import build.bazel.remote.execution.v2.Directory;
@@ -26,6 +29,7 @@ import build.bazel.remote.execution.v2.FileNode;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -90,7 +94,9 @@ public class ContentMerkleTree {
     }
 
     public static Digest buildTestsDirFromContext(
-            ContentAnalysisContext context, List<String> discoveredModule) {
+            ContentAnalysisContext context,
+            List<String> discoveredModule,
+            AnalysisHeuristic analysisLevel) {
         try (CloseableTraceScope testLoc = new CloseableTraceScope("buildTestsDirFromContext")) {
             ArtifactDetails currentContent =
                     ArtifactDetails.parseFile(
@@ -111,6 +117,21 @@ public class ContentMerkleTree {
                         }
                         return false;
                     });
+
+            if (analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
+                boolean removed = false;
+                for (String path :
+                        Arrays.asList(
+                                // b/451443647
+                                "/testcases/VtsSeeHalTargetTest/arm64/trusty_test_vm.elf",
+                                "/testcases/vts_treble_vintf_trusted_hal_test/arm64/trusty_test_vm.elf")) {
+                    removed = allFiles.removeIf(d -> d.path.endsWith(path)) || removed;
+                }
+                if (removed) {
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.TEST_ARTIFACT_USED_HEURISTIC, analysisLevel.name());
+                }
+            }
 
             List<ArtifactFileDescriptor> relevantArtifacts = new ArrayList<>();
             if (!discoveredModule.isEmpty()) {

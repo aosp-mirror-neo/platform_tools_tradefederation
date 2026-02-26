@@ -27,6 +27,7 @@ import com.android.tradefed.config.ConfigurationDef;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.result.skipped.AnalysisHeuristic;
 import com.android.tradefed.util.FileUtil;
 
 import org.junit.Before;
@@ -78,7 +79,8 @@ public class TestContentAnalyzerTest {
                             false,
                             Arrays.asList(analysisContext),
                             new ArrayList<String>(),
-                            new ArrayList<String>());
+                            new ArrayList<String>(),
+                            AnalysisHeuristic.REMOVE_EXEMPTION);
             ContentAnalysisResults results = analyzer.evaluate();
             assertNotNull(results);
             assertTrue(results.hasAnyTestsChange());
@@ -108,7 +110,8 @@ public class TestContentAnalyzerTest {
                             false,
                             Arrays.asList(analysisContext),
                             new ArrayList<String>(),
-                            new ArrayList<String>());
+                            new ArrayList<String>(),
+                            AnalysisHeuristic.REMOVE_EXEMPTION);
             ContentAnalysisResults results = analyzer.evaluate();
             assertNotNull(results);
             assertFalse(results.hasAnyTestsChange());
@@ -145,7 +148,8 @@ public class TestContentAnalyzerTest {
                             false,
                             Arrays.asList(analysisContext),
                             new ArrayList<String>(),
-                            new ArrayList<String>());
+                            new ArrayList<String>(),
+                            AnalysisHeuristic.REMOVE_EXEMPTION);
             ContentAnalysisResults results = analyzer.evaluate();
             assertNotNull(results);
             assertTrue(results.hasAnyTestsChange());
@@ -181,7 +185,8 @@ public class TestContentAnalyzerTest {
                             false,
                             Arrays.asList(analysisContext),
                             Arrays.asList("module2"),
-                            new ArrayList<String>());
+                            new ArrayList<String>(),
+                            AnalysisHeuristic.REMOVE_EXEMPTION);
             ContentAnalysisResults results = analyzer.evaluate();
             assertNotNull(results);
             // Only module2 is considered and didn't change
@@ -216,7 +221,8 @@ public class TestContentAnalyzerTest {
                             false,
                             Arrays.asList(analysisContext),
                             new ArrayList<String>(),
-                            new ArrayList<String>());
+                            new ArrayList<String>(),
+                            AnalysisHeuristic.REMOVE_EXEMPTION);
             ContentAnalysisResults results = analyzer.evaluate();
             assertNotNull(results);
             assertFalse(results.hasAnyTestsChange());
