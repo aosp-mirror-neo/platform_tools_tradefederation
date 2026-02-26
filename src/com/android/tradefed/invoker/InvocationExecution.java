@@ -30,6 +30,8 @@ import com.android.tradefed.config.GlobalConfiguration;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.IDeviceConfiguration;
+import com.android.tradefed.config.OptionDef;
+import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.config.filter.GetPreviousPassedHelper;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
@@ -84,6 +86,7 @@ import com.android.tradefed.testtype.retry.IAutoRetriableTest;
 import com.android.tradefed.testtype.suite.BaseTestSuite;
 import com.android.tradefed.testtype.suite.ITestSuite;
 import com.android.tradefed.testtype.suite.ModuleListener;
+import com.android.tradefed.util.ArgUtil;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
@@ -105,6 +108,7 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
@@ -1520,11 +1524,23 @@ public class InvocationExecution implements IInvocationExecution {
             long testPhaseTimeout,
             boolean testPhaseTimeoutNeeded)
             throws DeviceNotAvailableException, Throwable {
+        Map<String, List<OptionDef>> autoCollectorOptions = new HashMap<>();
+        ArgUtil.parseArgs(
+                config.getCommandOptions().getAutoCollectorSetOptions(), autoCollectorOptions);
+
         // We clone the collectors for each IRemoteTest to ensure no state conflicts.
         List<IMetricCollector> clonedCollectors = new ArrayList<>();
         // Add automated collectors
         for (AutoLogCollector auto : config.getCommandOptions().getAutoLogCollectors()) {
-            clonedCollectors.add(auto.getInstanceForValue());
+            IMetricCollector clonedCollector = auto.getInstanceForValue();
+            String className = clonedCollector.getClass().getName();
+            if (autoCollectorOptions.containsKey(className)) {
+                OptionSetter setter = new OptionSetter(clonedCollector);
+                for (OptionDef def : autoCollectorOptions.get(className)) {
+                    setter.setOptionValue(def.name, def.key, def.value);
+                }
+            }
+            clonedCollectors.add(clonedCollector);
         }
         // Add the collector from the configuration
         clonedCollectors.addAll(CollectorHelper.cloneCollectors(config.getMetricCollectors()));

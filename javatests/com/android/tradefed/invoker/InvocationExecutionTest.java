@@ -314,6 +314,32 @@ public class InvocationExecutionTest {
         assertEquals(1, RemoteTestCollector.sTotalInit);
     }
 
+    /** Test that options are passed to auto collectors. */
+    @Test
+    public void testRun_metricCollectors_auto_setOption() throws Throwable {
+        TestInformation info = TestInformation.newBuilder().setInvocationContext(mContext).build();
+        List<IRemoteTest> tests = new ArrayList<>();
+        // First add an IMetricCollectorReceiver
+        RemoteTestCollector remoteTest = new RemoteTestCollector();
+        tests.add(remoteTest);
+        mConfig.setTests(tests);
+
+        Set<AutoLogCollector> specialCollectors = new HashSet<>();
+        specialCollectors.add(AutoLogCollector.DEVICE_TRACE);
+        mConfig.getCommandOptions().setAutoLogCollectors(specialCollectors);
+
+        List<String> collectorSetOptions = new ArrayList<>();
+        collectorSetOptions.add(
+                "com.android.tradefed.device.metric.DeviceTraceCollector:trace-config-file:new_trace_config.textproto");
+        collectorSetOptions.add(
+                "com.android.tradefed.device.metric.DeviceTraceCollector:per-run:false");
+        mConfig.getCommandOptions().setAutoCollectorSetOptions(collectorSetOptions);
+
+        mExec.runTests(info, mConfig, mMockListener);
+        // Init was called twice in total on the class, but only once per instance.
+        assertEquals(1, RemoteTestCollector.sTotalInit);
+    }
+
     /** Test parallel pre-invocation setup. */
     @Test
     public void testRunPreInvocationSetup_parallel() throws Throwable {

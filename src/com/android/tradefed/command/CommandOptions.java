@@ -252,6 +252,13 @@ public class CommandOptions implements ICommandOptions {
     private Set<AutoLogCollector> mAutoCollectors = new LinkedHashSet<>();
 
     @Option(
+            name = "auto-collector-set-option",
+            description =
+                    "The options to pass to the auto collectors. The expected format is"
+                            + "\"<collector>:<option-name>:[<option-key>:=]<option-value>\"")
+    private List<String> mAutoCollectorSetOptions = new ArrayList<>();
+
+    @Option(
             name = "auto-processor",
             description =
                     "Specify a set of processors that will be automatically managed by the harness "
@@ -739,6 +746,18 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public void setAutoLogCollectors(Set<AutoLogCollector> autoLogCollectors) {
         mAutoCollectors = autoLogCollectors;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public List<String> getAutoCollectorSetOptions() {
+        return mAutoCollectorSetOptions;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void setAutoCollectorSetOptions(List<String> autoCollectorSetOptions) {
+        mAutoCollectorSetOptions = autoCollectorSetOptions;
     }
 
     /** {@inheritDoc} */
