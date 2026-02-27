@@ -73,7 +73,8 @@ public class ImageContentAnalyzer {
                                         || d.path.endsWith(".art")
                                         || d.path.endsWith(".oat")));
 
-        if (analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
+        if (analysisLevel != null
+                && analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
             boolean removed = false;
             for (String path :
                     Arrays.asList(

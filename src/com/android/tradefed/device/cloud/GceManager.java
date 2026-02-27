@@ -615,11 +615,18 @@ public class GceManager {
             // process any info in the invocation context that should be passed onto GCE driver
             // as meta data to be associated with the VM instance
             if (attributes != null) {
+                List<String> gceMetadata = new ArrayList<>();
                 for (String key : getTestDeviceOptions().getInvocationAttributeToMetadata()) {
-                    for (String value : attributes.get(key)) {
-                        extraArgs.add("--gce-metadata");
-                        extraArgs.add(String.format("%s:%s", key, value));
+                    List<String> values = attributes.get(key);
+                    if (values != null) {
+                        for (String value : values) {
+                            gceMetadata.add(String.format("%s:%s", key, value));
+                        }
                     }
+                }
+                if (!gceMetadata.isEmpty()) {
+                    extraArgs.add("--gce-metadata");
+                    extraArgs.add(String.join(",", gceMetadata));
                 }
             }
             // Get extra params by instance type

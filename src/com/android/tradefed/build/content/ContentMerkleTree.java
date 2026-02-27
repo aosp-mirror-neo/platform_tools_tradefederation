@@ -118,7 +118,8 @@ public class ContentMerkleTree {
                         return false;
                     });
 
-            if (analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
+            if (analysisLevel != null
+                    && analysisLevel.ordinal() >= AnalysisHeuristic.REMOVE_EXEMPTION.ordinal()) {
                 boolean removed = false;
                 for (String path :
                         Arrays.asList(
