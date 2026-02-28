@@ -265,6 +265,11 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     private boolean mValidateDeviceKernelVersion = true;
 
     @Option(
+            name = "validate-kernel-version-patch-level",
+            description = "whether to validate kernel version at patch level.")
+    private boolean mValidateKernelVersionPatchLevel = true;
+
+    @Option(
             name = "flash-logical-partition-first",
             description = "Whether to flash logical-partition-first")
     private boolean mFlashLogicalPartitionFirst = true;
@@ -671,6 +676,9 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                             "Boot image kernel version %s doesn't match %s kernel version %s",
                             Arrays.toString(bootVersion), imageName, Arrays.toString(imageVersion)),
                     device.getDeviceDescriptor());
+        }
+        if (!mValidateKernelVersionPatchLevel) {
+            return;
         }
         try {
             int bootPatchLevel = Integer.parseInt(bootVersion[1]);

@@ -3105,6 +3105,7 @@ public class TestDevice extends NativeDevice {
                 Strings.isNullOrEmpty(builder.mDumpDt)
                         ? ""
                         : "--dump-device-tree " + builder.mDumpDt;
+        final String enableEarlycon = builder.mEnableEarlycon ? "--enable-earlycon" : "";
 
         List<String> args =
                 new ArrayList<>(
@@ -3129,7 +3130,8 @@ public class TestDevice extends NativeDevice {
                                 builder.mApkPath,
                                 outApkIdsigPath,
                                 builder.mInstanceImg,
-                                dumpDt));
+                                dumpDt,
+                                enableEarlycon));
         if (isVirtFeatureEnabled("com.android.kvm.LLPVM_CHANGES")) {
             args.add("--instance-id-file");
             args.add(builder.mInstanceIdFile);
@@ -3493,6 +3495,7 @@ public class TestDevice extends NativeDevice {
         private boolean mHugePages;
         private String mName;
         private String mDumpDt;
+        private boolean mEnableEarlycon = false;
 
         /** Creates a builder for the given APK/apkPath. */
         private MicrodroidBuilder(
@@ -3729,6 +3732,18 @@ public class TestDevice extends NativeDevice {
             return this;
         }
 
+        /**
+         * Enables the earlycon logs for this VM.
+         *
+         * <p>NOTE: On the older API levels (before SDK 36) this function is a no-op.
+         *
+         * @return the microdroid builder.
+         */
+        public MicrodroidBuilder enableEarlycon(boolean enableEarlycon) {
+            mEnableEarlycon = enableEarlycon;
+            return this;
+        }
+
         /** Starts a Micrdroid TestDevice on the given TestDevice. */
         public ITestDevice build(@Nonnull TestDevice device) throws DeviceNotAvailableException {
             if (mNumCpus != null) {
@@ -3761,6 +3776,11 @@ public class TestDevice extends NativeDevice {
             }
             if (mInstanceImg == null) {
                 mInstanceImg = TEST_ROOT + INSTANCE_IMG;
+            }
+
+            if (device.getApiLevel() < 36) {
+                // `--enable-earlycon` flag was introduced in SDK level 36.
+                mEnableEarlycon = false;
             }
 
             return device.startMicrodroid(this);
