@@ -1324,10 +1324,15 @@ public class LaunchControlProvider
         localBuild.setBuildBranch(getBranch());
         localBuild.setTestTag(testTargetName);
         for (BuildAttributeKey downloadKey : mDownloadKeys) {
+            String remoteFilePath = remoteBuild.getAttribute(downloadKey);
+            if (remoteFilePath == null) {
+                throw new BuildRetrievalError(
+                        String.format(
+                                "The artifact: %s could not be located for the build: %s",
+                                downloadKey, buildId));
+            }
             localBuild.setFile(
-                    downloadKey.name(),
-                    downloader.downloadFile(remoteBuild.getAttribute(downloadKey)),
-                    buildId);
+                    downloadKey.name(), downloader.downloadFile(remoteFilePath), buildId);
         }
         return localBuild;
     }
