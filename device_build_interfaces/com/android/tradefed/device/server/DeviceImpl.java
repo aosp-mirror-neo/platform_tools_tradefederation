@@ -785,8 +785,9 @@ public final class DeviceImpl implements IDevice {
     public void push(@NonNull String[] local, @NonNull String remote)
             throws IOException, AdbCommandRejectedException, TimeoutException, SyncException {
         Log.d(
-                String.join(", ", local),
-                String.format("Uploading %1$s onto device '%2$s'", remote, getSerialNumber()));
+                LOG_TAG,
+                String.format("Uploading %1$s -> %2$s onto device '%3$s'",
+                        String.join(", ", local), remote, getSerialNumber()));
         try (SyncService sync = getSyncService()) {
             if (sync == null) {
                 throw new IOException("Unable to open sync connection");
@@ -808,7 +809,7 @@ public final class DeviceImpl implements IDevice {
             throws IOException, AdbCommandRejectedException, TimeoutException, SyncException {
         String targetFileName = getFileName(local);
         Log.d(
-                targetFileName,
+                LOG_TAG,
                 String.format(
                         "Uploading %1$s onto device '%2$s'", targetFileName, getSerialNumber()));
 
@@ -836,7 +837,7 @@ public final class DeviceImpl implements IDevice {
             String targetFileName = getFileName(remote);
 
             Log.d(
-                    targetFileName,
+                    LOG_TAG,
                     String.format(
                             "Downloading %1$s from device '%2$s'",
                             targetFileName, getSerialNumber()));

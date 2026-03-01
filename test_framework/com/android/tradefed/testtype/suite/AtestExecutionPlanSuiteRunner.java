@@ -17,6 +17,7 @@ package com.android.tradefed.testtype.suite;
 
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.Option;
+import com.android.tradefed.config.Option.Importance;
 import com.android.tradefed.config.OptionCopier;
 import com.android.tradefed.result.ITestInvocationListener;
 import com.android.tradefed.result.SubprocessResultsReporter;
@@ -24,10 +25,10 @@ import com.android.tradefed.util.AtestUtils;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 
-// TODO: b/462794425 - Support --atest-include-filter.
 /** Implementation of {@link ITestSuite} */
 public class AtestExecutionPlanSuiteRunner extends ExecutionPlanSuiteRunner {
 
@@ -53,6 +54,14 @@ public class AtestExecutionPlanSuiteRunner extends ExecutionPlanSuiteRunner {
             name = "subprocess-report-port",
             description = "the port where to connect to send the" + "events.")
     Integer mReportPort = null;
+
+    @Option(
+            name = "atest-include-filter",
+            description =
+                    "the include filters to pass to a module. The expected format is"
+                            + " \"<module-name>:<include-filter-value>\"",
+            importance = Importance.ALWAYS)
+    private List<String> mIncludeFilters = new ArrayList<>();
 
     @Option(
             name = "incremental-setup",
@@ -100,6 +109,7 @@ public class AtestExecutionPlanSuiteRunner extends ExecutionPlanSuiteRunner {
                         testConfig, /* shouldEnable= */ false);
             }
         }
+        AtestUtils.applyIncludeFilters(configMap, mIncludeFilters);
     }
 
     /** {@inheritDoc} */
