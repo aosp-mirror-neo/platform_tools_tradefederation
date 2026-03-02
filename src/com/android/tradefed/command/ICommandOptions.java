@@ -361,4 +361,7 @@ public interface ICommandOptions {
 
     /** Whether to enable device specific setup or not. */
     public boolean shouldEnableDeviceSpecificSetup();
+
+    /** Whether to pass retry attempt number. */
+    public boolean shouldPassRetryAttemptNumber();
 }

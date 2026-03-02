@@ -429,6 +429,9 @@ public class GranularRetriableTestWrapper implements IRemoteTest, ITestCollector
         try (CloseableTraceScope ignored =
                 new CloseableTraceScope(
                         "attempt " + attempt + " " + mTest.getClass().getCanonicalName())) {
+            if (mModuleConfiguration.getCommandOptions().shouldPassRetryAttemptNumber()) {
+                mTest.setRetryAttemptNumber(attempt);
+            }
             List<IMetricCollector> clonedCollectors = cloneCollectors(mRunMetricCollectors);
             clonedCollectors.addAll(cloneCollectors(mDefaultLogCollectors));
             if (mTest instanceof IMetricCollectorReceiver) {

@@ -62,4 +62,7 @@ public interface IRemoteTest {
             throws DeviceNotAvailableException {
         run(listener);
     }
+
+    /** Sets the retry attempt number for the test. Default does nothing. */
+    public default void setRetryAttemptNumber(int attemptNumber) {}
 }

@@ -1233,6 +1233,25 @@ public class GranularRetriableTestWrapperTest {
         assertEquals(listener.getTestMappingSources(), mTestMappingSources);
     }
 
+    @Test
+    public void testPassRetryAttemptNumber() throws Exception {
+        IRemoteTest mockTest = Mockito.mock(IRemoteTest.class);
+
+        GranularRetriableTestWrapper wrapper = createGranularTestWrapper(mockTest, 2);
+
+        // Mock the condition to return true
+        IConfiguration config = Mockito.mock(IConfiguration.class);
+        CommandOptions cmdOptions = Mockito.mock(CommandOptions.class);
+        Mockito.when(cmdOptions.shouldPassRetryAttemptNumber()).thenReturn(true);
+        Mockito.when(config.getCommandOptions()).thenReturn(cmdOptions);
+
+        wrapper.setModuleConfig(config);
+        wrapper.run(mModuleInfo, new CollectingTestListener());
+
+        // We assert that the attempt passed in to setRetryAttemptNumber is 0
+        verify(mockTest).setRetryAttemptNumber(0);
+    }
+
     /** Collector that track if it was called or not */
     public static class CalledMetricCollector extends BaseDeviceMetricCollector {
 
