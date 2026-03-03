@@ -15,6 +15,8 @@
 -->
 <configuration description="Points to the TF entry point for running TestExecutionPlans via atest.">
   <test class="com.android.tradefed.testtype.suite.AtestExecutionPlanSuiteRunner">
+      <!-- Only load test configurations for the modules specified in the TestExecutionPlans. -->
+      <option name="load-configs-with-include-filters" value="true" />
       <option name="test-arg" value="com.android.tradefed.testtype.AndroidJUnitTest:use-test-storage:false" />
       <option name="test-arg" value="com.android.tradefed.testtype.AndroidJUnitTest:rerun:false" />
       <option name="test-arg" value="com.android.tradefed.testtype.InstrumentationTest:rerun:false" />
