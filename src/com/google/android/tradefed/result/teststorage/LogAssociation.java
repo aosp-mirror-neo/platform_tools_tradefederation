@@ -16,6 +16,7 @@
 
 package com.google.android.tradefed.result.teststorage;
 
+import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.LogFile;
 
 import com.google.android.tradefed.build.RemoteBuildInfo;
@@ -37,6 +38,11 @@ public class LogAssociation {
     // MUST update the logsaver pattern in com.android.tradefed.result.resultdb.ResultDBReporter,
     // if this pattern is changed.
     private static final Pattern LOGSAVER_PATTERN =
+            Pattern.compile("https://android-build.googleplex.com/builds/I\\d+/(.+)");
+
+    // Still keep the legacy pattern, because sandvoxes tf subprocesses
+    // might not all be updated and still send legacy url.
+    private static final Pattern LEGACY_LOGSAVER_PATTERN =
             Pattern.compile(
                     "https:\\/\\/android-build.googleplex.com\\/builds\\/.+\\/.+\\/.+\\/.+\\/tests\\/\\d+\\/(.+)");
 
@@ -77,16 +83,24 @@ public class LogAssociation {
             mResourceId = "";
         } else {
             Matcher m = LOGSAVER_PATTERN.matcher(mLog.getUrl());
-            if (!m.find()) {
-                mResourceId = "";
-            } else {
+            Matcher legacyMatcher = LEGACY_LOGSAVER_PATTERN.matcher(mLog.getUrl());
+            if (m.find()) {
                 try {
                     mResourceId = new URI(m.group(1)).getPath();
                 } catch (URISyntaxException e) {
                     // ignore
                 }
+            } else if (legacyMatcher.find()) {
+                try {
+                    mResourceId = new URI(legacyMatcher.group(1)).getPath();
+                } catch (URISyntaxException e) {
+                    // ignore
+                }
+            } else {
+                mResourceId = "";
             }
         }
+        CLog.i("LogAssociation url:%s id:%s", mLog.getUrl(), mResourceId);
     }
 
     public String getInvocationId() {
