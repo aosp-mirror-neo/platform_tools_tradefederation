@@ -961,10 +961,11 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
 
         // Only report the mismatch if there were no error during the run.
         if (runFailureMessages.isEmpty() && totalExpectedTests != numResults) {
+            String qualifier = (numResults < totalExpectedTests) ? "only" : "somehow";
             String error =
                     String.format(
-                            "Module %s only ran %d out of %d expected tests.",
-                            getId(), numResults, totalExpectedTests);
+                            "Module %s %s ran %d out of %d expected tests.",
+                            getId(), qualifier, numResults, totalExpectedTests);
             FailureDescription mismatch =
                     FailureDescription.create(error)
                             .setFailureStatus(FailureStatus.TEST_FAILURE)
