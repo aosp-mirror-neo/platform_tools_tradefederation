@@ -188,6 +188,12 @@ public interface ICommandOptions {
     /** Sets the set of auto log collectors that should be added to an invocation. */
     public void setAutoLogCollectors(Set<AutoLogCollector> autoLogCollectors);
 
+    /** Returns the list of options to pass to the auto collectors. */
+    public List<String> getAutoCollectorSetOptions();
+
+    /** Sets the list of options to pass to the auto collectors. */
+    public void setAutoCollectorSetOptions(List<String> autoCollectorSetOptions);
+
     /** Returns the set of auto log processors to be added for an invocation */
     public Set<AutoLogProcessor> getAutoLogProcessors();
 

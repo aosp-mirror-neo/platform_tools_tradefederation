@@ -449,6 +449,7 @@ import com.android.tradefed.util.AbiFormatterTest;
 import com.android.tradefed.util.AbiUtilsTest;
 import com.android.tradefed.util.AdbRootElevatorTest;
 import com.android.tradefed.util.AppVersionFetcherTest;
+import com.android.tradefed.util.ArgUtilTest;
 import com.android.tradefed.util.ArrayUtilTest;
 import com.android.tradefed.util.BluetoothUtilsTest;
 import com.android.tradefed.util.BugreportTest;
@@ -1117,6 +1118,7 @@ import org.junit.runners.Suite.SuiteClasses;
     AbiUtilsTest.class,
     AdbRootElevatorTest.class,
     AppVersionFetcherTest.class,
+    ArgUtilTest.class,
     ArrayUtilTest.class,
     BluetoothUtilsTest.class,
     BugreportTest.class,

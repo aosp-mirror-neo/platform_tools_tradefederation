@@ -46,6 +46,7 @@ import com.android.tradefed.testtype.suite.params.ModuleParametersHelper;
 import com.android.tradefed.testtype.suite.params.NegativeHandler;
 import com.android.tradefed.testtype.suite.params.NotMultiAbiHandler;
 import com.android.tradefed.util.AbiUtils;
+import com.android.tradefed.util.ArgUtil;
 import com.android.tradefed.util.FileUtil;
 
 import com.google.common.base.Strings;
@@ -67,8 +68,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -117,8 +116,8 @@ public class SuiteModuleLoader {
         mIncludeFilters = includeFilters;
         mExcludeFilters = excludeFilters;
 
-        parseArgs(testArgs, mTestOrPreparerOptions);
-        parseArgs(moduleArgs, mModuleOptions);
+        ArgUtil.parseArgs(testArgs, mTestOrPreparerOptions);
+        ArgUtil.parseArgs(moduleArgs, mModuleOptions);
     }
 
     public final void setInvocationContext(IInvocationContext context) {
@@ -745,55 +744,6 @@ public class SuiteModuleLoader {
         @Override
         public boolean accept(File dir, String name) {
             return name.endsWith(CONFIG_EXT);
-        }
-    }
-
-    /**
-     * Parse a list of args formatted as expected into {@link OptionDef} to be injected to module
-     * configurations.
-     *
-     * <p>Format: <module name / module id / class runner>:<option name>:[<arg-key>:=]<arg-value>
-     */
-    private void parseArgs(List<String> args, Map<String, List<OptionDef>> moduleOptions) {
-        for (String arg : args) {
-            int moduleSep = arg.indexOf(":");
-            if (moduleSep == -1) {
-                throw new HarnessRuntimeException(
-                        "Expected delimiter ':' for module or class.",
-                        InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
-            }
-            String moduleName = arg.substring(0, moduleSep);
-            String remainder = arg.substring(moduleSep + 1);
-            List<OptionDef> listOption = moduleOptions.get(moduleName);
-            if (listOption == null) {
-                listOption = new ArrayList<>();
-                moduleOptions.put(moduleName, listOption);
-            }
-            int optionNameSep = remainder.indexOf(":");
-            if (optionNameSep == -1) {
-                throw new HarnessRuntimeException(
-                        "Expected delimiter ':' between option name and values.",
-                        InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
-            }
-            String optionName = remainder.substring(0, optionNameSep);
-            Pattern pattern = Pattern.compile("\\{(.*)\\}(.*)");
-            Matcher match = pattern.matcher(optionName);
-            if (match.find()) {
-                String alias = match.group(1);
-                String name = match.group(2);
-                optionName = alias + ":" + name;
-            }
-            String optionValueString = remainder.substring(optionNameSep + 1);
-            // TODO: See if QuotationTokenizer can be improved for multi-character delimiter.
-            // or change the delimiter to a single char.
-            String[] tokens = optionValueString.split(":=", 2);
-            OptionDef option = null;
-            if (tokens.length == 1) {
-                option = new OptionDef(optionName, tokens[0], moduleName);
-            } else if (tokens.length == 2) {
-                option = new OptionDef(optionName, tokens[0], tokens[1], moduleName);
-            }
-            listOption.add(option);
         }
     }
 
