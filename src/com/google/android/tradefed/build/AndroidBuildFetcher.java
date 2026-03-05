@@ -207,10 +207,23 @@ public class AndroidBuildFetcher {
                                 startOffset,
                                 size);
                     }
+                    long elapsedTime = System.currentTimeMillis() - startTime;
+                    String metrics =
+                            String.format(
+                                    "%s:%s:%s:%s:%d:%d:%d",
+                                    target,
+                                    buildId,
+                                    resourceId,
+                                    attemptId,
+                                    outputFile.length(),
+                                    startTime,
+                                    elapsedTime);
+                    InvocationMetricLogger.addInvocationMetrics(
+                            InvocationMetricKey.AB_DOWNLOAD_METRICS, metrics);
                     InvocationMetricLogger.addInvocationPairMetrics(
                             InvocationMetricKey.AB_DOWNLOAD_SIZE_ELAPSED_TIME,
                             outputFile.length(),
-                            System.currentTimeMillis() - startTime);
+                            elapsedTime);
                     break;
                 } catch (IOException ioe) {
                     retry =
