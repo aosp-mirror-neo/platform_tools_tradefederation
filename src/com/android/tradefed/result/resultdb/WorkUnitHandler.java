@@ -32,6 +32,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,22 +46,24 @@ class WorkUnitHandler {
     private static final String TEST_RUN_WORK_UNIT_TYPE = "TF_TEST_RUN";
     public static final String TF_INVOCATION_WORK_UNIT_TYPE = "TF_INVOCATION";
     private static final String WORK_UNIT_REALM = "android:ants-experiment";
+
+    private static final ImmutableSet<String> AL_TEST_VARIANT_ATTRIBUTE_KEYS =
+            ImmutableSet.of("board", "model", "sku");
+
     // Set containing the allowed variant module parameter keys
     private static final ImmutableSet<String> ALLOWED_MODULE_PARAMETERS =
             ImmutableSet.of(ModuleDefinition.MODULE_ABI, ModuleDefinition.MODULE_PARAMETERIZATION);
 
-    private static final ModuleIdentifier PLACEHOLDER_MODULE_IDENTIFIER =
-            ModuleIdentifier.newBuilder()
-                    .setModuleName(ResultDBUtil.NO_MODULE_NAME)
-                    .setModuleScheme("junit")
-                    .setModuleVariant(Variant.getDefaultInstance())
-                    .build();
     // Module level variant for test in the same test module.
     private IInvocationContext mModuleContext;
     private ModuleIdentifier mCurrentModuleIdentifier;
     // Module level parameters reported to AnTS (module-abi & module-param), ResultDB saves them
     // in test result properties.
     private List<AntsProperty> mCurrentAntsModuleParameters;
+    private final String mInvTopWorkUnitId;
+    private final IRecorderClient mRecorder;
+    private final HashMap<String, String> mAlVariants;
+    private final ModuleIdentifier mPlaceholderModuleIdentifier;
 
     // We keep work units in a stack, so that we can build them as a tree.
     // This is only set when the recorder client is not null (i.e. work unit reporting is enabled).
@@ -70,12 +73,30 @@ class WorkUnitHandler {
     // the correct one is obtained by calling mWorkUnits.peek.
     private Deque<WorkUnitInfo> mWorkUnitInfos = new ArrayDeque<>();
 
-    public void testModuleStarted(
-            IInvocationContext moduleContext, String invTopWorkUnitId, IRecorderClient recorder) {
+    public WorkUnitHandler(
+            String invTopWorkUnitId,
+            IRecorderClient recorder,
+            IInvocationContext context,
+            boolean enableAlTestProperties) {
+        mInvTopWorkUnitId = invTopWorkUnitId;
+        mRecorder = recorder;
+        mAlVariants = new HashMap<>();
+        if (enableAlTestProperties) {
+            for (String key : AL_TEST_VARIANT_ATTRIBUTE_KEYS) {
+                String value = context.getAttribute(key);
+                if (!Strings.isNullOrEmpty(value)) {
+                    mAlVariants.put(key, value);
+                }
+            }
+        }
+        mPlaceholderModuleIdentifier = createPlaceholderModuleIdentifier(mAlVariants);
+    }
+
+    public void testModuleStarted(IInvocationContext moduleContext) {
         mModuleContext = moduleContext;
         mCurrentAntsModuleParameters = extractAntsModuleParameters(moduleContext.getAttributes());
         String currentModuleName = moduleContext.getConfigurationDescriptor().getModuleName();
-        Variant moduleVariant = extractModuleVariant(moduleContext.getAttributes());
+        Variant moduleVariant = extractModuleVariant(moduleContext.getAttributes(), mAlVariants);
         if (Strings.isNullOrEmpty(currentModuleName)) {
             currentModuleName = ResultDBUtil.NO_MODULE_NAME;
         }
@@ -88,13 +109,13 @@ class WorkUnitHandler {
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
         // ResultDB reporting is disabled. This check can then be removed.
-        if (recorder == null) {
+        if (mRecorder == null) {
             // Recorder is null, so we don't create module work units.
             return;
         }
         // Prefixed work unit for update token sharing
         String moduleWorkUnitId =
-                String.format("%s:u-%s", invTopWorkUnitId, UUID.randomUUID().toString());
+                String.format("%s:u-%s", mInvTopWorkUnitId, UUID.randomUUID().toString());
         // Create work unit for this module.
         // TODO(b/463830449): add more properties to the work unit according to the data mapping.
         WorkUnit moduleWorkUnit =
@@ -105,18 +126,18 @@ class WorkUnitHandler {
                         .setModuleId(mCurrentModuleIdentifier)
                         .build();
         String parentWorkUnitId = mWorkUnitInfos.peek().getId();
-        recorder.enqueueWorkUnit(parentWorkUnitId, moduleWorkUnitId, moduleWorkUnit);
+        mRecorder.enqueueWorkUnit(parentWorkUnitId, moduleWorkUnitId, moduleWorkUnit);
         mWorkUnitInfos.push(new WorkUnitInfo(moduleWorkUnitId, MODULE_WORK_UNIT_TYPE));
     }
 
-    public void testModuleEnded(String rootInvocationId, IRecorderClient recorder) {
+    public void testModuleEnded(String rootInvocationId) {
         mModuleContext = null;
         mCurrentModuleIdentifier = null;
         mCurrentAntsModuleParameters = null;
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
         // ResultDB reporting is disabled. This check can then be removed.
-        if (recorder == null) {
+        if (mRecorder == null) {
             // Recorder is null, so we don't create module work units.
             return;
         }
@@ -137,28 +158,22 @@ class WorkUnitHandler {
                                         rootInvocationId, workUnitInfo.getId()))
                         .setState(WorkUnit.State.SUCCEEDED)
                         .build();
-        recorder.enqueueWorkUnitUpdate(
+        mRecorder.enqueueWorkUnitUpdate(
                 workUnitUpdate, FieldMask.newBuilder().addPaths("state").build());
     }
 
-    public void testRunStarted(
-            String runName,
-            int testCount,
-            int attemptNumber,
-            long startTime,
-            String invTopWorkUnitId,
-            IRecorderClient recorder) {
+    public void testRunStarted(String runName, int testCount, int attemptNumber, long startTime) {
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
         // ResultDB reporting is disabled. This check can then be removed.
-        if (recorder == null) {
+        if (mRecorder == null) {
             // Recorder is null, so we don't create test run work units.
             return;
         }
         WorkUnitInfo parentWorkUnit = mWorkUnitInfos.peek();
         // Prefixed work unit for update token sharing.
         String workUnitId =
-                String.format("%s:u-%s", invTopWorkUnitId, UUID.randomUUID().toString());
+                String.format("%s:u-%s", mInvTopWorkUnitId, UUID.randomUUID().toString());
         WorkUnit.Builder workUnitBuilder =
                 WorkUnit.newBuilder()
                         .setRealm(WORK_UNIT_REALM)
@@ -168,18 +183,17 @@ class WorkUnitHandler {
             // If the test run is not started in a module context, we set a placeholder module id
             // to this test run level work unit, otherwise ResultDB will reject the test result
             // because of missing module_id in the parent work unit.
-            workUnitBuilder.setModuleId(PLACEHOLDER_MODULE_IDENTIFIER);
+            workUnitBuilder.setModuleId(mPlaceholderModuleIdentifier);
         }
-        recorder.enqueueWorkUnit(parentWorkUnit.getId(), workUnitId, workUnitBuilder.build());
+        mRecorder.enqueueWorkUnit(parentWorkUnit.getId(), workUnitId, workUnitBuilder.build());
         mWorkUnitInfos.push(new WorkUnitInfo(workUnitId, TEST_RUN_WORK_UNIT_TYPE));
     }
 
-    public void testRunEnded(
-            String rootInvocationId, String invTopWorkUnitId, IRecorderClient recorder) {
+    public void testRunEnded(String rootInvocationId, String invTopWorkUnitId) {
         // TODO (b/464395641): Once the legacy recorder is deprecated, `recorder` will be non-null
         // unless
         // ResultDB reporting is disabled. This check can then be removed.
-        if (recorder == null) {
+        if (mRecorder == null) {
             // Recorder is null, so we don't create test run work units.
             return;
         }
@@ -200,7 +214,7 @@ class WorkUnitHandler {
                                         rootInvocationId, workUnitInfo.getId()))
                         .setState(WorkUnit.State.SUCCEEDED)
                         .build();
-        recorder.enqueueWorkUnitUpdate(
+        mRecorder.enqueueWorkUnitUpdate(
                 workUnitUpdate, FieldMask.newBuilder().addPaths("state").build());
     }
 
@@ -215,7 +229,7 @@ class WorkUnitHandler {
      */
     public ModuleIdentifier getCurrentModuleIdentifier() {
         if (mCurrentModuleIdentifier == null) {
-            return PLACEHOLDER_MODULE_IDENTIFIER;
+            return mPlaceholderModuleIdentifier;
         }
         return mCurrentModuleIdentifier;
     }
@@ -250,13 +264,20 @@ class WorkUnitHandler {
     /*
      * Only module-abi and module-param are used in the variant, so filter other values.
      */
-    private Variant extractModuleVariant(MultiMap<String, String> properties) {
+    private Variant extractModuleVariant(
+            MultiMap<String, String> properties, HashMap<String, String> alVariants) {
         Variant.Builder variantBuilder = Variant.newBuilder();
         for (Map.Entry<String, String> property : properties.entries()) {
             if (ALLOWED_MODULE_PARAMETERS.contains(property.getKey())) {
                 variantBuilder.putDef(
                         ResultDBUtil.makeValidKey(property.getKey()), property.getValue());
             }
+        }
+        // When using the constructor, the ACCOUNT_ID property is expected to be part of the
+        // alVariants already, so no need to filter it out here.
+        for (HashMap.Entry<String, String> property : alVariants.entrySet()) {
+            variantBuilder.putDef(
+                    ResultDBUtil.makeValidKey(property.getKey()), property.getValue());
         }
         return variantBuilder.build();
     }
@@ -275,6 +296,19 @@ class WorkUnitHandler {
         antsModuleParameters.sort(
                 Comparator.comparing(AntsProperty::getName).thenComparing(AntsProperty::getValue));
         return antsModuleParameters;
+    }
+
+    private static ModuleIdentifier createPlaceholderModuleIdentifier(
+            HashMap<String, String> alVariants) {
+        Variant.Builder variantBuilder = Variant.newBuilder();
+        for (Map.Entry<String, String> property : alVariants.entrySet()) {
+            variantBuilder.putDef(property.getKey(), property.getValue());
+        }
+        return ModuleIdentifier.newBuilder()
+                .setModuleName(ResultDBUtil.NO_MODULE_NAME)
+                .setModuleScheme("junit")
+                .setModuleVariant(variantBuilder.build())
+                .build();
     }
 
     private static class WorkUnitInfo {

@@ -225,6 +225,11 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     private Collection<String> mFastbootCommands = new ArrayList<>();
 
     @Option(
+            name = "additional-fastbootd-command",
+            description = "additional fastbootd command to run.")
+    private Collection<String> mFastbootdCommands = new ArrayList<>();
+
+    @Option(
             name = "boot-header-version",
             description = "The version of the boot.img header. Set to 3 by default.")
     private int mBootHeaderVersion = 3;
@@ -410,6 +415,15 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                 flashLogicalPartitions(device, buildInfo, tmpDir);
             }
 
+            // Run additional fastboot command
+            for (String cmd : mFastbootCommands) {
+                try {
+                    executeFastbootCmd(device, cmd);
+                } catch (TargetSetupError e) {
+                    CLog.w("fastboot command %s is not supported", cmd);
+                }
+            }
+
             executeFastbootCmd(device, "flash", "boot", mBootImg.getAbsolutePath());
 
             if (buildInfo.getFile(mVendorBootImageName) != null) {
@@ -464,10 +478,6 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
                 executeFastbootCmd(device, "flash", "vbmeta", vbmetaImg.getAbsolutePath());
             }
 
-            // Run additional fastboot command
-            for (String cmd : mFastbootCommands) {
-                executeFastbootCmd(device, cmd);
-            }
 
             if (!mFlashLogicalPartitionFirst) {
                 flashLogicalPartitions(device, buildInfo, tmpDir);
@@ -492,7 +502,8 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     private void flashLogicalPartitions(ITestDevice device, IBuildInfo buildInfo, File tmpDir)
             throws TargetSetupError, DeviceNotAvailableException {
         if (buildInfo.getFile(mSystemDlkmImageName) == null
-                && buildInfo.getFile(mVendorDlkmImageName) == null) {
+                && buildInfo.getFile(mVendorDlkmImageName) == null
+                && mFastbootdCommands.size() == 0) {
             return;
         }
         if (buildInfo.getFile(mSystemDlkmImageName) != null) {
@@ -520,6 +531,19 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
             }
             executeFastbootCmd(device, "flash", "vendor_dlkm", vendorDlkmImg.getAbsolutePath());
         }
+
+        if (mSupportFastbootd && !TestDeviceState.FASTBOOTD.equals(device.getDeviceState())) {
+            device.rebootIntoFastbootd();
+            // Run additional fastbootd command
+            for (String cmd : mFastbootdCommands) {
+                try {
+                    executeFastbootCmd(device, cmd);
+                } catch (TargetSetupError e) {
+                    CLog.w("fastbootd command %s is not supported", cmd);
+                }
+            }
+        }
+
         device.rebootIntoBootloader();
     }
 
