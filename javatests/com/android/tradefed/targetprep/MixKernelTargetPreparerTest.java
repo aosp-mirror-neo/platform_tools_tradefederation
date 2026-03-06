@@ -343,4 +343,89 @@ public class MixKernelTargetPreparerTest {
             FileUtil.recursiveDelete(newImageDir);
         }
     }
+
+    @Test
+    public void testValidateKernelCompatibility() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String[] bootVersion = {"android12-5.10", "100", "4k"};
+        String[] imageVersion = {"android12-5.10", "100", "4k"};
+        mk.validateKernelCompatibility(
+                "image", imageVersion, bootVersion, Mockito.mock(ITestDevice.class));
+    }
+
+    @Test
+    public void testValidateKernelCompatibility_mismatch() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String[] bootVersion = {"android12-5.10", "100", "4k"};
+        String[] imageVersion = {"android13-5.15", "100", "4k"};
+        try {
+            mk.validateKernelCompatibility(
+                    "image", imageVersion, bootVersion, Mockito.mock(ITestDevice.class));
+            Assert.fail("Expected TargetSetupError");
+        } catch (TargetSetupError e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testValidateKernelCompatibility_patchLevelLow() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String[] bootVersion = {"android12-5.10", "90", "4k"};
+        String[] imageVersion = {"android12-5.10", "100", "4k"};
+        try {
+            mk.validateKernelCompatibility(
+                    "image", imageVersion, bootVersion, Mockito.mock(ITestDevice.class));
+            Assert.fail("Expected TargetSetupError");
+        } catch (TargetSetupError e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testParseKernelVersion() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String versionString = "5.10.100-android12-9-g1234567890ab-ab1234567-4k";
+        String[] version = mk.parseKernelVersion("source", versionString);
+        Assert.assertEquals("android12-5.10", version[0]);
+        Assert.assertEquals("100", version[1]);
+        Assert.assertEquals("4k", version[2]);
+    }
+
+    @Test
+    public void testParseKernelVersion_mainline() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String versionString = "6.1.0-mainline-1-g1234567890ab-ab1234567";
+        String[] version = mk.parseKernelVersion("source", versionString);
+        Assert.assertEquals("android-mainline", version[0]);
+        Assert.assertEquals("0", version[1]);
+        Assert.assertEquals("16k", version[2]);
+    }
+
+    @Test
+    public void testValidateKernelVersion() throws Exception {
+        File tmpKernelDir = FileUtil.createTempDir("kernel_dir");
+        File tmpGkiDir = FileUtil.createTempDir("gki_dir");
+        File bootImg = new File(tmpGkiDir, "boot.img");
+        File kernelImg = new File(tmpKernelDir, "Image");
+        FileUtil.writeToFile("5.10.100-android12-9-ab1234567-4k", bootImg);
+        FileUtil.writeToFile("5.10.100-android12-9-ab1234567-4k", kernelImg);
+
+        MixKernelTargetPreparer mk =
+                new MixKernelTargetPreparer() {
+                    @Override
+                    protected String[] getKernelVersionFromImage(File image) {
+                        if (image.getName().contains("boot") || image.getName().contains("Image")) {
+                            return new String[] {"android12-5.10", "100", "4k"};
+                        }
+                        return null;
+                    }
+                };
+
+        try {
+            mk.validateKernelVersion(tmpKernelDir, tmpGkiDir, Mockito.mock(ITestDevice.class));
+        } finally {
+            FileUtil.recursiveDelete(tmpKernelDir);
+            FileUtil.recursiveDelete(tmpGkiDir);
+        }
+    }
 }

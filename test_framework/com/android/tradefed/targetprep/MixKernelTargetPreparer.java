@@ -34,6 +34,7 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.RunUtil;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 
 import java.io.File;
 import java.io.IOException;
@@ -112,6 +113,11 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
                             + "including leading dash, e.g. \"--nocompress\"")
     private Collection<String> mMixKernelArgs = new ArrayList<>();
 
+    @Option(
+            name = "validate-kernel-version-patch-level",
+            description = "whether to validate kernel version at patch level.")
+    private boolean mValidateKernelVersionPatchLevel = true;
+
     private IConfiguration mConfig;
 
     @Override
@@ -163,6 +169,10 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
             if (tmpKernelDir.listFiles().length == 0) {
                 throw new TargetSetupError(
                         "Could not find kernel images", device.getDeviceDescriptor());
+            }
+            if (tmpGkiDir.listFiles().length > 0) {
+                // Validate kernel version matches GKI kernel version
+                validateKernelVersion(tmpKernelDir, tmpGkiDir, device);
             }
             // Run the mix kernel tool and generate new device image into tmpNewDeviceDir
             CLog.i("running mixkernel tool from %s", mMixKernelToolPath);
@@ -346,6 +356,131 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
         } catch (ConfigurationException ignore) {
             CLog.e(ignore);
         }
+    }
+
+    /**
+     * Validate kernel versions in the images are expected. Throw exception if not valid.
+     *
+     * @param kernelDir the directory {@link File} contains kernel images
+     * @param gkiDir the directory {@link File} contains GKI images
+     * @param device the {@link ITestDevice}
+     * @throws TargetSetupError if there is no valid gki boot.img
+     */
+    @VisibleForTesting
+    protected void validateKernelVersion(File kernelDir, File gkiDir, ITestDevice device)
+            throws TargetSetupError {
+        // Find boot image in gkiDir
+        File gkiBootImg = FileUtil.findFile(gkiDir, "boot.*img");
+        File kernelImage = FileUtil.findFile(kernelDir, "Image.*");
+        if (gkiBootImg == null) {
+            CLog.w("Could not find GKI boot image like boot.*img in to validate kernel version.");
+            return;
+        }
+        if (kernelImage == null) {
+            CLog.w("Could not find Kernel image like Image.* to validate kernel version.");
+            return;
+        }
+
+        String[] gkiBootImgKernelVersion = getKernelVersionFromImage(gkiBootImg);
+        if (gkiBootImgKernelVersion == null) {
+            throw new TargetSetupError(
+                    "Could not extract kernel version from " + gkiBootImg.getName(),
+                    device.getDeviceDescriptor());
+        }
+
+        String[] kernelImageKernelVersion = getKernelVersionFromImage(kernelImage);
+        if (kernelImageKernelVersion == null) {
+            throw new TargetSetupError(
+                    "Could not extract kernel version from " + kernelImage.getName(),
+                    device.getDeviceDescriptor());
+        }
+
+        validateKernelCompatibility(
+                kernelImage.getName(), kernelImageKernelVersion, gkiBootImgKernelVersion, device);
+    }
+
+    @VisibleForTesting
+    protected void validateKernelCompatibility(
+            String imageName, String[] imageVersion, String[] bootVersion, ITestDevice device)
+            throws TargetSetupError {
+        if (!bootVersion[0].equals(imageVersion[0]) || !bootVersion[2].equals(imageVersion[2])) {
+            throw new TargetSetupError(
+                    String.format(
+                            "Boot image kernel version %s doesn't match %s kernel version %s",
+                            Arrays.toString(bootVersion), imageName, Arrays.toString(imageVersion)),
+                    device.getDeviceDescriptor());
+        }
+        if (!mValidateKernelVersionPatchLevel) {
+            return;
+        }
+        try {
+            int bootPatchLevel = Integer.parseInt(bootVersion[1]);
+            int imagePatchLevel = Integer.parseInt(imageVersion[1]);
+            if (bootPatchLevel < imagePatchLevel) {
+                throw new TargetSetupError(
+                        String.format(
+                                "Boot image kernel patch level %d is less than %s kernel patch"
+                                        + " level %d",
+                                bootPatchLevel, imageName, imagePatchLevel),
+                        device.getDeviceDescriptor());
+            }
+        } catch (NumberFormatException e) {
+            CLog.w("Could not parse patch level: %s or %s", bootVersion[1], imageVersion[1]);
+        }
+    }
+
+    /**
+     * Extracts the kernel version from a boot/vendor_boot/system_dlkm/vendor_dlkm image files.
+     *
+     * @param image The {@link File} to the image file.
+     * @return A {@link String[]} containing the parsed kernel version info: [kernelVersion,
+     *     patchLevel, pageSize]. Returns null if the version string cannot be parsed.
+     */
+    @VisibleForTesting
+    protected String[] getKernelVersionFromImage(File image) {
+        String cmd =
+                String.format(
+                        "strings %s | grep -E \"(android|mainline).*-ab\" | tail -n 1",
+                        image.getAbsolutePath());
+        CommandResult result = RunUtil.getDefault().runTimedCmd(300000L, "/bin/bash", "-c", cmd);
+        if (!CommandStatus.SUCCESS.equals(result.getStatus())
+                || Strings.isNullOrEmpty(result.getStdout())) {
+            CLog.w("Could not extract kernel version from %s", image.getAbsolutePath());
+            return null;
+        }
+
+        return parseKernelVersion(image.getAbsolutePath(), result.getStdout().trim());
+    }
+
+    @VisibleForTesting
+    protected String[] parseKernelVersion(String source, String kernelVersionString) {
+        CLog.i("%s has kernel version string: %s", source, kernelVersionString);
+        Pattern pattern =
+                Pattern.compile("(\\d+\\.\\d+)\\.(\\d+)-(android\\d+|mainline)-.*-ab(\\w+)");
+        Matcher matcher = pattern.matcher(kernelVersionString);
+        if (matcher.find()) {
+            String kernelVersion = matcher.group(3);
+            if (!kernelVersion.equals("mainline")) {
+                kernelVersion += "-" + matcher.group(1);
+            } else {
+                kernelVersion = "android-mainline";
+            }
+            String patchLevel = matcher.group(2);
+            String buildID = matcher.group(4);
+            String pageSize = "16k";
+            if (kernelVersionString.contains("-4k")
+                    || kernelVersion.startsWith("android12-")
+                    || kernelVersion.startsWith("android13-")
+                    || kernelVersion.startsWith("android14-")) {
+                pageSize = "4k";
+            }
+            CLog.i(
+                    "%s has kernel version: %s, patchLevel: %s, buildID: %s, pageSize: %s",
+                    source, kernelVersion, patchLevel, buildID, pageSize);
+            return new String[] {kernelVersion, patchLevel, pageSize};
+        }
+        CLog.w("%s has invalid kernel version string: %s", source, kernelVersionString);
+        return null;
     }
 
     /**
