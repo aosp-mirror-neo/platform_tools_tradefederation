@@ -39,7 +39,6 @@ import com.android.tradefed.device.TestDeviceOptions.InstanceType;
 import com.android.tradefed.device.connection.AdbSshConnection;
 import com.android.tradefed.device.metric.IMetricCollector;
 import com.android.tradefed.device.metric.IMetricCollectorReceiver;
-import com.android.tradefed.host.IHostOptions;
 import com.android.tradefed.invoker.DelegatedInvocationExecution;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.RemoteInvocationExecution;
@@ -510,14 +509,6 @@ public class CtsTestLauncher
         createSubprocessTmpDir(args);
         args.add("-cp");
         args.add(classpath);
-        args.add(
-                String.format(
-                        "-D%s=%s",
-                        IHostOptions.CACHE_DIR_PROPERTY,
-                        GlobalConfiguration.getInstance()
-                                .getHostOptions()
-                                .getDownloadCacheDir()
-                                .getAbsolutePath()));
 
         if (mCtsVersion == 2) {
             // Cts V2 requires CTS_ROOT to be set or VTS_ROOT for vts run

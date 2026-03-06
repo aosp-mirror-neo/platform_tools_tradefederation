@@ -41,8 +41,6 @@ public interface IHostOptions {
         CONCURRENT_VIRTUAL_DEVICE_STARTUP;
     }
 
-    public static String CACHE_DIR_PROPERTY = "tf.cache_dir";
-
     /**
      * Returns the max number of concurrent flashing to allow. Used by {@link DeviceFlashPreparer}.
      *
