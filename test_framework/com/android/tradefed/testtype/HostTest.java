@@ -445,7 +445,12 @@ public class HostTest
         return mClasses;
     }
 
-    void setMethodName(String methodName) {
+    /**
+     * Set the method name to be run.
+     *
+     * <p>This is used to run a specific test method from a test class.
+     */
+    protected void setMethodName(String methodName) {
         mMethodName = methodName;
     }
 

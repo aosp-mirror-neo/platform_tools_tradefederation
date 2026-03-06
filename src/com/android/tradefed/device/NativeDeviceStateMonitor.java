@@ -757,23 +757,17 @@ public class NativeDeviceStateMonitor implements IDeviceStateMonitor {
         return System.currentTimeMillis();
     }
 
-    private String getFileSystem(String externalStorePath) throws DeviceNotAvailableException {
+    private String getFileSystem(String externalStorePath) {
         final CollectingOutputReceiver receiver = new CollectingOutputReceiver();
         String statCommand = "stat -f -c \"%t\" " + externalStorePath;
         try {
             getIDevice().executeShellCommand(statCommand, receiver, 10000, TimeUnit.MILLISECONDS);
         } catch (TimeoutException
                 | ShellCommandUnresponsiveException
-                | IOException e) {
+                | IOException
+                | AdbCommandRejectedException e) {
             CLog.e("Exception while attempting to read filesystem of '%s'", externalStorePath);
             CLog.e(e);
-            return null;
-        } catch (AdbCommandRejectedException e) {
-            rejectToUnavailable(
-                    String.format(
-                            "Exception while attempting to read filesystem of '%s'",
-                            externalStorePath),
-                    e);
             return null;
         }
         String output = receiver.getOutput().trim();
