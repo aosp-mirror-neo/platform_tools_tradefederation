@@ -332,6 +332,7 @@ public class InvocationMetricLogger {
         // Ab downloader metrics
         AB_BUILD_GET_API_TIME("ab_build_get_api_time", true),
         AB_DOWNLOAD_SIZE_ELAPSED_TIME("ab_download_size_elapsed_time", true),
+        AB_DOWNLOAD_METRICS("ab_download_metrics", true),
         ZIP_PARTIAL_DOWNLOAD_CACHE_HIT("zip_partial_download_cache_hit", true),
         DOWNLOAD_BOTH_ZIPS_AND_TS("download_both_zips_and_ts", true),
         AB_LIST_API_TIME_PAIR("ab_list_api_time_pair", true),
