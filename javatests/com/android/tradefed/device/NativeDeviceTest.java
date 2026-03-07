@@ -15,6 +15,8 @@
  */
 package com.android.tradefed.device;
 
+import static com.google.common.truth.Truth.assertWithMessage;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -40,6 +42,7 @@ import com.android.tradefed.command.remote.DeviceDescriptor;
 import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.IWifiHelper.WifiConnectionResult;
+import com.android.tradefed.device.NativeDevice.RebootDeviceAction;
 import com.android.tradefed.device.NativeDevice.RebootMode;
 import com.android.tradefed.device.contentprovider.ContentProviderHandler;
 import com.android.tradefed.host.HostOptions;
@@ -1737,7 +1740,6 @@ public class NativeDeviceTest {
     /** Unit test for {@link NativeDevice#doAdbReboot(RebootMode, String)} )}. */
     @Test
     public void testDoAdbReboot_emulator() throws Exception {
-        final String into = "bootloader";
         CommandResult commandRes = new CommandResult();
         commandRes.setStatus(CommandStatus.SUCCESS);
         when(mMockRunUtil.runTimedCmd(
@@ -1751,8 +1753,10 @@ public class NativeDeviceTest {
                         Mockito.eq("reboot"),
                         Mockito.eq("bootloader")))
                 .thenReturn(commandRes);
+
         mTestDevice.doAdbReboot(RebootMode.REBOOT_INTO_BOOTLOADER, "");
-        verify(mMockRunUtil, times(1))
+
+        verify(mMockRunUtil)
                 .runTimedCmd(
                         Mockito.anyLong(),
                         (OutputStream) Mockito.isNull(),
@@ -1763,6 +1767,42 @@ public class NativeDeviceTest {
                         Mockito.eq("shell"),
                         Mockito.eq("reboot"),
                         Mockito.eq("bootloader"));
+    }
+
+    /** Unit test for {@link NativeDevice#doAdbReboot(RebootDeviceAction, String)} )}. */
+    @Test
+    public void testDoAdbReboot_rebootDeviceAction_emulator() throws Exception {
+        String rebootCmd = "Lights, Camera, ACTION"; // uses space on purpose
+        String rebootCmdOutput = "Saul Goodman!";
+        CommandResult commandRes = new CommandResult();
+        commandRes.setStatus(CommandStatus.SUCCESS);
+        commandRes.setStdout(rebootCmdOutput);
+        when(mMockRunUtil.runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq(rebootCmd)))
+                .thenReturn(commandRes);
+        RebootDeviceAction action =
+                mTestDevice.createRebootDeviceAction(rebootCmd, /* reason= */ null);
+
+        String result = mTestDevice.doAdbReboot(action);
+
+        assertWithMessage("result").that(result).isEqualTo(rebootCmdOutput);
+        verify(mMockRunUtil)
+                .runTimedCmd(
+                        Mockito.anyLong(),
+                        (OutputStream) Mockito.isNull(),
+                        Mockito.isNull(),
+                        Mockito.eq("adb"),
+                        Mockito.eq("-s"),
+                        Mockito.eq("serial"),
+                        Mockito.eq("shell"),
+                        Mockito.eq(rebootCmd));
     }
 
     /** Unit test for {@link NativeDevice#doReboot(RebootMode, String)} ()}. */
