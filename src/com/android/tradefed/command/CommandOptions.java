@@ -455,6 +455,11 @@ public class CommandOptions implements ICommandOptions {
             description = "Whether to enable the automated device setup or not.")
     private boolean mEnableDeviceSpecificSetup = true;
 
+    @Option(
+            name = "pass-retry-attempt-number",
+            description = "Whether or not to pass retry attempt number.")
+    private boolean mPassRetryAttemptNumber = false;
+
     /**
      * Set the help mode for the config.
      * <p/>
@@ -1079,5 +1084,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean shouldEnableDeviceSpecificSetup() {
         return mEnableDeviceSpecificSetup;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean shouldPassRetryAttemptNumber() {
+        return mPassRetryAttemptNumber;
     }
 }
