@@ -29,9 +29,6 @@ import com.android.tradefed.invoker.tracing.CloseableTraceScope;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.result.proto.ModuleProtoResultReporter;
 import com.android.tradefed.result.skipped.SkipContext;
-import com.android.tradefed.testtype.IRemoteTest;
-import com.android.tradefed.testtype.ITestFileFilterReceiver;
-import com.android.tradefed.testtype.ITestFilterReceiver;
 import com.android.tradefed.util.CacheClientFactory;
 import com.android.tradefed.util.FileUtil;
 
@@ -40,21 +37,17 @@ import build.bazel.remote.execution.v2.Digest;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -141,7 +134,7 @@ public class SuiteResultCacheUtil {
                 environment.put(TRADEFED_JAR_VERSION_KEY, tradefedDigest.getHash());
             }
             int i = 0;
-            for (Digest d : filterDigest(module)) {
+            for (Digest d : module.getFilterDigests()) {
                 environment.put("filter_" + i, d.getHash());
                 i++;
             }
@@ -214,7 +207,7 @@ public class SuiteResultCacheUtil {
                 }
             }
             int i = 0;
-            for (Digest d : filterDigest(module)) {
+            for (Digest d : module.getFilterDigests()) {
                 environment.put("filter_" + i, d.getHash());
                 i++;
             }
@@ -321,43 +314,5 @@ public class SuiteResultCacheUtil {
         } catch (NoSuchAlgorithmException e) {
             throw new IOException(e);
         }
-    }
-
-    private static Set<Digest> filterDigest(ModuleDefinition m) throws IOException {
-        Set<Digest> filterDigest = new LinkedHashSet<Digest>();
-        for (IRemoteTest t : m.getTests()) {
-            if (t instanceof ITestFileFilterReceiver) {
-                ITestFileFilterReceiver fileFilterTest = ((ITestFileFilterReceiver) t);
-
-                File includeFilter = fileFilterTest.getIncludeTestFile();
-                if (includeFilter != null && includeFilter.exists()) {
-                    filterDigest.add(DigestCalculator.compute(includeFilter));
-                }
-                File excludeFilter = fileFilterTest.getExcludeTestFile();
-                if (excludeFilter != null && excludeFilter.exists()) {
-                    filterDigest.add(DigestCalculator.compute(excludeFilter));
-                }
-            } else if (t instanceof ITestFilterReceiver) {
-                ITestFilterReceiver filterTest = ((ITestFilterReceiver) t);
-
-                Set<String> includeFilters = new TreeSet<>(filterTest.getIncludeFilters());
-                if (!includeFilters.isEmpty()) {
-                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                    for (String includeFilter : includeFilters) {
-                        buffer.write(includeFilter.getBytes(StandardCharsets.UTF_8));
-                    }
-                    filterDigest.add(DigestCalculator.compute(buffer.toByteArray()));
-                }
-                Set<String> excludeFilters = new TreeSet<>(filterTest.getExcludeFilters());
-                if (!excludeFilters.isEmpty()) {
-                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                    for (String excludeFilter : excludeFilters) {
-                        buffer.write(excludeFilter.getBytes(StandardCharsets.UTF_8));
-                    }
-                    filterDigest.add(DigestCalculator.compute(buffer.toByteArray()));
-                }
-            }
-        }
-        return filterDigest;
     }
 }

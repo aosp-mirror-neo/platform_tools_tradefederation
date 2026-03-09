@@ -17,6 +17,7 @@ package com.android.tradefed.testtype.suite;
 
 import com.android.tradefed.build.BuildRetrievalError;
 import com.android.tradefed.build.IBuildInfo;
+import com.android.tradefed.cache.DigestCalculator;
 import com.android.tradefed.config.Configuration;
 import com.android.tradefed.config.ConfigurationDescriptor;
 import com.android.tradefed.config.ConfigurationException;
@@ -94,11 +95,15 @@ import com.android.tradefed.util.StreamUtil;
 import com.android.tradefed.util.SystemUtil;
 import com.android.tradefed.util.proto.TfMetricProtoUtil;
 
+import build.bazel.remote.execution.v2.Digest;
+
 import com.google.api.client.util.Joiner;
 import com.google.common.annotations.VisibleForTesting;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -112,6 +117,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -222,6 +228,7 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
 
     private boolean mCollectKernelLog = false;
     private boolean mHasFailures = false;
+    private Set<Digest> mFilterDigest = null;
 
     @VisibleForTesting
     public ModuleDefinition() {
@@ -380,6 +387,50 @@ public class ModuleDefinition implements Comparable<ModuleDefinition>, ITestColl
     protected boolean hasTests() {
         synchronized (mTests) {
             return !mTests.isEmpty();
+        }
+    }
+
+    /** Return the digests of filters associated with the tests. */
+    public Set<Digest> getFilterDigests() throws IOException {
+        if (mFilterDigest != null) {
+            return mFilterDigest;
+        }
+        synchronized (mTests) {
+            mFilterDigest = new LinkedHashSet<Digest>();
+            for (IRemoteTest t : mTests) {
+                if (t instanceof ITestFileFilterReceiver) {
+                    ITestFileFilterReceiver fileFilterTest = ((ITestFileFilterReceiver) t);
+
+                    File includeFilter = fileFilterTest.getIncludeTestFile();
+                    if (includeFilter != null && includeFilter.exists()) {
+                        mFilterDigest.add(DigestCalculator.compute(includeFilter));
+                    }
+                    File excludeFilter = fileFilterTest.getExcludeTestFile();
+                    if (excludeFilter != null && excludeFilter.exists()) {
+                        mFilterDigest.add(DigestCalculator.compute(excludeFilter));
+                    }
+                } else if (t instanceof ITestFilterReceiver) {
+                    ITestFilterReceiver filterTest = ((ITestFilterReceiver) t);
+
+                    Set<String> includeFilters = new TreeSet<>(filterTest.getIncludeFilters());
+                    if (!includeFilters.isEmpty()) {
+                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                        for (String includeFilter : includeFilters) {
+                            buffer.write(includeFilter.getBytes(StandardCharsets.UTF_8));
+                        }
+                        mFilterDigest.add(DigestCalculator.compute(buffer.toByteArray()));
+                    }
+                    Set<String> excludeFilters = new TreeSet<>(filterTest.getExcludeFilters());
+                    if (!excludeFilters.isEmpty()) {
+                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                        for (String excludeFilter : excludeFilters) {
+                            buffer.write(excludeFilter.getBytes(StandardCharsets.UTF_8));
+                        }
+                        mFilterDigest.add(DigestCalculator.compute(buffer.toByteArray()));
+                    }
+                }
+            }
+            return mFilterDigest;
         }
     }
 
