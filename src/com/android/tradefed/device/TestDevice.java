@@ -3106,6 +3106,7 @@ public class TestDevice extends NativeDevice {
                         ? ""
                         : "--dump-device-tree " + builder.mDumpDt;
         final String enableEarlycon = builder.mEnableEarlycon ? "--enable-earlycon" : "";
+        final String ramdump = builder.mRamdump ? "--ramdump" : "";
 
         List<String> args =
                 new ArrayList<>(
@@ -3131,7 +3132,8 @@ public class TestDevice extends NativeDevice {
                                 outApkIdsigPath,
                                 builder.mInstanceImg,
                                 dumpDt,
-                                enableEarlycon));
+                                enableEarlycon,
+                                ramdump));
         if (isVirtFeatureEnabled("com.android.kvm.LLPVM_CHANGES")) {
             args.add("--instance-id-file");
             args.add(builder.mInstanceIdFile);
@@ -3496,6 +3498,7 @@ public class TestDevice extends NativeDevice {
         private String mName;
         private String mDumpDt;
         private boolean mEnableEarlycon = false;
+        private boolean mRamdump;
 
         /** Creates a builder for the given APK/apkPath. */
         private MicrodroidBuilder(
@@ -3719,6 +3722,16 @@ public class TestDevice extends NativeDevice {
          */
         public MicrodroidBuilder hugePages(boolean hintHugePages) {
             mHugePages = hintHugePages;
+            return this;
+        }
+
+        /**
+         * Sets whether to turn off crash kernel for ramdumps.
+         *
+         * @return the microdroid builder.
+         */
+        public MicrodroidBuilder ramdump(boolean useRamdump) {
+            mRamdump = useRamdump;
             return this;
         }
 
