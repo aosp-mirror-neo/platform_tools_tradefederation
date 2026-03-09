@@ -86,6 +86,10 @@ public class PerfettoGenericPostProcessorTest {
     private static final String PREFIX_OPTION_VALUE = "metric-perfetto";
     private static final String INDEX_OPTION = "perfetto-indexed-list-field";
     private static final String KEY_PREFIX_OPTION = "perfetto-prefix-key-field";
+    private static final String INNER_MSG_KEY_PREFIX_OPTION =
+            "perfetto-prefix-inner-message-key-field";
+    private static final String INDEXED_DUPLICATE_KEYS_OPTION =
+            "perfetto-indexed-duplicate-keys-field";
     private static final String REGEX_OPTION_VALUE = "perfetto-metric-filter-regex";
     private static final String ALL_METRICS_OPTION = "perfetto-include-all-metrics";
     private static final String ALL_METRICS_PREFIX_OPTION = "perfetto-all-metric-prefix";
@@ -277,15 +281,85 @@ public class PerfettoGenericPostProcessorTest {
                 27938816);
     }
 
-    /**
-     * Test metrics count and metrics without indexing. In case of app startup metrics startup
-     * messages for same package name will be overridden without indexing.
-     */
+    /** Test Wattson metrics with indexing and inner message key field. */
     @Test
-    public void testParsingWithoutIndexing() throws ConfigurationException, IOException {
-        setupPerfettoMetricFile(METRIC_FILE_FORMAT.text, true, true);
+    public void testWattsonMetrics_withIndexingDuplicates()
+            throws ConfigurationException, IOException {
+        testWattsonMetrics(true);
+    }
+
+    /** Test Wattson metrics with indexing and inner message key field. */
+    @Test
+    public void testWattsonMetrics_withoutIndexingDuplicates()
+            throws ConfigurationException, IOException {
+        testWattsonMetrics(false);
+    }
+
+    private void testWattsonMetrics(boolean indexing) throws ConfigurationException, IOException {
+        String wattsonContent =
+                "wattson_atrace_apps_rails {\n"
+                        + "  metric_version: 4\n"
+                        + "  power_model_version: 1\n"
+                        + "  is_crude_estimate: 0\n"
+                        + "  period_info {\n"
+                        + "    period_id: 1\n"
+                        + "    period_name: \"SPLASHSCREEN_EXIT_ANIM\"\n"
+                        + "    period_dur: 275232056\n"
+                        + "    cpu_subsystem {\n"
+                        + "      estimated_mw: 5640\n"
+                        + "      estimated_mws: 1552\n"
+                        + "    }\n"
+                        + "  }\n"
+                        + "  period_info {\n"
+                        + "    period_id: 2\n"
+                        + "    period_name: \"LAUNCHER_APP_CLOSE_TO_HOME\"\n"
+                        + "    period_dur: 992449015\n"
+                        + "    cpu_subsystem {\n"
+                        + "      estimated_mw: 1683\n"
+                        + "      estimated_mws: 1671\n"
+                        + "      }\n"
+                        + "  }\n"
+                        + "  period_info {\n"
+                        + "    period_id: 3\n"
+                        + "    period_name: \"SPLASHSCREEN_EXIT_ANIM\"\n"
+                        + "    period_dur: 281844035\n"
+                        + "    cpu_subsystem {\n"
+                        + "      estimated_mw: 822\n"
+                        + "      estimated_mws: 231\n"
+                        + "    }\n"
+                        + "  }\n"
+                        + "}";
+        FileWriter fileWriter = null;
+        try {
+            perfettoMetricProtoFile = FileUtil.createTempFile("wattson_perfetto", "");
+            fileWriter = new FileWriter(perfettoMetricProtoFile);
+            fileWriter.write(wattsonContent);
+        } finally {
+            if (fileWriter != null) {
+                fileWriter.close();
+            }
+        }
+
+        if (indexing) {
+            mOptionSetter.setOptionValue(INDEXED_DUPLICATE_KEYS_OPTION, "true");
+        }
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
-        mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
+        mOptionSetter.setOptionValue(
+                KEY_PREFIX_OPTION, "perfetto.protos.AndroidWattsonEstimateInfo.period_name");
+        mOptionSetter.setOptionValue(
+                REGEX_OPTION_VALUE,
+                "wattson_atrace_apps_rails-period_info-period_name-*.*-cpu_subsystem-estimated_mw-*.*");
+        mOptionSetter.setOptionValue(
+                REGEX_OPTION_VALUE,
+                "wattson_atrace_apps_rails-period_info-period_name-*.*-cpu_subsystem-estimated_mws-*.*");
+        mOptionSetter.setOptionValue(
+                REGEX_OPTION_VALUE,
+                "wattson_atrace_apps_rails-period_info-period_name-*.*-period_dur-*.*");
+        mOptionSetter.setOptionValue(
+                REPLACE_REGEX_OPTION,
+                "wattson_atrace_apps_rails-period_info-period_name-",
+                "wattson_apps_rails-name-");
+
         Map<String, LogFile> testLogs = new HashMap<>();
         testLogs.put(
                 PREFIX_OPTION_VALUE,
@@ -293,12 +367,65 @@ public class PerfettoGenericPostProcessorTest {
                         perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
-        assertMetricsContainString(parsedMetrics, "perfetto_android_startup-startup-startup_id", 2);
+
+        if (DEBUG) {
+            printOutputMetricsForDebug(parsedMetrics);
+        }
+
+        if (indexing) {
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_wattson_apps_rails-name-SPLASHSCREEN_EXIT_ANIM-cpu_subsystem-estimated_mw-1",
+                    5640.0);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_wattson_apps_rails-name-SPLASHSCREEN_EXIT_ANIM-cpu_subsystem-estimated_mw-2",
+                    822.0);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_wattson_apps_rails-name-SPLASHSCREEN_EXIT_ANIM-period_dur-1",
+                    275232056);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_wattson_apps_rails-name-SPLASHSCREEN_EXIT_ANIM-period_dur-2",
+                    281844035);
+        } else {
+            // Without indexing, the last occurrence (period_id: 3) should overwrite the first
+            // (period_id: 1).
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_wattson_apps_rails-name-SPLASHSCREEN_EXIT_ANIM-cpu_subsystem-estimated_mw",
+                    822.0);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_wattson_apps_rails-name-SPLASHSCREEN_EXIT_ANIM-period_dur",
+                    281844035);
+        }
+
         assertMetricsContainString(
                 parsedMetrics,
-                "perfetto_android_startup-startup-package_name-com.google."
-                        + "android.apps.nexuslauncher-to_first_frame-dur_ns",
-                53102401);
+                "perfetto_wattson_apps_rails-name-LAUNCHER_APP_CLOSE_TO_HOME-cpu_subsystem-estimated_mw",
+                1683.0);
+    }
+
+    /**
+     * Test metrics count and metrics without indexing. In case of app startup metrics startup
+     * messages for same package name will be overridden without indexing.
+     */
+    @Test
+    public void testParsingWithoutIndexingListsAndWithoutIndexingDuplicateKeys()
+            throws ConfigurationException, IOException {
+        testParsingStartupMetrics(false, false);
+    }
+
+    /**
+     * Test metrics count and metrics without indexing. In case of app startup metrics startup
+     * messages for same package name will be overridden without indexing.
+     */
+    @Test
+    public void testParsingWithoutIndexingListsAndWithIndexingDuplicateKeys()
+            throws ConfigurationException, IOException {
+        testParsingStartupMetrics(false, true);
     }
 
     /**
@@ -306,10 +433,32 @@ public class PerfettoGenericPostProcessorTest {
      * messages for same package name will not be overridden with indexing.
      */
     @Test
-    public void testParsingWithIndexing() throws ConfigurationException, IOException {
+    public void testParsingWithIndexingListsAndWithoutIndexingDuplicateKeys()
+            throws ConfigurationException, IOException {
+        testParsingStartupMetrics(true, false);
+    }
+
+    /**
+     * Test metrics count and metrics with indexing. In case of app startup metrics, startup
+     * messages for same package name will not be overridden with indexing.
+     */
+    @Test
+    public void testParsingWithIndexingListsAndWithIndexingDuplicateKeys()
+            throws ConfigurationException, IOException {
+        testParsingStartupMetrics(true, true);
+    }
+
+    private void testParsingStartupMetrics(boolean indexLists, boolean indexDuplicates)
+            throws ConfigurationException, IOException {
         setupPerfettoMetricFile(METRIC_FILE_FORMAT.text, true, true);
         mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
-        mOptionSetter.setOptionValue(INDEX_OPTION, "perfetto.protos.AndroidStartupMetric.startup");
+        if (indexLists) {
+            mOptionSetter.setOptionValue(
+                    INDEX_OPTION, "perfetto.protos.AndroidStartupMetric.startup");
+        }
+        if (indexDuplicates) {
+            mOptionSetter.setOptionValue(INDEXED_DUPLICATE_KEYS_OPTION, "true");
+        }
         mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
         Map<String, LogFile> testLogs = new HashMap<>();
         testLogs.put(
@@ -319,20 +468,55 @@ public class PerfettoGenericPostProcessorTest {
         Map<String, Metric.Builder> parsedMetrics =
                 mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
 
-        assertMetricsContainString(
-                parsedMetrics, "perfetto_android_startup-startup-1-startup_id", 1);
-        assertMetricsContainString(
-                parsedMetrics,
-                "perfetto_android_startup-startup-1-package_name-com.google."
-                        + "android.apps.nexuslauncher-to_first_frame-dur_ns",
-                36175473);
-        assertMetricsContainString(
-                parsedMetrics, "perfetto_android_startup-startup-2-startup_id", 2);
-        assertMetricsContainString(
-                parsedMetrics,
-                "perfetto_android_startup-startup-2-package_name-com.google."
-                        + "android.apps.nexuslauncher-to_first_frame-dur_ns",
-                53102401);
+        if (indexLists) {
+            assertMetricsContainString(
+                    parsedMetrics, "perfetto_android_startup-startup-1-startup_id", 1);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_android_startup-startup-1-package_name-com.google."
+                            + "android.apps.nexuslauncher-to_first_frame-dur_ns",
+                    36175473);
+            assertMetricsContainString(
+                    parsedMetrics, "perfetto_android_startup-startup-2-startup_id", 2);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_android_startup-startup-2-package_name-com.google."
+                            + "android.apps.nexuslauncher-to_first_frame-dur_ns",
+                    53102401);
+
+            // Make sure there are no indexed duplicate keys
+            assertFalse(
+                    "Metric key not expected but found",
+                    parsedMetrics.containsKey("perfetto_android_startup-startup-1-startup_id-1"));
+        } else if (indexDuplicates) {
+            assertMetricsContainString(
+                    parsedMetrics, "perfetto_android_startup-startup-startup_id-1", 1);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_android_startup-startup-package_name-com.google."
+                            + "android.apps.nexuslauncher-to_first_frame-dur_ns-1",
+                    36175473);
+            assertMetricsContainString(
+                    parsedMetrics, "perfetto_android_startup-startup-startup_id-2", 2);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_android_startup-startup-package_name-com.google."
+                            + "android.apps.nexuslauncher-to_first_frame-dur_ns-2",
+                    53102401);
+        } else {
+            assertMetricsContainString(
+                    parsedMetrics, "perfetto_android_startup-startup-startup_id", 2);
+            assertMetricsContainString(
+                    parsedMetrics,
+                    "perfetto_android_startup-startup-package_name-com.google."
+                            + "android.apps.nexuslauncher-to_first_frame-dur_ns",
+                    53102401);
+
+            // Make sure there are no indexed duplicate keys
+            assertFalse(
+                    "Metric key not expected but found",
+                    parsedMetrics.containsKey("perfetto_android_startup-startup-startup_id-1"));
+        }
     }
 
     /** Test metrics enabled with key and string value prefixing. */
@@ -517,8 +701,7 @@ public class PerfettoGenericPostProcessorTest {
         mOptionSetter.setOptionValue(
                 KEY_PREFIX_OPTION, "perfetto.protos.AndroidJankCujMetric.Cuj.name");
         mOptionSetter.setOptionValue(
-                "perfetto-prefix-inner-message-key-field",
-                "perfetto.protos.AndroidProcessMetadata.name");
+                INNER_MSG_KEY_PREFIX_OPTION, "perfetto.protos.AndroidProcessMetadata.name");
         mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
         Map<String, LogFile> testLogs = new HashMap<>();
         testLogs.put(

@@ -179,6 +179,11 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
     private String mAllMetricPrefix = "perfetto";
 
     @Option(
+            name = "perfetto-indexed-duplicate-keys-field",
+            description = "Whether to prefix duplicate keys with a unique suffix.")
+    private boolean mPerfettoIndexedDuplicateKeys = false;
+
+    @Option(
             name = "perfetto-alternative-parse-format",
             description =
                     "Parse the metrics as key/value pair or JSON when corresponding proto "
@@ -298,9 +303,12 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         } else {
                             TraceMetrics.Builder builder = TraceMetrics.newBuilder();
                             ALLOW_UNKNOWN_FIELD.merge(bufferedReader, builder);
-                            parsedMetrics.putAll(
+                            Map<String, Metric.Builder> metrics =
                                     handlePrefixForProcessedMetrics(
-                                            convertPerfettoProtoMessage(builder.build())));
+                                            convertPerfettoProtoMessage(builder.build()));
+                            for (Map.Entry<String, Metric.Builder> entry : metrics.entrySet()) {
+                                putParsedMetric(parsedMetrics, entry.getKey(), entry.getValue());
+                            }
                         }
                         break;
                     case binary:
@@ -322,9 +330,12 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                             TraceMetrics metricProto = null;
                             metricProto =
                                     TraceMetrics.parseFrom(new FileInputStream(perfettoMetricFile));
-                            parsedMetrics.putAll(
+                            Map<String, Metric.Builder> metrics =
                                     handlePrefixForProcessedMetrics(
-                                            convertPerfettoProtoMessage(metricProto)));
+                                            convertPerfettoProtoMessage(metricProto));
+                            for (Map.Entry<String, Metric.Builder> entry : metrics.entrySet()) {
+                                putParsedMetric(parsedMetrics, entry.getKey(), entry.getValue());
+                            }
                         }
                         break;
                     case json:
@@ -335,10 +346,13 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                     CLog.e("Failed to merge the perfetto metric file. " + e.getMessage());
                 } else {
                     CLog.w("Failed to merge the perfetto metric file, trying alternative");
-                    parsedMetrics.putAll(
+                    Map<String, Metric.Builder> metrics =
                             handlePrefixForProcessedMetrics(
                                     processPerfettoMetricsWithAlternativeMethods(
-                                            perfettoMetricFile)));
+                                            perfettoMetricFile));
+                    for (Map.Entry<String, Metric.Builder> entry : metrics.entrySet()) {
+                        putParsedMetric(parsedMetrics, entry.getKey(), entry.getValue());
+                    }
                 }
             } catch (IOException ioe) {
                 CLog.e(
@@ -436,12 +450,35 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                     .forEach(nested -> flattenJson(result, nested, new ArrayList<>(names)));
         } else {
             String name = names.stream().collect(Collectors.joining(METRIC_SEP));
-            result.put(
+            putParsedMetric(
+                    result,
                     name,
                     TfMetricProtoUtil.stringToMetric(node.getValue().getAsString()).toBuilder());
         }
 
         return result;
+    }
+
+    private void putParsedMetric(
+            Map<String, Metric.Builder> map, String key, Metric.Builder builder) {
+        if (!mPerfettoIndexedDuplicateKeys) {
+            map.put(key, builder);
+            return;
+        }
+
+        if (map.containsKey(key)) {
+            Metric.Builder original = map.remove(key);
+            map.put(key + METRIC_SEP + "1", original);
+            map.put(key + METRIC_SEP + "2", builder);
+        } else if (map.containsKey(key + METRIC_SEP + "1")) {
+            int i = 2;
+            while (map.containsKey(key + METRIC_SEP + i)) {
+                i++;
+            }
+            map.put(key + METRIC_SEP + i, builder);
+        } else {
+            map.put(key, builder);
+        }
     }
 
     private void mergePerfettoV2Metrics(
@@ -513,14 +550,14 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                     String newKey =
                             metric.getKey()
                                     .replaceFirst(replaceEntry.getKey(), replaceEntry.getValue());
-                    finalMetrics.put(newKey, metric.getValue());
+                    putParsedMetric(finalMetrics, newKey, metric.getValue());
                     isReplaced = true;
                     break;
                 }
             }
             // If key is not replaced put the original key and value in the final metrics.
             if (!isReplaced) {
-                finalMetrics.put(metric.getKey(), metric.getValue());
+                putParsedMetric(finalMetrics, metric.getKey(), metric.getValue());
             }
         }
         processPerfettoMetrics.clear();
@@ -614,13 +651,15 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
 
                     // Otherwise treat this numeric field as metric.
                     if (mNumberPattern.matcher(entry.getValue().toString()).matches()) {
-                        convertedMetrics.put(
+                        putParsedMetric(
+                                convertedMetrics,
                                 entry.getKey().getName(),
                                 TfMetricProtoUtil.stringToMetric(entry.getValue().toString())
                                         .toBuilder());
                     } else {
                         // Parse the exponent notation of string before adding it to metric.
-                        convertedMetrics.put(
+                        putParsedMetric(
+                                convertedMetrics,
                                 entry.getKey().getName(),
                                 TfMetricProtoUtil.stringToMetric(
                                         Long.toString(
@@ -679,7 +718,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                 for (Entry<String, Metric.Builder> metricEntry : messageMetrics.entrySet()) {
                     // Add prefix to the metrics parsed from this message.
                     for (String prefix : keyPrefixes) {
-                        convertedMetrics.put(
+                        putParsedMetric(
+                                convertedMetrics,
                                 String.join(
                                         METRIC_SEP,
                                         prefix,
@@ -688,7 +728,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                                 metricEntry.getValue());
                     }
                     if (keyPrefixes.isEmpty()) {
-                        convertedMetrics.put(
+                        putParsedMetric(
+                                convertedMetrics,
                                 String.join(
                                         METRIC_SEP, entry.getKey().getName(), metricEntry.getKey()),
                                 metricEntry.getValue());
@@ -718,7 +759,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                         for (Entry<String, Metric.Builder> metricEntry :
                                 messageMetrics.entrySet()) {
                             for (String prefix : keyPrefixes) {
-                                convertedMetrics.put(
+                                putParsedMetric(
+                                        convertedMetrics,
                                         String.join(
                                                 METRIC_SEP,
                                                 prefix,
@@ -727,14 +769,16 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                                         metricEntry.getValue());
                             }
                             if (keyPrefixes.isEmpty()) {
-                                convertedMetrics.put(
+                                putParsedMetric(
+                                        convertedMetrics,
                                         String.join(
                                                 METRIC_SEP, metricKeyRoot, metricEntry.getKey()),
                                         metricEntry.getValue());
                             }
                         }
                     } else {
-                        convertedMetrics.put(
+                        putParsedMetric(
+                                convertedMetrics,
                                 metricKeyRoot,
                                 TfMetricProtoUtil.stringToMetric(listMetrics.get(i).toString())
                                         .toBuilder());
@@ -748,7 +792,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                 new HashMap<String, Metric.Builder>();
         if (!keyPrefixOtherFields.isEmpty()) {
             for (Map.Entry<String, Metric.Builder> currentMetric : convertedMetrics.entrySet()) {
-                additionalConvertedMetrics.put(
+                putParsedMetric(
+                        additionalConvertedMetrics,
                         String.format("%s-%s", keyPrefixOtherFields, currentMetric.getKey()),
                         currentMetric.getValue());
             }
@@ -760,7 +805,8 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                             ? mPrefixFromInnerMessage
                             : innerMessagePrefix;
             for (Map.Entry<String, Metric.Builder> currentMetric : convertedMetrics.entrySet()) {
-                additionalConvertedMetrics.put(
+                putParsedMetric(
+                        additionalConvertedMetrics,
                         String.format("%s-%s", prefixToUse, currentMetric.getKey()),
                         currentMetric.getValue());
             }
@@ -771,7 +817,9 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         }
 
         // Not cleaning up the other metrics without prefix fields.
-        convertedMetrics.putAll(additionalConvertedMetrics);
+        for (Map.Entry<String, Metric.Builder> entry : additionalConvertedMetrics.entrySet()) {
+            putParsedMetric(convertedMetrics, entry.getKey(), entry.getValue());
+        }
 
         return convertedMetrics;
     }
