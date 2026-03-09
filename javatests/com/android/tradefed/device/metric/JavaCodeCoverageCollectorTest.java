@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
@@ -373,10 +374,17 @@ public class JavaCodeCoverageCollectorTest {
         mCodeCoverageCollector.testRunEnded(ELAPSED_TIME, TfMetricProtoUtil.upgradeConvert(metric));
 
         // Verify the correct files were deleted and some files were not deleted.
-        verify(mMockDevice).deleteFile(coverageFileList.get(0));
-        verify(mMockDevice).deleteFile(coverageFileList.get(1));
-        verify(mMockDevice, never()).deleteFile(coverageFileList.get(2));
-        verify(mMockDevice).deleteFile(coverageFileList.get(3));
+        ArgumentCaptor<String> shellCommandCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mMockDevice, atLeastOnce()).executeShellCommand(shellCommandCaptor.capture());
+
+        String deleteCommand = shellCommandCaptor.getAllValues().stream()
+                .filter(cmd -> cmd.contains("rm -rf"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Delete command not found"));
+        assertThat(deleteCommand).contains(coverageFileList.get(0));
+        assertThat(deleteCommand).contains(coverageFileList.get(1));
+        assertThat(deleteCommand).doesNotContain(coverageFileList.get(2));
+        assertThat(deleteCommand).contains(coverageFileList.get(3));
     }
 
     @Test
