@@ -4160,34 +4160,7 @@ public class NativeDevice
 
     @Override
     public void reboot(@Nullable String reason) throws DeviceNotAvailableException {
-        // TODO(b/450378054): refactor to call:
-        //
-        //   reboot((RebootDeviceAction) null, reason);
-        //
-        // (it will be done in a separate CL to make it easier to revert in case of breakages)
-        if (isInRebootCallback()) {
-            CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot");
-            return;
-        }
-        notifyRebootStarted();
-        internalRebootUntilOnline(reason);
-
-        RecoveryMode cachedRecoveryMode = getRecoveryMode();
-        setRecoveryMode(RecoveryMode.ONLINE);
-
-        if (isEncryptionSupported() && isDeviceEncrypted()) {
-            unlockDevice();
-        }
-
-        setRecoveryMode(cachedRecoveryMode);
-
-        try (CloseableTraceScope ignored =
-                new CloseableTraceScope("reboot_waitForDeviceAvailable")) {
-            waitForDeviceAvailable(mOptions.getRebootTimeout());
-        }
-        postBootSetup();
-        postBootWifiSetup();
-        notifyRebootEnded();
+        reboot((RebootDeviceAction) null, reason);
     }
 
     @Override
@@ -4290,30 +4263,7 @@ public class NativeDevice
     private void internalRebootUntilOnline(@Nullable String reason)
             throws DeviceNotAvailableException {
         CLog.v("internalRebootUntilOnline(%s)", reason);
-        // TODO(b/450378054): refactor to call:
-        //
-        //   internalRebootUntilOnline(/* rebootAction= */ null, reason);
-        //   reboot((RebootDeviceAction) null, reason);
-        //
-        // (it will be done in a separate CL to make it easier to revert in case of breakages)
-        long rebootStart = System.currentTimeMillis();
-        try (CloseableTraceScope ignored = new CloseableTraceScope("rebootUntilOnline")) {
-            // Force wait to commit the image before the reboot
-            waitForSnapuserd(SnapuserdWaitPhase.BLOCK_BEFORE_RELEASING);
-            // Invalidate cache before reboots
-            mPropertiesCache.invalidateAll();
-            doReboot(RebootMode.REBOOT_FULL, reason);
-            RecoveryMode cachedRecoveryMode = getRecoveryMode();
-            setRecoveryMode(RecoveryMode.ONLINE);
-            waitForDeviceOnline();
-            enableAdbRoot();
-            setRecoveryMode(cachedRecoveryMode);
-        } finally {
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.ADB_REBOOT_TIME, System.currentTimeMillis() - rebootStart);
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricKey.ADB_REBOOT_ROUTINE_COUNT, 1);
-        }
+        internalRebootUntilOnline(/* rebootAction= */ null, reason);
     }
 
     private String internalRebootUntilOnline(
@@ -4365,9 +4315,7 @@ public class NativeDevice
         notifyRebootEnded();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void rebootIntoRecovery() throws DeviceNotAvailableException {
         if (isInRebootCallback()) {
@@ -4378,8 +4326,10 @@ public class NativeDevice
         }
         notifyRebootStarted();
         if (isStateBootloaderOrFastbootd()) {
-            CLog.w("device %s in fastboot when requesting boot to recovery. " +
-                    "Rebooting to userspace first.", getSerialNumber());
+            CLog.w(
+                    "device %s in fastboot when requesting boot to recovery. "
+                            + "Rebooting to userspace first.",
+                    getSerialNumber());
             internalRebootUntilOnline(null);
         }
         doAdbReboot(RebootMode.REBOOT_INTO_RECOVERY, null);
@@ -4389,12 +4339,12 @@ public class NativeDevice
         notifyRebootEnded();
     }
 
-
     /** {@inheritDoc} */
     @Override
     public void rebootIntoSideload() throws DeviceNotAvailableException {
         rebootIntoSideload(false);
     }
+
     /** {@inheritDoc} */
     @Override
     public void rebootIntoSideload(boolean autoReboot) throws DeviceNotAvailableException {
@@ -4544,15 +4494,8 @@ public class NativeDevice
      */
     protected void doAdbReboot(RebootMode rebootMode, @Nullable final String reason)
             throws DeviceNotAvailableException {
-        // TODO(b/450378054): refactor to call:
-        //
-        //   var rebootAction = createRebootDeviceAction(rebootMode, reason);
-        //   doAdbReboot(rebootAction);
-        //
-        // (it will be done in a separate CL to make it easier to revert in case of breakages)
-        getConnection().notifyAdbRebootCalled();
-        DeviceAction rebootAction = createRebootDeviceAction(rebootMode, reason);
-        performDeviceAction("reboot", rebootAction, MAX_RETRY_ATTEMPTS);
+        var rebootAction = createRebootDeviceAction(rebootMode, reason);
+        doAdbReboot(rebootAction);
     }
 
     @VisibleForTesting
@@ -4617,8 +4560,9 @@ public class NativeDevice
         // before the operation
         if (!mStateMonitor.waitForDeviceNotAvailable(time)) {
             // above check is flaky, ignore till better solution is found
-            CLog.w("Did not detect device %s becoming unavailable after %s", getSerialNumber(),
-                    operationDesc);
+            CLog.w(
+                    "Did not detect device %s becoming unavailable after %s",
+                    getSerialNumber(), operationDesc);
             return false;
         }
         return true;
