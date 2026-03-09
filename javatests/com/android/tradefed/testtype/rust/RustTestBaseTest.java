@@ -16,15 +16,19 @@
 package com.android.tradefed.testtype.rust;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.testtype.ITestFilterReceiver;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /** Unit tests for {@link RustTestBase}. */
@@ -74,5 +78,30 @@ public class RustTestBaseTest extends RustParserTestBase {
         assertEquals(set0, runner.getIncludeFilters());
         runner.clearExcludeFilters();
         assertEquals(set0, runner.getExcludeFilters());
+    }
+
+    /** Test rust-env option. */
+    @Test
+    public void testRustEnv() throws Exception {
+        RustTestBaseImpl runner = new RustTestBaseImpl();
+        OptionSetter setter = new OptionSetter(runner);
+        String myEnvVar = "MY_VAR";
+        String myEnvVal = "my_val";
+        setter.setOptionValue("rust-env", myEnvVar, myEnvVal);
+
+        File target = new File("/tmp/my_test");
+        List<RustTestBase.Invocation> invocations = runner.generateInvocations(target);
+
+        assertEquals(1, invocations.size());
+        RustTestBase.Invocation invocation = invocations.getFirst();
+
+        boolean foundMyVar = false;
+        for (RustTestBase.EnvPair pair : invocation.env) {
+            if (myEnvVar.equals(pair.key) && myEnvVal.equals(pair.val)) {
+                foundMyVar = true;
+                break;
+            }
+        }
+        assertTrue(foundMyVar);
     }
 }

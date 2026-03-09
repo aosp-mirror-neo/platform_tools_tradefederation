@@ -33,8 +33,10 @@ import com.google.common.base.Strings;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Base class of RustBinaryHostTest and RustBinaryTest */
@@ -67,6 +69,11 @@ public abstract class RustTestBase
             name = "native-test-flag",
             description = "Option string to be passed to the binary when running")
     private List<String> mTestOptions = new ArrayList<>();
+
+    @Option(
+            name = "rust-env",
+            description = "Environment variables to be set for test execution.")
+    private Map<String, String> mRustEnv = new LinkedHashMap<>();
 
     @Option(
             name = "test-timeout",
@@ -265,6 +272,9 @@ public abstract class RustTestBase
             env.add(new EnvPair("RUST_BACKTRACE", "full"));
             if (ldLibraryPath() != null) {
                 env.add(new EnvPair("LD_LIBRARY_PATH", ldLibraryPath()));
+            }
+            for (Map.Entry<String, String> entry : mRustEnv.entrySet()) {
+                env.add(new EnvPair(entry.getKey(), entry.getValue()));
             }
             out.add(new Invocation(command.toArray(new String[0]), env, workingDir));
         }
