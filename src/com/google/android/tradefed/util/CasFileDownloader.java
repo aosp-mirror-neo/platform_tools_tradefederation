@@ -399,6 +399,9 @@ public class CasFileDownloader implements IFileDownloader {
             throws BuildRetrievalError {
         // Partial download fallback directly. CAS downloader only supports download directories
         // with includeFilters and excludeFilters.
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.CAS_PARTIAL_DOWNLOAD_FALLBACK_METRICS,
+                String.format("%s:%d:%d", remoteFilePath, startOffset, size));
         mFallbackDownloader.downloadFile(remoteFilePath, destFile, startOffset, size);
     }
 
