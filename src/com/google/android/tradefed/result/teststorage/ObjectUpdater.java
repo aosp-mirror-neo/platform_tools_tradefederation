@@ -149,7 +149,7 @@ public class ObjectUpdater {
     }
 
     public BuildArtifactMetadata runUpdate(
-            String invocationId, String resourceId, long legacyId, TestArtifactUpdate update)
+            String invocationId, String resourceId, long unusedLegacyId, TestArtifactUpdate update)
             throws IOException {
         IOException exception = null;
         for (int i = 0; i < 3; i++) {
@@ -176,9 +176,9 @@ public class ObjectUpdater {
             try {
                 if (content == null) {
                     return mClient.updateTestArtifact(
-                            invocationId, workUnitId, testResultId, updated, legacyId);
+                            invocationId, workUnitId, testResultId, updated, -1L);
                 } else {
-                    return mClient.updateTestArtifact(updated, legacyId, content);
+                    return mClient.updateTestArtifact(updated, -1L, content);
                 }
             } catch (GoogleJsonResponseException e) {
                 exception = e;

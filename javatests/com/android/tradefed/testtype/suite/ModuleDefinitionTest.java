@@ -296,7 +296,7 @@ public class ModuleDefinitionTest {
 
         @Override
         public Set<String> getExcludeFilters() {
-            return null;
+            return mExcludeFilters;
         }
 
         @Override
@@ -1905,5 +1905,63 @@ public class ModuleDefinitionTest {
                         Mockito.<HashMap<String, Metric>>any());
         verify(mMockListener, times(3))
                 .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+    }
+
+    /** Test that filter digests are still available after run. */
+    @Test
+    public void testRun_filterDigest() throws Exception {
+        final String runName = "baseRun";
+        List<IRemoteTest> testList = new ArrayList<>();
+        // The runner will generates 1 test run with 3 test cases.
+        MultiRunTestObject testObject = new MultiRunTestObject(runName, 3, 1, 0);
+        testObject.addExcludeFilter("baseRun0class#test0");
+        testList.add(testObject);
+        mModule =
+                new ModuleDefinition(
+                        MODULE_NAME,
+                        testList,
+                        mMapDeviceTargetPreparer,
+                        mMultiTargetPrepList,
+                        new Configuration("", ""));
+        mModule.disableAutoRetryReportingTime();
+        mModule.setRetryDecision(mDecision);
+        mModule.getModuleInvocationContext().addAllocatedDevice(DEFAULT_DEVICE_NAME, mMockDevice);
+        mModule.getModuleInvocationContext()
+                .addDeviceBuildInfo(DEFAULT_DEVICE_NAME, mMockBuildInfo);
+        mModuleInfo =
+                TestInformation.newBuilder()
+                        .setInvocationContext(mModule.getModuleInvocationContext())
+                        .build();
+        mModule.setBuild(mMockBuildInfo);
+        mModule.setDevice(mMockDevice);
+        when(mMockPrep.isDisabled()).thenReturn(false);
+        when(mMockPrep.isTearDownDisabled()).thenReturn(false);
+
+        assertEquals(1, mModule.getFilterDigests().size());
+
+        mModule.run(mModuleInfo, mMockListener);
+
+        verify(mMockPrep).setUp(Mockito.eq(mModuleInfo));
+        verify(mMockPrep).tearDown(Mockito.eq(mModuleInfo), Mockito.isNull());
+        verify(mMockListener)
+                .testRunStarted(
+                        Mockito.eq(MODULE_NAME), Mockito.eq(2), Mockito.eq(0), Mockito.anyLong());
+        TestDescription testId1 = new TestDescription(runName + "0class", "test1");
+        verify(mMockListener).testStarted(Mockito.eq(testId1), Mockito.anyLong());
+        verify(mMockListener)
+                .testEnded(
+                        Mockito.eq(testId1),
+                        Mockito.anyLong(),
+                        Mockito.<HashMap<String, Metric>>any());
+        TestDescription testId2 = new TestDescription(runName + "0class", "test2");
+        verify(mMockListener).testStarted(Mockito.eq(testId2), Mockito.anyLong());
+        verify(mMockListener)
+                .testEnded(
+                        Mockito.eq(testId2),
+                        Mockito.anyLong(),
+                        Mockito.<HashMap<String, Metric>>any());
+        verify(mMockListener)
+                .testRunEnded(Mockito.anyLong(), Mockito.<HashMap<String, Metric>>any());
+        assertEquals(1, mModule.getFilterDigests().size());
     }
 }
