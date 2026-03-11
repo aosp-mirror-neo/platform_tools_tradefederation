@@ -327,7 +327,9 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
         List<Integer> activePids = getRunningProcessIds(device);
 
         String fileList = device.executeShellCommand(FIND_COVERAGE_FILES);
-        for (String devicePath : Splitter.on('\n').omitEmptyStrings().split(fileList)) {
+        List<String> filesToDelete = new ArrayList<>();
+        List<String> allFiles = Splitter.on('\n').omitEmptyStrings().splitToList(fileList);
+        for (String devicePath : allFiles) {
             if (devicePath.endsWith(".mm.ec")) {
                 // Check if the process was still running. The file will have the format
                 // /data/misc/trace/jacoco-XXXXX.mm.ec where XXXXX is the process id.
@@ -335,11 +337,61 @@ public final class CodeCoverageCollector extends BaseDeviceMetricCollector
                 int end = devicePath.indexOf('.');
                 int pid = Integer.parseInt(devicePath.substring(start, end));
                 if (!activePids.contains(pid)) {
-                    device.deleteFile(devicePath);
+                    filesToDelete.add(devicePath);
                 }
             } else {
-                device.deleteFile(devicePath);
+                filesToDelete.add(devicePath);
             }
+        }
+        deleteCoverageFiles(device, filesToDelete);
+        CLog.d(
+                "Deleted %d coverage files from the device. %d files were not deleted.",
+                filesToDelete.size(),
+                allFiles.size() - filesToDelete.size());
+    }
+
+    /**
+     * Deletes files on the device using 'rm -rf'.
+     *
+     * <p>If the number of files is large, it will split the deletion into multiple commands to
+     * avoid exceeding the maximum argument length (ARG_MAX).
+     */
+    private void deleteCoverageFiles(ITestDevice device, List<String> filesToDelete)
+            throws DeviceNotAvailableException {
+        if (filesToDelete.isEmpty()) {
+            return;
+        }
+
+        long argMax = getArgMaxBytes(device);
+        List<String> currentBatch = new ArrayList<>();
+        long currentBatchLength = 4; // Length of "-rf "
+
+        for (String file : filesToDelete) {
+            // Check if adding this file (plus a space) would exceed argMax.
+            if (currentBatchLength + file.length() + 1 > argMax && !currentBatch.isEmpty()) {
+                device.executeShellCommand("rm -rf " + String.join(" ", currentBatch));
+                currentBatch.clear();
+                currentBatchLength = 4;
+            }
+            currentBatch.add(file);
+            currentBatchLength += file.length() + 1;
+        }
+
+        if (!currentBatch.isEmpty()) {
+            device.executeShellCommand("rm -rf " + String.join(" ", currentBatch));
+        }
+    }
+
+    private long getArgMaxBytes(ITestDevice device) {
+        try {
+            // Remaining bytes for arguments:
+            // ARG_MAX - env_bytes - (num_env_vars * pointer_size) - safety_margin
+            // safety_margin is 4KB, which is the typical memory page size on Android.
+            String cmd = "echo $(( $(getconf ARG_MAX) - $(env | wc -c) - $(env | wc -l) * 8 - 4096 ))";
+            String result = device.executeShellCommand(cmd);
+            return Long.parseLong(result);
+        } catch (Exception e) {
+            return 120000; // Safe 120KB fallback if command fails
         }
     }
 
