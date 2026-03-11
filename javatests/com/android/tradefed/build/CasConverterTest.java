@@ -39,7 +39,6 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.EnumSet;
 import java.util.Set;
-import java.util.function.Consumer;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -148,7 +147,7 @@ public class CasConverterTest {
         spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
                 .when(spyCasConverter)
-                .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
+                .logCasClientVersion(any(Path.class), any()); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
         CommandResult successResult = new CommandResult();
@@ -195,7 +194,7 @@ public class CasConverterTest {
         spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
                 .when(spyCasConverter)
-                .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
+                .logCasClientVersion(any(Path.class), any()); // Stub internal logging
 
         // Mock the CommandResult for a failed conversion
         CommandResult failureResult = new CommandResult();
@@ -248,7 +247,7 @@ public class CasConverterTest {
         spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
                 .when(spyCasConverter)
-                .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
+                .logCasClientVersion(any(Path.class), any()); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
         CommandResult successResult = new CommandResult();
@@ -296,7 +295,7 @@ public class CasConverterTest {
         spyCasConverter = spy(factoryInstance); // Spy on the instance
         doNothing()
                 .when(spyCasConverter)
-                .logCasClientVersion(any(Path.class), any(Consumer.class)); // Stub internal logging
+                .logCasClientVersion(any(Path.class), any()); // Stub internal logging
 
         // Mock the CommandResult for a successful conversion
         CommandResult successResult = new CommandResult();
