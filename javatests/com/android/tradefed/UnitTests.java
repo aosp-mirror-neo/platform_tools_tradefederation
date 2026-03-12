@@ -468,6 +468,7 @@ import com.android.tradefed.util.FileIdleMonitorTest;
 import com.android.tradefed.util.FileUtilTest;
 import com.android.tradefed.util.FixedByteArrayOutputStreamTest;
 import com.android.tradefed.util.FuseUtilTest;
+import com.android.tradefed.util.gcs.GCSFileDownloaderBaseTest;
 import com.android.tradefed.util.GCSFileDownloaderTest;
 import com.android.tradefed.util.GceRemoteCmdFormatterTest;
 import com.android.tradefed.util.GoogleApiClientUtilTest;
@@ -1139,6 +1140,7 @@ import org.junit.runners.Suite.SuiteClasses;
     FixedByteArrayOutputStreamTest.class,
     FuseUtilTest.class,
     GceRemoteCmdFormatterTest.class,
+    GCSFileDownloaderBaseTest.class,
     GCSFileDownloaderTest.class,
     GoogleApiClientUtilTest.class,
     HprofAllocSiteParserTest.class,

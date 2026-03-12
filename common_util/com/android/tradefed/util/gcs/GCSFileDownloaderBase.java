@@ -243,20 +243,37 @@ public class GCSFileDownloaderBase extends GCSCommon {
      * but these folders doesn't exist (not objects) in gcs. This function work for both cases. But
      * we should not try to download the size 0 folders.
      *
+     * In the case of permission denied, we will assume it is a file to avoid breaking the
+     * execution.
+     *
      * @param bucketName is the gcs bucket name.
      * @param filename is the relative path to the bucket.
      * @return true if the filename is a folder, otherwise false.
      */
     public boolean isRemoteFolder(String bucketName, String filename) throws IOException {
         filename = sanitizeDirectoryName(filename);
-        Objects objects =
-                getStorage()
-                        .objects()
-                        .list(bucketName)
-                        .setPrefix(filename)
-                        .setDelimiter(PATH_SEP)
-                        .setMaxResults(1L)
-                        .execute();
+        Objects objects = null;
+        try {
+            objects =
+                    getStorage()
+                            .objects()
+                            .list(bucketName)
+                            .setPrefix(filename)
+                            .setDelimiter(PATH_SEP)
+                            .setMaxResults(1L)
+                            .execute();
+        } catch (GoogleJsonResponseException e) {
+            if (e.getStatusCode() == 403
+                    && e.getMessage() != null
+                    && e.getMessage().contains("does not have storage.objects.list access")) {
+                CLog.w(
+                        "Missing storage.objects.list permission for gs://%s/%s, assuming it is a"
+                                + " file.",
+                        bucketName, filename);
+                return false;
+            }
+            throw e;
+        }
         if (objects.getItems() != null && !objects.getItems().isEmpty()) {
             // The filename is end with '/', if there are objects use filename as prefix
             // then filename must be a folder.
