@@ -15,16 +15,25 @@
  */
 package com.android.tradefed.targetprep;
 
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+
 import com.android.tradefed.build.DeviceBuildInfo;
 import com.android.tradefed.build.IDeviceBuildInfo;
 import com.android.tradefed.config.Configuration;
+import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.util.CommandResult;
+import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
+import com.android.tradefed.util.IRunUtil;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,15 +50,24 @@ public class MixKernelTargetPreparerTest {
     private IInvocationContext mContext;
     private TestInformation mTestInfo;
     private IDeviceBuildInfo mBuildInfo;
+    private IRunUtil mMockRunUtil;
+    private File mTmpDir;
 
     @Before
-    public void setUp() {
+    public void setUp() throws IOException {
         mContext = new InvocationContext();
         mBuildInfo = new DeviceBuildInfo();
         mBuildInfo.setBuildFlavor("flavor");
         mContext.addDeviceBuildInfo("device", mBuildInfo);
         mContext.addAllocatedDevice("device", Mockito.mock(ITestDevice.class));
         mTestInfo = TestInformation.newBuilder().setInvocationContext(mContext).build();
+        mMockRunUtil = Mockito.mock(IRunUtil.class);
+        mTmpDir = FileUtil.createTempDir("tmp");
+    }
+
+    @After
+    public void tearDown() {
+        FileUtil.recursiveDelete(mTmpDir);
     }
 
     @Test
@@ -167,6 +185,9 @@ public class MixKernelTargetPreparerTest {
         mBuildInfo.setFile("device", deviceImage, "0");
         mBuildInfo.setFile("{kernel}Image.gz", kernelImage, "0");
         mBuildInfo.setTestsDir(testsDir, "0");
+        IConfiguration config = new Configuration("name", "desc");
+        config.setTargetPreparer(new FastbootUpdateBootstrapPreparer());
+        mk.setConfiguration(config);
         try {
             mk.setUp(mTestInfo);
             Assert.fail("Expected TargetSetupError");
@@ -205,6 +226,9 @@ public class MixKernelTargetPreparerTest {
         mBuildInfo.setFile("device", deviceImage, "0");
         mBuildInfo.setFile("{kernel}Image.gz", kernelImage, "0");
         mBuildInfo.setTestsDir(testsDir, "0");
+        IConfiguration config = new Configuration("name", "desc");
+        config.setTargetPreparer(new FastbootUpdateBootstrapPreparer());
+        mk.setConfiguration(config);
         try {
             mk.setUp(mTestInfo);
             Assert.fail("Expected TargetSetupError");
@@ -240,7 +264,9 @@ public class MixKernelTargetPreparerTest {
                         }
                     }
                 };
-        mk.setConfiguration(new Configuration("name", "desc"));
+        IConfiguration config = new Configuration("name", "desc");
+        config.setTargetPreparer(new FastbootUpdateBootstrapPreparer());
+        mk.setConfiguration(config);
         File deviceImage = FileUtil.createTempFile("device-img-12345", "zip");
         File kernelImage = FileUtil.createTempFile("dtbo", "img");
         File testsDir = FileUtil.createTempDir("testsdir");
@@ -283,7 +309,9 @@ public class MixKernelTargetPreparerTest {
                         }
                     }
                 };
-        mk.setConfiguration(new Configuration("name", "desc"));
+        IConfiguration config = new Configuration("name", "desc");
+        config.setTargetPreparer(new FastbootUpdateBootstrapPreparer());
+        mk.setConfiguration(config);
         File deviceImage = FileUtil.createTempFile("device-img-12345", "zip");
         File kernelImage = FileUtil.createTempFile("dtbo", "img");
         File toolDir = FileUtil.createTempDir("tooldir");
@@ -304,7 +332,9 @@ public class MixKernelTargetPreparerTest {
     @Test
     public void testSetNewDeviceImage() throws Exception {
         MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
-        mk.setConfiguration(new Configuration("name", "desc"));
+        IConfiguration config = new Configuration("name", "desc");
+        config.setTargetPreparer(new FastbootUpdateBootstrapPreparer());
+        mk.setConfiguration(config);
         // Create a device image in lc cache
         File deviceImageInLcCache = FileUtil.createTempFile("device-img-12345", ".zip");
         FileUtil.writeToFile("old_image_12345", deviceImageInLcCache);
@@ -384,7 +414,7 @@ public class MixKernelTargetPreparerTest {
     @Test
     public void testParseKernelVersion() throws Exception {
         MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
-        String versionString = "5.10.100-android12-9-g1234567890ab-ab1234567-4k";
+        String versionString = "Linux version 5.10.100-android12-9-g1234567890ab-ab1234567-4k";
         String[] version = mk.parseKernelVersion("source", versionString);
         Assert.assertEquals("android12-5.10", version[0]);
         Assert.assertEquals("100", version[1]);
@@ -392,9 +422,138 @@ public class MixKernelTargetPreparerTest {
     }
 
     @Test
+    public void testParseKernelVersion_Android16_4k() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String versionString = " 6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k";
+        String[] version = mk.parseKernelVersion("source", versionString);
+        Assert.assertEquals("android16-6.12", version[0]);
+        Assert.assertEquals("63", version[1]);
+        Assert.assertEquals("4k", version[2]);
+    }
+
+    @Test
+    public void testParseKernelVersion_Android15_16k() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String versionString = " 6.6.10-android15-1-ab12345678";
+        String[] version = mk.parseKernelVersion("source", versionString);
+        Assert.assertEquals("android15-6.6", version[0]);
+        Assert.assertEquals("10", version[1]);
+        Assert.assertEquals("16k", version[2]);
+    }
+
+    @Test
+    public void testParseKernelVersion_Failure() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        String versionString = "invalid-kernel-string";
+        String[] version = mk.parseKernelVersion("source", versionString);
+        Assert.assertNull(version);
+    }
+
+    @Test
+    public void testGetKernelVersionFromImage() throws Exception {
+        MixKernelTargetPreparer mk =
+                new MixKernelTargetPreparer() {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        File image = new File(mTmpDir, "Image");
+        FileUtil.writeToFile("some content", image);
+        CommandResult result = new CommandResult(CommandStatus.SUCCESS);
+        result.setStdout("Linux version 6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
+        Mockito.when(
+                        mMockRunUtil.runTimedCmd(
+                                anyLong(),
+                                eq("/bin/bash"),
+                                eq("-c"),
+                                eq(
+                                        String.format(
+                                                "strings %s | grep -E -o -m 1 \"Linux version"
+                                                    + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                                image.getAbsolutePath()))))
+                .thenReturn(result);
+
+        String[] version = mk.getKernelVersionFromImage(image);
+        Assert.assertNotNull(version);
+        Assert.assertEquals("android16-6.12", version[0]);
+        Assert.assertEquals("63", version[1]);
+        Assert.assertEquals("4k", version[2]);
+    }
+
+    @Test
+    public void testGetKernelVersionFromImage_Fallback() throws Exception {
+        MixKernelTargetPreparer mk =
+                new MixKernelTargetPreparer() {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        File image = new File(mTmpDir, "Image");
+        FileUtil.writeToFile("some content", image);
+
+        // First attempt fails
+        CommandResult result1 = new CommandResult(CommandStatus.FAILED);
+        Mockito.when(
+                        mMockRunUtil.runTimedCmd(
+                                anyLong(),
+                                eq("/bin/bash"),
+                                eq("-c"),
+                                eq(
+                                        String.format(
+                                                "strings %s | grep -E -o -m 1 \"Linux version"
+                                                    + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                                image.getAbsolutePath()))))
+                .thenReturn(result1);
+
+        // Second attempt succeeds
+        CommandResult result2 = new CommandResult(CommandStatus.SUCCESS);
+        result2.setStdout("6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
+        Mockito.when(
+                        mMockRunUtil.runTimedCmd(
+                                anyLong(),
+                                eq("/bin/bash"),
+                                eq("-c"),
+                                eq(
+                                        String.format(
+                                                "strings %s | grep -E -o -m 1 \""
+                                                    + "[0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                                image.getAbsolutePath()))))
+                .thenReturn(result2);
+
+        String[] version = mk.getKernelVersionFromImage(image);
+        Assert.assertNotNull(version);
+        Assert.assertEquals("android16-6.12", version[0]);
+        Assert.assertEquals("63", version[1]);
+        Assert.assertEquals("4k", version[2]);
+    }
+
+    @Test
+    public void testGetKernelVersionFromImage_Failure() throws Exception {
+        MixKernelTargetPreparer mk =
+                new MixKernelTargetPreparer() {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        File image = new File(mTmpDir, "Image");
+        FileUtil.writeToFile("some content", image);
+
+        // Both attempts fail
+        CommandResult result = new CommandResult(CommandStatus.FAILED);
+        Mockito.when(mMockRunUtil.runTimedCmd(anyLong(), eq("/bin/bash"), eq("-c"), anyString()))
+                .thenReturn(result);
+
+        String[] version = mk.getKernelVersionFromImage(image);
+        Assert.assertNull(version);
+    }
+
+    @Test
     public void testParseKernelVersion_mainline() throws Exception {
         MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
-        String versionString = "6.1.0-mainline-1-g1234567890ab-ab1234567";
+        String versionString = " 6.1.0-mainline-1-g1234567890ab-ab1234567";
         String[] version = mk.parseKernelVersion("source", versionString);
         Assert.assertEquals("android-mainline", version[0]);
         Assert.assertEquals("0", version[1]);
@@ -403,27 +562,28 @@ public class MixKernelTargetPreparerTest {
 
     @Test
     public void testValidateKernelVersion() throws Exception {
+        MixKernelTargetPreparer mk = new MixKernelTargetPreparer();
+        IConfiguration config = new Configuration("name", "desc");
+        config.setTargetPreparer(new FastbootUpdateBootstrapPreparer());
+        mk.setConfiguration(config);
+        OptionSetter setter = new OptionSetter(mk);
+        File tmpDeviceDir = FileUtil.createTempDir("device_dir");
+        File deviceImg = new File(tmpDeviceDir, "device-img-12345.zip");
+        FileUtil.writeToFile("device_image_12345", deviceImg);
+        mBuildInfo.setFile("device", tmpDeviceDir, "0");
         File tmpKernelDir = FileUtil.createTempDir("kernel_dir");
+        File kernelImg = new File(tmpKernelDir, "Image");
+        FileUtil.writeToFile(" 5.10.100-android12-9-ab1234567-4k", kernelImg);
+        mBuildInfo.setFile("kernel", tmpKernelDir, "0");
         File tmpGkiDir = FileUtil.createTempDir("gki_dir");
         File bootImg = new File(tmpGkiDir, "boot.img");
-        File kernelImg = new File(tmpKernelDir, "Image");
-        FileUtil.writeToFile("5.10.100-android12-9-ab1234567-4k", bootImg);
-        FileUtil.writeToFile("5.10.100-android12-9-ab1234567-4k", kernelImg);
-
-        MixKernelTargetPreparer mk =
-                new MixKernelTargetPreparer() {
-                    @Override
-                    protected String[] getKernelVersionFromImage(File image) {
-                        if (image.getName().contains("boot") || image.getName().contains("Image")) {
-                            return new String[] {"android12-5.10", "100", "4k"};
-                        }
-                        return null;
-                    }
-                };
+        FileUtil.writeToFile("Linux version 5.10.100-android12-9-ab1234567-4k", bootImg);
+        mBuildInfo.setFile("gki", tmpGkiDir, "0");
 
         try {
             mk.validateKernelVersion(tmpKernelDir, tmpGkiDir, Mockito.mock(ITestDevice.class));
         } finally {
+            FileUtil.recursiveDelete(tmpDeviceDir);
             FileUtil.recursiveDelete(tmpKernelDir);
             FileUtil.recursiveDelete(tmpGkiDir);
         }
