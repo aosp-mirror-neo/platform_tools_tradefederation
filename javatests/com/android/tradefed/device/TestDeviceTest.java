@@ -111,6 +111,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
@@ -147,6 +148,11 @@ public class TestDeviceTest {
 
     /** A {@link TestDevice} that is suitable for running tests against */
     private class TestableTestDevice extends TestDevice {
+
+        private Function<RebootDeviceAction, String> mDoAdbRebootCallback;
+
+        private @Nullable String mRebootReason;
+
         public TestableTestDevice() {
             super(mMockIDevice, mMockStateMonitor, mMockDvcMonitor);
         }
@@ -162,8 +168,24 @@ public class TestDeviceTest {
         }
 
         @Override
-        void doReboot(RebootMode rebootMode, @Nullable final String reason)
-                throws DeviceNotAvailableException, UnsupportedOperationException {}
+        void doReboot(RebootMode rebootMode, @Nullable String reason)
+                throws DeviceNotAvailableException, UnsupportedOperationException {
+            CLog.i("doReboot(): rebootMode=%s, reason=%s", rebootMode, reason);
+            mRebootReason = reason;
+        }
+
+        /** Sets behavior of {@link #doAdbReboot(RebootDeviceAction)}. */
+        private void setDoAdbRebootCallback(Function<RebootDeviceAction, String> callback) {
+            mDoAdbRebootCallback = callback;
+        }
+
+        @Override
+        String doAdbReboot(RebootDeviceAction rebootAction) throws DeviceNotAvailableException {
+            if (mDoAdbRebootCallback == null) {
+                throw new IllegalStateException("setDoAdbRebootCallback() not called");
+            }
+            return mDoAdbRebootCallback.apply(rebootAction);
+        }
 
         @Override
         IHostOptions getHostOptions() {
@@ -2348,9 +2370,61 @@ public class TestDeviceTest {
     /** Test normal success case for {@link TestDevice#reboot()} */
     @Test
     public void testReboot() throws Exception {
+        TestableTestDevice testableDevice = (TestableTestDevice) mTestDevice;
         setRebootExpectations();
 
-        mTestDevice.reboot();
+        testableDevice.reboot();
+
+        assertWithMessage("reboot reason").that(testableDevice.mRebootReason).isNull();
+        verifyRebootExpectations();
+    }
+
+    /** Test normal success case for {@link TestDevice#reboot(String))} */
+    @Test
+    public void testReboot_withReason() throws Exception {
+        TestableTestDevice testableDevice = (TestableTestDevice) mTestDevice;
+        setRebootExpectations();
+
+        String reason = "To get to the other side faster";
+
+        testableDevice.reboot(reason);
+
+        assertWithMessage("reboot reason").that(testableDevice.mRebootReason).isEqualTo(reason);
+        verifyRebootExpectations();
+    }
+
+    /** Test invalid arg case for {@link TestDevice#reboot(String, String)} */
+    @Test
+    public void testReboot_withNullCommand() throws Exception {
+        assertThrows(NullPointerException.class, () -> mTestDevice.reboot(null, null));
+    }
+
+    /** Test normal success case for {@link TestDevice#reboot(String, String)} */
+    @Test
+    public void testRebootWithCommand() throws Exception {
+        TestableTestDevice testableDevice = (TestableTestDevice) mTestDevice;
+        setRebootExpectations();
+        String cmd = "Dude, where is my car?"; // make sure it has spaces
+        String reason = "able";
+        String response = "sweet";
+
+        testableDevice.setDoAdbRebootCallback(
+                action -> {
+                    String[] adbCmd = action.getCmd();
+                    assertWithMessage(
+                                    "Command passed to adb (full command: %s))",
+                                    Arrays.toString(adbCmd))
+                            .that(adbCmd[adbCmd.length - 1])
+                            .isEqualTo(cmd);
+                    assertWithMessage("reason").that(action.getReason()).isEqualTo(reason);
+                    return response;
+                });
+
+        String result = mTestDevice.reboot(cmd, reason);
+
+        assertWithMessage("result of reboot").that(result).isEqualTo(response);
+        // Reason should be part of RebootDeviceAction
+        assertWithMessage("reboot reason").that(testableDevice.mRebootReason).isNull();
         verifyRebootExpectations();
     }
 

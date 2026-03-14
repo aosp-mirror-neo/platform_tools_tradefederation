@@ -1270,12 +1270,30 @@ public interface INativeDevice {
      *
      * <p>Blocks until device becomes available.
      *
-     * <p>Last reboot reason can be obtained by querying {@code sys.boot.reason} propety.
+     * <p>Last reboot reason can be obtained by querying {@code sys.boot.reason} property.
      *
      * @param reason a reason for this reboot, or {@code null} if no reason is specified.
      * @throws DeviceNotAvailableException if device is not available after reboot
      */
     public void reboot(@Nullable String reason) throws DeviceNotAvailableException;
+
+    /**
+     * Reboots the device using the given {@code command}.
+     *
+     * <p>Blocks until device becomes available.
+     *
+     * <p>Last reboot reason can be obtained by querying {@code sys.boot.reason} property.
+     *
+     * @param command command passed to `adb`. Notice that it's passed "as-is", so it's up to the
+     *     caller to provide the proper quotation if needed (especially if it contains multiple
+     *     parts separated by space).
+     * @param reason a reason for this reboot, or {@code null} if no reason is specified.
+     * @throws DeviceNotAvailableException if device is not available after reboot
+     */
+    public default String reboot(String command, @Nullable String reason)
+            throws DeviceNotAvailableException {
+        throw new UnsupportedOperationException("NOT IMPLEMENTED");
+    }
 
     /**
      * Reboots the device into fastbootd mode.

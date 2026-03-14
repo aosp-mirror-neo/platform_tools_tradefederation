@@ -116,6 +116,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
@@ -562,7 +563,7 @@ public class NativeDevice
     }
 
     /** {@link DeviceAction} for rebooting a device. */
-    protected class RebootDeviceAction extends AdbShellAction {
+    protected final class RebootDeviceAction extends AdbShellAction {
 
         private final RebootMode mRebootMode;
         @Nullable private final String mReason;
@@ -588,7 +589,36 @@ public class NativeDevice
         // TODO: return more detail AdbCommandRejectedException instead of IOException only,
         @Override
         public boolean run() throws TimeoutException, IOException, DeviceNotAvailableException {
+            CLog.i("Rebooting device with %s. Reason: %s", Arrays.toString(getCmd()), mReason);
             return super.run();
+        }
+
+        private String getResult() {
+            // TODO: might need better logic to handle stdout / stderr
+            return mResult == null ? "" : mResult.getStdout();
+        }
+
+        @VisibleForTesting
+        String[] getCmd() {
+            return super.mCmd;
+        }
+
+        @VisibleForTesting
+        String getReason() {
+            return mReason;
+        }
+
+        @Override
+        public String toString() {
+            return "RebootDeviceAction [rebootMode="
+                    + mRebootMode
+                    + ", reason="
+                    + mReason
+                    + ", isFastbootOrBootloader="
+                    + isFastbootOrBootloader()
+                    + ", cmd="
+                    + Arrays.toString(getCmd())
+                    + "]";
         }
     }
 
@@ -4123,17 +4153,18 @@ public class NativeDevice
                 || TestDeviceState.FASTBOOTD.equals(getDeviceState());
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void reboot() throws DeviceNotAvailableException {
-        reboot(null);
+        reboot(/* reason= */ null);
     }
 
-    /** {@inheritDoc} */
     @Override
     public void reboot(@Nullable String reason) throws DeviceNotAvailableException {
+        // TODO(b/450378054): refactor to call:
+        //
+        //   reboot((RebootDeviceAction) null, reason);
+        //
+        // (it will be done in a separate CL to make it easier to revert in case of breakages)
         if (isInRebootCallback()) {
             CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot");
             return;
@@ -4157,6 +4188,43 @@ public class NativeDevice
         postBootSetup();
         postBootWifiSetup();
         notifyRebootEnded();
+    }
+
+    @Override
+    public String reboot(String command, @Nullable String reason)
+            throws DeviceNotAvailableException {
+        Objects.requireNonNull(command, "command cannot be null");
+        return reboot(createRebootDeviceAction(command, reason), /* reason= */ null);
+    }
+
+    private String reboot(@Nullable RebootDeviceAction rebootAction, @Nullable String reason)
+            throws DeviceNotAvailableException {
+        if (isInRebootCallback()) {
+            CLog.d("'%s' action is disabled during reboot callback. Ignoring.", "Reboot");
+            // TODO: better API than returning just String / ""
+            return "";
+        }
+        notifyRebootStarted();
+        String result = internalRebootUntilOnline(rebootAction, reason);
+
+        RecoveryMode cachedRecoveryMode = getRecoveryMode();
+        setRecoveryMode(RecoveryMode.ONLINE);
+
+        if (isEncryptionSupported() && isDeviceEncrypted()) {
+            unlockDevice();
+        }
+
+        setRecoveryMode(cachedRecoveryMode);
+
+        try (CloseableTraceScope ignored =
+                new CloseableTraceScope("reboot_waitForDeviceAvailable")) {
+            waitForDeviceAvailable(mOptions.getRebootTimeout());
+        }
+        postBootSetup();
+        postBootWifiSetup();
+        notifyRebootEnded();
+
+        return result;
     }
 
     @Override
@@ -4221,6 +4289,13 @@ public class NativeDevice
 
     private void internalRebootUntilOnline(@Nullable String reason)
             throws DeviceNotAvailableException {
+        CLog.v("internalRebootUntilOnline(%s)", reason);
+        // TODO(b/450378054): refactor to call:
+        //
+        //   internalRebootUntilOnline(/* rebootAction= */ null, reason);
+        //   reboot((RebootDeviceAction) null, reason);
+        //
+        // (it will be done in a separate CL to make it easier to revert in case of breakages)
         long rebootStart = System.currentTimeMillis();
         try (CloseableTraceScope ignored = new CloseableTraceScope("rebootUntilOnline")) {
             // Force wait to commit the image before the reboot
@@ -4233,6 +4308,37 @@ public class NativeDevice
             waitForDeviceOnline();
             enableAdbRoot();
             setRecoveryMode(cachedRecoveryMode);
+        } finally {
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.ADB_REBOOT_TIME, System.currentTimeMillis() - rebootStart);
+            InvocationMetricLogger.addInvocationMetrics(
+                    InvocationMetricKey.ADB_REBOOT_ROUTINE_COUNT, 1);
+        }
+    }
+
+    private String internalRebootUntilOnline(
+            @Nullable RebootDeviceAction rebootAction, @Nullable String reason)
+            throws DeviceNotAvailableException {
+        CLog.v("internalRebootUntilOnline: action=%s, reason=%s", rebootAction, reason);
+
+        long rebootStart = System.currentTimeMillis();
+        try (CloseableTraceScope ignored = new CloseableTraceScope("rebootUntilOnline")) {
+            // Force wait to commit the image before the reboot
+            waitForSnapuserd(SnapuserdWaitPhase.BLOCK_BEFORE_RELEASING);
+            // Invalidate cache before reboots
+            mPropertiesCache.invalidateAll();
+            String result = "";
+            if (rebootAction == null) {
+                doReboot(RebootMode.REBOOT_FULL, reason);
+            } else {
+                result = doAdbReboot(rebootAction);
+            }
+            RecoveryMode cachedRecoveryMode = getRecoveryMode();
+            setRecoveryMode(RecoveryMode.ONLINE);
+            waitForDeviceOnline();
+            enableAdbRoot();
+            setRecoveryMode(cachedRecoveryMode);
+            return result;
         } finally {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.ADB_REBOOT_TIME, System.currentTimeMillis() - rebootStart);
@@ -4438,9 +4544,22 @@ public class NativeDevice
      */
     protected void doAdbReboot(RebootMode rebootMode, @Nullable final String reason)
             throws DeviceNotAvailableException {
+        // TODO(b/450378054): refactor to call:
+        //
+        //   var rebootAction = createRebootDeviceAction(rebootMode, reason);
+        //   doAdbReboot(rebootAction);
+        //
+        // (it will be done in a separate CL to make it easier to revert in case of breakages)
         getConnection().notifyAdbRebootCalled();
         DeviceAction rebootAction = createRebootDeviceAction(rebootMode, reason);
         performDeviceAction("reboot", rebootAction, MAX_RETRY_ATTEMPTS);
+    }
+
+    @VisibleForTesting
+    String doAdbReboot(RebootDeviceAction rebootAction) throws DeviceNotAvailableException {
+        getConnection().notifyAdbRebootCalled();
+        performDeviceAction("reboot", rebootAction, MAX_RETRY_ATTEMPTS);
+        return rebootAction.getResult();
     }
 
     /**
@@ -4463,6 +4582,26 @@ public class NativeDevice
                 null,
                 null,
                 null,
+                TimeUnit.MILLISECONDS.toMillis(getCommandTimeout()));
+    }
+
+    @VisibleForTesting
+    RebootDeviceAction createRebootDeviceAction(String adbRebootCommand, @Nullable String reason) {
+        // NOTE: must use oldShellCommand=true, otherwise buildAdbShellCommand would try to tokenize
+        // the adbRebootCommand, which could cause issues - we better assume the caller is properly
+        // formatting / quoting the command if neededed
+        String[] fullCmd =
+                buildAdbShellCommand(
+                        adbRebootCommand,
+                        /* forceExitStatusDetection= */ false,
+                        /* oldShellCommand= */ true);
+        return new RebootDeviceAction(
+                RebootMode.REBOOT_FULL,
+                reason,
+                fullCmd,
+                /* pipeAsInput= */ null,
+                /* pipeToOutput= */ null,
+                /* pipeToError= */ null,
                 TimeUnit.MILLISECONDS.toMillis(getCommandTimeout()));
     }
 
