@@ -175,6 +175,13 @@ public class InstrumentationTestTest {
         mTestInfo = TestInformation.newBuilder().setInvocationContext(mContext).build();
     }
 
+    /** Tests that the retry attempt number is correctly passed as an instrumentation argument. */
+    @Test
+    public void testSetRetryAttemptNumber() {
+        mInstrumentationTest.setRetryAttemptNumber(2);
+        assertEquals("2", mInstrumentationTest.getInstrumentationArg("retry_attempt"));
+    }
+
     /** Test normal run scenario. */
     @Test
     public void testRun() throws DeviceNotAvailableException {
