@@ -31,6 +31,7 @@ import com.android.tradefed.util.ArrayUtil;
 import com.android.tradefed.util.CommandResult;
 import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FileUtil;
+import com.android.tradefed.util.IRunUtil;
 import com.android.tradefed.util.RunUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -440,16 +441,36 @@ public class MixKernelTargetPreparer extends BaseTargetPreparer
     protected String[] getKernelVersionFromImage(File image) {
         String cmd =
                 String.format(
-                        "strings %s | grep -E \"(android|mainline).*-ab\" | tail -n 1",
+                        "strings %s | grep -E -o -m 1 \"Linux version"
+                                + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
                         image.getAbsolutePath());
-        CommandResult result = RunUtil.getDefault().runTimedCmd(300000L, "/bin/bash", "-c", cmd);
+        CommandResult result = getRunUtil().runTimedCmd(300000L, "/bin/bash", "-c", cmd);
         if (!CommandStatus.SUCCESS.equals(result.getStatus())
                 || Strings.isNullOrEmpty(result.getStdout())) {
-            CLog.w("Could not extract kernel version from %s", image.getAbsolutePath());
-            return null;
+            cmd =
+                    String.format(
+                            "strings %s | grep -E -o -m 1 \""
+                                    + "[0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                            image.getAbsolutePath());
+            result = getRunUtil().runTimedCmd(300000L, "/bin/bash", "-c", cmd);
+            if (!CommandStatus.SUCCESS.equals(result.getStatus())
+                    || Strings.isNullOrEmpty(result.getStdout())) {
+                CLog.w("Could not extract kernel version from %s", image.getAbsolutePath());
+                return null;
+            }
         }
 
         return parseKernelVersion(image.getAbsolutePath(), result.getStdout().trim());
+    }
+
+    /**
+     * Get the {@link IRunUtil} instance to use.
+     *
+     * @return the {@link IRunUtil} to use
+     */
+    @VisibleForTesting
+    protected IRunUtil getRunUtil() {
+        return RunUtil.getDefault();
     }
 
     @VisibleForTesting

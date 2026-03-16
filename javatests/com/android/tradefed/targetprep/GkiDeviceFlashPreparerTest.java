@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.matches;
 import static org.mockito.Mockito.doAnswer;
@@ -255,6 +256,14 @@ public class GkiDeviceFlashPreparerTest {
     }
 
     @Test
+    public void testParseKernelVersion_Android12() {
+        String kernelString = "5.10.100-android12-9-ab1234567-4k";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android12-5.10", "100", "4k"}, version);
+    }
+
+    @Test
     public void testParseKernelVersion_Android15_16k() {
         String kernelString = "6.6.10-android15-1-ab12345678";
         String[] version = mPreparer.parseKernelVersion("source", kernelString);
@@ -262,11 +271,114 @@ public class GkiDeviceFlashPreparerTest {
         assertArrayEquals(new String[] {"android15-6.6", "10", "16k"}, version);
     }
 
+    @Test
+    public void testParseKernelVersion_Android15_4k() {
+        String kernelString = "6.6.10-android15-1-ab12345678-4k";
+        String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android15-6.6", "10", "4k"}, version);
+    }
+
     /* Test parseKernelVersion failure */
     @Test
     public void testParseKernelVersion_Failure() {
         String kernelString = "invalid-kernel-string";
         String[] version = mPreparer.parseKernelVersion("source", kernelString);
+        assertNull(version);
+    }
+
+    /* Test getKernelVersionFromImage */
+    @Test
+    public void testGetKernelVersionFromImage() throws Exception {
+        GkiDeviceFlashPreparer preparer =
+                new GkiDeviceFlashPreparer() {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        File image = new File(mTmpDir, "Image");
+        FileUtil.writeToFile("some content", image);
+        CommandResult result = new CommandResult(CommandStatus.SUCCESS);
+        result.setStdout("Linux version 6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(),
+                        eq("/bin/bash"),
+                        eq("-c"),
+                        eq(
+                                String.format(
+                                        "strings %s | grep -E -o -m 1 \"Linux version"
+                                            + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                        image.getAbsolutePath()))))
+                .thenReturn(result);
+
+        String[] version = preparer.getKernelVersionFromImage(image);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android16-6.12", "63", "4k"}, version);
+    }
+
+    @Test
+    public void testGetKernelVersionFromImage_Fallback() throws Exception {
+        GkiDeviceFlashPreparer preparer =
+                new GkiDeviceFlashPreparer() {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        File image = new File(mTmpDir, "Image");
+        FileUtil.writeToFile("some content", image);
+
+        // First attempt fails
+        CommandResult result1 = new CommandResult(CommandStatus.FAILED);
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(),
+                        eq("/bin/bash"),
+                        eq("-c"),
+                        eq(
+                                String.format(
+                                        "strings %s | grep -E -o -m 1 \"Linux version"
+                                            + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                        image.getAbsolutePath()))))
+                .thenReturn(result1);
+
+        // Second attempt succeeds
+        CommandResult result2 = new CommandResult(CommandStatus.SUCCESS);
+        result2.setStdout("6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
+        when(mMockRunUtil.runTimedCmd(
+                        anyLong(),
+                        eq("/bin/bash"),
+                        eq("-c"),
+                        eq(
+                                String.format(
+                                        "strings %s | grep -E -o -m 1 \""
+                                            + "[0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                        image.getAbsolutePath()))))
+                .thenReturn(result2);
+
+        String[] version = preparer.getKernelVersionFromImage(image);
+        assertNotNull(version);
+        assertArrayEquals(new String[] {"android16-6.12", "63", "4k"}, version);
+    }
+
+    @Test
+    public void testGetKernelVersionFromImage_Failure() throws Exception {
+        GkiDeviceFlashPreparer preparer =
+                new GkiDeviceFlashPreparer() {
+                    @Override
+                    protected IRunUtil getRunUtil() {
+                        return mMockRunUtil;
+                    }
+                };
+        File image = new File(mTmpDir, "Image");
+        FileUtil.writeToFile("some content", image);
+
+        // Both attempts fail
+        CommandResult result = new CommandResult(CommandStatus.FAILED);
+        when(mMockRunUtil.runTimedCmd(anyLong(), eq("/bin/bash"), eq("-c"), anyString()))
+                .thenReturn(result);
+
+        String[] version = preparer.getKernelVersionFromImage(image);
         assertNull(version);
     }
 
