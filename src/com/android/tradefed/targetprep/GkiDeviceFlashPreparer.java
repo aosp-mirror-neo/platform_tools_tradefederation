@@ -733,27 +733,16 @@ public class GkiDeviceFlashPreparer extends BaseTargetPreparer implements ILabPr
     @VisibleForTesting
     protected String[] getKernelVersionFromImage(File image) {
         // Android kernel version pattern in the boot/vendor_boot/system_dlkm/vendor_dlkm image
-        // files
-        // For example: 6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k
+        // files. For example: 6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k
         String cmd =
                 String.format(
-                        "strings %s | grep -E -o -m 1 \"Linux version"
-                                + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                        "strings %s | grep -E -o -m 1"
+                            + " '[0-9].[0-9]+.[0-9]+-(android|mainline).*-ab.*'",
                         image.getAbsolutePath());
         CommandResult result = getRunUtil().runTimedCmd(300000L, "/bin/bash", "-c", cmd);
         if (!CommandStatus.SUCCESS.equals(result.getStatus())
                 || Strings.isNullOrEmpty(result.getStdout())) {
-            cmd =
-                    String.format(
-                            "strings %s | grep -E -o -m 1 \""
-                                    + "[0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
-                            image.getAbsolutePath());
-            result = getRunUtil().runTimedCmd(300000L, "/bin/bash", "-c", cmd);
-            if (!CommandStatus.SUCCESS.equals(result.getStatus())
-                    || Strings.isNullOrEmpty(result.getStdout())) {
-                CLog.w("Could not extract kernel version from %s", image.getAbsolutePath());
-                return null;
-            }
+            return null;
         }
 
         return parseKernelVersion(image.getAbsolutePath(), result.getStdout().trim());
