@@ -196,6 +196,12 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
                     "Enable conversion of Perfetto v2 metrics to Crystalball dimensional metrics.")
     private boolean mEnableDimensionalMetrics = false;
 
+    @Option(
+            name = "perfetto-skip-message-field",
+            description =
+                    "List of proto field names (e.g. 'package') to completely skip during parsing.")
+    private Set<String> mPerfettoSkipMessageFields = new HashSet<>();
+
     // Matches 1.73, 1.73E+2
     private Pattern mNumberWithExponentPattern =
             Pattern.compile("[-+]?[0-9]*[\\.]?[0-9]+([eE][-+]?[0-9]+)?");
@@ -617,6 +623,10 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
 
         // TODO(b/15014555): Cleanup the parsing logic.
         for (Entry<FieldDescriptor, Object> entry : fields.entrySet()) {
+            // Skip the proto message field if it is in the skip list.
+            if (mPerfettoSkipMessageFields.contains(entry.getKey().toString())) {
+                continue;
+            }
             if (!(entry.getValue() instanceof Message) && !(entry.getValue() instanceof List)) {
                 if (isNumeric(entry.getValue().toString())) {
                     // Check if the current field has to be used as prefix for other fields
@@ -709,6 +719,10 @@ public class PerfettoGenericPostProcessor extends BasePostProcessor {
         // Used to cache the message prefix.
         String innerMessagePrefix = "";
         for (Entry<FieldDescriptor, Object> entry : fields.entrySet()) {
+            // Skip the proto message field if it is in the skip list.
+            if (mPerfettoSkipMessageFields.contains(entry.getKey().toString())) {
+                continue;
+            }
             if (entry.getValue() instanceof Message) {
                 Map<String, Metric.Builder> messageMetrics =
                         convertPerfettoProtoMessage((Message) entry.getValue());
