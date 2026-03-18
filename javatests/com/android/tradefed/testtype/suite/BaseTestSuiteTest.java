@@ -842,6 +842,22 @@ public class BaseTestSuiteTest {
         assertEquals("arm64-v8a CtsGestureTestCases", sortedModuleIds.get(3));
     }
 
+    @Test
+    public void testFormatFilters() {
+        java.util.Map<String, java.util.LinkedHashSet<SuiteTestFilter>> filtersMap =
+                new java.util.LinkedHashMap<>();
+        java.util.LinkedHashSet<SuiteTestFilter> filters = new java.util.LinkedHashSet<>();
+        filters.add(new SuiteTestFilter("x86_64", "module1", null));
+        filtersMap.put("module1", filters);
+
+        String result = mRunner.formatFilters(filtersMap);
+
+        // Verify that it contains open brace and newline AND indent
+        assertTrue(result.startsWith("{\n  "));
+        assertTrue(result.contains("module1=[x86_64 module1]"));
+        assertTrue(result.endsWith("\n}"));
+    }
+
     private void createConfig(File tmpDir, String name) throws IOException {
         File moduleConfig = new File(tmpDir, name);
         FileUtil.writeToFile("<configuration></configuration>", moduleConfig);

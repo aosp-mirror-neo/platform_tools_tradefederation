@@ -300,61 +300,17 @@ public class GkiDeviceFlashPreparerTest {
         File image = new File(mTmpDir, "Image");
         FileUtil.writeToFile("some content", image);
         CommandResult result = new CommandResult(CommandStatus.SUCCESS);
-        result.setStdout("Linux version 6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
+        result.setStdout("6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
         when(mMockRunUtil.runTimedCmd(
                         anyLong(),
                         eq("/bin/bash"),
                         eq("-c"),
                         eq(
                                 String.format(
-                                        "strings %s | grep -E -o -m 1 \"Linux version"
-                                            + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
+                                        "strings %s | grep -E -o -m 1"
+                                            + " '[0-9].[0-9]+.[0-9]+-(android|mainline).*-ab.*'",
                                         image.getAbsolutePath()))))
                 .thenReturn(result);
-
-        String[] version = preparer.getKernelVersionFromImage(image);
-        assertNotNull(version);
-        assertArrayEquals(new String[] {"android16-6.12", "63", "4k"}, version);
-    }
-
-    @Test
-    public void testGetKernelVersionFromImage_Fallback() throws Exception {
-        GkiDeviceFlashPreparer preparer =
-                new GkiDeviceFlashPreparer() {
-                    @Override
-                    protected IRunUtil getRunUtil() {
-                        return mMockRunUtil;
-                    }
-                };
-        File image = new File(mTmpDir, "Image");
-        FileUtil.writeToFile("some content", image);
-
-        // First attempt fails
-        CommandResult result1 = new CommandResult(CommandStatus.FAILED);
-        when(mMockRunUtil.runTimedCmd(
-                        anyLong(),
-                        eq("/bin/bash"),
-                        eq("-c"),
-                        eq(
-                                String.format(
-                                        "strings %s | grep -E -o -m 1 \"Linux version"
-                                            + " [0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
-                                        image.getAbsolutePath()))))
-                .thenReturn(result1);
-
-        // Second attempt succeeds
-        CommandResult result2 = new CommandResult(CommandStatus.SUCCESS);
-        result2.setStdout("6.12.63-android16-6-gf2758f0da7bc-ab14892992-4k\n");
-        when(mMockRunUtil.runTimedCmd(
-                        anyLong(),
-                        eq("/bin/bash"),
-                        eq("-c"),
-                        eq(
-                                String.format(
-                                        "strings %s | grep -E -o -m 1 \""
-                                            + "[0-9]+.[0-9]+.[0-9]+-(android|mainline).*-ab.*\"",
-                                        image.getAbsolutePath()))))
-                .thenReturn(result2);
 
         String[] version = preparer.getKernelVersionFromImage(image);
         assertNotNull(version);

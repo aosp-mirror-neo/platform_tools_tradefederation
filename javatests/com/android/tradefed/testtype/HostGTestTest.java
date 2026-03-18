@@ -15,10 +15,6 @@
  */
 package com.android.tradefed.testtype;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -35,8 +31,13 @@ import com.android.tradefed.util.CommandStatus;
 import com.android.tradefed.util.FakeShellOutputReceiver;
 import com.android.tradefed.util.FileUtil;
 
+import com.google.common.truth.Expect;
+import com.google.errorprone.annotations.FormatMethod;
+import com.google.errorprone.annotations.FormatString;
+
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -48,9 +49,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import javax.annotation.Nullable;
+
 /** Unit tests for {@link HostGTest}. */
 @RunWith(JUnit4.class)
-public class HostGTestTest {
+public final class HostGTestTest {
+
+    @Rule public final Expect expect = Expect.create();
+
     private File mTestsDir;
     private HostGTest mHostGTest;
     private TestInformation mTestInfo;
@@ -132,15 +138,21 @@ public class HostGTestTest {
     @Test
     public void testExecuteHostCommand_success() {
         CommandResult lsResult = mHostGTest.executeHostCommand("ls");
-        assertNotEquals("", lsResult.getStdout());
-        assertEquals(CommandStatus.SUCCESS, lsResult.getStatus());
+
+        expect.withMessage("stdout of ls").that(lsResult.getStdout()).isNotEmpty();
+        expect.withMessage("status of ls")
+                .that(lsResult.getStatus())
+                .isEqualTo(CommandStatus.SUCCESS);
     }
 
     /** Test the executeHostCommand method. */
     @Test
     public void testExecuteHostCommand_fail() {
         CommandResult cmdResult = mHostGTest.executeHostCommand("");
-        assertNotEquals(CommandStatus.SUCCESS, cmdResult.getStatus());
+
+        expect.withMessage("status of empty command")
+                .that(cmdResult.getStatus())
+                .isNotEqualTo(CommandStatus.SUCCESS);
     }
 
     /** Test the loadFilter method. */
@@ -167,9 +179,11 @@ public class HostGTestTest {
         filterFile.createNewFile();
         filterFile.setReadable(true);
         FileUtil.writeToFile(json_content, filterFile);
-        assertEquals(
-                mHostGTest.loadFilter(filterFile.getParent() + File.separator + moduleName),
-                filter);
+        String file = filterFile.getParent() + File.separator + moduleName;
+
+        expect.withMessage("loadFilter(%s)", file)
+                .that(mHostGTest.loadFilter(file))
+                .isEqualTo(filter);
     }
 
     /** Test runTest method. */
@@ -198,11 +212,11 @@ public class HostGTestTest {
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
 
-        assertTrue(cmd1.exists());
-        assertTrue(cmd2.exists());
-        assertTrue(cmd3.exists());
-        assertTrue(cmd4.exists());
-        assertNotEquals(0, mFakeReceiver.getReceivedOutput().length);
+        assertExists(cmd1);
+        assertExists(cmd2);
+        assertExists(cmd3);
+        assertExists(cmd4);
+        assertFakeReceiverReceivedOutput();
     }
 
     /** Test the run method for host linked folder is set. */
@@ -227,9 +241,10 @@ public class HostGTestTest {
         mHostGTest.setBuild(buildInfo);
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
-        assertTrue(hostTestcaseExecutedCheckFile.exists());
-        assertFalse(testfolderTestcaseCheckExecuted.exists());
-        assertNotEquals(0, mFakeReceiver.getReceivedOutput().length);
+
+        assertExists(hostTestcaseExecutedCheckFile);
+        assertDoesntExist(testfolderTestcaseCheckExecuted);
+        assertFakeReceiverReceivedOutput();
     }
 
     /** Test the run method for host linked folder is not set. */
@@ -253,9 +268,10 @@ public class HostGTestTest {
         mHostGTest.setBuild(buildInfo);
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
-        assertFalse(hostTestcaseExecutedCheckFile.exists());
-        assertTrue(testfolderTestcaseCheckExecuted.exists());
-        assertNotEquals(0, mFakeReceiver.getReceivedOutput().length);
+
+        assertDoesntExist(hostTestcaseExecutedCheckFile);
+        assertExists(testfolderTestcaseCheckExecuted);
+        assertFakeReceiverReceivedOutput();
     }
 
     /** Test can't find testcase. */
@@ -268,7 +284,8 @@ public class HostGTestTest {
         mHostGTest.setBuild(buildInfo);
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
-        assertNotEquals(0, mFakeReceiver.getReceivedOutput().length);
+
+        assertFakeReceiverReceivedOutput();
     }
 
     /** Test the run method for a binary with a suffix. */
@@ -293,9 +310,10 @@ public class HostGTestTest {
         mHostGTest.setBuild(buildInfo);
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
-        assertTrue(hostTestcaseExecutedCheckFile.exists());
-        assertFalse(testfolderTestcaseCheckExecuted.exists());
-        assertNotEquals(0, mFakeReceiver.getReceivedOutput().length);
+
+        assertExists(hostTestcaseExecutedCheckFile);
+        assertDoesntExist(testfolderTestcaseCheckExecuted);
+        assertFakeReceiverReceivedOutput();
     }
 
     /* Test that some command in the test run fails, an exception is thrown and the run stops. */
@@ -324,7 +342,7 @@ public class HostGTestTest {
         } catch (RuntimeException e) {
             // Expected exception
         }
-        assertFalse(hostTestcaseExecutedCheckFile.exists());
+        assertDoesntExist(hostTestcaseExecutedCheckFile);
     }
 
     /* Test that if the test module exits with code 1, no exception is thrown and the run completes
@@ -344,8 +362,8 @@ public class HostGTestTest {
         mSetter.setOptionValue("module-name", moduleName);
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
-        String testOutput = new String(mFakeReceiver.getReceivedOutput(), StandardCharsets.UTF_8);
-        assertEquals("TEST FAILED\n", testOutput);
+
+        assertFakeReceiverOutput("TEST FAILED\n");
     }
 
     @Test
@@ -362,11 +380,9 @@ public class HostGTestTest {
 
         mSetter.setOptionValue("module-name", moduleName);
         mHostGTest.run(mTestInfo, mMockInvocationListener);
-        assertTrue(hostTestcaseExecutedCheckFile.exists());
+        assertExists(hostTestcaseExecutedCheckFile);
 
-        String expected = String.format("stdout: %s\nstderr: %s\n", moduleName, moduleName);
-        String testOutput = new String(mFakeReceiver.getReceivedOutput(), StandardCharsets.UTF_8);
-        assertEquals(expected, testOutput);
+        assertFakeReceiverOutput("stdout: %s\nstderr: %s\n", moduleName, moduleName);
     }
 
     /** Test runTest method but executing from a hardlink */
@@ -394,6 +410,27 @@ public class HostGTestTest {
 
         mHostGTest.run(mTestInfo, mMockInvocationListener);
 
-        assertNotEquals(0, mFakeReceiver.getReceivedOutput().length);
+        assertFakeReceiverReceivedOutput();
+    }
+
+    private void assertExists(File file) {
+        expect.withMessage("%s exists", file).that(file.exists()).isTrue();
+    }
+
+    private void assertDoesntExist(File file) {
+        expect.withMessage("%s exists", file).that(file.exists()).isFalse();
+    }
+
+    private void assertFakeReceiverReceivedOutput() {
+        expect.withMessage("length of fake receiver output")
+                .that(mFakeReceiver.getReceivedOutput().length)
+                .isGreaterThan(0);
+    }
+
+    @FormatMethod
+    private void assertFakeReceiverOutput(@FormatString String format, @Nullable Object... args) {
+        String expectedOutput = String.format(format, args);
+        String actualOutput = new String(mFakeReceiver.getReceivedOutput(), StandardCharsets.UTF_8);
+        expect.withMessage("fake receiver output").that(actualOutput).isEqualTo(expectedOutput);
     }
 }

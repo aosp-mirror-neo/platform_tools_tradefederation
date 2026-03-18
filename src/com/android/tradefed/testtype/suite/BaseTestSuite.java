@@ -300,7 +300,8 @@ public class BaseTestSuite extends ITestSuite {
                     try {
                         suiteIncludeFilters =
                                 FileUtil.createTempFile("suite-include-filters", ".txt");
-                        FileUtil.writeToFile(mIncludeFiltersParsed.toString(), suiteIncludeFilters);
+                        FileUtil.writeToFile(
+                                formatFilters(mIncludeFiltersParsed), suiteIncludeFilters);
                         logFilterFile(
                                 suiteIncludeFilters,
                                 suiteIncludeFilters.getName(),
@@ -326,7 +327,8 @@ public class BaseTestSuite extends ITestSuite {
                     try {
                         suiteExcludeFilters =
                                 FileUtil.createTempFile("suite-exclude-filters", ".txt");
-                        FileUtil.writeToFile(mExcludeFiltersParsed.toString(), suiteExcludeFilters);
+                        FileUtil.writeToFile(
+                                formatFilters(mExcludeFiltersParsed), suiteExcludeFilters);
                         logFilterFile(
                                 suiteExcludeFilters,
                                 suiteExcludeFilters.getName(),
@@ -804,5 +806,16 @@ public class BaseTestSuite extends ITestSuite {
 
     public boolean reverseExcludeFilters() {
         return mReverseExcludeFilters;
+    }
+
+    String formatFilters(Map<String, LinkedHashSet<SuiteTestFilter>> filtersMap) {
+        if (filtersMap == null) {
+            return "{}";
+        }
+        return filtersMap
+                .toString()
+                .replace(", ", ",\n  ")
+                .replace("{", "{\n  ")
+                .replace("}", "\n}");
     }
 }
