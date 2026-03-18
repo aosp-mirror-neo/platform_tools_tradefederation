@@ -123,6 +123,12 @@ public interface IDeviceBuildInfo extends IBuildInfo {
      */
     public void setBootloaderImageFile(File bootloaderImgFile, String version);
 
+    /** Get the local trusty image file. */
+    public File getTrustyImageFile();
+
+    /** Get the trusty version. */
+    public String getTrustyVersion();
+
     /** Get the device OTA package zip file. */
     public File getOtaPackageFile();
 

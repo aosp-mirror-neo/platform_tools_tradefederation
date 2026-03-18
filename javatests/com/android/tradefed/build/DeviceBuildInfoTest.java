@@ -174,6 +174,34 @@ public class DeviceBuildInfoTest {
         assertEquals("build-flavor", mBuildInfo.getBuildFlavor());
     }
 
+    /** Test method for {@link DeviceBuildInfo#clone()} with trusty image. */
+    @Test
+    public void testGetTrusty() throws Exception {
+        File trustyFile = mTempFolder.newFile("trusty.img");
+        FileUtil.writeToFile("trustydata", trustyFile);
+
+        mBuildInfo.setFile(BuildInfoFileKey.TRUSTY_IMAGE, trustyFile, VERSION);
+
+        assertEquals(VERSION, mBuildInfo.getTrustyVersion());
+        assertEquals(
+                trustyFile.getAbsolutePath(), mBuildInfo.getTrustyImageFile().getAbsolutePath());
+        assertTrue(FileUtil.compareFileContents(trustyFile, mBuildInfo.getTrustyImageFile()));
+    }
+
+    /** Test method for {@link DeviceBuildInfo#cleanUp()} with trusty image. */
+    @Test
+    public void testCleanUpTrusty() throws Exception {
+        File trustyFile = mTempFolder.newFile("trusty.img");
+        FileUtil.writeToFile("trustydata", trustyFile);
+        mBuildInfo.setFile(BuildInfoFileKey.TRUSTY_IMAGE, trustyFile, VERSION);
+        assertTrue(mBuildInfo.getTrustyImageFile().exists());
+
+        mBuildInfo.cleanUp();
+
+        assertNull(mBuildInfo.getTrustyImageFile());
+        assertFalse(trustyFile.exists());
+    }
+
     // FuseMountManager specific tests
 
     @Test

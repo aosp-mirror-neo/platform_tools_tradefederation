@@ -88,6 +88,7 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
     private static final String BOOTLOADER_FILTER = "bootloader\\.img$";
     private static final String BASEBAND_FILTER = "radio\\.img$";
     private static final String TESTS_ZIP_PREFIX = "tests-zip_";
+    private static final String TRUSTY_FILTER = "tzsw\\.img$";
 
     @Option(
             name = "download-build-file",
@@ -95,8 +96,11 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
     private Collection<BuildAttributeKey> mDownloadKeys =
             new HashSet<BuildAttributeKey>(
                     ArrayUtil.list(
-                            BuildAttributeKey.DEVICE_IMAGE, BuildAttributeKey.TESTS_ZIP,
-                            BuildAttributeKey.BOOTLOADER, BuildAttributeKey.BASEBAND));
+                            BuildAttributeKey.DEVICE_IMAGE,
+                            BuildAttributeKey.TESTS_ZIP,
+                            BuildAttributeKey.BOOTLOADER,
+                            BuildAttributeKey.BASEBAND,
+                            BuildAttributeKey.TRUSTY));
 
     @Option(
             name = "test-zip-file-filter",
@@ -434,12 +438,14 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
             }
 
             String bootloaderVersion = buildId;
+            String trustyVersion = null;
             String basebandVersion = buildId;
             if (shouldDownload(BuildAttributeKey.DEVICE_IMAGE)) {
                 try {
                     IFlashingResourcesParser flashingResourcesParser =
                             new FlashingResourcesParser(localBuild.getDeviceImageFile());
                     bootloaderVersion = flashingResourcesParser.getRequiredBootloaderVersion();
+                    trustyVersion = flashingResourcesParser.getRequiredTrustyVersion();
                     basebandVersion = flashingResourcesParser.getRequiredBasebandVersion();
                 } catch (TargetSetupError e) {
                     // delete the image from the cache
@@ -467,6 +473,26 @@ public class DeviceLaunchControlProvider extends LaunchControlProvider
                                     true);
                     toBeDownloaded.add(bootloader);
                 }
+            }
+
+            if (shouldDownload(BuildAttributeKey.TRUSTY) && trustyVersion != null) {
+                final String trustyPath = getPathForPattern(remoteBuild, TRUSTY_FILTER);
+                if (trustyPath == null) {
+                    CLog.d("There is no %s in the build artifacts", TRUSTY_FILTER);
+                    throw new BuildRetrievalError(
+                            String.format(
+                                    "%s is required but not found in the build artifacts",
+                                    TRUSTY_FILTER),
+                            InfraErrorIdentifier.ARTIFACT_NOT_FOUND);
+                }
+                DownloadFileDescriptor trusty =
+                        new DownloadFileDescriptor(
+                                trustyPath,
+                                BuildInfoFileKey.TRUSTY_IMAGE.getFileKey(),
+                                true,
+                                trustyVersion,
+                                true);
+                toBeDownloaded.add(trusty);
             }
 
             if (shouldDownload(BuildAttributeKey.BASEBAND)) {

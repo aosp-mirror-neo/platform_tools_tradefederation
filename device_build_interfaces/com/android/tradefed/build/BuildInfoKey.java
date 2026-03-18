@@ -31,6 +31,7 @@ public class BuildInfoKey {
         TESTDIR_IMAGE("testsdir", false),
         BASEBAND_IMAGE("baseband", false),
         BOOTLOADER_IMAGE("bootloader", false),
+        TRUSTY_IMAGE("tzsw", false),
         OTA_IMAGE("ota", false),
         MKBOOTIMG_IMAGE("mkbootimg", false),
         RAMDISK_IMAGE("ramdisk", false),

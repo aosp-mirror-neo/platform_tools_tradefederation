@@ -121,7 +121,10 @@ public class RemoteBuildInfo {
         BASEBAND("baseband"),
 
         /** The google-tradefed.zip file path */
-        TF("tf");
+        TF("tf"),
+
+        /** The Trusty image path */
+        TRUSTY("tzsw");
 
         private String mRemoteValue;
 
