@@ -460,6 +460,16 @@ public class CommandOptions implements ICommandOptions {
             description = "Whether or not to pass retry attempt number.")
     private boolean mPassRetryAttemptNumber = false;
 
+    // When a preparer failed for a test, it may fail test invocation as infra error, which leads to
+    // test run retry. This option allows such failure to be converted to a test failure, so infra
+    // does not waste resources to retry the whole test run.
+    @Option(
+            name = "force-preparer-failure-as-test-failure",
+            description =
+                    "Force to convert preparer failure as a test failure, instead of invocation"
+                            + " failure.")
+    private boolean mForcePreparerFailureAsTestFailure = false;
+
     /**
      * Set the help mode for the config.
      * <p/>
@@ -1090,5 +1100,11 @@ public class CommandOptions implements ICommandOptions {
     @Override
     public boolean shouldPassRetryAttemptNumber() {
         return mPassRetryAttemptNumber;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean shouldForcePreparerFailureAsTestFailure() {
+        return mForcePreparerFailureAsTestFailure;
     }
 }
