@@ -15,9 +15,6 @@
  */
 package com.android.tradefed.isolation;
 
-import org.junit.runner.Description;
-import org.junit.runner.manipulation.Filter;
-
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
@@ -29,6 +26,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
+import org.junit.runner.Description;
+import org.junit.runner.manipulation.Filter;
 
 // LINT.IfChange
 /**
@@ -106,8 +105,9 @@ public final class IsolationFilter extends Filter {
         }
         String packageName = classObj == null ? "" : classObj.getPackage().getName();
         String className = desc.getClassName();
+        String realClassName = classObj == null ? "" : classObj.getName();
         String methodName = String.format("%s#%s", className, desc.getMethodName());
-        if (!shouldRunFilter(packageName, className, methodName)) {
+        if (!shouldRunFilter(packageName, className, realClassName, methodName)) {
             return false;
         }
         // Carry the parent class annotations to ensure includeAnnotations are respected
@@ -121,6 +121,9 @@ public final class IsolationFilter extends Filter {
         return mIncludeFilters.isEmpty()
                 || mIncludeFilters.contains(methodName)
                 || mIncludeFilters.contains(className)
+                || (realClassName != null
+                        && !realClassName.isEmpty()
+                        && mIncludeFilters.contains(realClassName))
                 || mIncludeFilters.contains(packageName)
                 || includeFilterMatches(methodName);
     }
@@ -199,7 +202,7 @@ public final class IsolationFilter extends Filter {
         String className = classObj.getName();
         String methodName = String.format("%s#%s", className, method.getName());
 
-        if (!shouldRunFilter(packageName, className, methodName)) {
+        if (!shouldRunFilter(packageName, className, className, methodName)) {
             return false;
         }
         // If class is explicitly annotated to be excluded.
@@ -250,13 +253,20 @@ public final class IsolationFilter extends Filter {
      * Internal helper to check if a particular test should run based on its package, class, method
      * names.
      */
-    private boolean shouldRunFilter(String packageName, String className, String methodName) {
+    private boolean shouldRunFilter(
+            String packageName, String className, String realClassName, String methodName) {
         if (mExcludeFilters.contains(packageName)) {
             // Skip package because it was excluded
             return false;
         }
         if (mExcludeFilters.contains(className)) {
             // Skip class because it was excluded
+            return false;
+        }
+        if (realClassName != null
+                && !realClassName.isEmpty()
+                && mExcludeFilters.contains(realClassName)) {
+            // Skip real class because it was excluded
             return false;
         }
         if (mExcludeFilters.contains(methodName)) {
@@ -277,4 +287,4 @@ public final class IsolationFilter extends Filter {
         return true;
     }
 }
-// LINT.ThenChange(//tools/tradefederation/core/com/android/tradefed/testtype/TestFilterHelper.java)
+// LINT.ThenChange(//tools/tradefederation/core/src/com/android/tradefed/util/TestFilterHelper.java)

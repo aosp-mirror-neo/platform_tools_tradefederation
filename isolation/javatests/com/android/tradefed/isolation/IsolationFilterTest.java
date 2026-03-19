@@ -207,4 +207,28 @@ public class IsolationFilterTest {
         Description desc = Description.createTestDescription(AnnotatedClass.class, "testMethod");
         assertTrue("Should run because regex matches", filter.shouldRun(desc));
     }
+
+    @Test
+    public void testIncludeFilter_ParameterizedSuiteClassMatch() {
+        List<String> includeFilters = new ArrayList<>();
+        includeFilters.add(AnnotatedClass.class.getName());
+
+        IsolationFilter filter =
+                new IsolationFilter(
+                        includeFilters, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+
+        // Simulate parameterized runner suite description, e.g. "[0]"
+        // This description has no test class attached explicitly.
+        Description parameterizedSuite = Description.createSuiteDescription("[0]");
+        // The child test description HAS the test class.
+        Description childTest =
+                Description.createTestDescription(AnnotatedClass.class, "testMethod[0]");
+        parameterizedSuite.addChild(childTest);
+
+        // Even though parameterizedSuite.getClassName() returns "[0]", it should resolve the
+        // real class name from its child and thus match the include filter.
+        assertTrue(
+                "Should run because real class name from child matches include filter",
+                filter.shouldRun(parameterizedSuite));
+    }
 }
