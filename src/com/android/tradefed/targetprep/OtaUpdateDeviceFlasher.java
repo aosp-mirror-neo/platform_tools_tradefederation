@@ -144,6 +144,11 @@ public class OtaUpdateDeviceFlasher implements IDeviceFlasher {
         device.enableAdbRoot();
         // allow OTA downgrade since it can't be assumed that incoming builds are always newer
         device.setProperty(OTA_DOWNGRADE_PROP, "1");
+        // cancel any in-progress update and unmap/delete snapshots
+        device.executeShellCommand("update_engine_client --cancel");
+        // in case there are precreated snapshots
+        device.executeShellCommand("snapshotctl unmap-snapshots");
+        device.executeShellCommand("snapshotctl delete-snapshots");
         // trigger the actual flashing
         List<String> cmd =
                 Arrays.asList(

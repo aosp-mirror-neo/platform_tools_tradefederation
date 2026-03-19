@@ -1096,7 +1096,7 @@ public class ResultDBReporterTest {
 
     private String getLogUrl(String log) {
         return String.format(
-                "https://android-build.googleplex.com/builds/submitted/18274/docs/0/tests/1488327372312/18274/stub/inv_9000/%s_9000.dat",
+                "https://android-build.googleplex.com/builds/I1234567890/18274/stub/inv_9000/%s_9000.dat",
                 URLEncoder.encode(log, StandardCharsets.UTF_8));
     }
 }

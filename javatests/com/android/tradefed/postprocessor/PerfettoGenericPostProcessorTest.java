@@ -97,6 +97,7 @@ public class PerfettoGenericPostProcessorTest {
     private static final String FILE_FORMAT_OPTION = "trace-processor-output-format";
     private static final String ALTERNATIVE_PARSE_FORMAT_OPTION =
             "perfetto-alternative-parse-format";
+    private static final String SKIP_MESSAGE_FIELD_OPTION = "perfetto-skip-message-field";
 
     File perfettoMetricProtoFile = null;
     File perfettoV2MetricProtoFile = null;
@@ -772,6 +773,37 @@ public class PerfettoGenericPostProcessorTest {
                         + "::HIDE_SOFT_INPUT-blocking_calls-name-AIDL::java::ITrustManager"
                         + "::isDeviceSecure::server-total_dur_ms",
                 1);
+    }
+
+    /**
+     * Test metrics are skipped correctly when skip field is passed and
+     * "perfetto-include-all-metrics" is set to true.
+     */
+    @Test
+    public void testSkipMessageField() throws ConfigurationException, IOException {
+        setupPerfettoMetricFile(METRIC_FILE_FORMAT.text, true, true);
+        mOptionSetter.setOptionValue(PREFIX_OPTION, PREFIX_OPTION_VALUE);
+        mOptionSetter.setOptionValue(ALL_METRICS_OPTION, "true");
+        // Skip the 'android_mem' field.
+        mOptionSetter.setOptionValue(
+                SKIP_MESSAGE_FIELD_OPTION, "perfetto.protos.TraceMetrics.android_mem");
+
+        Map<String, LogFile> testLogs = new HashMap<>();
+        testLogs.put(
+                PREFIX_OPTION_VALUE,
+                new LogFile(
+                        perfettoMetricProtoFile.getAbsolutePath(), "some.url", LogDataType.TEXTPB));
+        Map<String, Metric.Builder> parsedMetrics =
+                mProcessor.processRunMetricsAndLogs(new HashMap<>(), testLogs);
+
+        // android_mem metrics should be skipped.
+        assertFalse(
+                "android_mem metrics should have been skipped.",
+                parsedMetrics.keySet().stream().anyMatch(key -> key.contains("android_mem")));
+        // Other metrics should still be present.
+        assertTrue(
+                "android_startup metrics should still be present.",
+                parsedMetrics.keySet().stream().anyMatch(key -> key.contains("android_startup")));
     }
 
     private void printOutputMetricsForDebug(Map<String, Metric.Builder> metrics) {
