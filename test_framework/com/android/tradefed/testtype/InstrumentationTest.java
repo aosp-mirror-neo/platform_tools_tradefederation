@@ -1389,6 +1389,17 @@ public class InstrumentationTest
         return mAbi;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Sets the retry attempt number by pushing it as a "retry_attempt" instrumentation argument
+     * to the device-side runner.
+     */
+    @Override
+    public void setRetryAttemptNumber(int attemptNumber) {
+        addInstrumentationArg("retry_attempt", String.valueOf(attemptNumber));
+    }
+
     @Override
     public void setMetricCollectors(List<IMetricCollector> collectors) {
         mCollectors = collectors;
