@@ -210,7 +210,17 @@ public class ResultReporter
                     ModuleDefinition.MODULE_TEST_COUNT);
 
     private static final ImmutableSet<String> TEST_PROPERTIES_MIGRATION =
-            ImmutableSet.of("board", "model", "sku", "account_id");
+            ImmutableSet.of(
+                    "account_id",
+                    "board",
+                    "dut_name",
+                    "label-phase",
+                    "label-hwid_sku",
+                    "label-pool",
+                    "label-wifi_chip",
+                    "model",
+                    "sku",
+                    "ufs_zone");
 
     private static final String ACCOUNT_ID = "account_id";
 
