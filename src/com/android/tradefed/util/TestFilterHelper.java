@@ -17,9 +17,6 @@ package com.android.tradefed.util;
 
 import com.android.tradefed.error.HarnessRuntimeException;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
-
-import org.junit.runner.Description;
-
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
@@ -35,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
+import org.junit.runner.Description;
 
 // LINT.IfChange
 /** Helper class for filtering tests */
@@ -222,7 +220,7 @@ public class TestFilterHelper {
         String className = classObj.getName();
         String methodName = String.format("%s#%s", className, method.getName());
 
-        if (!shouldRunFilter(packageName, className, methodName)) {
+        if (!shouldRunFilter(packageName, className, className, methodName)) {
             return false;
         }
         // If class is explicitly annotated to be excluded.
@@ -289,10 +287,23 @@ public class TestFilterHelper {
                 cl = URLClassLoader.newInstance(urlList.toArray(new URL[0]));
                 classObj = cl.loadClass(desc.getClassName());
             } catch (MalformedURLException | ClassNotFoundException e) {
-                throw new HarnessRuntimeException(
-                        String.format("Could not load Test class %s", desc.getClassName()),
-                        e,
-                        InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+                // If it fails to load the class, attempt to find it from children, as it
+                // might be a parameterized suite.
+                if (desc.isSuite() && !desc.getChildren().isEmpty()) {
+                    try {
+                        classObj = cl.loadClass(desc.getChildren().get(0).getClassName());
+                    } catch (ClassNotFoundException e2) {
+                        throw new HarnessRuntimeException(
+                                String.format("Could not load Test class %s", desc.getClassName()),
+                                e,
+                                InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+                    }
+                } else {
+                    throw new HarnessRuntimeException(
+                            String.format("Could not load Test class %s", desc.getClassName()),
+                            e,
+                            InfraErrorIdentifier.OPTION_CONFIGURATION_ERROR);
+                }
             }
 
             // If class is explicitly annotated to be excluded, exclude it.
@@ -301,8 +312,9 @@ public class TestFilterHelper {
             }
             String packageName = classObj.getPackage().getName();
             String className = desc.getClassName();
+            String realClassName = classObj.getName();
             String methodName = String.format("%s#%s", className, desc.getMethodName());
-            if (!shouldRunFilter(packageName, className, methodName)) {
+            if (!shouldRunFilter(packageName, className, realClassName, methodName)) {
                 return false;
             }
             // Carry the parent class annotations to ensure includeAnnotations are respected
@@ -314,6 +326,7 @@ public class TestFilterHelper {
             return mIncludeFilters.isEmpty()
                     || mIncludeFilters.contains(methodName)
                     || mIncludeFilters.contains(className)
+                    || mIncludeFilters.contains(realClassName)
                     || mIncludeFilters.contains(packageName)
                     || includeFilterMatches(methodName);
         } finally {
@@ -325,13 +338,20 @@ public class TestFilterHelper {
      * Internal helper to check if a particular test should run based on its package, class, method
      * names.
      */
-    private boolean shouldRunFilter(String packageName, String className, String methodName) {
+    private boolean shouldRunFilter(
+            String packageName, String className, String realClassName, String methodName) {
         if (mExcludeFilters.contains(packageName)) {
             // Skip package because it was excluded
             return false;
         }
         if (mExcludeFilters.contains(className)) {
             // Skip class because it was excluded
+            return false;
+        }
+        if (realClassName != null
+                && !realClassName.isEmpty()
+                && mExcludeFilters.contains(realClassName)) {
+            // Skip real class because it was excluded
             return false;
         }
         if (mExcludeFilters.contains(methodName)) {
