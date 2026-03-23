@@ -531,8 +531,10 @@ public class FastbootDeviceFlasherTest {
                 };
         IDeviceBuildInfo mockBuild = mock(IDeviceBuildInfo.class);
         when(mockBuild.getBootloaderVersion()).thenReturn(version);
+        when(mockBuild.getTrustyVersion()).thenReturn(version);
 
         assertFalse(mFlasher.checkAndFlashBootloader(mMockDevice, mockBuild));
+        verify(mMockDevice, times(0)).rebootIntoBootloader();
     }
 
     /**
@@ -567,6 +569,97 @@ public class FastbootDeviceFlasherTest {
             verify(mMockDevice, times(1)).rebootIntoBootloader();
         } finally {
             FileUtil.deleteFile(bootloaderFake);
+        }
+    }
+
+    /**
+     * Test that {@link FastbootDeviceFlasher#checkAndFlashBootloader(ITestDevice,
+     * IDeviceBuildInfo)} returns true after flashing the device trusty.
+     */
+    @Test
+    public void testCheckAndFlashBootloader_IndependentTrusty() throws Exception {
+        final String bootloaderVersion = "bootloader-target-version";
+        final String trustyVersion = "trusty-target-version";
+        mFlasher =
+                new FastbootDeviceFlasher() {
+                    @Override
+                    protected String getImageVersion(ITestDevice device, String imageName)
+                            throws DeviceNotAvailableException, TargetSetupError {
+                        if (imageName.equals("bootloader")) {
+                            return "bootloader-current-version";
+                        } else if (imageName.equals("trusty")) {
+                            return "trusty-current-version";
+                        }
+                        return "unknown";
+                    }
+                };
+        IDeviceBuildInfo mockBuild = mock(IDeviceBuildInfo.class);
+        when(mockBuild.getBootloaderVersion()).thenReturn(bootloaderVersion);
+        when(mockBuild.getTrustyVersion()).thenReturn(trustyVersion);
+        File bootloaderFake = FileUtil.createTempFile("fakeBootloader", "");
+        File trustyFake = FileUtil.createTempFile("fakeTrusty", "");
+        try {
+            when(mockBuild.getTrustyImageFile()).thenReturn(trustyFake);
+            when(mockBuild.getBootloaderImageFile()).thenReturn(bootloaderFake);
+            CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+            res.setStderr("flashing");
+            when(mMockDevice.executeFastbootCommand(
+                            Mockito.eq("flash"),
+                            Mockito.eq("tzsw"),
+                            Mockito.eq(trustyFake.getAbsolutePath())))
+                    .thenReturn(res);
+            when(mMockDevice.executeFastbootCommand(
+                            Mockito.eq("flash"),
+                            Mockito.eq("bootloader"),
+                            Mockito.eq(bootloaderFake.getAbsolutePath())))
+                    .thenReturn(res);
+
+            assertTrue(mFlasher.checkAndFlashBootloader(mMockDevice, mockBuild));
+            verify(mMockDevice, times(1)).rebootIntoBootloader();
+        } finally {
+            FileUtil.deleteFile(trustyFake);
+            FileUtil.deleteFile(bootloaderFake);
+        }
+    }
+
+    /**
+     * Test that {@link FastbootDeviceFlasher#checkAndFlashBootloader(ITestDevice,
+     * IDeviceBuildInfo)} returns true after flashing trusty when property is not set on device.
+     */
+    @Test
+    public void testCheckAndFlashTrusty_nullProperty() throws Exception {
+        final String bootloaderVersion = "bootloader-target-version";
+        final String trustyVersion = "trusty-target-version";
+        mFlasher =
+                new FastbootDeviceFlasher() {
+                    @Override
+                    protected String getImageVersion(ITestDevice device, String imageName)
+                            throws DeviceNotAvailableException, TargetSetupError {
+                        if (imageName.equals("bootloader")) {
+                            return bootloaderVersion;
+                        } else if (imageName.equals("trusty")) {
+                            throw new TargetSetupError("not set", device.getDeviceDescriptor());
+                        }
+                        return "unknown";
+                    }
+                };
+        IDeviceBuildInfo mockBuild = mock(IDeviceBuildInfo.class);
+        when(mockBuild.getBootloaderVersion()).thenReturn(bootloaderVersion);
+        when(mockBuild.getTrustyVersion()).thenReturn(trustyVersion);
+        File trustyFake = FileUtil.createTempFile("fakeTrusty", "");
+        try {
+            when(mockBuild.getTrustyImageFile()).thenReturn(trustyFake);
+            CommandResult res = new CommandResult(CommandStatus.SUCCESS);
+            res.setStderr("flashing");
+            when(mMockDevice.executeFastbootCommand(
+                            Mockito.eq("flash"),
+                            Mockito.eq("tzsw"),
+                            Mockito.eq(trustyFake.getAbsolutePath())))
+                    .thenReturn(res);
+
+            assertTrue(mFlasher.checkAndFlashBootloader(mMockDevice, mockBuild));
+        } finally {
+            FileUtil.deleteFile(trustyFake);
         }
     }
 
