@@ -96,6 +96,10 @@ public class CasFileDownloader implements IFileDownloader {
     private static final String STATS_E2E_TIME_KEY = "e2e_time_ms";
     private static final String STATS_NOTES_KEY = "notes";
 
+    // The download stats contains "download_error": "TIMED_OUT:..." when casdownloader invoked with
+    // timeout flags is timed out.
+    private static final String CASDOWNLOADER_TIMED_OUT = "TIMED_OUT";
+
     // Keys of environment variables to set local cache options.
     // Will read from the environment variables if set for easiler experiment, will move to
     // CasOptions eventually.
@@ -140,6 +144,7 @@ public class CasFileDownloader implements IFileDownloader {
 
     private static final String ADC_CREDENTIALS_RES = "/util/adc_credentials.sh";
     private boolean mAdcCredentialsLogged = false;
+    boolean mUseCasDownloaderTimeout = false;
 
     public void setCasRpcTimeout(
             long casRpcTimeout,
@@ -304,7 +309,7 @@ public class CasFileDownloader implements IFileDownloader {
             }
         }
 
-        try {
+        try (CloseableTraceScope ignored = new CloseableTraceScope("extract_cas_client")) {
             mCasClient = extractCasClient(CAS_CLIENT_NAME).toPath();
         } catch (IOException e) {
             throw new CasInitializationException("The CAS client is invalid.", e);
@@ -600,6 +605,7 @@ public class CasFileDownloader implements IFileDownloader {
                 FileUtil.recursiveDelete(cacheDir);
             }
         }
+        JSONObject downloadStats = getDownloadStats(statsFile);
         try {
             if (result.getStderr() != null) {
                 if (result.getStderr().contains("no space left on device")) {
@@ -612,7 +618,11 @@ public class CasFileDownloader implements IFileDownloader {
                     logAdcCredentials();
                 }
             }
-            if (CommandStatus.TIMED_OUT.equals(result.getStatus())) {
+            if (CommandStatus.TIMED_OUT.equals(result.getStatus())
+                    || (downloadStats != null
+                            && downloadStats
+                                    .optString(STATS_DOWNLOAD_ERROR_KEY)
+                                    .startsWith(CASDOWNLOADER_TIMED_OUT))) {
                 InvocationMetricLogger.addInvocationMetrics(
                         InvocationMetricKey.CAS_TIMEOUT_COUNT, 1);
                 throw new CasDownloadException(
@@ -676,20 +686,12 @@ public class CasFileDownloader implements IFileDownloader {
                     InvocationMetricKey.CAS_DOWNLOAD_TIME, elapsedTime);
 
             try (CloseableTraceScope ignored = new CloseableTraceScope("report_cas_errors")) {
-                exportDownloadErrors(statsFile, remoteFilePath);
-            } catch (IOException | JSONException e) {
-                CLog.w(
-                        "Fail to parse download statics %s. Message",
-                        statsFile.getAbsolutePath(), e.getMessage());
+                exportDownloadErrors(downloadStats, remoteFilePath);
             }
         }
         try (CloseableTraceScope ignored = new CloseableTraceScope("report_cas_metrics")) {
             extractDownloaderMetricsFromStdout(result.getStdout());
-            exportDownloadStats(statsFile);
-        } catch (IOException | JSONException e) {
-            CLog.w(
-                    "Fail to parse download statics %s. Message",
-                    statsFile.getAbsolutePath(), e.getMessage());
+            exportDownloadStats(downloadStats);
         }
         if (!includeFilters.isEmpty() || !excludeFilters.isEmpty()) {
             String includes =
@@ -722,6 +724,23 @@ public class CasFileDownloader implements IFileDownloader {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_LOCAL_CACHE_TYPE, mCasLocalCacheType);
         }
+    }
+
+    private JSONObject getDownloadStats(File statsFile) {
+        JSONObject downloadStats = new JSONObject();
+        try {
+            if (statsFile.exists()) {
+                String stdout = new String(Files.readAllBytes(statsFile.toPath()));
+                downloadStats = new JSONObject(stdout);
+            }
+        } catch (IOException | JSONException e) {
+            CLog.w(
+                    "Fail to parse download statics %s. Message",
+                    statsFile.getAbsolutePath(), e.getMessage());
+            return null;
+        }
+        // CLog.d("Cas stats: %s", jsonString);
+        return downloadStats;
     }
 
     private void logAdcCredentials() {
@@ -831,9 +850,14 @@ public class CasFileDownloader implements IFileDownloader {
             commandArgs.add("-exclude-filters");
             commandArgs.add(filter);
         }
-        CommandResult result =
-                mRunUtil.runTimedCmd(
-                        getCasOptions().getDownloadTimeoutMs(), commandArgs.toArray(new String[0]));
+        long timeoutMs = getCasOptions().getDownloadTimeoutMs();
+        if (mUseCasDownloaderTimeout) {
+            CLog.d("Using casdownloader internal timeout: %d ms", timeoutMs);
+            commandArgs.add("-download-timeout");
+            commandArgs.add(String.format("%dms", timeoutMs));
+            timeoutMs = 0; // Disable RunUtil timeout.
+        }
+        CommandResult result = mRunUtil.runTimedCmd(timeoutMs, commandArgs.toArray(new String[0]));
         String stdout = result.getStdout();
         CLog.i(
                 "[%s] Output when downloading the file %s:\n%s\n%s",
@@ -905,10 +929,10 @@ public class CasFileDownloader implements IFileDownloader {
         }
     }
 
-    private void exportDownloadErrors(File statsFile, String remoteFilePath)
-            throws IOException, JSONException {
-        String jsonString = new String(Files.readAllBytes(statsFile.toPath()));
-        JSONObject statsObject = new JSONObject(jsonString);
+    private void exportDownloadErrors(JSONObject statsObject, String remoteFilePath) {
+        if (statsObject == null) {
+            return;
+        }
         String casError = statsObject.optString(STATS_DOWNLOAD_ERROR_KEY);
         if (!casError.isEmpty()) {
             // The error message can be excessive long, so we only log the first part.
@@ -931,12 +955,13 @@ public class CasFileDownloader implements IFileDownloader {
         }
     }
 
-    private void exportDownloadStats(File statsFile) throws IOException, JSONException {
-        String jsonString = new String(Files.readAllBytes(statsFile.toPath()));
-        CLog.d("Cas stats: %s", jsonString);
-        JSONObject statsObject = new JSONObject(jsonString);
+    private void exportDownloadStats(JSONObject statsObject) {
+        if (statsObject == null) {
+            return;
+        }
+        CLog.d("Cas stats: %s", statsObject.toString());
         // In golang, json.Marshal() omits fields with default values. It is desirable to Log
-        // default values for missing fields to equalize the number of data itmes for each workunit
+        // default values for missing fields to equalize the number of data items for each workunit
         // which makes the analyzing of ANTS data less error prone.
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.CAS_DOWNLOAD_COLD_BYTES,
@@ -968,7 +993,7 @@ public class CasFileDownloader implements IFileDownloader {
         if (statsObject.has(STATS_NOTES_KEY) && !statsObject.optString(STATS_NOTES_KEY).isEmpty()) {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.CAS_DOWNLOAD_NOTES,
-                    statsObject.getString(STATS_NOTES_KEY));
+                    statsObject.optString(STATS_NOTES_KEY));
         }
     }
 
@@ -999,6 +1024,13 @@ public class CasFileDownloader implements IFileDownloader {
                         version -> {
                             InvocationMetricLogger.addInvocationMetrics(
                                     InvocationMetricKey.CAS_VERSION, version);
+                        });
+                CasUtil.checkCasClientFlags(
+                        client.toPath(),
+                        flags -> {
+                            if (flags.contains("download-timeout")) {
+                                mUseCasDownloaderTimeout = true;
+                            }
                         });
                 return client;
             }

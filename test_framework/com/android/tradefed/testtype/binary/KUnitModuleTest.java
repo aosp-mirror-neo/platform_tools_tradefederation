@@ -123,13 +123,19 @@ public class KUnitModuleTest extends ExecutableTargetTest {
                         KernelModuleUtils.installModule(
                                 getDevice(), modulePath, "", getTimeoutPerBinaryMs());
             } catch (TargetSetupError e) {
-                String errorMessage = e.toString();
-                listener.testStarted(description);
-                listener.testFailed(
-                        description,
+                String errorMessage =
+                        String.format(
+                                "KUnit module installation failed for %s: %s",
+                                kunitModule, e.toString());
+                CLog.e(errorMessage);
+                // Report a module-level failure
+                FailureDescription failure =
                         FailureDescription.create(errorMessage)
-                                .setFailureStatus(FailureStatus.TEST_FAILURE));
-                listener.testEnded(description, new HashMap<String, Metric>());
+                                .setFailureStatus(FailureStatus.TEST_FAILURE)
+                                .setErrorIdentifier(e.getErrorId())
+                                .setOrigin(e.getOrigin())
+                                .setCause(e);
+                listener.testRunFailed(failure);
                 return;
             }
 
@@ -145,12 +151,11 @@ public class KUnitModuleTest extends ExecutableTargetTest {
                                 "No KTAP results generated in '%s' for module '%s'",
                                 KUNIT_DEBUGFS_PATH, kunitModule);
                 CLog.e(errorMessage);
-                listener.testStarted(description);
-                listener.testFailed(
-                        description,
+                // Report a module-level failure
+                FailureDescription failure =
                         FailureDescription.create(errorMessage)
-                                .setFailureStatus(FailureStatus.TEST_FAILURE));
-                listener.testEnded(description, new HashMap<String, Metric>());
+                                .setFailureStatus(FailureStatus.TEST_FAILURE);
+                listener.testRunFailed(failure);
             }
 
             List<String> ktapResultsList = new ArrayList<>();

@@ -22,6 +22,8 @@ import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.GoogleApiClientUtil;
 
 import com.google.android.ci.build.shadow.api.gax.core.FixedCredentialsProvider;
+import com.google.android.ci.build.v4.BranchServiceClient;
+import com.google.android.ci.build.v4.BranchServiceSettings;
 import com.google.android.ci.build.v4.BuildArtifactServiceClient;
 import com.google.android.ci.build.v4.BuildArtifactServiceSettings;
 import com.google.android.ci.build.v4.BuildServiceClient;
@@ -220,6 +222,17 @@ public class AndroidBuildAPIHelper {
             builder.setCredentialsProvider(FixedCredentialsProvider.create(credentials));
         }
         return BuildServiceClient.create(builder.build());
+    }
+
+    public static BranchServiceClient getV4BranchClient(String environment)
+            throws IOException, GeneralSecurityException {
+        com.google.android.ci.build.shadow.auth.oauth2.GoogleCredentials credentials =
+                createV4Credential();
+        BranchServiceSettings.Builder builder = BranchServiceSettings.newHttpJsonBuilder();
+        if (credentials != null) {
+            builder.setCredentialsProvider(FixedCredentialsProvider.create(credentials));
+        }
+        return BranchServiceClient.create(builder.build());
     }
 
     public static BuildArtifactServiceClient getV4BuildArtifactClient(String environment)

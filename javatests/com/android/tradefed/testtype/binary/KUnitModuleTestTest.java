@@ -39,6 +39,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
@@ -203,24 +204,32 @@ public class KUnitModuleTestTest {
         // Run test
         mKUnitModuleTest.run(mTestInfo, mListener);
 
-        ArrayList<Pair<TestDescription, Boolean>> expectedTestResults = new ArrayList<>();
-        expectedTestResults.add(Pair.create(new TestDescription(MODULE_01, "main_test_01"), true));
-        expectedTestResults.add(Pair.create(new TestDescription(MODULE_02, MODULE_02), false));
+        Mockito.verify(mListener, Mockito.times(1)).testRunStarted(Mockito.any(), eq(1));
 
-        Mockito.verify(mListener, Mockito.times(1)).testRunStarted(Mockito.any(), eq(2));
-        for (Pair<TestDescription, Boolean> testResult : expectedTestResults) {
-            Mockito.verify(mListener, Mockito.times(1))
-                    .testStarted(Mockito.eq(testResult.first), Mockito.anyLong());
-            if (!testResult.second) {
-                Mockito.verify(mListener, Mockito.times(1))
-                        .testFailed(Mockito.eq(testResult.first), any(FailureDescription.class));
-            }
-            Mockito.verify(mListener, Mockito.times(1))
-                    .testEnded(
-                            Mockito.eq(testResult.first),
-                            Mockito.anyLong(),
-                            Mockito.eq(new HashMap<String, MetricMeasurement.Metric>()));
-        }
+        TestDescription module1Description = new TestDescription(MODULE_01, "main_test_01");
+        Mockito.verify(mListener, Mockito.times(1))
+                .testStarted(Mockito.eq(module1Description), Mockito.anyLong());
+        Mockito.verify(mListener, Mockito.times(1))
+                .testEnded(
+                        Mockito.eq(module1Description),
+                        Mockito.anyLong(),
+                        Mockito.eq(new HashMap<String, MetricMeasurement.Metric>()));
+
+        ArgumentCaptor<FailureDescription> failureCaptor =
+                ArgumentCaptor.forClass(FailureDescription.class);
+        Mockito.verify(mListener, Mockito.times(1)).testRunFailed(failureCaptor.capture());
+
+        FailureDescription capturedFailure = failureCaptor.getValue();
+        org.junit.Assert.assertTrue(
+                "The error message should include 'KUnit module installation failed'",
+                capturedFailure
+                        .getErrorMessage()
+                        .contains("KUnit module installation failed for " + MODULE_NAME_02));
+
+        // Ensure no testStarted calls for the MODULE_02 description
+        TestDescription module2Description = new TestDescription(MODULE_02, MODULE_02);
+        Mockito.verify(mListener, Mockito.never())
+                .testStarted(Mockito.eq(module2Description), Mockito.anyLong());
 
         Mockito.verify(mListener, Mockito.times(1))
                 .testRunEnded(
@@ -278,25 +287,40 @@ public class KUnitModuleTestTest {
         // Run test
         mKUnitModuleTest.run(mTestInfo, mListener);
 
-        ArrayList<Pair<TestDescription, Boolean>> expectedTestResults = new ArrayList<>();
-        expectedTestResults.add(Pair.create(new TestDescription(MODULE_01, "main_test_01"), true));
-        expectedTestResults.add(Pair.create(new TestDescription(MODULE_02, MODULE_02), false));
+        // Since module 2 fails before starting any test cases, the total expected test count is 1.
+        Mockito.verify(mListener, Mockito.times(1)).testRunStarted(Mockito.any(), eq(1));
 
-        Mockito.verify(mListener, Mockito.times(1)).testRunStarted(Mockito.any(), eq(2));
-        for (Pair<TestDescription, Boolean> testResult : expectedTestResults) {
-            Mockito.verify(mListener, Mockito.times(1))
-                    .testStarted(Mockito.eq(testResult.first), Mockito.anyLong());
-            if (!testResult.second) {
-                Mockito.verify(mListener, Mockito.times(1))
-                        .testFailed(Mockito.eq(testResult.first), any(FailureDescription.class));
-            }
-            Mockito.verify(mListener, Mockito.times(1))
-                    .testEnded(
-                            Mockito.eq(testResult.first),
-                            Mockito.anyLong(),
-                            Mockito.eq(new HashMap<String, MetricMeasurement.Metric>()));
-        }
+        // Verify module 1 passes normally
+        TestDescription module1Description = new TestDescription(MODULE_01, "main_test_01");
+        Mockito.verify(mListener, Mockito.times(1))
+                .testStarted(Mockito.eq(module1Description), Mockito.anyLong());
+        Mockito.verify(mListener, Mockito.times(1))
+                .testEnded(
+                        Mockito.eq(module1Description),
+                        Mockito.anyLong(),
+                        Mockito.eq(new HashMap<String, MetricMeasurement.Metric>()));
 
+        // Capture and verify the testRunFailed event for module 2
+        ArgumentCaptor<FailureDescription> failureCaptor =
+                ArgumentCaptor.forClass(FailureDescription.class);
+        Mockito.verify(mListener, Mockito.times(1)).testRunFailed(failureCaptor.capture());
+
+        FailureDescription capturedFailure = failureCaptor.getValue();
+        org.junit.Assert.assertTrue(
+                "The error message should indicate missing KTAP results",
+                capturedFailure.getErrorMessage().contains("No KTAP results generated in"));
+        org.junit.Assert.assertTrue(
+                "The error message should mention the failing module",
+                capturedFailure
+                        .getErrorMessage()
+                        .contains(String.format("for module '%s'", MODULE_NAME_02)));
+
+        // Ensure no testStarted calls happened for the MODULE_02 description
+        TestDescription module2Description = new TestDescription(MODULE_02, MODULE_02);
+        Mockito.verify(mListener, Mockito.never())
+                .testStarted(Mockito.eq(module2Description), Mockito.anyLong());
+
+        // Verify the run ends correctly
         Mockito.verify(mListener, Mockito.times(1))
                 .testRunEnded(
                         Mockito.anyLong(),
