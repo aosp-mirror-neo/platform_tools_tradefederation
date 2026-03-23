@@ -39,9 +39,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of {@link BaseTestSuite} to run tests based on specified execution plans in the
@@ -88,6 +92,7 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
                         .add(new Pair<>(executionPlan, modulePlan));
             }
         }
+        CLog.d("Created module to plans map for %d modules", moduleNameToPlansMap.size());
 
         // Get all individual module names from the matched execution plans
         Set<String> modulesToLoad = moduleNameToPlansMap.keySet();
@@ -98,7 +103,9 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
         // so that parameters in IRemoteTest could be assigned correctly
         // during loadTest calls.
         setIncludeFilter(modulesToLoad);
+        CLog.d("Loading %d module(s) via super.loadTests()", modulesToLoad.size());
         LinkedHashMap<String, IConfiguration> discoveredConfigs = super.loadTests();
+        CLog.d("Discovered %d module configurations", discoveredConfigs.size());
 
         // Step 4: reload discovered configurations with args set per ModulePlan
         LinkedHashMap<String, IConfiguration> finalConfigs = new LinkedHashMap<>();
@@ -126,6 +133,10 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
                 continue;
             }
 
+            CLog.d(
+                    "Reloading individual tests for module %s with %d plan(s)",
+                    moduleName, plans.size());
+
             IConfiguration clonedConfig = moduleConfig.clone();
 
             List<IRemoteTest> allTestsForModule = new ArrayList<>();
@@ -139,6 +150,7 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
 
             if (plans.size() > 1) {
                 clonedConfig.getConfigurationDescription().setNotIRemoteTestShardable(true);
+                CLog.d("Module %s has multiple plans; disabled remote test sharding", moduleName);
             }
 
             if (mRemoteTestTimeOut != null) {
@@ -147,6 +159,9 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
                         .addMetadata(
                                 RemoteTestTimeOutEnforcer.REMOTE_TEST_TIMEOUT_OPTION,
                                 mRemoteTestTimeOut.toString());
+                CLog.d(
+                        "Applied remote test timeout %s to module %s",
+                        mRemoteTestTimeOut, moduleName);
             }
 
             finalConfigs.put(entry.getKey(), clonedConfig);
@@ -177,22 +192,31 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
         clearConfigPaths();
         if (configPath != null) {
             File configFile = new File(configPath);
-            if (configFile != null) {
-                addConfigPaths(configFile);
-            }
+            addConfigPaths(configFile);
+            CLog.d("Added config path %s for module %s", configPath, modulePlan.getModule());
         }
 
+        CLog.d("Parsing options for module %s", modulePlan.getModule());
         parseOptions(modulePlan, executionPlan);
 
         LinkedHashMap<String, IConfiguration> loadedConfigs = super.loadTests();
+        CLog.d(
+                "Loaded %d configurations for config %s of module %s",
+                loadedConfigs.size(), configPath, modulePlan.getModule());
 
         for (Map.Entry<String, IConfiguration> entry : loadedConfigs.entrySet()) {
             if (entry.getValue().getConfigurationDescription().getAbi() != null
                     && !entry.getValue().getConfigurationDescription().getAbi().equals(abi)) {
+                CLog.d(
+                        "Skipping test %s because abi %s does not match expected %s",
+                        entry.getKey(),
+                        entry.getValue().getConfigurationDescription().getAbi(),
+                        abi);
                 continue;
             }
             tests.addAll(entry.getValue().getTests());
         }
+        CLog.d("Created %d individual tests for module %s", tests.size(), modulePlan.getModule());
         return tests;
     }
 
@@ -211,8 +235,12 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
         }
         if (!moduleIncludeFilters.isEmpty()) {
             setIncludeFilter(moduleIncludeFilters);
+            CLog.d(
+                    "Set %d include filters for module %s",
+                    moduleIncludeFilters.size(), modulePlan.getModule());
         } else {
             setIncludeFilter(Set.of(modulePlan.getModule()));
+            CLog.d("Set default include filter for module %s", modulePlan.getModule());
         }
 
         Set<String> moduleExcludeFilters = new HashSet<>();
@@ -221,6 +249,9 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
         }
         if (!moduleExcludeFilters.isEmpty()) {
             setExcludeFilter(moduleExcludeFilters);
+            CLog.d(
+                    "Set %d exclude filters for module %s",
+                    moduleExcludeFilters.size(), modulePlan.getModule());
         }
 
         // Process module arguments
@@ -233,6 +264,9 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
             moduleArgs.add(moduleArg);
         }
         addModuleArgs(moduleArgs);
+        if (!moduleArgs.isEmpty()) {
+            CLog.d("Added %d module args for module %s", moduleArgs.size(), modulePlan.getModule());
+        }
     }
 
     /**
@@ -242,7 +276,44 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
      */
     private List<TestExecutionPlan> loadAndMatchExecutionPlans() {
         List<TestExecutionPlan> allPlans = new ArrayList<>();
-        for (String zipPath : mConfigZipPaths) {
+        Set<String> matchedZipPaths = new LinkedHashSet<>();
+        Set<String> keys = getBuildInfo().getVersionedFileKeys();
+
+        for (String zipPathOrRegex : mConfigZipPaths) {
+            // 1. If keys are unavailable, skip regex compilation and fallback immediately
+            if (keys == null) {
+                matchedZipPaths.add(zipPathOrRegex);
+                continue;
+            }
+
+            // 2. Exact literal match (fast path)
+            if (keys.contains(zipPathOrRegex)) {
+                matchedZipPaths.add(zipPathOrRegex);
+                continue;
+            }
+
+            // 3. Regex matching
+            List<String> regexMatches = new ArrayList<>();
+            try {
+                Pattern pattern = Pattern.compile(zipPathOrRegex);
+                regexMatches =
+                        keys.stream()
+                                .filter(k -> pattern.matcher(k).matches())
+                                .collect(Collectors.toList());
+                matchedZipPaths.addAll(regexMatches);
+            } catch (PatternSyntaxException e) {
+                CLog.w(
+                        "Failed to compile zip path '%s' as a regex: %s",
+                        zipPathOrRegex, e.getMessage());
+            }
+
+            // 4. Graceful Fallback for non-matching regex
+            if (regexMatches.isEmpty()) {
+                matchedZipPaths.add(zipPathOrRegex);
+            }
+        }
+
+        for (String zipPath : matchedZipPaths) {
             File zipFile = getBuildInfo().getFile(zipPath);
             if (zipFile == null || !zipFile.exists()) {
                 CLog.w("Config zip path %s does not exist.", zipPath);
@@ -252,6 +323,7 @@ public class ExecutionPlanSuiteRunner extends BaseTestSuite {
             try (ZipFile zf = new ZipFile(zipFile)) {
                 protoFile = ZipUtil2.extractFileFromZip(zf, TEST_CONFIGS_PROTO_PATH);
                 if (protoFile != null) {
+                    CLog.d("Extracted %s from zip %s", TEST_CONFIGS_PROTO_PATH, zipPath);
                     try (FileInputStream fis = new FileInputStream(protoFile)) {
                         TestConfigs testConfigs = TestConfigs.parseFrom(fis);
                         allPlans.addAll(testConfigs.getExecutionPlansList());

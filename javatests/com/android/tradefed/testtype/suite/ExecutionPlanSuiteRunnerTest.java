@@ -296,6 +296,47 @@ public class ExecutionPlanSuiteRunnerTest {
         assertEquals(4, configMap.get("module_four").getTests().size());
     }
 
+    @Test
+    public void testLoadTests_regexZipPaths() throws Exception {
+        String zipPath = createTestConfigZip("acme_test_configs_textproto");
+        when(mBuildInfo.getVersionedFileKeys())
+                .thenReturn(new HashSet<>(Arrays.asList("testconfigs.zip", "other.zip")));
+        when(mBuildInfo.getFile("testconfigs.zip")).thenReturn(new File(zipPath));
+        // Use a generic regex that would match the given exact file.
+        mOptionSetter.setOptionValue("config-zip-paths", ".*testconfigs\\.zip");
+        mOptionSetter.setOptionValue("execution-plans", "plan_alpha");
+
+        mTestConfigs.clear();
+        addModuleConfig("module_one");
+        addModuleConfig("module_two");
+
+        LinkedHashMap<String, IConfiguration> configMap = mRunner.loadTests();
+        assertEquals(2, configMap.size());
+        assertTrue(configMap.containsKey("module_one"));
+        assertTrue(configMap.containsKey("module_two"));
+    }
+
+    @Test
+    public void testLoadTests_invalidRegexZipPaths() throws Exception {
+        String zipPath = createTestConfigZip("acme_test_configs_textproto");
+        when(mBuildInfo.getVersionedFileKeys())
+                .thenReturn(new HashSet<>(Arrays.asList("testconfigs.zip", "other.zip")));
+        // Mock getFile to return the zipPath when queried with the literal invalid regex string
+        when(mBuildInfo.getFile(".*[unclosed_testconfigs.zip")).thenReturn(new File(zipPath));
+        // Use an invalid regex (unmatched bracket)
+        mOptionSetter.setOptionValue("config-zip-paths", ".*[unclosed_testconfigs.zip");
+        mOptionSetter.setOptionValue("execution-plans", "plan_alpha");
+
+        mTestConfigs.clear();
+        addModuleConfig("module_one");
+        addModuleConfig("module_two");
+
+        LinkedHashMap<String, IConfiguration> configMap = mRunner.loadTests();
+        assertEquals(2, configMap.size());
+        assertTrue(configMap.containsKey("module_one"));
+        assertTrue(configMap.containsKey("module_two"));
+    }
+
     private void addModuleConfig(String moduleName) {
         addModuleConfig(moduleName, null);
     }
