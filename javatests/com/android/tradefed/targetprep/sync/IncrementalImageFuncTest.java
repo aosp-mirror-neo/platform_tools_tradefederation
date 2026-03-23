@@ -110,7 +110,7 @@ public class IncrementalImageFuncTest extends BaseHostJUnit4Test {
                         SnapuserdWaitPhase.BLOCK_AFTER_UPDATE,
                         null);
         try {
-            updateUtil.updateDevice(null, null);
+            updateUtil.updateDevice(null, null, null);
 
             String afterMountBuildId = getDevice().getBuildId();
             CLog.d(

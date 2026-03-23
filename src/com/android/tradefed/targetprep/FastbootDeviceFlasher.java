@@ -224,7 +224,9 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 && shouldFlashSystem(mSystemBuildId, mSystemBuildFlavor, deviceBuild)) {
             try {
                 mIncrementalFlashing.updateDeviceWithNewFlow(
-                        deviceBuild.getBootloaderImageFile(), deviceBuild.getBasebandImageFile());
+                        deviceBuild.getBootloaderImageFile(),
+                        deviceBuild.getBasebandImageFile(),
+                        deviceBuild.getTrustyImageFile());
             } catch (TargetSetupError e) {
                 mIncrementalFlashing = null;
                 // In case of TargetSetupError for incremental flashing,
@@ -860,7 +862,8 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 try {
                     mIncrementalFlashing.updateDevice(
                             deviceBuild.getBootloaderImageFile(),
-                            deviceBuild.getBasebandImageFile());
+                            deviceBuild.getBasebandImageFile(),
+                            deviceBuild.getTrustyImageFile());
                     shouldFlash = false;
                 } catch (TargetSetupError e) {
                     // In case of TargetSetupError for incremental flashing,

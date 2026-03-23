@@ -298,7 +298,7 @@ public class IncrementalImageUtil {
         return true;
     }
 
-    public void updateDeviceWithNewFlow(File currentBootloader, File currentRadio)
+    public void updateDeviceWithNewFlow(File currentBootloader, File currentRadio, File currentTrusty)
             throws DeviceNotAvailableException, TargetSetupError {
         if (!mNewFlow || !mApplySnapshot || !mWipeAfterApplySnapshot) {
             mNewFlow = false;
@@ -312,14 +312,14 @@ public class IncrementalImageUtil {
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.INCREMENTAL_NEW_FLOW, 1);
         // If enable, push the bootloader from userspace like OTA
         if (mUpdateBootloaderFromUserspace) {
-            updateBootloaderFromUserspace(currentBootloader);
+            updateBootloaderFromUserspace(currentBootloader, currentTrusty);
         }
         CLog.d("Updating with new incremental flow.");
-        updateDevice(currentBootloader, currentRadio);
+        updateDevice(currentBootloader, currentRadio, currentTrusty);
     }
 
     /** Updates the device using the snapshot logic. */
-    public void updateDevice(File currentBootloader, File currentRadio)
+    public void updateDevice(File currentBootloader, File currentRadio, File currentTrusty)
             throws DeviceNotAvailableException, TargetSetupError {
         if (mDevice.isStateBootloaderOrFastbootd()) {
             mDevice.rebootUntilOnline();
@@ -330,7 +330,7 @@ public class IncrementalImageUtil {
                     InfraErrorIdentifier.INCREMENTAL_FLASHING_ERROR);
         }
         try {
-            internalUpdateDevice(currentBootloader, currentRadio);
+            internalUpdateDevice(currentBootloader, currentRadio, currentTrusty);
         } catch (DeviceNotAvailableException | TargetSetupError | RuntimeException e) {
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.INCREMENTAL_FLASHING_UPDATE_FAILURE, 1);
@@ -338,7 +338,7 @@ public class IncrementalImageUtil {
         }
     }
 
-    private void updateBootloaderFromUserspace(File currentBootloader)
+    private void updateBootloaderFromUserspace(File currentBootloader, File currentTrusty)
             throws DeviceNotAvailableException, TargetSetupError {
         File bootloaderDir = null;
         try (CloseableTraceScope ignored = new CloseableTraceScope("update_bootloader_userspace")) {
@@ -373,6 +373,20 @@ public class IncrementalImageUtil {
                 bootloaderDir =
                         FileUtil.createTempDir("bootloader", CurrentInvocation.getWorkFolder());
                 FastbootPack.unpack(currentBootloader, bootloaderDir, null, false);
+                if (currentTrusty != null) {
+                    if (partitions.contains("tzsw.img")) {
+                        CLog.d(
+                                "Moving Trusty image into unpacked bootloader %s",
+                                bootloaderDir.getAbsolutePath());
+                        FileUtil.copyFile(
+                                currentTrusty,
+                                new File(bootloaderDir.getAbsolutePath(), "tzsw.img"));
+                    } else {
+                        CLog.d(
+                                "Trusty is not on the OTA partitions list. Skip flashing from"
+                                    + " userspace.");
+                    }
+                }
             } catch (IOException e) {
                 throw new TargetSetupError(
                         e.getMessage(), e, InfraErrorIdentifier.INCREMENTAL_FLASHING_ERROR);
@@ -414,7 +428,7 @@ public class IncrementalImageUtil {
         }
     }
 
-    private void internalUpdateDevice(File currentBootloader, File currentRadio)
+    private void internalUpdateDevice(File currentBootloader, File currentRadio, File currentTrusty)
             throws DeviceNotAvailableException, TargetSetupError {
         InvocationMetricLogger.addInvocationMetrics(
                 InvocationMetricKey.INCREMENTAL_FLASHING_ATTEMPT_COUNT, 1);
@@ -566,7 +580,7 @@ public class IncrementalImageUtil {
                     CLog.d("wipe stderr: %s", wipeResults.getStderr());
                 }
                 updateBootloaderAndBasebandIfNeeded(
-                        targetDirectory, currentBootloader, currentRadio);
+                        targetDirectory, currentBootloader, currentRadio, currentTrusty);
             }
             flashStaticPartition(targetDirectory);
             mSourceDirectory = srcDirectory;
@@ -644,21 +658,37 @@ public class IncrementalImageUtil {
     }
 
     private void updateBootloaderAndBasebandIfNeeded(
-            File deviceImageUnzipped, File bootloader, File baseband)
+            File deviceImageUnzipped, File bootloader, File baseband, File trusty)
             throws DeviceNotAvailableException, TargetSetupError {
         FlashingResourcesParser parser = new FlashingResourcesParser(deviceImageUnzipped);
+        boolean flashedBootloaderOrTrusty = false;
         if (bootloader == null) {
             CLog.w("No bootloader file to flash.");
         } else {
             if (shouldFlashBootloader(mDevice, parser.getRequiredBootloaderVersion())) {
+                flashedBootloaderOrTrusty = true;
                 CommandResult bootloaderFlashTarget =
                         mDevice.executeFastbootCommand(
                                 "flash", "bootloader", bootloader.getAbsolutePath());
                 CLog.d("Status: %s", bootloaderFlashTarget.getStatus());
                 CLog.d("stdout: %s", bootloaderFlashTarget.getStdout());
                 CLog.d("stderr: %s", bootloaderFlashTarget.getStderr());
-                mDevice.rebootIntoBootloader();
             }
+        }
+        if (trusty == null) {
+            CLog.w("No trusty file to flash");
+        } else {
+            if (shouldFlashTrusty(mDevice, parser.getRequiredTrustyVersion())) {
+                flashedBootloaderOrTrusty = true;
+                CommandResult trustyFlashTarget =
+                        mDevice.executeFastbootCommand("flash", "tzsw", trusty.getAbsolutePath());
+                CLog.d("Status: %s", trustyFlashTarget.getStatus());
+                CLog.d("stdout: %s", trustyFlashTarget.getStdout());
+                CLog.d("stderr: %s", trustyFlashTarget.getStderr());
+            }
+        }
+        if (flashedBootloaderOrTrusty) {
+            mDevice.rebootIntoBootloader();
         }
         if (baseband == null) {
             CLog.w("No baseband file to flash");
@@ -808,6 +838,19 @@ public class IncrementalImageUtil {
             return true;
         } else {
             CLog.i("Bootloader is already version %s, skipping flashing", currentBootloaderVersion);
+            return false;
+        }
+    }
+
+    private boolean shouldFlashTrusty(ITestDevice device, String trustyVersion)
+            throws DeviceNotAvailableException, TargetSetupError {
+        String currentTrustyVersion =
+                FastbootDeviceFlasher.fetchImageVersion(mRunUtil, device, "trusty");
+        if (trustyVersion != null && !trustyVersion.equals(currentTrustyVersion)) {
+            CLog.i("Flashing trusty %s", trustyVersion);
+            return true;
+        } else {
+            CLog.i("Trusty is already version %s, skipping flashing", currentTrustyVersion);
             return false;
         }
     }
