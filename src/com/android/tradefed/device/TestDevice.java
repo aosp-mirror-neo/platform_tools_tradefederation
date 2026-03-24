@@ -3187,6 +3187,26 @@ public class TestDevice extends NativeDevice {
                     forwardFileToLog(logPath, "MicrodroidLog");
                 });
 
+        long adbConnectTimeoutMs = builder.mAdbConnectTimeoutMs;
+        if (builder.mForceStartAdbd) {
+            long timeoutTimeNs =
+                    System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(adbConnectTimeoutMs);
+            while (System.nanoTime() < timeoutTimeNs) {
+                // Explicitly turn on adbd in the VM.
+                // This may fail if VM is in early boot stage and hasn't registered guest agent.
+                CommandResult res = executeShellV2Command("vm start-adbd --cid " + cid);
+                if (res.getStatus() == CommandStatus.SUCCESS) {
+                    break;
+                }
+            }
+            long remainingTimeMs = TimeUnit.NANOSECONDS.toMillis(timeoutTimeNs - System.nanoTime());
+            if (remainingTimeMs <= 0) {
+                throw new DeviceRuntimeException(
+                        "vm start-adbd has failed", DeviceErrorIdentifier.SHELL_COMMAND_ERROR);
+            }
+            adbConnectTimeoutMs -= remainingTimeMs;
+        }
+
         int vmAdbPort = forwardMicrodroidAdbPort(cid);
         String microdroidSerial = "localhost:" + vmAdbPort;
 
@@ -3216,7 +3236,7 @@ public class TestDevice extends NativeDevice {
         ((IManagedTestDevice) microdroid).setIDevice(new RemoteAvdIDevice(microdroidSerial));
 
         try {
-            adbConnectToMicrodroid(cid, microdroidSerial, vmAdbPort, builder.mAdbConnectTimeoutMs);
+            adbConnectToMicrodroid(cid, microdroidSerial, vmAdbPort, adbConnectTimeoutMs);
         } catch (DeviceRuntimeException e) {
             // Before passing the exception, try to pull logs to see what went wrong
             try {
@@ -3498,6 +3518,7 @@ public class TestDevice extends NativeDevice {
         private String mName;
         private String mDumpDt;
         private boolean mEnableEarlycon = false;
+        private boolean mForceStartAdbd;
         private boolean mRamdump;
 
         /** Creates a builder for the given APK/apkPath. */
@@ -3523,7 +3544,8 @@ public class TestDevice extends NativeDevice {
             mProtectedVm = false; // Vm is unprotected by default.
             mTestDeviceOptions = new LinkedHashMap<>();
             mBootFiles = new LinkedHashMap<>();
-            mAdbConnectTimeoutMs = MICRODROID_DEFAULT_ADB_CONNECT_TIMEOUT_MINUTES * 60 * 1000;
+            mAdbConnectTimeoutMs =
+                    TimeUnit.MINUTES.toMillis(MICRODROID_DEFAULT_ADB_CONNECT_TIMEOUT_MINUTES);
             mAssignedDevices = new ArrayList<>();
             mInstanceIdFile = null;
             mInstanceImg = null;
@@ -3666,9 +3688,14 @@ public class TestDevice extends NativeDevice {
         /**
          * Sets the timeout for adb connect to microdroid TestDevice in millis.
          *
+         * <p>This should be positive to prevent test hangs.
+         *
          * @param timeoutMs The timeout in millis
          */
         public MicrodroidBuilder setAdbConnectTimeoutMs(long timeoutMs) {
+            if (timeoutMs <= 0) {
+                throw new IllegalArgumentException("adb connection timeout must be positive");
+            }
             mAdbConnectTimeoutMs = timeoutMs;
             return this;
         }
@@ -3757,6 +3784,18 @@ public class TestDevice extends NativeDevice {
             return this;
         }
 
+        /**
+         * Forcefully calls `vm start-adbd` between `vm run` and `adb forward`
+         *
+         * <p>NOTE: On the older API levels (before SDK 36) this function is a no-op.
+         *
+         * @return the microdroid builder.
+         */
+        public MicrodroidBuilder forceStartAdbd(boolean forceStartAdbd) {
+            mForceStartAdbd = true;
+            return this;
+        }
+
         /** Starts a Micrdroid TestDevice on the given TestDevice. */
         public ITestDevice build(@Nonnull TestDevice device) throws DeviceNotAvailableException {
             if (mNumCpus != null) {
@@ -3794,6 +3833,11 @@ public class TestDevice extends NativeDevice {
             if (device.getApiLevel() < 36) {
                 // `--enable-earlycon` flag was introduced in SDK level 36.
                 mEnableEarlycon = false;
+            }
+
+            if (device.getApiLevel() < 37) {
+                // `--start-adbd` flag was introduced in SDK level 37.
+                mForceStartAdbd = false;
             }
 
             return device.startMicrodroid(this);
