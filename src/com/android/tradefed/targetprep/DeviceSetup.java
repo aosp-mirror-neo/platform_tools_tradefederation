@@ -29,6 +29,7 @@ import com.android.tradefed.dependencies.connectivity.NetworkDependency;
 import com.android.tradefed.dependencies.connectivity.TelephonyDependency;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
+import com.android.tradefed.device.IWifiHelper.WifiConnectionResult;
 import com.android.tradefed.device.LocalAndroidVirtualDevice;
 import com.android.tradefed.device.StubDevice;
 import com.android.tradefed.device.TestDevice;
@@ -1269,11 +1270,19 @@ public class DeviceSetup extends BaseTargetPreparer implements IExternalDependen
         if (mWifiSsid != null) {
             mWifiSsidToPsk.put(mWifiSsid, mWifiPsk);
         }
-        if (device.connectToWifiNetwork(mWifiSsidToPsk)) {
+        WifiConnectionResult result = device.connectToWifiNetworkWithResult(mWifiSsidToPsk);
+        if (WifiConnectionResult.SUCCESS.equals(result)) {
             return;
         }
 
         if (mWifiSsid != null || !mWifiSsidToPsk.isEmpty()) {
+            if (WifiConnectionResult.FAILED_TO_ENABLE.equals(result)) {
+                throw new TargetSetupError(
+                        String.format("Failed to enable wifi on %s", device.getSerialNumber()),
+                        device.getDeviceDescriptor(),
+                        DeviceErrorIdentifier.FAILED_TO_ENABLE_WIFI);
+            }
+
             String network = (mWifiSsid == null) ? mWifiSsidToPsk.toString() : mWifiSsid;
             InfraErrorIdentifier errorIdentifier = InfraErrorIdentifier.WIFI_FAILED_CONNECT;
             if (device instanceof RemoteAndroidVirtualDevice

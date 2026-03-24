@@ -22,6 +22,7 @@ import com.android.tradefed.dependencies.IExternalDependency;
 import com.android.tradefed.dependencies.connectivity.NetworkDependency;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
+import com.android.tradefed.device.IWifiHelper.WifiConnectionResult;
 import com.android.tradefed.device.LocalAndroidVirtualDevice;
 import com.android.tradefed.device.cloud.NestedRemoteDevice;
 import com.android.tradefed.device.cloud.RemoteAndroidVirtualDevice;
@@ -29,6 +30,7 @@ import com.android.tradefed.invoker.TestInformation;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger;
 import com.android.tradefed.invoker.logger.InvocationMetricLogger.InvocationMetricKey;
 import com.android.tradefed.log.LogUtil.CLog;
+import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 
 import com.google.common.base.Strings;
@@ -95,7 +97,15 @@ public class WifiPreparer extends BaseTargetPreparer implements IExternalDepende
         }
 
         InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.WIFI_AP_NAME, mWifiNetwork);
-        if (!device.connectToWifiNetworkIfNeeded(mWifiNetwork, mWifiPsk)) {
+        WifiConnectionResult result =
+                device.connectToWifiNetworkIfNeededWithResult(mWifiNetwork, mWifiPsk);
+        if (!WifiConnectionResult.SUCCESS.equals(result)) {
+            if (WifiConnectionResult.FAILED_TO_ENABLE.equals(result)) {
+                throw new TargetSetupError(
+                        String.format("Failed to enable wifi on %s", device.getSerialNumber()),
+                        device.getDeviceDescriptor(),
+                        DeviceErrorIdentifier.FAILED_TO_ENABLE_WIFI);
+            }
             InfraErrorIdentifier errorIdentifier = InfraErrorIdentifier.WIFI_FAILED_CONNECT;
             if (device instanceof RemoteAndroidVirtualDevice
                     || device instanceof NestedRemoteDevice

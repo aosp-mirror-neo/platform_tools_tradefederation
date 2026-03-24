@@ -62,7 +62,8 @@ public enum DeviceErrorIdentifier implements ErrorIdentifier {
     DEVICE_CRASHED(520_752, FailureStatus.SYSTEM_UNDER_TEST_CRASHED),
     UNEXPECTED_REBOOT(520_753, FailureStatus.SYSTEM_UNDER_TEST_CRASHED),
     // Failures of the device action tool.
-    DEVICE_ACTION_EXECUTION_FAILURE(520_754, FailureStatus.DEPENDENCY_ISSUE);
+    DEVICE_ACTION_EXECUTION_FAILURE(520_754, FailureStatus.DEPENDENCY_ISSUE),
+    FAILED_TO_ENABLE_WIFI(520_755, FailureStatus.DEPENDENCY_ISSUE);
 
     private final long code;
     private final @Nonnull FailureStatus status;

@@ -34,6 +34,7 @@ import com.android.tradefed.config.ConfigurationException;
 import com.android.tradefed.config.OptionSetter;
 import com.android.tradefed.device.DeviceNotAvailableException;
 import com.android.tradefed.device.ITestDevice;
+import com.android.tradefed.device.IWifiHelper.WifiConnectionResult;
 import com.android.tradefed.device.RemoteAvdIDevice;
 import com.android.tradefed.device.TestDevice;
 import com.android.tradefed.device.TestDeviceOptions;
@@ -42,6 +43,7 @@ import com.android.tradefed.device.cloud.RemoteAndroidVirtualDevice;
 import com.android.tradefed.invoker.IInvocationContext;
 import com.android.tradefed.invoker.InvocationContext;
 import com.android.tradefed.invoker.TestInformation;
+import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.util.BinaryState;
 import com.android.tradefed.util.CommandResult;
@@ -257,7 +259,8 @@ public class DeviceSetupTest {
         doCheckExternalStoreSpaceExpectations();
         LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
         ssidToPsk.put("wifi_network", "psk");
-        when(mMockDevice.connectToWifiNetwork(ssidToPsk)).thenReturn(true);
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPsk))
+                .thenReturn(WifiConnectionResult.SUCCESS);
 
         mDeviceSetup.setWifiNetwork("wifi_network");
         mDeviceSetup.setWifiPsk("psk");
@@ -276,7 +279,8 @@ public class DeviceSetupTest {
         doCheckExternalStoreSpaceExpectations();
         LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
         ssidToPsk.put("wifi_network", "");
-        when(mMockDevice.connectToWifiNetwork(ssidToPsk)).thenReturn(true);
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPsk))
+                .thenReturn(WifiConnectionResult.SUCCESS);
 
         mDeviceSetup.setWifiNetwork("wifi_network");
         mDeviceSetup.setWifiPsk("");
@@ -313,7 +317,8 @@ public class DeviceSetupTest {
         ssidToPskExpected.put("old_network", "abc");
         ssidToPskExpected.put("network", "def");
         ssidToPskExpected.put("new_network", "ghi");
-        when(mMockDevice.connectToWifiNetwork(ssidToPskExpected)).thenReturn(true);
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPskExpected))
+                .thenReturn(WifiConnectionResult.SUCCESS);
 
         mDeviceSetup.setWifiNetwork("old_network");
         mDeviceSetup.setWifiPsk("abc");
@@ -338,7 +343,8 @@ public class DeviceSetupTest {
         ssidToPskExpected.put("old_network", null);
         ssidToPskExpected.put("network", "");
         ssidToPskExpected.put("new_network", "");
-        when(mMockDevice.connectToWifiNetwork(ssidToPskExpected)).thenReturn(true);
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPskExpected))
+                .thenReturn(WifiConnectionResult.SUCCESS);
 
         mDeviceSetup.setWifiNetwork("old_network");
         mDeviceSetup.setWifiPsk(null);
@@ -1052,7 +1058,10 @@ public class DeviceSetupTest {
     public void testSetup_connectToWifiFailed() throws Exception {
         doSetupExpectations();
         doCheckExternalStoreSpaceExpectations();
-        when(mMockDevice.connectToWifiNetwork("wifi_network", "psk")).thenReturn(false);
+        LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
+        ssidToPsk.put("wifi_network", "psk");
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPsk))
+                .thenReturn(WifiConnectionResult.FAILED_TO_CONNECT);
 
         mDeviceSetup.setWifiNetwork("wifi_network");
         mDeviceSetup.setWifiPsk("psk");
@@ -1064,6 +1073,32 @@ public class DeviceSetupTest {
         } catch (TargetSetupError e) {
             // expected identifier
             assertEquals(e.getErrorId(), InfraErrorIdentifier.WIFI_FAILED_CONNECT);
+        }
+    }
+
+    /**
+     * Test {@link DeviceSetup#setUp(TestInformation)} when connect to wifi fails due to
+     * FAILED_TO_ENABLE.
+     */
+    @Test
+    public void testSetup_connectToWifiFailedToEnable() throws Exception {
+        doSetupExpectations();
+        doCheckExternalStoreSpaceExpectations();
+        LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
+        ssidToPsk.put("wifi_network", "psk");
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPsk))
+                .thenReturn(WifiConnectionResult.FAILED_TO_ENABLE);
+
+        mDeviceSetup.setWifiNetwork("wifi_network");
+        mDeviceSetup.setWifiPsk("psk");
+        mDeviceSetup.setWifi(BinaryState.ON);
+
+        try {
+            mDeviceSetup.setUp(mTestInfo);
+            fail("TargetSetupError not thrown");
+        } catch (TargetSetupError e) {
+            assertEquals(e.getErrorId(), DeviceErrorIdentifier.FAILED_TO_ENABLE_WIFI);
+            assertTrue(e.getMessage().contains("Failed to enable wifi on"));
         }
     }
 
@@ -1082,7 +1117,10 @@ public class DeviceSetupTest {
         doSetupExpectations();
         doCheckExternalStoreSpaceExpectations();
 
-        when(mMockDevice.connectToWifiNetwork("wifi_network", "psk")).thenReturn(false);
+        LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
+        ssidToPsk.put("wifi_network", "psk");
+        when(mMockDevice.connectToWifiNetworkWithResult(ssidToPsk))
+                .thenReturn(WifiConnectionResult.FAILED_TO_CONNECT);
         mTestInfo = TestInformation.newBuilder().setInvocationContext(context).build();
         mDeviceSetup.setWifiNetwork("wifi_network");
         mDeviceSetup.setWifiPsk("psk");
