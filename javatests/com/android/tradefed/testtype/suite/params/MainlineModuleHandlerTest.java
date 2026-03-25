@@ -102,7 +102,7 @@ public final class MainlineModuleHandlerTest {
         try {
             when(mMockBuildInfo.getBuildBranch()).thenReturn(null);
 
-            mHandler = new MainlineModuleHandler("mod1.apk+mod2.apex", mAbi, mContext, false);
+            mHandler = new MainlineModuleHandler("mod1.apk+mod2.apex", null, mAbi, mContext);
             fail("Should have thrown an exception.");
         } catch (IllegalArgumentException expected) {
             // expected

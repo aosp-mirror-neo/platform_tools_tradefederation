@@ -543,6 +543,17 @@ import com.android.tradefed.util.zip.MergedZipEntryCollectionTest;
 import com.google.android.tradefed.build.AndroidBuildArtifactHelperTest;
 import com.google.android.tradefed.result.CoverageMetadataCollectorTest;
 
+import com.google.android.tradefed.build.AndroidBuildDownloaderTest;
+import com.google.android.tradefed.build.CtsDeviceLaunchControlProviderTest;
+import com.google.android.tradefed.build.CtsLaunchControlProviderTest;
+import com.google.android.tradefed.build.DeviceLaunchControlProviderTest;
+import com.google.android.tradefed.build.LaunchControlProviderTest;
+import com.google.android.tradefed.build.LCUtilTest;
+import com.google.android.tradefed.build.RemoteBuildInfoTest;
+import com.google.android.tradefed.build.SsoClientHttpHelperTest;
+import com.google.android.tradefed.build.TfLaunchControlProviderTest;
+import com.google.android.tradefed.build.content.LastBuildInfoTest;
+import com.google.android.tradefed.config.remote.AndroidBuildRemoteFileResolverTest;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
@@ -555,7 +566,17 @@ import org.junit.runners.Suite.SuiteClasses;
  */
 @RunWith(Suite.class)
 @SuiteClasses({
-    // Auth
+    AndroidBuildDownloaderTest.class,
+    CtsDeviceLaunchControlProviderTest.class,
+    CtsLaunchControlProviderTest.class,
+    DeviceLaunchControlProviderTest.class,
+    LaunchControlProviderTest.class,
+    LCUtilTest.class,
+    RemoteBuildInfoTest.class,
+    SsoClientHttpHelperTest.class,
+    TfLaunchControlProviderTest.class,
+    LastBuildInfoTest.class,
+    AndroidBuildRemoteFileResolverTest.class,
     ServiceAccountKeyCredentialFactoryTest.class,
 
     // build

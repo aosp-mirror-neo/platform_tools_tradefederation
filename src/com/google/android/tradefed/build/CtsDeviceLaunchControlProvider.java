@@ -30,11 +30,9 @@ import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.observatory.IDiscoverDependencies;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.testtype.suite.ITestSuite;
-
 import com.google.android.tradefed.build.RemoteBuildInfo.BuildAttributeKey;
 import com.google.android.tradefed.config.remote.AndroidBuildRemoteFileResolver;
 import com.google.common.base.Strings;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -146,6 +144,30 @@ public class CtsDeviceLaunchControlProvider extends DeviceLaunchControlProvider
                     "Force the test discovery to be in metadata mode.")
     private boolean mCtsForceTestDiscoveryMetadataMode = false;
 
+    @Option(
+            name = "partial-download-rollout-artifact",
+            description =
+                    "The main artifact name (e.g., android-cts.zip) currently being targeted for"
+                        + " partial download rollout. This option is primarily to scope the effect"
+                        + " of force-disable-partial-download.")
+    private String mPartialDownloadRolloutArtifact = null;
+
+    @Option(
+            name = "force-disable-partial-download-experiment",
+            description =
+                    "If true, partial download experiment is disabled for the artifact specified in"
+                            + " --partial-download-rollout-artifact on the current branch. Legacy"
+                            + " rollout logic will be used instead. This is used for experimental"
+                            + " control and quick mitigations.")
+    private boolean mForceDisablePartialDownloadExperiment = false;
+
+    @Option(
+            name = "partial-download-disallow-list",
+            description =
+                    "A set of 'artifact:branch' pairs for which partial download should always be"
+                            + " disabled. Example: 'android-cts.zip:git_main'")
+    private Set<String> mPartialDownloadDisallowList = new HashSet<>();
+
     private CtsLaunchControlProvider mCtsLcProvider;
     private IFileDownloader mCtsDownloader;
 
@@ -200,7 +222,10 @@ public class CtsDeviceLaunchControlProvider extends DeviceLaunchControlProvider
             mCtsLcProvider.setEnableResolveSymlinks(mEnableResolveSymlinks);
             mCtsLcProvider.setUseBuildApi(shouldUseBuildApi());
             mCtsLcProvider.setContentBasedReportingDefault(getContentBasedReportingDefault());
-
+            mCtsLcProvider.setPartialDownloadRolloutArtifact(mPartialDownloadRolloutArtifact);
+            mCtsLcProvider.setForceDisablePartialDownloadExperiment(
+                    mForceDisablePartialDownloadExperiment);
+            mCtsLcProvider.setPartialDownloadDisallowList(mPartialDownloadDisallowList);
             RemoteBuildInfo ctsBuild = queryCtsBuild(deviceBuild.getBuildId(), mCtsLcProvider);
             if (ctsBuild != null) {
                 if (mCtsLcProvider.getForceCas()) {

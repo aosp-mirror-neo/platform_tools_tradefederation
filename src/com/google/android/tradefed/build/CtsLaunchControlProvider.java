@@ -42,16 +42,12 @@ import com.android.tradefed.testtype.suite.ITestSuite;
 import com.android.tradefed.util.FileUtil;
 import com.android.tradefed.util.FuseUtil;
 import com.android.tradefed.util.TimeUtil;
-
 import com.google.android.tradefed.build.RemoteBuildInfo.BuildAttributeKey;
 import com.google.android.tradefed.build.content.ContentBasedHelper;
 import com.google.android.tradefed.testtype.CtsTestLauncher;
 import com.google.android.tradefed.util.TestDiscoveryInfo;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
-
-import org.json.JSONException;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -61,6 +57,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.json.JSONException;
 
 /**
  * A {@link LaunchControlProvider} for a CTS build.
@@ -125,6 +122,30 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
                     "Force the test discovery to be in metadata mode.")
     private boolean mCtsForceTestDiscoveryMetadataMode = false;
 
+    @Option(
+            name = "partial-download-rollout-artifact",
+            description =
+                    "The main artifact name (e.g., android-cts.zip) currently being targeted for"
+                        + " partial download rollout. This option is primarily to scope the effect"
+                        + " of force-disable-partial-download.")
+    private String mPartialDownloadRolloutArtifact = null;
+
+    @Option(
+            name = "force-disable-partial-download-experiment",
+            description =
+                    "If true, partial download experiment is disabled for the artifact specified in"
+                            + " --partial-download-rollout-artifact on the current branch. Legacy"
+                            + " rollout logic will be used instead. This is used for experimental"
+                            + " control and quick mitigations.")
+    private boolean mForceDisablePartialDownloadExperiment = false;
+
+    @Option(
+            name = "partial-download-disallow-list",
+            description =
+                    "A set of 'artifact:branch' pairs for which partial download should always be"
+                            + " disabled. Example: 'android-cts.zip:git_main'")
+    private Set<String> mPartialDownloadDisallowList = new HashSet<>();
+
     private Map<String, String> mExtraWithPath = new HashMap<String, String>();
     private List<File> mFileCreated = new ArrayList<File>();
     private final boolean mIsFuseUtilAvailable = getFuseUtil().canMountZip();
@@ -144,6 +165,8 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
                     "List of package_name:branch combinations where partial download will be used.")
     private Set<String> mPartialDownloadDefaultRollout = new LinkedHashSet<>();
 
+    // This enum represents the different states or outcomes of the partial download process for an
+    // xTS artifact (like android-cts.zip).
     public enum PartialDownloadMode {
         PartialDownloadNotInUse,
         PartialDownloadTestModules,
@@ -197,6 +220,19 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
 
     public void setPartialDownloadDefaultRollout(Set<String> partialDownloadDefaultRollout) {
         mPartialDownloadDefaultRollout.addAll(partialDownloadDefaultRollout);
+    }
+
+    public void setPartialDownloadRolloutArtifact(String partialDownloadRolloutArtifact) {
+        mPartialDownloadRolloutArtifact = partialDownloadRolloutArtifact;
+    }
+
+    public void setForceDisablePartialDownloadExperiment(
+            boolean forceDisablePartialDownloadExperiment) {
+        mForceDisablePartialDownloadExperiment = forceDisablePartialDownloadExperiment;
+    }
+
+    public void setPartialDownloadDisallowList(Set<String> partialDownloadDisallowList) {
+        mPartialDownloadDisallowList.addAll(partialDownloadDisallowList);
     }
 
     public boolean getForceCas() {
@@ -495,6 +531,25 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
         }
     }
 
+    private void recordPartialDownloadMetrics() {
+        int partialDownloadCount =
+                mPartialDownloadMode.equals(PartialDownloadMode.PartialDownloadNotInUse) ? 0 : 1;
+        int fullDownloadCount =
+                (mPartialDownloadMode.equals(PartialDownloadMode.PartialDownloadNotInUse)
+                                || mPartialDownloadMode.equals(
+                                        PartialDownloadMode.PartialDownloadFallbackToFullDownload))
+                        ? 1
+                        : 0;
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricLogger.InvocationMetricKey.XTS_PARTIAL_DOWNLOAD_ROLLOUT_METRICS,
+                String.format(
+                        "%s:%s:%d:%d",
+                        mCtsPackageName,
+                        mPartialDownloadMode.name(),
+                        partialDownloadCount,
+                        fullDownloadCount));
+    }
+
     private void instrumentPartialDownloadResult(
             IFolderBuildInfo localBuild, String remoteCtsZipPath) {
         switch (mPartialDownloadMode) {
@@ -612,29 +667,70 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
                                 BuildAttributeKey.CTS, remoteBuild.toString()),
                         InfraErrorIdentifier.ARTIFACT_NOT_FOUND);
             }
-            if (mApplyDefaultRollout) {
-                if (mPartialDownloadDefaultRollout.contains(
-                        String.format("%s:%s", mCtsPackageName, getBranch()))) {
-                    CLog.d("Apply rollout strategy to partial download");
-                    mCtsUsePartialDownload = true;
+
+            boolean usePartialDownload = false;
+            String currentArtifactBranch = String.format("%s:%s", mCtsPackageName, getBranch());
+
+            if (mPartialDownloadDisallowList.contains(currentArtifactBranch)) {
+                CLog.d("Partial download disabled for %s by disallow list.", currentArtifactBranch);
+                usePartialDownload = false;
+            } else {
+                // Check if the current package is the one being rolled out
+                if (mCtsPackageName.equals(mPartialDownloadRolloutArtifact)
+                        && !mForceDisablePartialDownloadExperiment) {
+                    // For the artifact being rolled out, partial download experiment is on by
+                    // default
+                    CLog.d(
+                            "Partial download experiment enabled by default for rollout artifact %s"
+                                + " on branch %s.",
+                            mCtsPackageName, getBranch());
+                    usePartialDownload = true;
+                } else {
+                    if (mForceDisablePartialDownloadExperiment
+                            && mCtsPackageName.equals(mPartialDownloadRolloutArtifact)) {
+                        CLog.d(
+                                "Partial download experiment force disabled for rollout artifact %s"
+                                        + " on branch %s. Falling back to legacy rollout logic.",
+                                mCtsPackageName, getBranch());
+                    }
+                    // Legacy behavior for other artifacts not yet fully rolled out
+                    usePartialDownload = mCtsUsePartialDownload;
+                    if (!usePartialDownload && mApplyDefaultRollout) {
+                        if (mPartialDownloadDefaultRollout.contains(currentArtifactBranch)) {
+                            CLog.d(
+                                    "Apply legacy rollout strategy to partial download for %s",
+                                    currentArtifactBranch);
+                            usePartialDownload = true;
+                        }
+                    }
                 }
             }
-            if (mCtsUsePartialDownload) {
+
+            mPartialDownloadMode = PartialDownloadMode.PartialDownloadNotInUse;
+            if (usePartialDownload) {
                 localCtsRootDir =
                         FileUtil.createTempDir(
                                 String.format("%s_%s_", getBuildFlavor(), remoteBuild.getBuildId()),
                                 getWorkFolder());
+                CLog.i("Attempting partial download for %s", currentArtifactBranch);
                 xtsPartialDownload(localBuild, localCtsRootDir, remoteCtsZipPath, downloader);
                 instrumentPartialDownloadResult(localBuild, remoteCtsZipPath);
+            } else {
+                CLog.i("Skipping partial download for %s", currentArtifactBranch);
             }
+
             if (mPartialDownloadMode.equals(
                     PartialDownloadMode.PartialDownloadFallbackToFullDownload)) {
+                CLog.i("Fallback to full download for %s", currentArtifactBranch);
                 FileUtil.recursiveDelete(localCtsRootDir);
+                localCtsRootDir = null; // Reset to ensure full download re-creates it
             }
+
             if (mPartialDownloadMode.equals(
                             PartialDownloadMode.PartialDownloadFallbackToFullDownload)
                     || mPartialDownloadMode.equals(PartialDownloadMode.PartialDownloadNotInUse)) {
                 // Full download to get main package
+                CLog.d("Performing full download for %s", remoteCtsZipPath);
                 ctsZip = downloader.downloadFile(remoteCtsZipPath);
                 // If the returned path is a directory, the artifact is downloaded from CAS, and
                 // is already extracted. Directly use the path as the root dir.
@@ -679,10 +775,13 @@ public class CtsLaunchControlProvider extends LaunchControlProvider
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricLogger.InvocationMetricKey.XTS_STAGE_TESTS_TIME,
                     System.currentTimeMillis() - startTime);
-            InvocationMetricLogger.addInvocationMetrics(
-                    InvocationMetricLogger.InvocationMetricKey.XTS_STAGE_TESTS_BYTES,
-                    FileUtil.sizeOfDirectory(localCtsRootDir));
+            if (localCtsRootDir != null) {
+                InvocationMetricLogger.addInvocationMetrics(
+                        InvocationMetricLogger.InvocationMetricKey.XTS_STAGE_TESTS_BYTES,
+                        FileUtil.sizeOfDirectory(localCtsRootDir));
+            }
 
+            recordPartialDownloadMetrics();
             return localBuild;
         } catch (BuildRetrievalError e) {
             e.setBuildInfo(localBuild);
