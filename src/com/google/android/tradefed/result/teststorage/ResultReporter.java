@@ -471,7 +471,8 @@ public class ResultReporter
             try {
                 mLegacyResultId = Long.parseLong(testResultId);
             } catch (NumberFormatException e) {
-                mLegacyResultId = -1L;
+                CLog.w("Could not parse legacy test result id. Log associations will be disabled.");
+                mDisableAssociations = true;
             }
             if (!context.getBuildInfos().isEmpty()) {
                 mBuildInfo = context.getBuildInfos().get(0);
@@ -893,7 +894,6 @@ public class ResultReporter
                 updateModuleWorkUnit(update, currentTimeStamp, moduleCheckerProperties, moduleSkip);
                 return;
             }
-            CLog.i("Test module ended %s", update.getId());
             final SkipReason finalModuleSkip = moduleSkip;
             Runnable updater =
                     new Runnable() {
@@ -920,7 +920,6 @@ public class ResultReporter
                                 throw new RuntimeException(e);
                             }
                             if (mUploadLogAssociationWithWorkUnit) {
-                                CLog.i("Uploading module associations %s", workUnitId);
                                 Collection<LogAssociation> logs =
                                         mLogAssociations.removeAll(workUnitId);
                                 try {
@@ -1025,7 +1024,6 @@ public class ResultReporter
             InvocationMetricLogger.addInvocationMetrics(
                     InvocationMetricKey.ANTS_RUN_START_TIME, System.currentTimeMillis() - runStart);
         }
-        CLog.i("Test run started %s", mWorkUnits.peek().getId());
     }
 
     @Override
@@ -1140,7 +1138,6 @@ public class ResultReporter
                                 throw new RuntimeException(e);
                             }
                             if (mUploadLogAssociationWithWorkUnit) {
-                                CLog.i("Uploading work unit associations %s", workUnitId);
                                 Collection<LogAssociation> logs =
                                         mLogAssociations.removeAll(workUnitId);
                                 try {

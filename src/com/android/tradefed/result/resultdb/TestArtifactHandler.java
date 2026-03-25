@@ -34,7 +34,8 @@ import java.util.regex.Pattern;
 class TestArtifactHandler {
     // Pattern to extract artifact id from logsaver URL.
     private static final Pattern LOGSAVER_PATTERN =
-            Pattern.compile("https://android-build.googleplex.com/builds/I\\d+/(.+)");
+            Pattern.compile(
+                    "https:\\/\\/android-build.googleplex.com\\/builds\\/.+\\/.+\\/.+\\/.+\\/tests\\/\\d+\\/(.+)");
 
     // A map from resource ID to TestArtifact.
     private final Map<String, RecorderClient.ArtifactItem> mTestArtifactItems =
