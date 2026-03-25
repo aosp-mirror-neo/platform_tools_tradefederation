@@ -224,7 +224,9 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 && shouldFlashSystem(mSystemBuildId, mSystemBuildFlavor, deviceBuild)) {
             try {
                 mIncrementalFlashing.updateDeviceWithNewFlow(
-                        deviceBuild.getBootloaderImageFile(), deviceBuild.getBasebandImageFile());
+                        deviceBuild.getBootloaderImageFile(),
+                        deviceBuild.getBasebandImageFile(),
+                        deviceBuild.getTrustyImageFile());
             } catch (TargetSetupError e) {
                 mIncrementalFlashing = null;
                 // In case of TargetSetupError for incremental flashing,
@@ -524,16 +526,63 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
      */
     protected boolean checkAndFlashBootloader(ITestDevice device, IDeviceBuildInfo deviceBuild)
             throws DeviceNotAvailableException, TargetSetupError {
+        boolean flashedBootloaderOrTrusty = false;
         String currentBootloaderVersion = getImageVersion(device, "bootloader");
+        String currentTrustyVersion = null;
+        try{
+            currentTrustyVersion = getImageVersion(device, "trusty");
+        } catch (TargetSetupError e) {
+            CLog.i("Property version-trusty is not set on this device.");
+        }
+
         if (mSkipBootloaderVersionCheck
                 || (deviceBuild.getBootloaderVersion() != null
                         && !deviceBuild.getBootloaderVersion().equals(currentBootloaderVersion))) {
             CLog.i("Flashing bootloader %s", deviceBuild.getBootloaderVersion());
-            flashBootloader(device, deviceBuild.getBootloaderImageFile());
-            return true;
+            flashBootloader(device, deviceBuild.getBootloaderImageFile(), false);
+            flashedBootloaderOrTrusty = true;
         } else {
             CLog.i("Bootloader is already version %s, skipping flashing", currentBootloaderVersion);
-            return false;
+        }
+        if (deviceBuild.getTrustyVersion() != null
+                && !deviceBuild.getTrustyVersion().equals(currentTrustyVersion)) {
+            CLog.i("Flashing Trusty %s", deviceBuild.getTrustyVersion());
+            flashTrusty(device, deviceBuild.getTrustyImageFile());
+            flashedBootloaderOrTrusty = true;
+        } else {
+            CLog.i("Trusty is already version %s, skipping flashing", currentTrustyVersion);
+        }
+
+        if (flashedBootloaderOrTrusty) {
+            device.rebootIntoBootloader();
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Flashes the given bootloader image.
+     *
+     * @param device the {@link ITestDevice} to flash
+     * @param bootloaderImageFile the bootloader image {@link File}
+     * @param requireReboot whether to reboot after flashing
+     * @throws DeviceNotAvailableException if device is not available
+     * @throws TargetSetupError if failed to flash
+     */
+    protected void flashBootloader(
+            ITestDevice device, File bootloaderImageFile, boolean requireReboot)
+            throws DeviceNotAvailableException, TargetSetupError {
+        // bootloader images are small, and flash quickly. so use the 'normal' timeout
+        executeFastbootCmd(
+                device,
+                buildFastbootCommand(
+                        "flash",
+                        mShouldFlashRamdisk,
+                        getBootPartitionName(),
+                        bootloaderImageFile.getAbsolutePath()));
+        if (requireReboot) {
+            device.rebootIntoBootloader();
         }
     }
 
@@ -547,15 +596,7 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
      */
     protected void flashBootloader(ITestDevice device, File bootloaderImageFile)
             throws DeviceNotAvailableException, TargetSetupError {
-        // bootloader images are small, and flash quickly. so use the 'normal' timeout
-        executeFastbootCmd(
-                device,
-                buildFastbootCommand(
-                        "flash",
-                        mShouldFlashRamdisk,
-                        getBootPartitionName(),
-                        bootloaderImageFile.getAbsolutePath()));
-        device.rebootIntoBootloader();
+        flashBootloader(device, bootloaderImageFile, true);
     }
 
     /**
@@ -565,6 +606,25 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
      */
     protected String getBootPartitionName() {
         return "bootloader";
+    }
+
+    /**
+     * Flashes the given trusty image and reboots back into bootloader
+     *
+     * @param device the {@link ITestDevice} to flash
+     * @param trustyImageFile the trusty image {@link File}
+     * @throws DeviceNotAvailableException if device is not available
+     * @throws TargetSetupError if failed to flash
+     */
+    protected void flashTrusty(ITestDevice device, File trustyImageFile)
+            throws DeviceNotAvailableException, TargetSetupError {
+        executeFastbootCmd(
+                device,
+                buildFastbootCommand(
+                        "flash",
+                        mShouldFlashRamdisk,
+                        "tzsw",
+                        trustyImageFile.getAbsolutePath()));
     }
 
     /**
@@ -860,7 +920,8 @@ public class FastbootDeviceFlasher implements IDeviceFlasher {
                 try {
                     mIncrementalFlashing.updateDevice(
                             deviceBuild.getBootloaderImageFile(),
-                            deviceBuild.getBasebandImageFile());
+                            deviceBuild.getBasebandImageFile(),
+                            deviceBuild.getTrustyImageFile());
                     shouldFlash = false;
                 } catch (TargetSetupError e) {
                     // In case of TargetSetupError for incremental flashing,

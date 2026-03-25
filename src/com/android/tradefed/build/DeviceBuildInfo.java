@@ -307,6 +307,18 @@ public class DeviceBuildInfo extends BuildInfo implements IDeviceBuildInfo {
 
     /** {@inheritDoc} */
     @Override
+    public File getTrustyImageFile() {
+        return getFile(BuildInfoFileKey.TRUSTY_IMAGE);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String getTrustyVersion() {
+        return getVersion(BuildInfoFileKey.TRUSTY_IMAGE);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public File getOtaPackageFile() {
         return getFile(BuildInfoFileKey.OTA_IMAGE);
     }

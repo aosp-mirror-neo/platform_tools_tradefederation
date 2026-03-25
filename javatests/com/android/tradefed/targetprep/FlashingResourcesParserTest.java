@@ -275,4 +275,37 @@ public class FlashingResourcesParserTest {
         assertNull(parser.getRequiredImageVersion("version-baseband", "alpha"));
         assertNull(parser.getRequiredImageVersion("version-baseband", null));
     }
+
+    /**
+     * Test that {@link FlashingResourcesParser#parseAndroidInfo(BufferedReader, Map)} parses valid
+     * data correctly including trusty version.
+     */
+    @Test
+    public void testParseAndroidInfo_trusty() throws IOException {
+        final String validInfoData = "require board=board1|board2\n" +
+                "require version-bootloader=1.0.1\n" +
+                "require version-trusty=1234568\n";
+        BufferedReader reader = new BufferedReader(new StringReader(validInfoData));
+        AndroidInfo fullInfo = FlashingResourcesParser.parseAndroidInfo(reader, null);
+        MultiMap<String, String> result = fullInfo.get(null);
+
+        assertEquals(3, result.size());
+        List<String> trustyVersions = result.get(FlashingResourcesParser.TRUSTY_VERSION_KEY);
+        assertEquals(1, trustyVersions.size());
+        assertEquals("1234568", trustyVersions.get(0));
+    }
+
+    /**
+     * Test {@link FlashingResourcesParser#getRequiredTrustyVersion()} to make sure the
+     * latest version is returned when multiple valid version exist.
+     */
+    @Test
+    public void testGetRequiredTrustyVersion() throws Exception {
+        final String validInfoData =
+            "require product=alpha|beta|gamma\n" +
+            "require version-trusty=1234|5678|3456\n";
+        BufferedReader reader = new BufferedReader(new StringReader(validInfoData));
+        IFlashingResourcesParser parser = new FlashingResourcesParser(reader);
+        assertEquals("5678", parser.getRequiredTrustyVersion());
+    }
 }

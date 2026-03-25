@@ -72,6 +72,7 @@ public class FlashingResourcesParser implements IFlashingResourcesParser {
     public static final String PRODUCT_KEY = "product";
     public static final String BOARD_KEY = "board";
     public static final String BOOTLOADER_VERSION_KEY = "version-bootloader";
+    public static final String TRUSTY_VERSION_KEY = "version-trusty";
     public static final String BASEBAND_VERSION_KEY = "version-baseband";
 
     // key-value pairs of build requirements
@@ -146,6 +147,17 @@ public class FlashingResourcesParser implements IFlashingResourcesParser {
     @Override
     public String getRequiredBootloaderVersion() {
         return getRequiredImageVersion(BOOTLOADER_VERSION_KEY);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p/>
+     * If multiple versions are listed, get the latest with the assumption that versions sort from
+     * oldest to newest alphabetically.
+     */
+    @Override
+    public String getRequiredTrustyVersion() {
+        return getRequiredImageVersion(TRUSTY_VERSION_KEY);
     }
 
     /**

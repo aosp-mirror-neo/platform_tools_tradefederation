@@ -94,6 +94,7 @@ import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogSaverResultForwarder;
 import com.android.tradefed.result.ReportPassedTests;
 import com.android.tradefed.result.ResultAndLogForwarder;
+import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.error.DeviceErrorIdentifier;
 import com.android.tradefed.result.error.ErrorIdentifier;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
@@ -109,6 +110,7 @@ import com.android.tradefed.targetprep.DeviceFailedToBootError;
 import com.android.tradefed.targetprep.HsumBootStrategyPreparer;
 import com.android.tradefed.targetprep.SwitchUserTargetPreparer;
 import com.android.tradefed.targetprep.TargetSetupError;
+import com.android.tradefed.testtype.IRemoteTest;
 import com.android.tradefed.testtype.ITestInformationReceiver;
 import com.android.tradefed.testtype.SubprocessTfLauncher;
 import com.android.tradefed.testtype.suite.ModuleDefinition;
@@ -319,7 +321,11 @@ public class TestInvocation implements ITestInvocation {
                     badDevice.setRecoveryMode(RecoveryMode.NONE);
                 }
             }
-            reportFailure(createFailureFromException(e, FailureStatus.INFRA_FAILURE), listener);
+            if (config.getCommandOptions().shouldForcePreparerFailureAsTestFailure()) {
+                reportTestFailed(config, listener, e);
+            } else {
+                reportFailure(createFailureFromException(e, FailureStatus.INFRA_FAILURE), listener);
+            }
         } catch (TargetSetupError e) {
             exception = e;
             CLog.e("Caught exception while running invocation");
@@ -2106,6 +2112,23 @@ public class TestInvocation implements ITestInvocation {
                     "true");
             listener.testModuleStarted(moduleContext);
             listener.testModuleEnded();
+        }
+    }
+
+    /* Force to report the test is failed due to device setup issue. */
+    private void reportTestFailed(
+            IConfiguration config, ITestInvocationListener listener, Throwable exception) {
+        for (IRemoteTest test : config.getTests()) {
+            listener.testRunStarted(test.toString(), 1);
+            TestDescription testDescription = new TestDescription(test.toString(), test.toString());
+            listener.testStarted(testDescription);
+            FailureDescription failureDescription =
+                    createFailureFromException(exception, FailureStatus.TEST_FAILURE);
+            // Force failure status to be TEST_FAILURE so the run won't be marked as infra failure.
+            failureDescription.setFailureStatus(FailureStatus.TEST_FAILURE);
+            listener.testFailed(testDescription, failureDescription);
+            listener.testEnded(testDescription, System.currentTimeMillis(), Collections.emptyMap());
+            listener.testRunEnded(0, Collections.emptyMap());
         }
     }
 

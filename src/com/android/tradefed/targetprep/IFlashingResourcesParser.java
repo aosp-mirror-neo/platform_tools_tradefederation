@@ -32,6 +32,12 @@ public interface IFlashingResourcesParser {
     public String getRequiredBootloaderVersion();
 
     /**
+     * Gets the required trusty version specified in the device image zip.
+     * @return the trusty version or <code>null</code> if not specified
+     */
+    public String getRequiredTrustyVersion();
+
+    /**
      * Gets the required baseband version specified in the device image zip.
      * @return the baseband version or <code>null</code> if not specified
      */

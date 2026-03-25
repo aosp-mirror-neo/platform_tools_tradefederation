@@ -85,6 +85,7 @@ import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.result.InvocationStatus;
 import com.android.tradefed.result.LogDataType;
 import com.android.tradefed.result.LogFile;
+import com.android.tradefed.result.TestDescription;
 import com.android.tradefed.result.TestSummary;
 import com.android.tradefed.result.error.InfraErrorIdentifier;
 import com.android.tradefed.result.proto.TestRecordProto.FailureStatus;
@@ -1343,6 +1344,79 @@ public class TestInvocationTest {
 
         verifyInvokeWithBuild();
         verifyMockFailureListeners(exception);
+
+        verifySummaryListener();
+    }
+
+    /**
+     * Test the invoke scenario where preparer throws {@link BuildError} and the option
+     * force-preparer-failure-as-test-failure is enabled.
+     *
+     * @throws Exception if unexpected error occurs
+     */
+    @Test
+    public void testInvoke_buildError_forceTestFailure() throws Throwable {
+        String testName = "mytest";
+        BuildError exception =
+                new BuildError(
+                        "error", mFakeDescriptor, InfraErrorIdentifier.ARTIFACT_DOWNLOAD_ERROR);
+        IRemoteTest test = Mockito.mock(IRemoteTest.class);
+        Mockito.doReturn(testName).when(test).toString();
+        mStubConfiguration.setTests(Collections.singletonList(test));
+        OptionSetter setter = new OptionSetter(mStubConfiguration.getCommandOptions());
+        setter.setOptionValue("force-preparer-failure-as-test-failure", "true");
+
+        stubEarlyDeviceReleaseExpectation();
+        stubMockSuccessListeners();
+        stubInvokeWithBuild();
+
+        Mockito.when(mMockBuildProvider.getBuild()).thenReturn(mMockBuildInfo);
+        doThrow(exception).when(mMockPreparer).setUp(Mockito.any());
+        Mockito.when(mMockDevice.getRecoveryMode()).thenReturn(RecoveryMode.AVAILABLE);
+        Mockito.when(mMockDevice.getBugreport())
+                .thenReturn(new ByteArrayInputStreamSource(new byte[0]));
+
+        mTestInvocation.invoke(mStubInvocationMetadata, mStubConfiguration, mockRescheduler);
+
+        verifyInvokeWithBuild();
+
+        // Verify fundamental lifecycle events in order
+        mInOrderTestListener.verify(mMockTestListener).invocationStarted(Mockito.any());
+        mInOrderTestListener.verify(mMockTestListener).getSummary();
+
+        // Verify the extra reporting from reportTestFailed happens BEFORE invocationEnded
+        TestDescription testDescription = new TestDescription(testName, testName);
+        mInOrderTestListener
+                .verify(mMockTestListener)
+                .testRunStarted(
+                        Mockito.eq(testName), Mockito.eq(1), Mockito.anyInt(), Mockito.anyLong());
+        mInOrderTestListener
+                .verify(mMockTestListener)
+                .testStarted(Mockito.eq(testDescription), Mockito.anyLong());
+
+        // Match the failure description
+        ArgumentCaptor<FailureDescription> failureCaptor =
+                ArgumentCaptor.forClass(FailureDescription.class);
+        mInOrderTestListener
+                .verify(mMockTestListener)
+                .testFailed(Mockito.eq(testDescription), failureCaptor.capture());
+        FailureDescription failure = failureCaptor.getValue();
+        assertTrue(failure.getErrorMessage().contains("error"));
+        assertEquals(FailureStatus.TEST_FAILURE, failure.getFailureStatus());
+
+        mInOrderTestListener
+                .verify(mMockTestListener)
+                .testEnded(
+                        Mockito.eq(testDescription),
+                        Mockito.anyLong(),
+                        (HashMap<String, Metric>) Mockito.any());
+        mInOrderTestListener
+                .verify(mMockTestListener)
+                .testRunEnded(Mockito.anyLong(), (HashMap<String, Metric>) Mockito.any());
+
+        mInOrderTestListener.verify(mMockTestListener).invocationEnded(Mockito.anyLong());
+        mInOrderSummaryListener.verify(mMockSummaryListener).putSummary(mUriCapture.capture());
+        mInOrderSummaryListener.verify(mMockSummaryListener).invocationEnded(Mockito.anyLong());
 
         verifySummaryListener();
     }

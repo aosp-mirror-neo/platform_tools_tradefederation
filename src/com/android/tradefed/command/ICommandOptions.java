@@ -364,4 +364,11 @@ public interface ICommandOptions {
 
     /** Whether to pass retry attempt number. */
     public boolean shouldPassRetryAttemptNumber();
+
+    /**
+     * When a preparer failed for a test, it may fail test invocation as infra error, which leads to
+     * test run retry. This option allows such failure to be converted to a test failure, so infra
+     * does not waste resources to retry the whole test run.
+     */
+    public boolean shouldForcePreparerFailureAsTestFailure();
 }
