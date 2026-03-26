@@ -34,6 +34,7 @@ import com.android.tradefed.config.GlobalConfiguration;
 import com.android.tradefed.config.IConfiguration;
 import com.android.tradefed.config.IConfigurationReceiver;
 import com.android.tradefed.config.IDeviceConfiguration;
+import com.android.tradefed.config.IGlobalConfiguration;
 import com.android.tradefed.config.filter.OptionFetcher;
 import com.android.tradefed.config.proxy.AutomatedReporters;
 import com.android.tradefed.config.proxy.TradefedDelegator;
@@ -1075,6 +1076,29 @@ public class TestInvocation implements ITestInvocation {
         }
     }
 
+    /**
+     * Logs information about the global configuration environment variables and the effective
+     * configuration source used.
+     */
+    private static void logGlobalConfigurationInfo() {
+        CLog.i(
+                "Global Config Env Vars: %s=%s, %s=%s",
+                GlobalConfiguration.GLOBAL_CONFIG_VARIABLE,
+                System.getenv(GlobalConfiguration.GLOBAL_CONFIG_VARIABLE),
+                GlobalConfiguration.GLOBAL_CONFIG_SERVER_CONFIG_VARIABLE,
+                System.getenv(GlobalConfiguration.GLOBAL_CONFIG_SERVER_CONFIG_VARIABLE));
+
+        IGlobalConfiguration globalConfig = GlobalConfiguration.getInstance();
+        if (globalConfig instanceof GlobalConfiguration) {
+            CLog.i(
+                    "Effective Global Configuration Source: %s",
+                    ((GlobalConfiguration) globalConfig).getGlobalConfigPathUsed());
+        } else {
+            // This case should ideally not happen after initialization
+            CLog.i("Effective Global Configuration Source: Unknown");
+        }
+    }
+
     /** {@inheritDoc} */
     @Override
     public void invoke(
@@ -1311,6 +1335,7 @@ public class TestInvocation implements ITestInvocation {
             if (cmdLineArgs != null) {
                 CLog.i("Invocation was started with cmd: %s", cmdLineArgs);
             }
+            logGlobalConfigurationInfo();
 
             long start = System.currentTimeMillis();
             InvocationMetricLogger.addInvocationMetrics(

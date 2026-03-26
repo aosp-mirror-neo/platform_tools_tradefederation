@@ -47,8 +47,13 @@ import com.google.android.tradefed.util.androidbuildapi.AndroidBuildAPIHelper;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.AbstractInputStreamContent;
 import com.google.api.client.http.FileContent;
+import com.google.api.client.http.HttpResponseException;
 import com.google.api.services.androidbuildinternal.Androidbuildinternal;
+import com.google.api.services.androidbuildinternal.Androidbuildinternal.Testartifact;
+import com.google.api.services.androidbuildinternal.model.BuildArtifactMetadata;
+import com.google.api.services.androidbuildinternal.model.TestResult;
 import com.google.api.services.androidbuildinternal.v3.model.Build;
+import com.google.api.services.androidbuildinternal.v3.model.TestArtifactListResponse;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.net.UrlEscapers;
@@ -59,6 +64,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -81,10 +87,8 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
     private static final int DEFAULT_MAX_UPLOAD_ATTEMPTS = 3;
     private static final int INIT_ATTEMPTS_WAIT_TIME = 500; // ms
     private static final long UPLOAD_THREAD_JOIN_TIMEOUT_MS = 10 * 60 * 1000;
-
-    // Template is /builds/<invocation-id>/
-    private static final String ANTS_URL_TEMPLATE =
-            "https://android-build.googleplex.com/builds/%s/";
+    static final String URL_TEMPLATE =
+            "https://android-build.googleplex.com/builds/%s/%s/%s/%s/tests/%s/";
     private static final String INVOCATION_ID_KEY = "invocation_id";
     private static final String WORK_UNIT_ID_KEY = "work_unit_id";
     // Key that determines if we are using legacy V2 api or only v3 api for logs
@@ -203,23 +207,30 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
     private String mWorkUnitId = "";
     private boolean mUpdateMetadata = true;
     private Map<String, LogDataType> mFilePathToLogDataTypeMap = new HashMap<>();
+    private boolean mUseLegacyMigration;
     private IInvocationContext mInvocationContext;
 
     /** Stores all the log files that have been already handled for upload to Android Build API. */
     private Set<String> mUploadedLogs = new LinkedHashSet<>();
 
-    /** This is a class for full test result identify. It include the build info. */
+    /**
+     * This is a class for full test result identify. It include the build info for the test result
+     * id and the test result id.
+     */
     static class TestResultIdentity {
+        public final Long mTestResultId;
         public final String mTestResultBuildId;
         public final String mTestResultBuildTarget;
         public final String mTestResultBuildAttemptId;
         public final RemoteBuildInfo.BuildType mTestResultBuildType;
 
         public TestResultIdentity(
+                Long testResultId,
                 String buildId,
                 String buildTarget,
                 String attemptId,
                 RemoteBuildInfo.BuildType buildType) {
+            mTestResultId = testResultId;
             mTestResultBuildId = buildId;
             mTestResultBuildTarget = buildTarget;
             mTestResultBuildAttemptId = attemptId;
@@ -228,7 +239,8 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
 
         @Override
         public String toString() {
-            return String.format("%s %s", mTestResultBuildTarget, mTestResultBuildId);
+            return String.format(
+                    "%d %s %s", mTestResultId, mTestResultBuildTarget, mTestResultBuildId);
         }
     }
 
@@ -255,7 +267,8 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                 // Propagate the test_result_id for log saving
                 if (mTestResultIdentity != null
                         && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
-                    context.addInvocationAttribute(TEST_RESULT_ID, "-1");
+                    context.addInvocationAttribute(
+                            TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
                 }
             } catch (RuntimeException e) {
                 CLog.e("Failed to init the test result id:");
@@ -268,7 +281,6 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
     /** {@inheritDoc} */
     @Override
     public void invocationStarted(IInvocationContext context) {
-        CLog.i("invocation context: %s", context.getAttribute(INVOCATION_ID_KEY));
         try (CloseableTraceScope start =
                 new CloseableTraceScope("ab-log-uploader:invocationStart")) {
             List<String> buildEnvironments =
@@ -284,7 +296,7 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
             }
 
             mInvocationContext = context;
-            fetchInvocationAndWorkUnitId();
+            mUseLegacyMigration = !"false".equals(context.getAttribute(ARTIFACT_UPLOAD_KEY));
 
             IBuildInfo build = context.getBuildInfos().get(0);
             // Limit build creation to local auth for now
@@ -311,7 +323,8 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                     // Propagate the test_result_id for log saving
                     if (mTestResultIdentity != null
                             && !context.getAttributes().containsKey(TEST_RESULT_ID)) {
-                        context.addInvocationAttribute(TEST_RESULT_ID, "-1");
+                        context.addInvocationAttribute(
+                                TEST_RESULT_ID, Long.toString(mTestResultIdentity.mTestResultId));
                     }
                 } catch (RuntimeException e) {
                     CLog.e("Failed to init the test result id:");
@@ -385,11 +398,16 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
 
     /** Fetch test result and related build info with stub build. */
     TestResultIdentity fetchTestResultIdFromStubBuild() throws GoogleJsonResponseException {
-        return new TestResultIdentity(
-                mStubBuildId,
-                mStubBuildTarget,
-                mStubBuildAttemptId,
-                RemoteBuildInfo.parseBuildType(mStubBuildId));
+        Long testResultId = createTestResult(mStubBuildId, mStubBuildTarget, mStubBuildAttemptId);
+        if (testResultId != null) {
+            return new TestResultIdentity(
+                    testResultId,
+                    mStubBuildId,
+                    mStubBuildTarget,
+                    mStubBuildAttemptId,
+                    RemoteBuildInfo.parseBuildType(mStubBuildId));
+        }
+        return null;
     }
 
     /**
@@ -401,6 +419,18 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
      */
     TestResultIdentity fetchTestResultIdFromContext(IInvocationContext context) {
         CLog.i("Fetching test result from context");
+        String testResultIdStr = context.getAttribute(TEST_RESULT_ID);
+        if (Strings.isNullOrEmpty(testResultIdStr)) {
+            return null;
+        }
+        Long testResultId = null;
+        try {
+            testResultId = Long.parseLong(testResultIdStr);
+        } catch (NumberFormatException e) {
+            CLog.e("%s is not a valid test result id, will create a new one", testResultIdStr);
+            CLog.e(e);
+            return null;
+        }
         String buildId = context.getAttribute("test_result.build_id");
         String buildTarget = context.getAttribute("test_result.build_target");
         String attemptId = context.getAttribute("test_result.build_attempt_id");
@@ -416,8 +446,11 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
             buildType = getBuildType();
         }
         TestResultIdentity testResultIdentity =
-                new TestResultIdentity(buildId, buildTarget, attemptId, buildType);
-        return testResultIdentity;
+                new TestResultIdentity(testResultId, buildId, buildTarget, attemptId, buildType);
+        if (checkTestResultExist(testResultIdentity)) {
+            return testResultIdentity;
+        }
+        return null;
     }
 
     /**
@@ -437,7 +470,11 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
         CLog.i(
                 "Creating new test result from local build (%s %s %s %s)",
                 buildId, buildTarget, attemptId, buildType);
-        return new TestResultIdentity(buildId, buildTarget, attemptId, buildType);
+        Long testResultId = createTestResult(buildId, buildTarget, attemptId);
+        if (testResultId == null) {
+            return null;
+        }
+        return new TestResultIdentity(testResultId, buildId, buildTarget, attemptId, buildType);
     }
 
     /**
@@ -459,6 +496,73 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
             CLog.e("Build %s %s doesn't exist.", buildId, buildTarget);
             return false;
         }
+    }
+
+    /**
+     * Check a test result exists or not.
+     *
+     * @param testResultIdentity testResultIdentity
+     * @return true if the test result exists, otherwise false.
+     */
+    boolean checkTestResultExist(TestResultIdentity testResultIdentity) {
+        if (getClient() == null) {
+            CLog.w("There is no Android Build Api client.");
+            return false;
+        }
+        try {
+            getClient()
+                    .testresult()
+                    .get(
+                            testResultIdentity.mTestResultBuildId,
+                            testResultIdentity.mTestResultBuildTarget,
+                            testResultIdentity.mTestResultBuildAttemptId,
+                            testResultIdentity.mTestResultId)
+                    .execute();
+            return true;
+        } catch (IOException e) {
+            CLog.w("There is no test result id %s", testResultIdentity);
+            return false;
+        }
+    }
+
+    /**
+     * Create a test result in Android Build Api.
+     *
+     * @param buildId
+     * @param buildTarget
+     * @param buildAttemptId
+     * @return test result id
+     */
+    Long createTestResult(String buildId, String buildTarget, String buildAttemptId)
+            throws GoogleJsonResponseException {
+        if (getClient() == null) {
+            CLog.w("There is no Android Build Api client.");
+            return null;
+        }
+
+        CLog.i(
+                "Creating new test result from build (%s %s %s)",
+                buildId, buildTarget, buildAttemptId);
+        TestResult testResult = new TestResult();
+        if (getBuildInfo() == null) {
+            testResult.setTestTag("stub");
+        } else {
+            testResult.setTestTag(getBuildInfo().getTestTag());
+        }
+        try {
+            testResult =
+                    getClient()
+                            .testresult()
+                            .insert(buildId, buildTarget, buildAttemptId, testResult)
+                            .execute();
+            return testResult.getId();
+        } catch (GoogleJsonResponseException gre) {
+            throw gre;
+        } catch (IOException e) {
+            CLog.e("Failed to create test result, will not upload logs to Android Build Api.");
+            CLog.e(e);
+        }
+        return null;
     }
 
     /** {@inheritDoc} */
@@ -510,6 +614,8 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                     uploadOnPath(stagedPath);
                 }
             }
+            CLog.d("Start updateArtifactMetadata");
+            updateArtifactMetadata();
 
             synchronized (this) {
                 if (--mShardingLock == 0) {
@@ -534,7 +640,7 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
     private void uploadOnPath(String stagedPath) {
         try (CloseableTraceScope ignored =
                 new CloseableTraceScope("ab-upload:" + new File(stagedPath).getName())) {
-            uploadFileToAndroidBuildApi(stagedPath);
+            uploadFileToAndroidBuildApiWithMultiAttempts(stagedPath);
             if (mRemoveStagedFiles) {
                 FileUtil.deleteFile(new File(stagedPath));
             }
@@ -579,20 +685,64 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
         return true;
     }
 
+    /**
+     * Upload staged file to Android Build Api with multiple attempts.
+     *
+     * @param filePath the staged file path
+     * @throws IOException
+     */
+    void uploadFileToAndroidBuildApiWithMultiAttempts(String filePath) throws IOException {
+        // TODO(b/143365209): Remove this method once we switch to v3 api.
+        // ObjectUpdater library already implements retries and error handling.
+        IOException exception = null;
+        int waitTimeMS = INIT_ATTEMPTS_WAIT_TIME;
+        for (int i = 1; i <= mMaxUploadAttempts; ++i) {
+            try {
+                uploadFileToAndroidBuildApi(filePath);
+                return;
+            } catch (IOException e) {
+                exception = e;
+                String message = e.getMessage();
+                if (e instanceof GoogleJsonResponseException) {
+                    GoogleJsonResponseException respException = (GoogleJsonResponseException) e;
+                    // Get the scotty id for debugging purpose.
+                    String value =
+                            respException
+                                    .getHeaders()
+                                    .getFirstHeaderStringValue("x-guploader-uploadid");
+                    if (!Strings.isNullOrEmpty(value)) {
+                        CLog.w("More info at http://go/scottydash/lookup.html?uploadId=%s", value);
+                    } else {
+                        CLog.w("There is no \"x-guploader-uploadid\" in the response.");
+                    }
+                    message = respException.getStatusMessage();
+                }
+                CLog.w(
+                        "Failed to upload file %s to the Android Build API due to %s in attempt"
+                                + " %d.",
+                        filePath, message, i);
+                if (i < mMaxUploadAttempts) {
+                    CLog.w("Wait %dms for another retry.", waitTimeMS);
+                    getRunUtil().sleep(waitTimeMS);
+                    waitTimeMS *= 2;
+                }
+            }
+        }
+        throw exception;
+    }
+
     @VisibleForTesting
     protected IInvocationContext getInvocationContext() {
         return mInvocationContext;
     }
 
     private synchronized void fetchInvocationAndWorkUnitId() {
-        CLog.i("fetch invocation id");
         if (Strings.isNullOrEmpty(mInvocationId)) {
             mInvocationId = getInvocationContext().getAttribute(INVOCATION_ID_KEY);
         }
         if (Strings.isNullOrEmpty(mWorkUnitId)) {
             mWorkUnitId = getInvocationContext().getAttribute(WORK_UNIT_ID_KEY);
         }
-        CLog.i("%s %s", mInvocationId, mWorkUnitId);
     }
 
     /**
@@ -605,6 +755,11 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
         long startUpload = System.currentTimeMillis();
         try {
             fetchInvocationAndWorkUnitId();
+
+            if (!mUseLegacyMigration) {
+                legacyUploadFileToAndroidBuildApi(filePath);
+                return;
+            }
 
             if (Strings.isNullOrEmpty(mInvocationId) || Strings.isNullOrEmpty(mWorkUnitId)) {
                 CLog.w("Unable to upload logs because invocation id or work unit id are not set");
@@ -631,10 +786,6 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
             String resourceId = getRemoteFilePath(f.getName());
             FileContent fileContent = new FileContent(contentType, f);
 
-            CLog.i(
-                    "Updating i:%s fpath:%s name:%s remote:%s",
-                    mInvocationId, filePath, f.getName(), resourceId);
-
             runUpdate(client, filePath, resourceId, md5, fileContent, type, contentType);
         } finally {
             InvocationMetricLogger.addInvocationMetrics(
@@ -657,7 +808,7 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
         updater.runUpdate(
                 mInvocationId,
                 resourceId,
-                -1L,
+                getTestResultId(),
                 new ObjectUpdater.TestArtifactUpdate() {
                     @Override
                     public com.google.api.services.androidbuildinternal.v3.model
@@ -699,11 +850,88 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                 });
     }
 
+    private void legacyUploadFileToAndroidBuildApi(String filePath) throws IOException {
+        File f = new File(filePath);
+        if (f.length() <= 0) {
+            // Android Build API doesn't accept empty file
+            FileUtil.writeToFile("empty", f);
+        }
+        String contentType = FileUtil.getContentType(filePath);
+        BuildArtifactMetadata metadata = new BuildArtifactMetadata().setContentType(contentType);
+        BuildArtifactMetadata artifact = getTestArtifact(getRemoteFilePath(f.getName()));
+        if (artifact != null) {
+            String md5 = FileUtil.calculateMd5(f);
+            if (md5.equals(artifact.getMd5())) {
+                CLog.i(
+                        "File %s with same md5 exists in Android Build Api." + " Skip uploading.",
+                        filePath);
+                return;
+            } else {
+                CLog.i(
+                        "File %s with different md5 exists in Android Build Api. "
+                                + "Will overwrite contents.\n",
+                        filePath);
+                metadata.setRevision(artifact.getRevision());
+            }
+        }
+        LogDataType type = getFilePathToLogDataTypeMap().get(filePath);
+        if (type != null) {
+            metadata.setArtifactType(type.name());
+        }
+        FileContent fileContent = new FileContent(contentType, f);
+        TestResultIdentity testResultIdentity = getTestResultIdentity();
+
+        InvocationMetricLogger.addInvocationMetrics(
+                InvocationMetricKey.ARTIFACTS_UPLOAD_SIZE, f.length());
+
+        getClient()
+                .testartifact()
+                .update(
+                        testResultIdentity.mTestResultBuildType.toString(),
+                        testResultIdentity.mTestResultBuildId,
+                        testResultIdentity.mTestResultBuildTarget,
+                        testResultIdentity.mTestResultBuildAttemptId,
+                        testResultIdentity.mTestResultId,
+                        getRemoteFilePath(f.getName()),
+                        metadata,
+                        fileContent)
+                .execute();
+        CLog.i("Finished uploading %s", filePath);
+    }
+
+    /**
+     * Get test artifact for a file from Android Build API.
+     *
+     * @param resourceId test artifact's resource id
+     * @throws IOException
+     */
+    BuildArtifactMetadata getTestArtifact(String resourceId) throws IOException {
+        // TODO(b/143365209): We can remove this method when switching over to v3 api.
+        try {
+            return getClient()
+                    .testartifact()
+                    .get(
+                            mTestResultIdentity.mTestResultBuildType.toString(),
+                            mTestResultIdentity.mTestResultBuildId,
+                            mTestResultIdentity.mTestResultBuildTarget,
+                            mTestResultIdentity.mTestResultBuildAttemptId,
+                            mTestResultIdentity.mTestResultId,
+                            resourceId)
+                    .execute();
+        } catch (HttpResponseException e) {
+            if (e.getStatusCode() == 404) {
+                CLog.i("File %s doesn't exist in Android Build API. Expected.", resourceId);
+                return null;
+            } else {
+                throw e;
+            }
+        }
+    }
+
     /** {@inheritDoc} */
     @Override
     public LogFile saveLogData(String dataName, LogDataType dataType, InputStream dataStream)
             throws IOException {
-        fetchInvocationAndWorkUnitId();
         if (isSandbox()) {
             dataName = "sandbox-" + dataName;
         }
@@ -770,7 +998,6 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
     @Override
     public LogFile saveLogFile(String dataName, LogDataType dataType, File fileToLog)
             throws IOException {
-        fetchInvocationAndWorkUnitId();
         if (isSandbox()) {
             dataName = "sandbox-" + dataName;
         }
@@ -808,6 +1035,157 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
                     InvocationMetricKey.AB_LOG_SAVER_STAGING_TIME,
                     System.currentTimeMillis() - stagingStart);
         }
+    }
+
+    private void updateArtifactMetadata() {
+        fetchInvocationAndWorkUnitId();
+
+        // TODO(b/143365209): Remove this method once we switch to v3 api.
+        if (mUseLegacyMigration) {
+            CLog.i("Not updating metadata because we are using v3 api for upload.");
+            return;
+        }
+        if (mInvocationId == null || mInvocationId.isEmpty()) {
+            CLog.i("Invocation id is empty, skipping metadata update.");
+            return;
+        }
+        if (!mUpdateMetadata) {
+            CLog.i("Metadata update is skipped in subprocess");
+            return;
+        }
+        try {
+            Map<String, BuildArtifactMetadata> correctMetadata = new HashMap<>();
+            for (BuildArtifactMetadata artifact : listArtifacts()) {
+                correctMetadata.put(artifact.getName(), artifact);
+            }
+            CLog.i("Got %d v2 artifacts", correctMetadata.size());
+            com.google.api.services.androidbuildinternal.v3.Androidbuildinternal client =
+                    AndroidBuildAPIHelper.getTestStorageClient(mBuildEnvironment);
+            List<com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata>
+                    artifacts = listArtifacts(client, mInvocationId);
+            CLog.i("ArtifactList returnd %d artifacts", artifacts.size());
+
+            for (com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata
+                    artifact : artifacts) {
+                BuildArtifactMetadata uploadedArtifact = correctMetadata.get(artifact.getName());
+                if (uploadedArtifact == null) {
+                    continue;
+                }
+                CLog.i("Update metadata for %s\nCorrect: %s", artifact, uploadedArtifact);
+                try {
+                    updateMetadata(client, artifact, uploadedArtifact);
+                } catch (IOException e) {
+                    CLog.e(e);
+                }
+            }
+        } catch (IOException | GeneralSecurityException e) {
+            CLog.e(e);
+        }
+    }
+
+    private List<BuildArtifactMetadata> listArtifacts() throws IOException {
+        // TODO(b/143365209): Remove this method once we switch to v3 api.
+        String pageToken = "";
+        List<BuildArtifactMetadata> artifacts = new ArrayList<>();
+        do {
+            Testartifact.List request =
+                    getClient()
+                            .testartifact()
+                            .list(
+                                    mTestResultIdentity.mTestResultBuildType.toString(),
+                                    mTestResultIdentity.mTestResultBuildId,
+                                    mTestResultIdentity.mTestResultBuildTarget,
+                                    mTestResultIdentity.mTestResultBuildAttemptId,
+                                    mTestResultIdentity.mTestResultId)
+                            .setMaxResults(1000L);
+            if (!pageToken.isEmpty()) {
+                request.setPageToken(pageToken);
+            }
+            com.google.api.services.androidbuildinternal.model.TestArtifactListResponse response =
+                    request.execute();
+            pageToken = response.getNextPageToken();
+            if (response.getTestArtifacts() != null) {
+                artifacts.addAll(response.getTestArtifacts());
+            }
+        } while (pageToken != null && !pageToken.isEmpty());
+
+        return artifacts;
+    }
+
+    private List<com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata>
+            listArtifacts(
+                    com.google.api.services.androidbuildinternal.v3.Androidbuildinternal client,
+                    String invocationId)
+                    throws IOException {
+        // TODO(b/143365209): Remove this method once we switch to v3 api.
+        String pageToken = "";
+        List<com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata>
+                artifacts = new ArrayList<>();
+        do {
+            com.google.api.services.androidbuildinternal.v3.Androidbuildinternal.Testartifact.List
+                    request =
+                            client.testartifact()
+                                    .list()
+                                    .setInvocationId(invocationId)
+                                    .setMaxResults(1000L);
+            if (!pageToken.isEmpty()) {
+                request.setPageToken(pageToken);
+            }
+            TestArtifactListResponse response = request.execute();
+            pageToken = response.getNextPageToken();
+            if (response.getTestArtifacts() != null) {
+                artifacts.addAll(response.getTestArtifacts());
+            }
+        } while (pageToken != null && !pageToken.isEmpty());
+
+        return artifacts;
+    }
+
+    private void updateMetadata(
+            com.google.api.services.androidbuildinternal.v3.Androidbuildinternal client,
+            com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata
+                    staleArtifact,
+            BuildArtifactMetadata correctMetadata)
+            throws IOException {
+        // TODO(b/143365209): Remove this method once we switch to v3 api.
+
+        int attempts = 0;
+        do {
+            com.google.api.services.androidbuildinternal.v3.model.BuildArtifactMetadata update =
+                    new com.google.api.services.androidbuildinternal.v3.model
+                            .BuildArtifactMetadata();
+            String artifactType = correctMetadata.getArtifactType();
+            if (artifactType != null && !artifactType.isEmpty()) {
+                update.setArtifactType(artifactType);
+            }
+            update.setContentType(correctMetadata.getContentType());
+            update.setRevision(staleArtifact.getRevision());
+            try {
+                attempts++;
+                client.testartifact()
+                        .patch(staleArtifact.getName(), update)
+                        .setInvocationId(mInvocationId)
+                        .execute();
+                break;
+            } catch (GoogleJsonResponseException e) {
+                if (e.getStatusCode() != HttpURLConnection.HTTP_CONFLICT) {
+                    throw e;
+                }
+                // We detected a conflicting write. It might be the artifact was already updated.
+                // Get the latest version.
+                if (attempts >= DEFAULT_MAX_UPLOAD_ATTEMPTS) {
+                    CLog.i("Too many attempts failed to update metadata for %s", staleArtifact);
+                    continue;
+                }
+                staleArtifact =
+                        client.testartifact()
+                                .get(staleArtifact.getName())
+                                .setInvocationId(mInvocationId)
+                                .setWorkUnitId(staleArtifact.getWorkUnitId())
+                                .setResultId(staleArtifact.getTestResultId())
+                                .execute();
+            }
+        } while (attempts < DEFAULT_MAX_UPLOAD_ATTEMPTS);
     }
 
     /** {@inheritDoc} */
@@ -855,16 +1233,20 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
      * @return A URL that should allow visitors to view the logfile with the specified name
      */
     String getRemoteFileUrl(String fileName) {
-        // TODO: It is not safe to calculate paths that would be returned from the service.
-        // This method needs to be removed.
         if (mTestResultIdentity == null) {
             return null;
         }
-        String baseUrl = String.format(ANTS_URL_TEMPLATE, mInvocationId);
+        String baseUrl =
+                String.format(
+                        URL_TEMPLATE,
+                        mTestResultIdentity.mTestResultBuildType,
+                        mTestResultIdentity.mTestResultBuildId,
+                        mTestResultIdentity.mTestResultBuildTarget,
+                        mTestResultIdentity.mTestResultBuildAttemptId,
+                        String.valueOf(mTestResultIdentity.mTestResultId));
         fileName = sanitizeUrlFileName(fileName);
         return baseUrl + getRemoteFilePath(fileName);
     }
-
 
     /** Escape special url character (like spaces and #) to have a proper link. */
     private static String sanitizeUrlFileName(String filename) {
@@ -1004,7 +1386,7 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
      * @return test result id
      */
     Long getTestResultId() {
-        return -1L;
+        return mTestResultIdentity.mTestResultId;
     }
 
     /**
@@ -1015,8 +1397,6 @@ public class AndroidBuildApiLogSaver implements ILogSaver {
     String getTestResultBuildId() {
         return mTestResultIdentity.mTestResultBuildId;
     }
-
-
 
     /**
      * Get test result build target.

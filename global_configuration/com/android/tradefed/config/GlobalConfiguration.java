@@ -238,6 +238,17 @@ public class GlobalConfiguration implements IGlobalConfiguration {
     }
 
     /**
+     * Returns the original argument used to specify the global configuration source.
+     * This can be a file path, "empty", or a config name from the config server.
+     */
+    public String getGlobalConfigPathUsed() {
+        if (mOriginalArgs != null && mOriginalArgs.length > 0) {
+            return mOriginalArgs[0];
+        }
+        return "unknown";
+    }
+
+    /**
      * Returns an {@link IConfigurationServer}, if one exists, or <code>null</code> if none could be
      * found.
      *

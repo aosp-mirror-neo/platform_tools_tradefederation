@@ -17,6 +17,7 @@
 package com.android.tradefed.device;
 
 import com.android.ddmlib.IDevice;
+import com.android.tradefed.device.IWifiHelper.WifiConnectionResult;
 import com.android.tradefed.log.ITestLogger;
 import com.android.tradefed.result.InputStreamSource;
 import com.android.tradefed.util.Bugreport;
@@ -453,39 +454,100 @@ public interface ITestDevice extends INativeDevice {
 
     /**
      * Connects to a wifi network.
-     * <p/>
-     * Turns on wifi and blocks until a successful connection is made to the specified wifi network.
-     * Once a connection is made, the instance will try to restore the connection after every reboot
-     * until {@link ITestDevice#disconnectFromWifi()} or
-     * {@link ITestDevice#clearLastConnectedWifiNetwork()} is called.
+     *
+     * <p>Turns on wifi and blocks until a successful connection is made to the specified wifi
+     * network. Once a connection is made, the instance will try to restore the connection after
+     * every reboot until {@link ITestDevice#disconnectFromWifi()} or {@link
+     * ITestDevice#clearLastConnectedWifiNetwork()} is called.
      *
      * @param wifiSsid the wifi ssid to connect to
      * @param wifiPsk PSK passphrase or null if unencrypted
-     * @return <code>true</code> if connected to wifi network successfully. <code>false</code>
-     *         otherwise
+     * @return the {@link WifiConnectionResult} indicating the status of the connection.
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
-     *             recovered.
+     *     recovered.
      */
-    public boolean connectToWifiNetwork(String wifiSsid, String wifiPsk)
+    public WifiConnectionResult connectToWifiNetworkWithResult(String wifiSsid, String wifiPsk)
             throws DeviceNotAvailableException;
 
     /**
      * Connects to a wifi network.
-     * <p/>
-     * Turns on wifi and blocks until a successful connection is made to the specified wifi network.
-     * Once a connection is made, the instance will try to restore the connection after every reboot
-     * until {@link ITestDevice#disconnectFromWifi()} or
-     * {@link ITestDevice#clearLastConnectedWifiNetwork()} is called.
+     *
+     * <p>Turns on wifi and blocks until a successful connection is made to the specified wifi
+     * network. Once a connection is made, the instance will try to restore the connection after
+     * every reboot until {@link ITestDevice#disconnectFromWifi()} or {@link
+     * ITestDevice#clearLastConnectedWifiNetwork()} is called.
+     *
+     * @param wifiSsid the wifi ssid to connect to
+     * @param wifiPsk PSK passphrase or null if unencrypted
+     * @return <code>true</code> if connected to wifi network successfully. <code>false</code>
+     *     otherwise
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     * @deprecated use {@link #connectToWifiNetworkWithResult(String, String)} instead.
+     */
+    @Deprecated
+    public default boolean connectToWifiNetwork(String wifiSsid, String wifiPsk)
+            throws DeviceNotAvailableException {
+        return WifiConnectionResult.SUCCESS.equals(
+                connectToWifiNetworkWithResult(wifiSsid, wifiPsk));
+    }
+
+    /**
+     * Connects to a wifi network.
+     *
+     * <p>Turns on wifi and blocks until a successful connection is made to the specified wifi
+     * network. Once a connection is made, the instance will try to restore the connection after
+     * every reboot until {@link ITestDevice#disconnectFromWifi()} or {@link
+     * ITestDevice#clearLastConnectedWifiNetwork()} is called.
+     *
+     * @param wifiSsid the wifi ssid to connect to
+     * @param wifiPsk PSK passphrase or null if unencrypted
+     * @param scanSsid whether to scan for hidden SSID for this network.
+     * @return the {@link WifiConnectionResult} indicating the status of the connection.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public WifiConnectionResult connectToWifiNetworkWithResult(
+            String wifiSsid, String wifiPsk, boolean scanSsid) throws DeviceNotAvailableException;
+
+    /**
+     * Connects to a wifi network.
+     *
+     * <p>Turns on wifi and blocks until a successful connection is made to the specified wifi
+     * network. Once a connection is made, the instance will try to restore the connection after
+     * every reboot until {@link ITestDevice#disconnectFromWifi()} or {@link
+     * ITestDevice#clearLastConnectedWifiNetwork()} is called.
      *
      * @param wifiSsid the wifi ssid to connect to
      * @param wifiPsk PSK passphrase or null if unencrypted
      * @param scanSsid whether to scan for hidden SSID for this network.
      * @return <code>true</code> if connected to wifi network successfully. <code>false</code>
-     *         otherwise
+     *     otherwise
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
-     *             recovered.
+     *     recovered.
+     * @deprecated use {@link #connectToWifiNetworkWithResult(String, String, boolean)} instead.
      */
-    public boolean connectToWifiNetwork(String wifiSsid, String wifiPsk, boolean scanSsid)
+    @Deprecated
+    public default boolean connectToWifiNetwork(String wifiSsid, String wifiPsk, boolean scanSsid)
+            throws DeviceNotAvailableException {
+        return WifiConnectionResult.SUCCESS.equals(
+                connectToWifiNetworkWithResult(wifiSsid, wifiPsk, scanSsid));
+    }
+
+    /**
+     * Connects to a wifi network.
+     *
+     * <p>Turns on wifi and blocks until a successful connection is made with one of the wifi
+     * networks given in the wifiSsidToPsk map. Once a connection is made, the instance will try to
+     * restore the connection after every reboot until {@link ITestDevice#disconnectFromWifi()} or
+     * {@link ITestDevice#clearLastConnectedWifiNetwork()} is called.
+     *
+     * @param wifiSsidToPsk A map of wifi SSIDs to passwords.
+     * @return the {@link WifiConnectionResult} indicating the status of the connection.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public WifiConnectionResult connectToWifiNetworkWithResult(Map<String, String> wifiSsidToPsk)
             throws DeviceNotAvailableException;
 
     /**
@@ -501,9 +563,30 @@ public interface ITestDevice extends INativeDevice {
      *     otherwise
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
      *     recovered.
+     * @deprecated use {@link #connectToWifiNetworkWithResult(Map)} instead.
      */
-    public boolean connectToWifiNetwork(Map<String, String> wifiSsidToPsk)
-            throws DeviceNotAvailableException;
+    @Deprecated
+    public default boolean connectToWifiNetwork(Map<String, String> wifiSsidToPsk)
+            throws DeviceNotAvailableException {
+        return WifiConnectionResult.SUCCESS.equals(connectToWifiNetworkWithResult(wifiSsidToPsk));
+    }
+
+    /**
+     * Connects to a wifi network.
+     *
+     * <p>Turns on wifi and blocks until a successful connection is made with one of the wifi
+     * networks given in the wifiSsidToPsk map. Once a connection is made, the instance will try to
+     * restore the connection after every reboot until {@link ITestDevice#disconnectFromWifi()} or
+     * {@link ITestDevice#clearLastConnectedWifiNetwork()} is called.
+     *
+     * @param wifiSsidToPsk A map of wifi SSIDs to passwords.
+     * @param scanSsid whether to scan for hidden SSIDs for this network.
+     * @return the {@link WifiConnectionResult} indicating the status of the connection.
+     * @throws DeviceNotAvailableException if connection with device is lost and cannot be
+     *     recovered.
+     */
+    public WifiConnectionResult connectToWifiNetworkWithResult(
+            Map<String, String> wifiSsidToPsk, boolean scanSsid) throws DeviceNotAvailableException;
 
     /**
      * Connects to a wifi network.
@@ -519,9 +602,26 @@ public interface ITestDevice extends INativeDevice {
      *     otherwise
      * @throws DeviceNotAvailableException if connection with device is lost and cannot be
      *     recovered.
+     * @deprecated use {@link #connectToWifiNetworkWithResult(Map, boolean)} instead.
      */
-    public boolean connectToWifiNetwork(Map<String, String> wifiSsidToPsk, boolean scanSsid)
-            throws DeviceNotAvailableException;
+    @Deprecated
+    public default boolean connectToWifiNetwork(Map<String, String> wifiSsidToPsk, boolean scanSsid)
+            throws DeviceNotAvailableException {
+        return WifiConnectionResult.SUCCESS.equals(
+                connectToWifiNetworkWithResult(wifiSsidToPsk, scanSsid));
+    }
+
+    /**
+     * A variant of {@link #connectToWifiNetwork(String, String)} that only connects if device
+     * currently does not have network connectivity.
+     *
+     * @param wifiSsid
+     * @param wifiPsk
+     * @return the {@link WifiConnectionResult} indicating the status of the connection.
+     * @throws DeviceNotAvailableException
+     */
+    public WifiConnectionResult connectToWifiNetworkIfNeededWithResult(
+            String wifiSsid, String wifiPsk) throws DeviceNotAvailableException;
 
     /**
      * A variant of {@link #connectToWifiNetwork(String, String)} that only connects if device
@@ -530,11 +630,29 @@ public interface ITestDevice extends INativeDevice {
      * @param wifiSsid
      * @param wifiPsk
      * @return <code>true</code> if connected to wifi network successfully. <code>false</code>
-     *         otherwise
+     *     otherwise
+     * @throws DeviceNotAvailableException
+     * @deprecated use {@link #connectToWifiNetworkIfNeededWithResult(String, String)} instead.
+     */
+    @Deprecated
+    public default boolean connectToWifiNetworkIfNeeded(String wifiSsid, String wifiPsk)
+            throws DeviceNotAvailableException {
+        return WifiConnectionResult.SUCCESS.equals(
+                connectToWifiNetworkIfNeededWithResult(wifiSsid, wifiPsk));
+    }
+
+    /**
+     * A variant of {@link #connectToWifiNetwork(String, String)} that only connects if device
+     * currently does not have network connectivity.
+     *
+     * @param wifiSsid
+     * @param wifiPsk
+     * @param scanSsid whether to scan for hidden SSID for this network
+     * @return the {@link WifiConnectionResult} indicating the status of the connection.
      * @throws DeviceNotAvailableException
      */
-    public boolean connectToWifiNetworkIfNeeded(String wifiSsid, String wifiPsk)
-            throws DeviceNotAvailableException;
+    public WifiConnectionResult connectToWifiNetworkIfNeededWithResult(
+            String wifiSsid, String wifiPsk, boolean scanSsid) throws DeviceNotAvailableException;
 
     /**
      * A variant of {@link #connectToWifiNetwork(String, String)} that only connects if device
@@ -544,11 +662,17 @@ public interface ITestDevice extends INativeDevice {
      * @param wifiPsk
      * @param scanSsid whether to scan for hidden SSID for this network
      * @return <code>true</code> if connected to wifi network successfully. <code>false</code>
-     *         otherwise
+     *     otherwise
      * @throws DeviceNotAvailableException
+     * @deprecated use {@link #connectToWifiNetworkIfNeededWithResult(String, String, boolean)}
+     *     instead.
      */
-    public boolean connectToWifiNetworkIfNeeded(String wifiSsid, String wifiPsk, boolean scanSsid)
-            throws DeviceNotAvailableException;
+    @Deprecated
+    public default boolean connectToWifiNetworkIfNeeded(
+            String wifiSsid, String wifiPsk, boolean scanSsid) throws DeviceNotAvailableException {
+        return WifiConnectionResult.SUCCESS.equals(
+                connectToWifiNetworkIfNeededWithResult(wifiSsid, wifiPsk, scanSsid));
+    }
 
     /**
      * Disconnects from a wifi network.

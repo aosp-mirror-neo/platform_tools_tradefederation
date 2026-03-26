@@ -896,7 +896,9 @@ public class NativeDeviceTest {
         fail("getAndroidIds should have thrown an exception.");
     }
 
-    /** Unit test for {@link NativeDevice#connectToWifiNetworkIfNeeded(String, String)}. */
+    /**
+     * Unit test for {@link NativeDevice#connectToWifiNetworkIfNeededWithResult(String, String)}.
+     */
     @Test
     public void testConnectToWifiNetworkIfNeeded_alreadyConnected()
             throws DeviceNotAvailableException {
@@ -920,11 +922,13 @@ public class NativeDeviceTest {
         when(mMockWifi.checkConnectivity(mTestDevice.getOptions().getConnCheckUrl()))
                 .thenReturn(true);
 
-        assertTrue(
-                mTestDevice.connectToWifiNetworkIfNeeded(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
+        assertEquals(
+                WifiConnectionResult.SUCCESS,
+                mTestDevice.connectToWifiNetworkIfNeededWithResult(
+                        FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
     }
 
-    /** Unit test for {@link NativeDevice#connectToWifiNetwork(String, String)}. */
+    /** Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(String, String)}. */
     @Test
     public void testConnectToWifiNetwork_success() throws DeviceNotAvailableException {
         mTestDevice =
@@ -955,10 +959,13 @@ public class NativeDeviceTest {
         fakeWifiInfo.put("bssid", FAKE_NETWORK_SSID);
         when(mMockWifi.getWifiInfo()).thenReturn(fakeWifiInfo);
 
-        assertTrue(mTestDevice.connectToWifiNetwork(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
+        assertEquals(
+                WifiConnectionResult.SUCCESS,
+                mTestDevice.connectToWifiNetworkWithResult(
+                        FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
     }
 
-    /** Unit test for {@link NativeDevice#connectToWifiNetwork(Map<String, String>)}. */
+    /** Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(Map<String, String>)}. */
     @Test
     public void testConnectToWifiNetworkGivenMap_success() throws DeviceNotAvailableException {
         mTestDevice =
@@ -991,12 +998,14 @@ public class NativeDeviceTest {
 
         LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
         ssidToPsk.put(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD);
-        assertTrue(mTestDevice.connectToWifiNetwork(ssidToPsk));
+        assertEquals(
+                WifiConnectionResult.SUCCESS,
+                mTestDevice.connectToWifiNetworkWithResult(ssidToPsk));
     }
 
     /**
-     * Unit test for {@link NativeDevice#connectToWifiNetwork(String, String)} for a failure to
-     * connect case.
+     * Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(String, String)} for a
+     * failure to connect case.
      */
     @Test
     public void testConnectToWifiNetwork_failure() throws DeviceNotAvailableException {
@@ -1028,7 +1037,10 @@ public class NativeDeviceTest {
         fakeWifiInfo.put("bssid", FAKE_NETWORK_SSID);
         when(mMockWifi.getWifiInfo()).thenReturn(fakeWifiInfo);
 
-        assertFalse(mTestDevice.connectToWifiNetwork(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
+        assertEquals(
+                WifiConnectionResult.FAILED_TO_CONNECT,
+                mTestDevice.connectToWifiNetworkWithResult(
+                        FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
         verify(mMockRunUtil, times(mTestDevice.getOptions().getWifiAttempts() - 1))
                 .sleep(Mockito.anyLong());
         verify(mMockWifi, times(mTestDevice.getOptions().getWifiAttempts()))
@@ -1042,8 +1054,8 @@ public class NativeDeviceTest {
     }
 
     /**
-     * Unit test for {@link NativeDevice#connectToWifiNetwork(Map<String, String>)} for a failure to
-     * connect case.
+     * Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(Map<String, String>)} for a
+     * failure to connect case.
      */
     @Test
     public void testConnectToWifiNetworkGivenMap_failure() throws DeviceNotAvailableException {
@@ -1077,7 +1089,9 @@ public class NativeDeviceTest {
 
         LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
         ssidToPsk.put(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD);
-        assertFalse(mTestDevice.connectToWifiNetwork(ssidToPsk));
+        assertEquals(
+                WifiConnectionResult.FAILED_TO_CONNECT,
+                mTestDevice.connectToWifiNetworkWithResult(ssidToPsk));
         verify(mMockRunUtil, times(mTestDevice.getOptions().getWifiAttempts() - 1))
                 .sleep(Mockito.anyLong());
         verify(mMockWifi, times(mTestDevice.getOptions().getWifiAttempts()))
@@ -1091,8 +1105,8 @@ public class NativeDeviceTest {
     }
 
     /**
-     * Unit test for {@link NativeDevice#connectToWifiNetwork(String, String)} for limiting the time
-     * trying to connect to wifi.
+     * Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(String, String)} for
+     * limiting the time trying to connect to wifi.
      */
     @Test
     public void testConnectToWifiNetwork_maxConnectTime()
@@ -1131,7 +1145,10 @@ public class NativeDeviceTest {
         fakeWifiInfo.put("bssid", FAKE_NETWORK_SSID);
         when(mMockWifi.getWifiInfo()).thenReturn(fakeWifiInfo);
 
-        assertFalse(mTestDevice.connectToWifiNetwork(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
+        assertEquals(
+                WifiConnectionResult.FAILED_TO_CONNECT,
+                mTestDevice.connectToWifiNetworkWithResult(
+                        FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD));
         verify(mMockWifi, times(2))
                 .connectToNetwork(
                         FAKE_NETWORK_SSID,
@@ -1144,8 +1161,8 @@ public class NativeDeviceTest {
     }
 
     /**
-     * Unit test for {@link NativeDevice#connectToWifiNetwork(Map<String, String>)} for limiting the
-     * time trying to connect to wifi.
+     * Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(Map<String, String>)} for
+     * limiting the time trying to connect to wifi.
      */
     @Test
     public void testConnectToWifiNetworkGivenMap_maxConnectTime()
@@ -1186,7 +1203,9 @@ public class NativeDeviceTest {
 
         LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
         ssidToPsk.put(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD);
-        assertFalse(mTestDevice.connectToWifiNetwork(ssidToPsk));
+        assertEquals(
+                WifiConnectionResult.FAILED_TO_CONNECT,
+                mTestDevice.connectToWifiNetworkWithResult(ssidToPsk));
         verify(mMockWifi, times(2))
                 .connectToNetwork(
                         FAKE_NETWORK_SSID,
@@ -1198,7 +1217,9 @@ public class NativeDeviceTest {
         Mockito.verify(mockClock, Mockito.times(4)).millis();
     }
 
-    /** Unit test for {@link NativeDevice#connectToWifiNetwork(String, String, boolean)}. */
+    /**
+     * Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(String, String, boolean)}.
+     */
     @Test
     public void testConnectToWifiNetwork_scanSsid() throws DeviceNotAvailableException {
         mTestDevice =
@@ -1229,11 +1250,16 @@ public class NativeDeviceTest {
         fakeWifiInfo.put("bssid", FAKE_NETWORK_SSID);
         when(mMockWifi.getWifiInfo()).thenReturn(fakeWifiInfo);
 
-        assertTrue(
-                mTestDevice.connectToWifiNetwork(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD, true));
+        assertEquals(
+                WifiConnectionResult.SUCCESS,
+                mTestDevice.connectToWifiNetworkWithResult(
+                        FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD, true));
     }
 
-    /** Unit test for {@link NativeDevice#connectToWifiNetwork(Map<String, String>, boolean)}. */
+    /**
+     * Unit test for {@link NativeDevice#connectToWifiNetworkWithResult(Map<String, String>,
+     * boolean)}.
+     */
     @Test
     public void testConnectToWifiNetworkGivenMap_scanSsid() throws DeviceNotAvailableException {
         mTestDevice =
@@ -1266,7 +1292,9 @@ public class NativeDeviceTest {
 
         LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
         ssidToPsk.put(FAKE_NETWORK_SSID, FAKE_NETWORK_PASSWORD);
-        assertTrue(mTestDevice.connectToWifiNetwork(ssidToPsk, true));
+        assertEquals(
+                WifiConnectionResult.SUCCESS,
+                mTestDevice.connectToWifiNetworkWithResult(ssidToPsk, true));
     }
 
     /** Unit test for {@link NativeDevice#checkWifiConnection(String)}. */

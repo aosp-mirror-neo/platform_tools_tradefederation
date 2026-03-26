@@ -3610,36 +3610,33 @@ public class NativeDevice
         mLastConnectedWifiPsk = null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
-    public boolean connectToWifiNetwork(String wifiSsid, String wifiPsk)
+    public WifiConnectionResult connectToWifiNetworkWithResult(String wifiSsid, String wifiPsk)
             throws DeviceNotAvailableException {
-        return connectToWifiNetwork(wifiSsid, wifiPsk, false);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean connectToWifiNetwork(String wifiSsid, String wifiPsk, boolean scanSsid)
-            throws DeviceNotAvailableException {
-        LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
-        ssidToPsk.put(wifiSsid, wifiPsk);
-        return connectToWifiNetwork(ssidToPsk, scanSsid);
-    }
-
-    /** {@inheritDoc}f */
-    @Override
-    public boolean connectToWifiNetwork(Map<String, String> wifiSsidToPsk)
-            throws DeviceNotAvailableException {
-        return connectToWifiNetwork(wifiSsidToPsk, false);
+        return connectToWifiNetworkWithResult(wifiSsid, wifiPsk, false);
     }
 
     /** {@inheritDoc} */
     @Override
-    public boolean connectToWifiNetwork(Map<String, String> wifiSsidToPsk, boolean scanSsid)
+    public WifiConnectionResult connectToWifiNetworkWithResult(
+            String wifiSsid, String wifiPsk, boolean scanSsid) throws DeviceNotAvailableException {
+        LinkedHashMap<String, String> ssidToPsk = new LinkedHashMap<>();
+        ssidToPsk.put(wifiSsid, wifiPsk);
+        return connectToWifiNetworkWithResult(ssidToPsk, scanSsid);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public WifiConnectionResult connectToWifiNetworkWithResult(Map<String, String> wifiSsidToPsk)
+            throws DeviceNotAvailableException {
+        return connectToWifiNetworkWithResult(wifiSsidToPsk, false);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public WifiConnectionResult connectToWifiNetworkWithResult(
+            Map<String, String> wifiSsidToPsk, boolean scanSsid)
             throws DeviceNotAvailableException {
         // Clears the last connected wifi network.
         mLastConnectedWifiSsid = null;
@@ -3652,9 +3649,10 @@ public class NativeDevice
         int slotTime = mOptions.getWifiRetryWaitTime();
         int waitTime = 0;
         long startTime = mClock.millis();
+        boolean failedToEnableWifi = false;
         try (CloseableTraceScope ignored = new CloseableTraceScope("connectToWifiNetwork")) {
             for (int i = 1; i <= mOptions.getWifiAttempts(); i++) {
-                boolean failedToEnableWifi = false;
+                failedToEnableWifi = false;
                 for (Map.Entry<String, String> ssidToPsk : wifiSsidToPsk.entrySet()) {
                     String wifiSsid = ssidToPsk.getKey();
                     String wifiPsk = Strings.emptyToNull(ssidToPsk.getValue());
@@ -3688,7 +3686,7 @@ public class NativeDevice
                         mLastConnectedWifiSsid = wifiSsid;
                         mLastConnectedWifiPsk = wifiPsk;
 
-                        return true;
+                        return WifiConnectionResult.SUCCESS;
                     } else if (WifiConnectionResult.FAILED_TO_ENABLE.equals(result)) {
                         CLog.w("Failed to enable wifi");
                         failedToEnableWifi = true;
@@ -3728,7 +3726,9 @@ public class NativeDevice
                     InvocationMetricKey.WIFI_CONNECT_TIME, mClock.millis() - startTime);
             InvocationMetricLogger.addInvocationMetrics(InvocationMetricKey.WIFI_CONNECT_COUNT, 1);
         }
-        return false;
+        return failedToEnableWifi
+                ? WifiConnectionResult.FAILED_TO_ENABLE
+                : WifiConnectionResult.FAILED_TO_CONNECT;
     }
 
     /**
@@ -3745,25 +3745,21 @@ public class NativeDevice
         return wifi.checkConnectivity(mOptions.getConnCheckUrl());
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
-    public boolean connectToWifiNetworkIfNeeded(String wifiSsid, String wifiPsk)
-            throws DeviceNotAvailableException {
-        return connectToWifiNetworkIfNeeded(wifiSsid, wifiPsk, false);
+    public WifiConnectionResult connectToWifiNetworkIfNeededWithResult(
+            String wifiSsid, String wifiPsk) throws DeviceNotAvailableException {
+        return connectToWifiNetworkIfNeededWithResult(wifiSsid, wifiPsk, false);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
-    public boolean connectToWifiNetworkIfNeeded(String wifiSsid, String wifiPsk, boolean scanSsid)
-            throws DeviceNotAvailableException {
+    public WifiConnectionResult connectToWifiNetworkIfNeededWithResult(
+            String wifiSsid, String wifiPsk, boolean scanSsid) throws DeviceNotAvailableException {
         if (!checkConnectivity())  {
-            return connectToWifiNetwork(wifiSsid, wifiPsk, scanSsid);
+            return connectToWifiNetworkWithResult(wifiSsid, wifiPsk, scanSsid);
         }
-        return true;
+        return WifiConnectionResult.SUCCESS;
     }
 
     /**
@@ -4029,7 +4025,10 @@ public class NativeDevice
 
         // If wifi is still not connected, try to re-connect on our own.
         final String wifiSsid = mLastConnectedWifiSsid;
-        if (!connectToWifiNetworkIfNeeded(mLastConnectedWifiSsid, mLastConnectedWifiPsk)) {
+        WifiConnectionResult result =
+                connectToWifiNetworkIfNeededWithResult(
+                        mLastConnectedWifiSsid, mLastConnectedWifiPsk);
+        if (!WifiConnectionResult.SUCCESS.equals(result)) {
             throw new NetworkNotAvailableException(
                     String.format("Failed to connect to wifi network %s on %s after reboot",
                             wifiSsid, getSerialNumber()));

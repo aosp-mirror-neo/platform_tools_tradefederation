@@ -19,17 +19,17 @@ package com.android.tradefed.device;
 import java.util.List;
 import java.util.Map;
 
-
-/**
- * Helper interface for manipulating wifi services on device.
- */
-interface IWifiHelper {
+/** Helper interface for manipulating wifi services on device. */
+public interface IWifiHelper {
 
     /**
      * The Wifi supplicant state. Should match states defined in android.net.wifi.SupplicantState.
      */
     public enum WifiState {
-        COMPLETED, SCANNING, DISCONNECTED, OTHER;
+        COMPLETED,
+        SCANNING,
+        DISCONNECTED,
+        OTHER;
     }
 
     public enum WifiConnectionResult {
@@ -59,15 +59,15 @@ interface IWifiHelper {
      *
      * @param expectedStates one or more wifi states to expect
      * @return <code>true</code> if the one of the expected states occurred. <code>false</code> if
-     *         none of the states occurred before timeout is reached
+     *     none of the states occurred before timeout is reached
      * @throws DeviceNotAvailableException
      */
     boolean waitForWifiState(WifiState... expectedStates) throws DeviceNotAvailableException;
 
     /**
      * Adds the open security network identified by ssid.
-     * <p/>
-     * To connect to any wifi network, a network profile must be created in wpa_supplicant
+     *
+     * <p>To connect to any wifi network, a network profile must be created in wpa_supplicant
      * configuration first. This will call wpa_cli to add the open security network identified by
      * ssid.
      *
@@ -79,8 +79,8 @@ interface IWifiHelper {
 
     /**
      * Adds the open security network identified by ssid.
-     * <p/>
-     * To connect to any wifi network, a network profile must be created in wpa_supplicant
+     *
+     * <p>To connect to any wifi network, a network profile must be created in wpa_supplicant
      * configuration first. This will call wpa_cli to add the open security network identified by
      * ssid.
      *
@@ -110,14 +110,15 @@ interface IWifiHelper {
      * @return <code>true</code> if network was added successfully, <code>false</code> otherwise.
      * @throws DeviceNotAvailableException
      */
-    boolean addWpaPskNetwork(String ssid, String psk, boolean scanSsid) throws DeviceNotAvailableException;
+    boolean addWpaPskNetwork(String ssid, String psk, boolean scanSsid)
+            throws DeviceNotAvailableException;
 
     /**
      * Wait until an ip address is assigned to wifi adapter.
      *
      * @param timeout how long to wait
      * @return <code>true</code> if an ip address is assigned before timeout, <code>false</code>
-     *         otherwise
+     *     otherwise
      * @throws DeviceNotAvailableException
      */
     boolean waitForIp(long timeout) throws DeviceNotAvailableException;
@@ -131,9 +132,9 @@ interface IWifiHelper {
     /**
      * Gets the service set identifier of the currently connected network.
      *
-     * @see
-     * <a href="http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()">
-     * http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()</a>
+     * @see <a
+     *     href="http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()">
+     *     http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()</a>
      * @throws DeviceNotAvailableException
      */
     String getSSID() throws DeviceNotAvailableException;
@@ -141,9 +142,9 @@ interface IWifiHelper {
     /**
      * Gets the basic service set identifier (BSSID) of the currently access point.
      *
-     * @see
-     * <a href="http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()">
-     * http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()</a>
+     * @see <a
+     *     href="http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()">
+     *     http://developer.android.com/reference/android/net/wifi/WifiInfo.html#getSSID()</a>
      * @throws DeviceNotAvailableException
      */
     String getBSSID() throws DeviceNotAvailableException;
@@ -155,9 +156,7 @@ interface IWifiHelper {
      */
     boolean removeAllNetworks() throws DeviceNotAvailableException;
 
-    /**
-     * Check if wifi is currently enabled.
-     */
+    /** Check if wifi is currently enabled. */
     boolean isWifiEnabled() throws DeviceNotAvailableException;
 
     /**
@@ -202,8 +201,9 @@ interface IWifiHelper {
 
     /**
      * Gets the current wifi connection information.
-     * <p/>
-     * This includes SSID, BSSID, IP address, link speed, and RSSI.
+     *
+     * <p>This includes SSID, BSSID, IP address, link speed, and RSSI.
+     *
      * @return a map containing wifi connection information.
      * @throws DeviceNotAvailableException
      */
@@ -280,9 +280,9 @@ interface IWifiHelper {
 
     /**
      * Stops network connectivity monitoring.
-     * <p/>
-     * This also returns the latency history since the last
-     * {@link IWifiHelper#startMonitor(long, String)} call.
+     *
+     * <p>This also returns the latency history since the last {@link IWifiHelper#startMonitor(long,
+     * String)} call.
      *
      * @return the latency history.
      * @throws DeviceNotAvailableException
