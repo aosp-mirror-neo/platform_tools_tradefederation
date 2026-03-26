@@ -27,7 +27,7 @@ import com.android.tradefed.util.CommandStatus;
 
 /** A {@link ITargetPreparer} that wipes userdata */
 @OptionClass(alias = "device-wiper")
-public class DeviceWiper extends BaseTargetPreparer {
+public class DeviceWiper extends BaseTargetPreparer implements ILabPreparer {
     @Deprecated
     @Option(name = "use-erase",
             description =
