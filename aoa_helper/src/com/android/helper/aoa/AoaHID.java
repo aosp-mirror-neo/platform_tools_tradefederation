@@ -118,7 +118,7 @@ enum AoaHID {
 
     /** @return HID identifier */
     int getId() {
-        return ordinal();
+        return ordinal() + 1;
     }
 
     /** @return HID descriptor */
